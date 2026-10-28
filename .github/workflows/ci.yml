@@ -1,0 +1,31 @@
+---
+name: ci
+
+# Runs the repository checks on every pull request. The security-review-pr
+# and quality-review-pr callers trigger on completion of this workflow by its
+# name. Renaming it stops both reviews. The checks use only the Python
+# standard library.
+
+"on":
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Review wiring tests
+        run: python3 -m unittest discover -s tests -v
