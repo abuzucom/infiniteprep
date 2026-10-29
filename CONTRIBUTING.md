@@ -19,10 +19,6 @@
 
 - Use parameterized queries for untrusted input.
 - Run subprocesses with argument arrays. Disable shell interpretation.
-- Obtain explicit approval before destructive changes.
-- Never weaken a test to force a pass. Never skip a test to force a pass.
-  Never delete a test to force a pass. Stop after suspecting a test defect. Ask
-  a maintainer before changing the test.
 - Keep public APIs backward compatible.
 - Never commit secrets, credentials, or private user data.
 - Use SHA-256 or SHA-3 for general hashing.
