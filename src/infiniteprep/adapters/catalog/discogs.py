@@ -89,14 +89,14 @@ class DiscogsAdapter:
     ) -> list[CandidateMatch]:
         """Fetch a specific Discogs release by ID and extract tracklist positions."""
         _ = entity_type
+        ready, _ = self.is_available()
+        if not ready:
+            return []
         if not SAFE_RELEASE_ID_RE.fullmatch(entity_id):
             raise ValueError(
                 f"Invalid Discogs release id {entity_id!r}. "
                 "Use 1 to 16 digits without a leading zero."
             )
-        ready, _ = self.is_available()
-        if not ready:
-            return []
         cache_key = f"discogs:release:{entity_id}"
         payload = self.repo.get_cached_response(cache_key)
         if payload is None:

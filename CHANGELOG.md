@@ -30,8 +30,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `install_fpcalc` refuses Linux and other platforms without a pinned archive. Those platforms install fpcalc from the system package manager.
 - `install_fpcalc` rejects an `expected_sha256` that differs from the pinned digest. Passing the parameter emits `DeprecationWarning`.
 - ZIP extraction of `fpcalc` reads at most `MAX_FPCALC_BINARY_BYTES` plus one byte. The untrusted header size no longer gates the read.
-- `MutagenAdapter.render_filename` substitutes only known `{token}` names. Other brace syntax selects the default `artist - title` layout and logs a warning.
-- `DiscogsAdapter.fetch` accepts only numeric release IDs without a leading zero.
+- `MutagenAdapter.render_filename` substitutes only known `{token}` names and keeps the `{{` and `}}` literal brace escapes. Other brace syntax selects the default `artist - title` layout and logs a warning.
+- `DiscogsAdapter.fetch` accepts only numeric release IDs without a leading zero. An unconfigured adapter still returns an empty list.
 - `OllamaBootstrapService.pull_model` accepts only `[host/][namespace/]model:tag` references. Each part starts with a letter or digit. That rule excludes empty, `.`, and `..` segments.
 - The Discogs, MusicBrainz, and AcoustID HTTP clients cap each response at 5 MiB.
 - ID3 writes remove an existing `TXXX` frame with the same description before adding the new value.

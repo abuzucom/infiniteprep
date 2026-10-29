@@ -16,7 +16,8 @@ OLLAMA_TAGS_URL: Final[str] = "http://127.0.0.1:11434/api/tags"
 # A model reference is [host/][namespace/]model:tag, e.g. hf.co/user/model:q4.
 # Each slash-separated segment and the tag must start with a letter or digit.
 # The CLI parses an argument as an option only when it starts with a hyphen.
-# The leading character rule also excludes empty, "." and ".." segments.
+# The leading character rule also rejects empty segments and segments that
+# start with a dot, such as "." and "..". Later characters may include dots.
 # Each segment allows 64 characters. Both bounds exceed published model names.
 MODEL_REFERENCE_PART_RE: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 MAX_MODEL_NAME_SEGMENTS: Final[int] = 3

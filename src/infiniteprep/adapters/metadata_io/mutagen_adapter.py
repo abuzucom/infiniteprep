@@ -52,9 +52,11 @@ ILLEGAL_FILENAME_CHARS_RE: Final[re.Pattern[str]] = re.compile(r'[<>:"/\\|?*\x00
 WHITESPACE_COLLAPSE_RE: Final[re.Pattern[str]] = re.compile(r"\s+")
 EMPTY_PARENS_RE: Final[re.Pattern[str]] = re.compile(r"\(\s*\)")
 EMPTY_BRACKETS_RE: Final[re.Pattern[str]] = re.compile(r"\[\s*\]")
-# Rename templates accept only bare {token} names. str.format would also
-# evaluate attribute, index, and conversion syntax from user settings.
-TEMPLATE_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"\{([a-z_]+)\}")
+# Rename templates accept bare {token} names and the {{ and }} literal brace
+# escapes of str.format. str.format would also evaluate attribute, index, and
+# conversion syntax from user settings. Any other brace selects the default.
+TEMPLATE_PART_RE: Final[re.Pattern[str]] = re.compile(r"\{\{|\}\}|\{([a-z_]*)\}|[{}]")
+LITERAL_BRACE_ESCAPES: Final[dict[str, str]] = {"{{": "{", "}}": "}"}
 
 logger = logging.getLogger(__name__)
 
@@ -395,20 +397,27 @@ class MutagenAdapter:
 
     @staticmethod
     def _substitute_template_tokens(template: str, tokens: dict[str, str]) -> str:
-        """Replace known {token} names. Any other brace syntax selects the default layout."""
-        requested = TEMPLATE_TOKEN_RE.findall(template)
-        unknown = sorted({name for name in requested if name not in tokens})
-        stray_brace = any(brace in TEMPLATE_TOKEN_RE.sub("", template) for brace in "{}")
-        if unknown or stray_brace:
-            # repr() escapes line breaks in the template text.
-            logger.warning(
-                "Rename template %r uses unknown tokens %s or unsupported brace syntax. "
-                "Using the default 'artist - title' layout.",
-                template,
-                unknown,
-            )
-            return f"{tokens['artist']} - {tokens['title']}"
-        return TEMPLATE_TOKEN_RE.sub(lambda match: tokens[match.group(1)], template)
+        """Replace known {token} names and brace escapes. Other brace syntax uses the default."""
+        pieces: list[str] = []
+        position = 0
+        for match in TEMPLATE_PART_RE.finditer(template):
+            replacement = LITERAL_BRACE_ESCAPES.get(match.group(0))
+            if replacement is None:
+                replacement = tokens.get(match.group(1) or "")
+            if replacement is None:
+                # repr() escapes line breaks in the template text.
+                logger.warning(
+                    "Rename template %r has unsupported brace syntax %r. "
+                    "Using the default 'artist - title' layout.",
+                    template,
+                    match.group(0),
+                )
+                return f"{tokens['artist']} - {tokens['title']}"
+            pieces.append(template[position : match.start()])
+            pieces.append(replacement)
+            position = match.end()
+        pieces.append(template[position:])
+        return "".join(pieces)
 
     def _build_filename_tokens(
         self, source_path: Path, effective_fields: dict[str, str]
