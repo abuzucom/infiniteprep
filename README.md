@@ -212,6 +212,13 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
 8. **Restore.** Click **Change Journal & Restore**. Each completed write shows
    a **Restore Backup** button. The restore verifies the backup and returns
    the original file.
+9. **Transcode for XDJ-RX3.** Click **Transcode for XDJ-RX3** to convert the
+   visible rows with the mode and preset from **Settings & Providers**. A
+   confirmation names the file count, mode, and preset.
+   - `sibling_export` writes a `<name>_XDJ_RX3` copy next to each original.
+   - `in_place_backed_up` replaces each original. Each replacement first
+     takes a SHA-256 verified backup and records a journal entry.
+   - A summary lists each output file and each failure.
 
 ### Evaluate a folder from the command line
 
@@ -233,8 +240,12 @@ command writes no report.
 - The AcoustID, MusicBrainz, Discogs, and LLM adapters exist in
   `src/infiniteprep/adapters/`. The launcher does not wire those adapters. Saved
   credentials and provider settings do not change the identification results.
-- The main window exposes no transcode action. `SafeTranscoderAdapter` and
-  `PlaylistExporter` run only through the Python API.
+- The main window exposes no playlist export action. `PlaylistExporter` runs
+  only through the Python API.
+- The `MP3_320_CBR` preset produces the same output as
+  `XDJ_RX3_LOSSLESS_AUTO`.
+- An in-place transcode of an OGG or M4A file writes a WAV and removes the
+  original. The table keeps the old path for that file.
 
 ---
 

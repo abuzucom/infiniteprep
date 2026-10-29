@@ -71,6 +71,7 @@ class MainWindow(QMainWindow):
         on_open_journal_dialog: Callable[[], None] | None = None,
         on_open_settings_dialog: Callable[[], None] | None = None,
         parent: QWidget | None = None,
+        on_transcode_batch: Callable[[list[str]], object] | None = None,
     ) -> None:
         """Initialize MainWindow with core services and callbacks."""
         super().__init__(parent)
@@ -81,6 +82,7 @@ class MainWindow(QMainWindow):
         self.on_open_write_dialog = on_open_write_dialog
         self.on_open_journal_dialog = on_open_journal_dialog
         self.on_open_settings_dialog = on_open_settings_dialog
+        self.on_transcode_batch = on_transcode_batch
 
         self.current_key_notation: KeyDisplayNotation = KeyDisplayNotation.CAMELOT
         self.visible_file_ids: list[str] = []
@@ -123,6 +125,10 @@ class MainWindow(QMainWindow):
         write_btn = QPushButton("Preview & Apply Writes", self)
         write_btn.clicked.connect(self._trigger_open_write_dialog)
         toolbar.addWidget(write_btn)
+
+        self.transcode_btn = QPushButton("Transcode for XDJ-RX3", self)
+        self.transcode_btn.clicked.connect(self._trigger_transcode_batch)
+        toolbar.addWidget(self.transcode_btn)
 
         journal_btn = QPushButton("Change Journal & Restore", self)
         journal_btn.clicked.connect(self._trigger_open_journal)
@@ -328,6 +334,12 @@ class MainWindow(QMainWindow):
         """Open write preview and execution dialog if callback is registered."""
         if self.on_open_write_dialog:
             self.on_open_write_dialog(list(self.visible_file_ids))
+
+    def _trigger_transcode_batch(self) -> None:
+        """Invoke the batch transcode callback on visible files and refresh the table."""
+        if self.on_transcode_batch and self.visible_file_ids:
+            self.on_transcode_batch(list(self.visible_file_ids))
+            self.refresh_file_table()
 
     def _trigger_open_journal(self) -> None:
         """Open change journal and restore dialog if callback is registered."""
