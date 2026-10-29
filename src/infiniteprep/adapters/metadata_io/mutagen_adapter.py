@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import shutil
 import struct
@@ -54,6 +55,8 @@ EMPTY_BRACKETS_RE: Final[re.Pattern[str]] = re.compile(r"\[\s*\]")
 # Rename templates accept only bare {token} names. str.format would also
 # evaluate attribute, index, and conversion syntax from user settings.
 TEMPLATE_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"\{([a-z_]+)\}")
+
+logger = logging.getLogger(__name__)
 
 EXTENSION_TO_FORMAT: Final[dict[str, AudioFormat]] = {
     ".mp3": AudioFormat.MP3,
@@ -393,12 +396,18 @@ class MutagenAdapter:
     @staticmethod
     def _substitute_template_tokens(template: str, tokens: dict[str, str]) -> str:
         """Replace known {token} names. Any other brace syntax selects the default layout."""
-        default_layout = f"{tokens['artist']} - {tokens['title']}"
         requested = TEMPLATE_TOKEN_RE.findall(template)
-        if any(name not in tokens for name in requested):
-            return default_layout
-        if any(brace in TEMPLATE_TOKEN_RE.sub("", template) for brace in "{}"):
-            return default_layout
+        unknown = sorted({name for name in requested if name not in tokens})
+        stray_brace = any(brace in TEMPLATE_TOKEN_RE.sub("", template) for brace in "{}")
+        if unknown or stray_brace:
+            # repr() escapes line breaks in the template text.
+            logger.warning(
+                "Rename template %r uses unknown tokens %s or unsupported brace syntax. "
+                "Using the default 'artist - title' layout.",
+                template,
+                unknown,
+            )
+            return f"{tokens['artist']} - {tokens['title']}"
         return TEMPLATE_TOKEN_RE.sub(lambda match: tokens[match.group(1)], template)
 
     def _build_filename_tokens(
