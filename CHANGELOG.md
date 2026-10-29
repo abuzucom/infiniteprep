@@ -26,13 +26,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
-- `FpcalcBootstrapService` pins the SHA-256 digest of the official Chromaprint 1.5.1 Windows and macOS archives. Extraction requires a digest and compares it in constant time.
+- `FpcalcBootstrapService` pins the SHA-256 digest of the official Chromaprint 1.5.1 Windows and macOS archives. Extraction requires a 64-character hexadecimal digest and compares it in constant time.
 - `install_fpcalc` refuses Linux and other platforms without a pinned archive. Those platforms install fpcalc from the system package manager.
 - `install_fpcalc` always verifies the download against the pinned digest. A caller `expected_sha256` that differs from the pin raises before any download.
 - ZIP and TAR extraction of `fpcalc` read at most `MAX_FPCALC_BINARY_BYTES` plus one byte. The untrusted header size no longer gates the read.
-- `MutagenAdapter.render_filename` substitutes only known `{token}` names and keeps the `{{` and `}}` literal brace escapes. Other brace syntax selects the default `artist - title` layout and logs a warning.
+- `MutagenAdapter.render_filename` substitutes only known `{token}` names and keeps the `{{` and `}}` literal brace escapes. Other brace syntax selects the default `artist - title` layout and logs a warning. Positional fields, index and attribute access, conversions, and format specs no longer render.
 - `DiscogsAdapter.fetch` accepts only numeric release IDs without a leading zero. An unconfigured adapter still returns an empty list.
-- `OllamaBootstrapService.pull_model` accepts only `[host/][namespace/]model:tag` references. Each part starts with a letter or digit. That rule excludes empty, `.`, and `..` segments.
+- `OllamaBootstrapService.pull_model` accepts only `[host/][namespace/]model:tag` references. Each part starts with a letter or digit and contains no run of two dots.
 - The Discogs, MusicBrainz, and AcoustID HTTP clients cap each response at 5 MiB.
 - ID3 writes remove an existing `TXXX` frame with the same description before adding the new value.
 - Added `tests/unit/test_security_review_remediation.py`.
