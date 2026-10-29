@@ -459,3 +459,20 @@ def test_discogs_fetch_unavailable_returns_empty_for_any_id() -> None:
     adapter = DiscogsAdapter(repository=_new_repository(), user_token=None, min_interval_sec=0.0)
     assert adapter.is_available()[0] is False
     assert adapter.fetch("../database/search") == []
+
+
+def test_install_fpcalc_rejects_caller_digest_before_download(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Windows")
+    downloads: list[str] = []
+
+    def record_download(url: str) -> bytes:
+        downloads.append(url)
+        return _build_fpcalc_zip(FAKE_BINARY)
+
+    bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin", downloader=record_download)
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        bootstrap.install_fpcalc(user_consented=True, expected_sha256="0" * 64)
+    assert downloads == []
+    assert not (tmp_path / "bin").exists()
