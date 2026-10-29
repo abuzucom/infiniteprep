@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from typing import Final
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMessageBox, QWidget
 
 from infiniteprep.adapters.transcoder.safe_transcoder import (
@@ -34,6 +35,15 @@ IN_PLACE_WARNING: Final[str] = (
     "WARNING: in-place mode replaces each original file. Each replacement first takes a "
     "SHA-256 verified backup and records a Change Journal entry."
 )
+
+
+def show_plain_message(
+    parent: QWidget | None, icon: QMessageBox.Icon, title: str, text: str
+) -> None:
+    """Show a modal message that renders file names as literal text, never as rich text."""
+    box = QMessageBox(icon, title, text, QMessageBox.StandardButton.Ok, parent)
+    box.setTextFormat(Qt.TextFormat.PlainText)
+    box.exec()
 
 
 def build_transcode_confirmation_text(
@@ -108,8 +118,9 @@ def export_playlist_with_feedback(
         report = exporter.export_m3u8_report(file_ids, destination)
     except OSError as exc:
         logger.warning("Playlist export to %s failed: %s", destination, exc.__class__.__name__)
-        QMessageBox.warning(
+        show_plain_message(
             parent,
+            QMessageBox.Icon.Warning,
             EXPORT_DIALOG_TITLE,
             f"Playlist export failed ({exc}). Choose a writable location and retry.",
         )
@@ -117,7 +128,7 @@ def export_playlist_with_feedback(
     message = f"Exported {report.written_count} track(s) to {report.path}."
     if report.skipped_file_ids:
         message += "\n\n" + build_skipped_tracks_text(exporter.repo, report.skipped_file_ids)
-    QMessageBox.information(parent, EXPORT_DIALOG_TITLE, message)
+    show_plain_message(parent, QMessageBox.Icon.Information, EXPORT_DIALOG_TITLE, message)
     return report.path
 
 

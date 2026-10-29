@@ -50,6 +50,10 @@ def _write_without_following_links(destination: Path, content: str) -> None:
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | NO_FOLLOW_FLAG | BINARY_FLAG
     descriptor = os.open(destination, flags, PLAYLIST_FILE_MODE)
     with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        # The open mode applies only to a new file, so reset an overwritten playlist too.
+        # Windows has no fchmod and ignores these bits.
+        if hasattr(os, "fchmod"):
+            os.fchmod(handle.fileno(), PLAYLIST_FILE_MODE)
         handle.write(content)
 
 
