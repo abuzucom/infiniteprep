@@ -23,7 +23,7 @@ from infiniteprep.services.transcode_batch import (
 TRANSCODE_DIALOG_TITLE: Final[str] = "Transcode to XDJ"
 MAX_LISTED_FAILURES: Final[int] = 10
 SIBLING_EXPORT_NOTE: Final[str] = (
-    "Each file gets a new '<name>_XDJ_RX3' copy next to the original. The originals stay unchanged."
+    "Each file gets a new '<name>_XDJ' copy next to the original. The originals stay unchanged."
 )
 IN_PLACE_WARNING: Final[str] = (
     "WARNING: in-place mode replaces each original file. Each replacement first takes a "

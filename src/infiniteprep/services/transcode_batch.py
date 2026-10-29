@@ -43,8 +43,8 @@ def resolve_transcode_options(
     try:
         preset = TranscodePreset(preset_value)
     except ValueError:
-        logger.warning("Unknown transcode preset %r; using XDJ_RX3_LOSSLESS_AUTO.", preset_value)
-        preset = TranscodePreset.XDJ_RX3_LOSSLESS_AUTO
+        logger.warning("Unknown transcode preset %r; using XDJ_LOSSLESS_AUTO.", preset_value)
+        preset = TranscodePreset.XDJ_LOSSLESS_AUTO
     return mode, preset
 
 
