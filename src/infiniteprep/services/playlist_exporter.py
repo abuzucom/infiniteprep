@@ -11,8 +11,12 @@ from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName
 from infiniteprep.domain.models import FileAsset
 
-# A line break inside a path line would split one entry into several playlist lines.
-UNSAFE_PATH_CHARACTERS: Final[tuple[str, ...]] = ("\n", "\r")
+# A line break inside a path line would split one entry into several playlist lines. Other C0
+# control characters and DEL have no place in a file name and confuse player parsers.
+DEL_CODE_POINT: Final[int] = 0x7F
+UNSAFE_PATH_CHARACTERS: Final[frozenset[str]] = frozenset(
+    [chr(code) for code in range(ord(" "))] + [chr(DEL_CODE_POINT)]
+)
 # O_NOFOLLOW refuses a symlink at the destination. Windows lacks the flag, so it is 0 there.
 NO_FOLLOW_FLAG: Final[int] = getattr(os, "O_NOFOLLOW", 0)
 # O_BINARY stops the Windows C runtime from translating line endings a second time.
@@ -24,6 +28,21 @@ PLAYLIST_FILE_MODE: Final[int] = 0o600
 def _m3u8_escape(value: str) -> str:
     """Strip newlines, carriage returns, and commas from M3U8 #EXTINF text values."""
     return value.replace("\n", " ").replace("\r", " ").replace(",", " ").strip()
+
+
+def has_unsafe_path_characters(value: str) -> bool:
+    """Return True when the text holds a C0 control character or DEL."""
+    return not UNSAFE_PATH_CHARACTERS.isdisjoint(value)
+
+
+def _safe_path_line(stored_path: str) -> str | None:
+    """Return the resolved path line, or None when the stored or resolved path is unsafe."""
+    # Check the stored text first, because resolving a path with NUL raises ValueError.
+    if has_unsafe_path_characters(stored_path):
+        return None
+    # Resolution can follow a link to a different name, so check the emitted line too.
+    path_line = str(Path(stored_path).resolve())
+    return None if has_unsafe_path_characters(path_line) else path_line
 
 
 def _write_without_following_links(destination: Path, content: str) -> None:
@@ -64,11 +83,12 @@ class PlaylistExporter:
             asset = self.repo.get_file_by_id(file_id)
             if asset is None:
                 continue
-            if any(char in asset.current_path for char in UNSAFE_PATH_CHARACTERS):
+            path_line = _safe_path_line(asset.current_path)
+            if path_line is None:
                 result.skipped_file_ids.append(file_id)
                 continue
             lines.append(self._extinf_line(asset))
-            lines.append(str(Path(asset.current_path).resolve()))
+            lines.append(path_line)
             result.written_count += 1
 
         destination_path.parent.mkdir(parents=True, exist_ok=True)

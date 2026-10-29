@@ -68,7 +68,10 @@ def test_export_dialog_counts_and_names_the_skipped_tracks(
 
     message = dialogs.texts("information")[0]
     assert message.startswith(f"Exported 1 track(s) to {destination}.")
-    assert "Skipped 1 track(s) with a line break in the file name:" in message
+    assert (
+        "Skipped 1 track(s) with a line break or other control character in the file name:"
+        in message
+    )
     assert "evil #EXTINF:1 Injected.wav" in message.replace(",", " ")
 
 

@@ -15,7 +15,7 @@ from infiniteprep.adapters.transcoder.safe_transcoder import (
 )
 from infiniteprep.config.settings import SettingsManager
 from infiniteprep.db.repositories import Repository
-from infiniteprep.services.playlist_exporter import PlaylistExporter
+from infiniteprep.services.playlist_exporter import UNSAFE_PATH_CHARACTERS, PlaylistExporter
 from infiniteprep.services.transcode_batch import (
     TranscodeBatchSummary,
     resolve_transcode_options,
@@ -98,7 +98,12 @@ def export_playlist_with_feedback(
     file_ids: list[str],
     destination: Path,
 ) -> Path | None:
-    """Write the playlist and report the destination, or report the failure and return None."""
+    """Write the playlist and report the destination, or report the failure and return None.
+
+    Only OSError gets a dialog. It covers the expected failures of a user-chosen destination,
+    such as a missing permission, a full disk, a directory, or a refused symlink. Any other
+    exception is a defect and propagates to the application error handler.
+    """
     try:
         report = exporter.export_m3u8_report(file_ids, destination)
     except OSError as exc:
@@ -117,10 +122,16 @@ def export_playlist_with_feedback(
 
 
 def build_skipped_tracks_text(repo: Repository, skipped_file_ids: list[str]) -> str:
-    """Name each track left out because its file path holds a line break."""
-    lines = [f"Skipped {len(skipped_file_ids)} track(s) with a line break in the file name:"]
+    """Name each track left out because its file path holds a control character."""
+    lines = [
+        f"Skipped {len(skipped_file_ids)} track(s) with a line break or other control "
+        "character in the file name:"
+    ]
     for file_id in skipped_file_ids[:MAX_LISTED_FAILURES]:
         asset = repo.get_file_by_id(file_id)
-        raw_name = Path(asset.current_path).name if asset is not None else file_id
-        lines.append(raw_name.replace("\n", " ").replace("\r", " "))
+        if asset is None:
+            lines.append(f"<unknown track {file_id}>")
+            continue
+        raw_name = Path(asset.current_path).name
+        lines.append("".join(" " if char in UNSAFE_PATH_CHARACTERS else char for char in raw_name))
     return "\n".join(lines)

@@ -358,8 +358,9 @@ class MainWindow(QMainWindow):
         if not chosen:
             return
         destination = Path(chosen)
+        # Append rather than replace, so a name like "set.v2" keeps its full stem.
         if destination.suffix.lower() != PLAYLIST_SUFFIX:
-            destination = destination.with_suffix(PLAYLIST_SUFFIX)
+            destination = destination.with_name(destination.name + PLAYLIST_SUFFIX)
         self.on_export_playlist(list(self.visible_file_ids), destination)
 
     def _trigger_open_journal(self) -> None:
