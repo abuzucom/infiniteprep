@@ -431,3 +431,33 @@ def test_repeated_mp3_writes_keep_one_txxx_frame(tmp_path: Path) -> None:
     frames = ID3(str(mp3_path)).getall("TXXX:CATALOGNUMBER")
     assert len(frames) == 1
     assert list(frames[0].text) == ["TRIUK015"]
+
+
+# Escaped braces and Discogs availability order.
+
+
+def test_render_filename_keeps_escaped_braces(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, logger=mutagen_adapter_module.__name__):
+        rendered = MutagenAdapter().render_filename(
+            Path("track.mp3"),
+            {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
+            "{artist} - {title} [{{label}}]",
+        )
+    assert rendered == "Deep Dish - The Dream [{label}].mp3"
+    assert caplog.records == []
+
+
+@pytest.mark.parametrize("template", ["{artist} {", "{artist} }", "{{artist}", "{}"])
+def test_render_filename_unbalanced_braces_use_default(template: str) -> None:
+    rendered = MutagenAdapter().render_filename(
+        Path("track.mp3"),
+        {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
+        template,
+    )
+    assert rendered == "Deep Dish - The Dream.mp3"
+
+
+def test_discogs_fetch_unavailable_returns_empty_for_any_id() -> None:
+    adapter = DiscogsAdapter(repository=_new_repository(), user_token=None, min_interval_sec=0.0)
+    assert adapter.is_available()[0] is False
+    assert adapter.fetch("../database/search") == []

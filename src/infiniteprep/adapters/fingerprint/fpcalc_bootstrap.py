@@ -37,7 +37,7 @@ OFFICIAL_FPCALC_URLS: Final[dict[str, str]] = {
 # - a direct download of each URL
 # - the `FPCALC_SHA256SUM` pins for fpcalc 1.5.1 in `metabrainz/picard`
 #   `.github/workflows/package-windows.yml` and `package-macos.yml` at
-#   commit `03323e2ae`
+#   commit `03323e2ae9e67cde3267ab25bb4bf90b00700273`
 # No second source confirms the Linux archive digest. Linux installs fpcalc
 # from the distribution package manager instead.
 OFFICIAL_FPCALC_SHA256: Final[dict[str, str]] = {
