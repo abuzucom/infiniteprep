@@ -26,10 +26,10 @@ jobs:
           persist-credentials: false
 
       - name: Run Microsoft Security DevOps
-        uses: microsoft/security-devops-action@f9001b97972fc0021c251d1469eb7f61ad8841a1  # v1.1.1
+        uses: microsoft/security-devops-action@cf28f87c67770dbaa208cce3665fafc849f77507  # v1.12.1
         id: msdo
 
       - name: Upload results to Security tab
-        uses: github/codeql-action/upload-sarif@b6a472f63d00ce764a70eff9140f73d14778195e  # v3.28.10
+        uses: github/codeql-action/upload-sarif@b56ba49b26e50535fa1e7f7db0f4f7b4bf65d80d  # v3.28.10
         with:
           sarif_file: ${{ steps.msdo.outputs.sarifFile }}
