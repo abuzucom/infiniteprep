@@ -14,7 +14,8 @@ from typing import Final
 
 OLLAMA_TAGS_URL: Final[str] = "http://127.0.0.1:11434/api/tags"
 # A model reference is name:tag. The leading alphanumeric keeps a crafted
-# name from reaching the ollama CLI as an option.
+# name from reaching the ollama CLI as an option. The name allows 128
+# characters and the tag allows 64. Both bounds exceed published model names.
 SAFE_MODEL_NAME_RE: Final[re.Pattern[str]] = re.compile(
     r"[A-Za-z0-9][A-Za-z0-9._/-]{0,127}:[A-Za-z0-9._-]{1,64}"
 )
@@ -73,7 +74,8 @@ class OllamaBootstrapService:
         """Pull an Ollama model (e.g., qwen2.5:3b) only when user_consented is True."""
         if not SAFE_MODEL_NAME_RE.fullmatch(model_name):
             raise ValueError(
-                f"Invalid Ollama model name {model_name!r}. Use the name:tag form, e.g. qwen2.5:3b."
+                f"Invalid Ollama model name {model_name!r}. Use name:tag with a name up to 128 "
+                "characters and a tag up to 64, e.g. qwen2.5:3b."
             )
         if not user_consented:
             raise PermissionError(

@@ -36,6 +36,8 @@ OFFICIAL_FPCALC_URLS: Final[dict[str, str]] = {
 }
 # SHA-256 of each OFFICIAL_FPCALC_URLS asset. A digest pins the exact release
 # archive. A replaced asset or redirected download fails before extraction.
+# Recompute with `sha256sum` over a fresh download of each URL before any
+# update to these values.
 OFFICIAL_FPCALC_SHA256: Final[dict[str, str]] = {
     "windows": "36b478e16aa69f757f376645db0d436073a42c0097b6bb2677109e7835b59bbc",
     "darwin": "d4d8faff4b5f7c558d9be053da47804f9501eaa6c2f87906a9f040f38d61c860",
@@ -126,10 +128,18 @@ class FpcalcBootstrapService:
         sys_key = platform.system().lower()
         if sys_key not in OFFICIAL_FPCALC_URLS:
             sys_key = "windows"
+        pinned_sha256 = OFFICIAL_FPCALC_SHA256[sys_key]
+        # The parameter stays for API compatibility. Only the pinned digest
+        # can authorize the official download.
+        if expected_sha256 and expected_sha256.lower() != pinned_sha256:
+            raise ValueError(
+                "expected_sha256 differs from the pinned fpcalc digest. "
+                "Omit it to use the pinned value."
+            )
         raw_bytes = self.downloader(OFFICIAL_FPCALC_URLS[sys_key])
         return self.install_from_archive_bytes(
             archive_bytes=raw_bytes,
-            expected_sha256=expected_sha256 or OFFICIAL_FPCALC_SHA256[sys_key],
+            expected_sha256=pinned_sha256,
             user_consented=user_consented,
         )
 
