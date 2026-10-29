@@ -208,7 +208,9 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
      Preview** after an edit.
    - A `BLOCKED` row names its validation errors or filename collisions.
    - **Apply Safe Writes** writes only the `READY` rows. Each write first
-     takes a verified backup and records a journal entry.
+     records an in-progress journal entry, then takes a verified backup.
+   - A write that fails partway restores the original from its verified
+     backup and records the journal entry as rolled back.
 8. **Restore.** Click **Change Journal & Restore**. Each completed write shows
    a **Restore Backup** button. The restore verifies the backup and returns
    the original file.
