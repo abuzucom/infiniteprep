@@ -17,6 +17,7 @@ from infiniteprep.domain.ports import FingerprintMatchItem, FingerprintResult
 
 ACOUSTID_API_URL: Final[str] = "https://api.acoustid.org/v2/lookup"
 CACHE_TTL_SEC: Final[int] = 86400
+MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
 
 
 class ChromaprintAcoustIDAdapter:
@@ -159,4 +160,7 @@ class ChromaprintAcoustIDAdapter:
             headers={"User-Agent": "InfinitePrep/0.1.0 (https://infiniteprep.local)"},
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return dict(json.loads(resp.read().decode("utf-8")))
+            raw_bytes = resp.read(MAX_API_RESPONSE_BYTES + 1)
+        if len(raw_bytes) > MAX_API_RESPONSE_BYTES:
+            raise ValueError("AcoustID HTTP response exceeded maximum byte size limit.")
+        return dict(json.loads(raw_bytes.decode("utf-8")))

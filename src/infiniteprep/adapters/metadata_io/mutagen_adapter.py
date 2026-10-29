@@ -51,6 +51,9 @@ ILLEGAL_FILENAME_CHARS_RE: Final[re.Pattern[str]] = re.compile(r'[<>:"/\\|?*\x00
 WHITESPACE_COLLAPSE_RE: Final[re.Pattern[str]] = re.compile(r"\s+")
 EMPTY_PARENS_RE: Final[re.Pattern[str]] = re.compile(r"\(\s*\)")
 EMPTY_BRACKETS_RE: Final[re.Pattern[str]] = re.compile(r"\[\s*\]")
+# Rename templates accept only bare {token} names. str.format would also
+# evaluate attribute, index, and conversion syntax from user settings.
+TEMPLATE_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"\{([a-z_]+)\}")
 
 EXTENSION_TO_FORMAT: Final[dict[str, AudioFormat]] = {
     ".mp3": AudioFormat.MP3,
@@ -380,15 +383,23 @@ class MutagenAdapter:
         """Render a safe filename from template and effective fields, preserving extension."""
         ext = source_path.suffix
         tokens = self._build_filename_tokens(source_path, effective_fields)
-        try:
-            rendered = template.format(**tokens)
-        except KeyError:
-            rendered = f"{tokens['artist']} - {tokens['title']}"
+        rendered = self._substitute_template_tokens(template, tokens)
 
         rendered = EMPTY_PARENS_RE.sub("", rendered)
         rendered = EMPTY_BRACKETS_RE.sub("", rendered)
         rendered = sanitize_filename_component(rendered)
         return f"{rendered or source_path.stem}{ext}"
+
+    @staticmethod
+    def _substitute_template_tokens(template: str, tokens: dict[str, str]) -> str:
+        """Replace known {token} names. Any other brace syntax selects the default layout."""
+        default_layout = f"{tokens['artist']} - {tokens['title']}"
+        requested = TEMPLATE_TOKEN_RE.findall(template)
+        if any(name not in tokens for name in requested):
+            return default_layout
+        if any(brace in TEMPLATE_TOKEN_RE.sub("", template) for brace in "{}"):
+            return default_layout
+        return TEMPLATE_TOKEN_RE.sub(lambda match: tokens[match.group(1)], template)
 
     def _build_filename_tokens(
         self, source_path: Path, effective_fields: dict[str, str]
@@ -588,6 +599,7 @@ class MutagenAdapter:
 
         for field_enum, txxx_desc in ID3_TXXX_MAP.items():
             if field_enum in tags_to_write:
+                id3.delall(f"TXXX:{txxx_desc}")
                 id3.add(
                     TXXX(
                         encoding=ID3_UTF16_ENCODING,

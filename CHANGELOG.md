@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0] (2026-10-29)
+## [0.2.1] (2026-10-29)
 
 ### Added
 
@@ -23,6 +23,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `.gitattributes` pins LF line endings for the policy files.
 - The `checks` and `test-matrix` jobs install `requirements-checkers.txt` for the agents tests.
 - The `checks` and `test-matrix` test steps unset `GITHUB_EVENT_PATH`. Push events no longer reach the compliance scanner tests.
+
+### Security
+
+- `FpcalcBootstrapService` pins the SHA-256 digest of each official Chromaprint 1.5.1 archive. Extraction requires a digest and compares it in constant time.
+- ZIP extraction of `fpcalc` reads at most `MAX_FPCALC_BINARY_BYTES` plus one byte.
+- `MutagenAdapter.render_filename` substitutes only known `{token}` names. Other brace syntax selects the default `artist - title` layout.
+- `DiscogsAdapter.fetch` accepts only numeric release IDs.
+- `OllamaBootstrapService.pull_model` accepts only `name:tag` model references with a leading alphanumeric character.
+- The Discogs, MusicBrainz, and AcoustID HTTP clients cap each response at 5 MiB.
+- ID3 writes remove an existing `TXXX` frame with the same description before adding the new value.
+- Added `tests/unit/test_security_review_remediation.py`.
 
 ## [0.1.0] (2026-10-28)
 

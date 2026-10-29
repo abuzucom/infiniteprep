@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import io
 import os
 import platform
@@ -33,6 +34,13 @@ OFFICIAL_FPCALC_URLS: Final[dict[str, str]] = {
         "v1.5.1/chromaprint-fpcalc-1.5.1-linux-x86_64.tar.gz"
     ),
 }
+# SHA-256 of each OFFICIAL_FPCALC_URLS asset. A digest pins the exact release
+# archive. A replaced asset or redirected download fails before extraction.
+OFFICIAL_FPCALC_SHA256: Final[dict[str, str]] = {
+    "windows": "36b478e16aa69f757f376645db0d436073a42c0097b6bb2677109e7835b59bbc",
+    "darwin": "d4d8faff4b5f7c558d9be053da47804f9501eaa6c2f87906a9f040f38d61c860",
+    "linux": "4d7433a7f778e5946d7225230681cbcd634e153316ecac87c538c33ac32387a5",
+}
 
 
 def _is_matching_fpcalc_name(member_path: str, exe_name: str) -> bool:
@@ -58,6 +66,14 @@ def _try_write_tar_member(
         return False
     target_bin.write_bytes(extracted.read(MAX_FPCALC_BINARY_BYTES))
     return True
+
+
+def _read_bounded_zip_entry(zf: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
+    """Read a ZIP entry and raise ValueError past MAX_FPCALC_BINARY_BYTES."""
+    with zf.open(info) as entry:
+        data = entry.read(MAX_FPCALC_BINARY_BYTES + 1)
+    _verify_entry_size(len(data))
+    return data
 
 
 class FpcalcBootstrapService:
@@ -108,11 +124,12 @@ class FpcalcBootstrapService:
                 "pass user_consented=True after user approval."
             )
         sys_key = platform.system().lower()
-        url = OFFICIAL_FPCALC_URLS.get(sys_key, OFFICIAL_FPCALC_URLS["windows"])
-        raw_bytes = self.downloader(url)
+        if sys_key not in OFFICIAL_FPCALC_URLS:
+            sys_key = "windows"
+        raw_bytes = self.downloader(OFFICIAL_FPCALC_URLS[sys_key])
         return self.install_from_archive_bytes(
             archive_bytes=raw_bytes,
-            expected_sha256=expected_sha256,
+            expected_sha256=expected_sha256 or OFFICIAL_FPCALC_SHA256[sys_key],
             user_consented=user_consented,
         )
 
@@ -128,8 +145,13 @@ class FpcalcBootstrapService:
             raise PermissionError(
                 "User consent is required before extracting fpcalc; aborting setup."
             )
+        if not expected_sha256:
+            raise ValueError(
+                "Missing SHA-256 digest for the fpcalc archive. "
+                "Pass the digest of the official release archive."
+            )
         actual_sha256 = hashlib.sha256(archive_bytes).hexdigest()
-        if expected_sha256 and actual_sha256.lower() != expected_sha256.lower():
+        if not hmac.compare_digest(actual_sha256, expected_sha256.lower()):
             raise ValueError(
                 f"SHA-256 mismatch for fpcalc archive: expected {expected_sha256}, "
                 f"got {actual_sha256}; aborting installation."
@@ -159,7 +181,7 @@ class FpcalcBootstrapService:
             for info in zf.infolist():
                 if not info.is_dir() and _is_matching_fpcalc_name(info.filename, exe_name):
                     _verify_entry_size(info.file_size)
-                    target_bin.write_bytes(zf.read(info.filename))
+                    target_bin.write_bytes(_read_bounded_zip_entry(zf, info))
                     return
         raise FileNotFoundError(
             f"ZIP archive did not contain '{exe_name}'; verify official Chromaprint bundle."

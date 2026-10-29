@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import platform
+import re
 import shutil
 import subprocess
 import urllib.request
@@ -12,6 +13,11 @@ from pathlib import Path
 from typing import Final
 
 OLLAMA_TAGS_URL: Final[str] = "http://127.0.0.1:11434/api/tags"
+# A model reference is name:tag. The leading alphanumeric keeps a crafted
+# name from reaching the ollama CLI as an option.
+SAFE_MODEL_NAME_RE: Final[re.Pattern[str]] = re.compile(
+    r"[A-Za-z0-9][A-Za-z0-9._/-]{0,127}:[A-Za-z0-9._-]{1,64}"
+)
 
 
 class OllamaBootstrapService:
@@ -65,6 +71,10 @@ class OllamaBootstrapService:
 
     def pull_model(self, model_name: str, *, user_consented: bool) -> str:
         """Pull an Ollama model (e.g., qwen2.5:3b) only when user_consented is True."""
+        if not SAFE_MODEL_NAME_RE.fullmatch(model_name):
+            raise ValueError(
+                f"Invalid Ollama model name {model_name!r}. Use the name:tag form, e.g. qwen2.5:3b."
+            )
         if not user_consented:
             raise PermissionError(
                 f"Explicit user consent is required before pulling Ollama model '{model_name}'."

@@ -17,6 +17,7 @@ from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
 from infiniteprep.domain.ports import MetadataSearchQuery
 
 MB_BASE_URL: Final[str] = "https://musicbrainz.org/ws/2"
+MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
 MB_USER_AGENT: Final[str] = "InfinitePrep/0.1.0 (https://github.com/infiniteprep/infiniteprep)"
 MB_CACHE_TTL_SEC: Final[int] = 86400
 LUCENE_SPECIAL_RE: Final[re.Pattern[str]] = re.compile(r'([+\-!(){}\[\]^"~*?:\\/]|&&|\|\|)')
@@ -210,4 +211,7 @@ class MusicBrainzAdapter:
             headers={"User-Agent": MB_USER_AGENT, "Accept": "application/json"},
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return dict(json.loads(resp.read().decode("utf-8")))
+            raw_bytes = resp.read(MAX_API_RESPONSE_BYTES + 1)
+        if len(raw_bytes) > MAX_API_RESPONSE_BYTES:
+            raise ValueError("MusicBrainz HTTP response exceeded maximum byte size limit.")
+        return dict(json.loads(raw_bytes.decode("utf-8")))

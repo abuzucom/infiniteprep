@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -18,6 +19,11 @@ from infiniteprep.domain.ports import MetadataSearchQuery
 DISCOGS_BASE_URL: Final[str] = "https://api.discogs.com"
 DISCOGS_USER_AGENT: Final[str] = "InfinitePrep/0.1.0 +https://github.com/infiniteprep/infiniteprep"
 DISCOGS_TTL_SEC: Final[int] = 21600  # 6 hours per Discogs API caching rules
+MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
+# Discogs release IDs are positive integers. The ID becomes a URL path segment
+# in a request that carries the Discogs token. Digits keep traversal and query
+# characters out of that path.
+SAFE_RELEASE_ID_RE: Final[re.Pattern[str]] = re.compile(r"[0-9]{1,16}")
 
 
 class DiscogsAdapter:
@@ -82,6 +88,8 @@ class DiscogsAdapter:
     ) -> list[CandidateMatch]:
         """Fetch a specific Discogs release by ID and extract tracklist positions."""
         _ = entity_type
+        if not SAFE_RELEASE_ID_RE.fullmatch(entity_id):
+            raise ValueError(f"Invalid Discogs release id {entity_id!r}. Use digits only.")
         ready, _ = self.is_available()
         if not ready:
             return []
@@ -204,4 +212,7 @@ class DiscogsAdapter:
         }
         req = urllib.request.Request(full_url, headers=headers)
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return dict(json.loads(resp.read().decode("utf-8")))
+            raw_bytes = resp.read(MAX_API_RESPONSE_BYTES + 1)
+        if len(raw_bytes) > MAX_API_RESPONSE_BYTES:
+            raise ValueError("Discogs HTTP response exceeded maximum byte size limit.")
+        return dict(json.loads(raw_bytes.decode("utf-8")))
