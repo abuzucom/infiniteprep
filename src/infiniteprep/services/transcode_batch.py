@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Final
 
+import soundfile as sf
+
 from infiniteprep.adapters.transcoder.safe_transcoder import (
     SafeTranscoderAdapter,
     TranscodeMode,
@@ -15,11 +17,12 @@ from infiniteprep.adapters.transcoder.safe_transcoder import (
 
 logger = logging.getLogger(__name__)
 
-# soundfile raises LibsndfileError, a RuntimeError subclass, on decode failures.
+# soundfile raises SoundFileRuntimeError, the base of LibsndfileError, on decode and
+# encode failures. Other RuntimeError types surface as programming errors.
 EXPECTED_TRANSCODE_ERRORS: Final[tuple[type[Exception], ...]] = (
     OSError,
     ValueError,
-    RuntimeError,
+    sf.SoundFileRuntimeError,
 )
 
 
