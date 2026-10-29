@@ -519,3 +519,24 @@ def test_tar_entry_at_cap_installs_whole_binary(
         user_consented=True,
     )
     assert installed.read_bytes() == payload
+
+
+@pytest.mark.parametrize("bad_digest", [" ", "0", "g" * 64, "a" * 63, "a" * 65])
+def test_archive_install_rejects_malformed_digest(tmp_path: Path, bad_digest: str) -> None:
+    bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin")
+    with pytest.raises(ValueError, match="64 hexadecimal"):
+        bootstrap.install_from_archive_bytes(
+            archive_bytes=_build_fpcalc_zip(FAKE_BINARY),
+            expected_sha256=bad_digest,
+            user_consented=True,
+        )
+    assert not (tmp_path / "bin").exists()
+
+
+@pytest.mark.parametrize("model_name", ["a/x..:b", "a..b:c", "model:v1..2"])
+def test_pull_model_rejects_consecutive_dots(model_name: str) -> None:
+    commands: list[list[str]] = []
+    service = OllamaBootstrapService(runner=_command_recorder(commands))
+    with pytest.raises(ValueError, match="model name"):
+        service.pull_model(model_name, user_consented=True)
+    assert commands == []

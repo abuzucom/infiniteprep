@@ -7,6 +7,7 @@ import hmac
 import io
 import os
 import platform
+import re
 import shutil
 import stat
 import tarfile
@@ -20,6 +21,7 @@ import platformdirs
 
 FPCALC_VERSION: Final[str] = "1.5.1"
 MAX_FPCALC_BINARY_BYTES: Final[int] = 33_554_432  # 32 MiB cap for extracted binary
+SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"[0-9A-Fa-f]{64}")
 OFFICIAL_FPCALC_URLS: Final[dict[str, str]] = {
     "windows": (
         "https://github.com/acoustid/chromaprint/releases/download/"
@@ -72,6 +74,15 @@ def _try_write_tar_member(
     _verify_entry_size(len(data))
     target_bin.write_bytes(data)
     return True
+
+
+def _require_sha256_hex(digest: str) -> None:
+    """Raise ValueError unless digest is 64 hexadecimal characters."""
+    if not SHA256_HEX_RE.fullmatch(digest):
+        raise ValueError(
+            "The fpcalc archive digest must be 64 hexadecimal characters. "
+            "Pass a SHA-256 hex digest."
+        )
 
 
 def _verify_archive_digest(archive_bytes: bytes, expected_sha256: str) -> None:
@@ -153,15 +164,19 @@ class FpcalcBootstrapService:
                 "Install fpcalc with the system package manager, e.g. libchromaprint-tools."
             )
         pinned_sha256 = OFFICIAL_FPCALC_SHA256[sys_key]
-        if expected_sha256 and not hmac.compare_digest(expected_sha256.lower(), pinned_sha256):
-            raise ValueError(
-                "SHA-256 mismatch: expected_sha256 differs from the pinned fpcalc digest. "
-                "Omit it or pass the pinned value."
-            )
+        if expected_sha256:
+            _require_sha256_hex(expected_sha256)
+            if not hmac.compare_digest(expected_sha256.lower(), pinned_sha256):
+                raise ValueError(
+                    "SHA-256 mismatch: expected_sha256 differs from the pinned fpcalc digest. "
+                    "Omit it or pass the pinned value."
+                )
         raw_bytes = self.downloader(OFFICIAL_FPCALC_URLS[sys_key])
+        # A caller digest equals the pin at this point. Passing it on keeps
+        # the caller value in the verification path.
         return self.install_from_archive_bytes(
             archive_bytes=raw_bytes,
-            expected_sha256=pinned_sha256,
+            expected_sha256=expected_sha256 or pinned_sha256,
             user_consented=user_consented,
         )
 
@@ -182,6 +197,7 @@ class FpcalcBootstrapService:
                 "Missing SHA-256 digest for the fpcalc archive. "
                 "Pass the digest of the official release archive."
             )
+        _require_sha256_hex(expected_sha256)
         _verify_archive_digest(archive_bytes, expected_sha256)
         self.install_dir.mkdir(parents=True, exist_ok=True)
         target_bin = self.install_dir / self.binary_filename()
