@@ -80,35 +80,184 @@ output.
 
 ---
 
-## Installation & Quick Start
+## Setup Walkthrough
+
+### 1. Prerequisites
+
+- Python 3.11 or newer.
+- Git.
+- A desktop session. The application opens a Qt window.
+- The Qt XCB runtime libraries on Linux. On Debian and Ubuntu, install
+  `libxcb-cursor0`, `libxkbcommon-x11-0`, and `libegl1`.
+
+The `soundfile` wheels bundle `libsndfile` on Windows, macOS, and x86_64
+Linux. Other platforms need the system `libsndfile` package.
+
+### 2. Get the source
 
 ```bash
-python -m venv .venv
-# Windows PowerShell:
-.\.venv\Scripts\pip.exe install -e ".[dev]"
-
-# Launch Desktop UI:
-.\.venv\Scripts\python.exe -m infiniteprep.main
-
-# Run Pilot Evaluation Sample CLI Harness:
-.\.venv\Scripts\python.exe -m infiniteprep.main evaluate-sample --input-dir ./path/to/tracks --output-json ./eval_report.json
+git clone https://github.com/abuzucom/infiniteprep.git
+cd infiniteprep
 ```
+
+### 3. Create a virtual environment and install
+
+Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+macOS and Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+The `dev` extra adds pytest, pytest-qt, Ruff, and PyInstaller. Run
+`python -m pip install -e .` instead for the application alone.
+
+The install registers the `infiniteprep` command inside the virtual
+environment. Every command below assumes an active virtual environment.
+
+### 4. Optional external tools
+
+- `fpcalc` (Chromaprint). Linux installs it from the distribution package,
+  such as `libchromaprint-tools` on Debian and Ubuntu. Windows and macOS use
+  the consent-gated `FpcalcBootstrapService`.
+- Ollama for local LLM arbitration. Install it from the Ollama site and pull
+  `qwen2.5:3b`. The default endpoint is `http://127.0.0.1:11434/v1`.
+- The Essentia `essentia_streaming_extractor_music` binary for the optional
+  `EssentiaCliAnalyzer`.
+
+### 5. Launch the desktop application
+
+```bash
+infiniteprep
+```
+
+`python -m infiniteprep.main` starts the same application.
+
+On first launch the application creates these per-user locations through
+`platformdirs`:
+
+| Item | Windows | macOS | Linux |
+| --- | --- | --- | --- |
+| Database `infiniteprep.sqlite3` and `backups/` | `%LOCALAPPDATA%\InfinitePrep\InfinitePrep` | `~/Library/Application Support/InfinitePrep` | `~/.local/share/InfinitePrep` |
+| `settings.json` | `%LOCALAPPDATA%\InfinitePrep\InfinitePrep` | `~/Library/Application Support/InfinitePrep` | `~/.config/InfinitePrep` |
+
+### 6. Configure settings and credentials
+
+Click **Settings & Providers**. The dialog holds these fields:
+
+- AcoustID API key and Discogs personal token.
+- The closed-world LLM toggle, the Ollama or OpenAI-compatible base URL, and
+  the model.
+- The XDJ-RX3 transcode mode and preset.
+
+Click **Save Settings**. Secrets go to the OS keyring under the
+`InfinitePrep` service. The application refuses a plaintext fallback when the
+keyring fails. Environment variables override the keyring:
+
+| Credential | Environment variable |
+| --- | --- |
+| AcoustID API key | `INFINITEPREP_ACOUSTID_API_KEY` |
+| Discogs token | `INFINITEPREP_DISCOGS_TOKEN` |
+| ACRCloud access key | `INFINITEPREP_ACRCLOUD_ACCESS_KEY` |
+| ACRCloud access secret | `INFINITEPREP_ACRCLOUD_ACCESS_SECRET` |
+| LLM API key | `INFINITEPREP_LLM_API_KEY` |
+
+Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
+
+---
+
+## Usage Walkthrough
+
+1. **Import.** Click **Import Folder** and pick a music folder. The import
+   reads tags and hashes each file. It never modifies the files. Each file
+   appears in the table with its format, duration, current tags, status, and
+   warnings.
+2. **Filter.** Type in the filter box to match filename, artist, title, label,
+   or warning text. The status menu narrows the table to `Has Warnings
+   (XDJ-RX3 / Rip)`, `Unprocessed`, `Proposed`, `Partially Approved`,
+   `Ready to Write`, `Written`, or `Error`.
+3. **Identify and analyze.** Click **Identify & Analyze All**. The batch runs
+   on every visible row. `LocalDspAnalyzer` computes BPM, key, the waveform
+   overview, and rip warnings. Reconciliation turns the results into field
+   proposals.
+4. **Pick the key notation.** The **Key Notation** menu switches the table and
+   detail panel between Standard, Camelot, and Open Key.
+5. **Review one track.** Select a row. The detail panel shows hardware
+   warnings, the audio preview, and each field proposal.
+   - **Play**, **Stop**, and the `Intro`, `25%`, `50% Drop`, `75%`, and
+     `Outro` buttons jump through the track.
+   - **Accept** approves a proposal.
+   - **Save** stores a manual edit.
+   - **Lock** protects a field from later proposals. **Unlock** releases it.
+6. **Bulk approve.** Click **Bulk Approve Non-Conflicting** to approve every
+   proposal without a competing value on the visible rows.
+7. **Preview and apply.** Click **Preview & Apply Writes**. The dialog lists
+   each destination file, the tag changes, the preserved custom frames, the
+   backup path, and a safety status.
+   - Check **Rename files using template** to rename on write. The default
+     template is `{artist} - {title} ({mix_name})`. Click **Refresh
+     Preview** after an edit.
+   - A `BLOCKED` row names its validation errors or filename collisions.
+   - **Apply Safe Writes** writes only the `READY` rows. Each write first
+     takes a verified backup and records a journal entry.
+8. **Restore.** Click **Change Journal & Restore**. Each completed write shows
+   a **Restore Backup** button. The restore verifies the backup and returns
+   the original file.
+
+### Evaluate a folder from the command line
+
+```bash
+infiniteprep evaluate-sample --input-dir ./path/to/tracks --output-json ./eval_report.json
+```
+
+The harness imports the folder into an in-memory database and runs the
+pipeline. It writes counts for imported, damaged, unsupported, identified,
+and analyzed files. `zero_unintended_file_mutations` reports whether every
+input file kept its original SHA-256 digest. Without `--output-json` the
+command writes no report.
+
+### Current limitations
+
+- The desktop launcher and `evaluate-sample` use the offline mock fingerprint
+  and catalog adapters. Proposals for artist, title, label, and release
+  fields come from those deterministic mock candidates.
+- The AcoustID, MusicBrainz, Discogs, and LLM adapters exist in
+  `src/infiniteprep/adapters/`. The launcher does not wire those adapters. Saved
+  credentials and provider settings do not change the identification results.
+- The main window exposes no transcode action. `SafeTranscoderAdapter` and
+  `PlaylistExporter` run only through the Python API.
 
 ---
 
 ## Testing, Linting & Packaging
 
+Run these from an active virtual environment:
+
 ```bash
-# Review wiring tests:
-python3 -m unittest discover -s tests -v
+# Agents policy, gate, and review wiring tests (unittest):
+python -m pip install --requirement requirements-checkers.txt
+python -m unittest discover -s tests -v
 
 # Format & Lint check:
-.\.venv\Scripts\ruff.exe format --check src tests
-.\.venv\Scripts\ruff.exe check src tests
+ruff format --check src tests
+ruff check src tests
 
 # Run automated test suite (Unit + Qt UI + Integration + E2E):
-.\.venv\Scripts\pytest.exe
+pytest
 
 # Package standalone desktop binary with PyInstaller:
-.\.venv\Scripts\pyinstaller.exe infiniteprep.spec
+pyinstaller infiniteprep.spec
 ```
+
+PyInstaller writes the packaged application to `dist/`.
