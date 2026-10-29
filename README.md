@@ -2,8 +2,6 @@
 
 **InfinitePrep** is a cross-platform desktop application (**Windows, macOS, and Linux**) built for DJs to identify, correct, enrich, and safely organize music files (**MP3, FLAC, WAV, and AIFF** write-enabled; **M4A/OGG** read-only and convertible).
 
-It is purpose-built for **Native Instruments Traktor Pro 4**, **AlphaTheta / Pioneer DJ Rekordbox**, and standalone **Pioneer DJ XDJ-RX3** hardware workflows, with first-class support for 1990s-2010s rare dance singles, vinyl transfers, and cassette/CD rips.
-
 ---
 
 ## Core Loop
