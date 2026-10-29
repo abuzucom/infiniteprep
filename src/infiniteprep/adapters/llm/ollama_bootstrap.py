@@ -13,13 +13,24 @@ from pathlib import Path
 from typing import Final
 
 OLLAMA_TAGS_URL: Final[str] = "http://127.0.0.1:11434/api/tags"
-# A model reference is name:tag. The CLI parses an argument as an option only
-# when it starts with a hyphen. The first character must be a letter or digit.
-# That rule keeps a crafted name out of option parsing. The name allows 128
-# characters and the tag allows 64. Both bounds exceed published model names.
-SAFE_MODEL_NAME_RE: Final[re.Pattern[str]] = re.compile(
-    r"[A-Za-z0-9][A-Za-z0-9._/-]{0,127}:[A-Za-z0-9._-]{1,64}"
-)
+# A model reference is [host/][namespace/]model:tag, e.g. hf.co/user/model:q4.
+# Each slash-separated segment and the tag must start with a letter or digit.
+# The CLI parses an argument as an option only when it starts with a hyphen.
+# The leading character rule also excludes empty, "." and ".." segments.
+# Each segment allows 64 characters. Both bounds exceed published model names.
+MODEL_REFERENCE_PART_RE: Final[re.Pattern[str]] = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+MAX_MODEL_NAME_SEGMENTS: Final[int] = 3
+
+
+def is_safe_model_reference(model_name: str) -> bool:
+    """Return True when model_name is a name:tag reference with safe path segments."""
+    name, separator, tag = model_name.partition(":")
+    if not separator:
+        return False
+    segments = name.split("/")
+    if len(segments) > MAX_MODEL_NAME_SEGMENTS:
+        return False
+    return all(MODEL_REFERENCE_PART_RE.fullmatch(part) for part in [*segments, tag])
 
 
 class OllamaBootstrapService:
@@ -73,10 +84,10 @@ class OllamaBootstrapService:
 
     def pull_model(self, model_name: str, *, user_consented: bool) -> str:
         """Pull an Ollama model (e.g., qwen2.5:3b) only when user_consented is True."""
-        if not SAFE_MODEL_NAME_RE.fullmatch(model_name):
+        if not is_safe_model_reference(model_name):
             raise ValueError(
-                f"Invalid Ollama model name {model_name!r}. Use name:tag with a name up to 128 "
-                "characters and a tag up to 64, e.g. qwen2.5:3b."
+                f"Invalid Ollama model name {model_name!r}. Use [host/][namespace/]model:tag. "
+                "Start each part with a letter or digit and keep it within 64 characters."
             )
         if not user_consented:
             raise PermissionError(

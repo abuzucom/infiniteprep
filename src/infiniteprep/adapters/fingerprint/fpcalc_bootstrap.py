@@ -11,6 +11,7 @@ import shutil
 import stat
 import tarfile
 import urllib.request
+import warnings
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
@@ -121,10 +122,11 @@ class FpcalcBootstrapService:
     ) -> Path:
         """Download and install fpcalc only when user_consented is explicitly True.
 
-        The pinned OFFICIAL_FPCALC_SHA256 digest verifies the download. The
-        optional expected_sha256 remains for API compatibility. A value that
-        differs from the pin raises ValueError. install_from_archive_bytes
-        accepts a caller-supplied digest for archives from other sources.
+        The pinned OFFICIAL_FPCALC_SHA256 digest verifies the download.
+        Passing expected_sha256 emits DeprecationWarning. The parameter remains
+        for API compatibility. A value that differs from the pin raises
+        ValueError. install_from_archive_bytes accepts a caller-supplied digest
+        for archives from other sources.
         Platforms without a pinned archive raise ValueError before any download.
         """
         if not user_consented:
@@ -141,6 +143,13 @@ class FpcalcBootstrapService:
         pinned_sha256 = OFFICIAL_FPCALC_SHA256[sys_key]
         # The parameter stays for API compatibility. Only the pinned digest
         # can authorize the official download.
+        if expected_sha256 is not None:
+            warnings.warn(
+                "Stop passing install_fpcalc(expected_sha256=...). "
+                "The pinned OFFICIAL_FPCALC_SHA256 digest verifies the download.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         if expected_sha256 and expected_sha256.lower() != pinned_sha256:
             raise ValueError(
                 "expected_sha256 differs from the pinned fpcalc digest. "
@@ -200,9 +209,8 @@ class FpcalcBootstrapService:
         with zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as zf:
             for info in zf.infolist():
                 if not info.is_dir() and _is_matching_fpcalc_name(info.filename, exe_name):
-                    # The declared size gives an early reject. The bounded read
-                    # enforces the cap on the decompressed bytes.
-                    _verify_entry_size(info.file_size)
+                    # The bounded read enforces the cap on decompressed bytes.
+                    # The declared header size stays untrusted.
                     target_bin.write_bytes(_read_bounded_zip_entry(zf, info))
                     return
         raise FileNotFoundError(

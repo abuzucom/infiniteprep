@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import logging
 import re
 import subprocess
 import zipfile
@@ -23,6 +24,7 @@ from infiniteprep.adapters.fingerprint import fpcalc_bootstrap as fpcalc_module
 from infiniteprep.adapters.fingerprint.chromaprint_acoustid import ChromaprintAcoustIDAdapter
 from infiniteprep.adapters.fingerprint.fpcalc_bootstrap import FpcalcBootstrapService
 from infiniteprep.adapters.llm.ollama_bootstrap import OllamaBootstrapService
+from infiniteprep.adapters.metadata_io import mutagen_adapter as mutagen_adapter_module
 from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
@@ -271,6 +273,79 @@ def test_pull_model_runs_recommended_model() -> None:
     service = OllamaBootstrapService(runner=_command_recorder(commands))
     assert service.pull_model("qwen2.5:3b", user_consented=True) == "pulled"
     assert commands == [["ollama", "pull", "qwen2.5:3b"]]
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    [
+        "a/..:b",
+        "a//b:c",
+        "a/.hidden:b",
+        "a/-x:b",
+        "/a:b",
+        "a/:b",
+        "a/b/c/d:e",
+        "a:-b",
+        "a:.b",
+        "a:b:c",
+    ],
+)
+def test_pull_model_rejects_unsafe_name_segments(model_name: str) -> None:
+    commands: list[list[str]] = []
+    service = OllamaBootstrapService(runner=_command_recorder(commands))
+    with pytest.raises(ValueError, match="model name"):
+        service.pull_model(model_name, user_consented=True)
+    assert commands == []
+
+
+@pytest.mark.parametrize(
+    "model_name",
+    ["library/qwen2.5:3b", "hf.co/user/model-name:q4_K_M", "llama3.2-vision:11b"],
+)
+def test_pull_model_accepts_namespaced_names(model_name: str) -> None:
+    commands: list[list[str]] = []
+    service = OllamaBootstrapService(runner=_command_recorder(commands))
+    service.pull_model(model_name, user_consented=True)
+    assert commands == [["ollama", "pull", model_name]]
+
+
+# Deprecated install_fpcalc digest parameter and template fallback observability.
+
+
+def test_install_fpcalc_warns_when_digest_parameter_is_passed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Windows")
+    bootstrap = FpcalcBootstrapService(
+        install_dir=tmp_path / "bin", downloader=lambda _url: _build_fpcalc_zip(FAKE_BINARY)
+    )
+    pinned = fpcalc_module.OFFICIAL_FPCALC_SHA256["windows"]
+    with (
+        pytest.warns(DeprecationWarning, match="expected_sha256"),
+        pytest.raises(ValueError, match="SHA-256 mismatch"),
+    ):
+        bootstrap.install_fpcalc(user_consented=True, expected_sha256=pinned)
+
+
+def test_render_filename_logs_template_fallback(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, logger=mutagen_adapter_module.__name__):
+        rendered = MutagenAdapter().render_filename(
+            Path("track.mp3"),
+            {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
+            "{artis} - {title}",
+        )
+    assert rendered == "Deep Dish - The Dream.mp3"
+    assert any("template" in record.getMessage() for record in caplog.records)
+
+
+def test_render_filename_valid_template_logs_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING, logger=mutagen_adapter_module.__name__):
+        MutagenAdapter().render_filename(
+            Path("track.mp3"),
+            {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
+            "{artist} - {title}",
+        )
+    assert caplog.records == []
 
 
 def _command_recorder(
