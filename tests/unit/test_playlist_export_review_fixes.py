@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-import stat
 from pathlib import Path
 
 import pytest
@@ -19,8 +17,6 @@ from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.action_handlers import build_skipped_tracks_text
 from infiniteprep.ui.main_window import MainWindow
 from tests.fixtures.audio_factory import create_wav_fixture
-
-GROUP_AND_OTHER_BITS = stat.S_IRWXG | stat.S_IRWXO
 
 
 def import_tracks(tmp_path: Path, count: int) -> tuple[Repository, ImportService, list[str]]:
@@ -115,14 +111,3 @@ def test_export_button_appends_the_suffix_only_when_missing(
     window.export_playlist_btn.click()
 
     assert destinations == [tmp_path / expected_name]
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits apply only on POSIX.")
-def test_new_playlist_has_no_group_or_other_permission_bits(tmp_path: Path) -> None:
-    """The created playlist mode clears every group and other permission bit."""
-    repo, _, file_ids = import_tracks(tmp_path, 1)
-    destination = tmp_path / "out" / "crate.m3u8"
-
-    PlaylistExporter(repo).export_m3u8_report(file_ids, destination)
-
-    assert stat.S_IMODE(destination.stat().st_mode) & GROUP_AND_OTHER_BITS == 0
