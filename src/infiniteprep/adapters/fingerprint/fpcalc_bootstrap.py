@@ -11,7 +11,6 @@ import shutil
 import stat
 import tarfile
 import urllib.request
-import warnings
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
@@ -71,6 +70,16 @@ def _try_write_tar_member(
     return True
 
 
+def _verify_archive_digest(archive_bytes: bytes, expected_sha256: str) -> None:
+    """Raise ValueError unless archive_bytes hash to expected_sha256."""
+    actual_sha256 = hashlib.sha256(archive_bytes).hexdigest()
+    if not hmac.compare_digest(actual_sha256, expected_sha256.lower()):
+        raise ValueError(
+            f"SHA-256 mismatch for fpcalc archive: expected {expected_sha256}, "
+            f"got {actual_sha256}. Aborting installation."
+        )
+
+
 def _read_bounded_zip_entry(zf: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
     """Read a ZIP entry and raise ValueError past MAX_FPCALC_BINARY_BYTES."""
     with zf.open(info) as entry:
@@ -122,12 +131,11 @@ class FpcalcBootstrapService:
     ) -> Path:
         """Download and install fpcalc only when user_consented is explicitly True.
 
-        The pinned OFFICIAL_FPCALC_SHA256 digest verifies the download.
-        Passing expected_sha256 emits DeprecationWarning. The parameter remains
-        for API compatibility. A value that differs from the pin raises
-        ValueError. install_from_archive_bytes accepts a caller-supplied digest
-        for archives from other sources.
-        Platforms without a pinned archive raise ValueError before any download.
+        The pinned OFFICIAL_FPCALC_SHA256 digest always verifies the download.
+        An expected_sha256 adds a second check of the same bytes. It can only
+        narrow what installs. A download that misses either digest raises
+        ValueError before extraction. Platforms without a pinned archive raise
+        ValueError before any download.
         """
         if not user_consented:
             raise PermissionError(
@@ -140,25 +148,12 @@ class FpcalcBootstrapService:
                 f"No verified fpcalc archive exists for {platform.system() or 'this OS'}. "
                 "Install fpcalc with the system package manager, e.g. libchromaprint-tools."
             )
-        pinned_sha256 = OFFICIAL_FPCALC_SHA256[sys_key]
-        # The parameter stays for API compatibility. Only the pinned digest
-        # can authorize the official download.
-        if expected_sha256 is not None:
-            warnings.warn(
-                "Stop passing install_fpcalc(expected_sha256=...). "
-                "The pinned OFFICIAL_FPCALC_SHA256 digest verifies the download.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        if expected_sha256 and expected_sha256.lower() != pinned_sha256:
-            raise ValueError(
-                "expected_sha256 differs from the pinned fpcalc digest. "
-                "Omit it to use the pinned value."
-            )
         raw_bytes = self.downloader(OFFICIAL_FPCALC_URLS[sys_key])
+        if expected_sha256:
+            _verify_archive_digest(raw_bytes, expected_sha256)
         return self.install_from_archive_bytes(
             archive_bytes=raw_bytes,
-            expected_sha256=pinned_sha256,
+            expected_sha256=OFFICIAL_FPCALC_SHA256[sys_key],
             user_consented=user_consented,
         )
 
@@ -179,12 +174,7 @@ class FpcalcBootstrapService:
                 "Missing SHA-256 digest for the fpcalc archive. "
                 "Pass the digest of the official release archive."
             )
-        actual_sha256 = hashlib.sha256(archive_bytes).hexdigest()
-        if not hmac.compare_digest(actual_sha256, expected_sha256.lower()):
-            raise ValueError(
-                f"SHA-256 mismatch for fpcalc archive: expected {expected_sha256}, "
-                f"got {actual_sha256}; aborting installation."
-            )
+        _verify_archive_digest(archive_bytes, expected_sha256)
         self.install_dir.mkdir(parents=True, exist_ok=True)
         target_bin = self.install_dir / self.binary_filename()
         self._extract_binary_from_archive(archive_bytes, target_bin)

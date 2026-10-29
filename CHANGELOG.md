@@ -28,7 +28,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `FpcalcBootstrapService` pins the SHA-256 digest of the official Chromaprint 1.5.1 Windows and macOS archives. Extraction requires a digest and compares it in constant time.
 - `install_fpcalc` refuses Linux and other platforms without a pinned archive. Those platforms install fpcalc from the system package manager.
-- `install_fpcalc` rejects an `expected_sha256` that differs from the pinned digest. Passing the parameter emits `DeprecationWarning`.
+- `install_fpcalc` always verifies the download against the pinned digest. A caller `expected_sha256` adds a second check of the same bytes.
 - ZIP extraction of `fpcalc` reads at most `MAX_FPCALC_BINARY_BYTES` plus one byte. The untrusted header size no longer gates the read.
 - `MutagenAdapter.render_filename` substitutes only known `{token}` names and keeps the `{{` and `}}` literal brace escapes. Other brace syntax selects the default `artist - title` layout and logs a warning.
 - `DiscogsAdapter.fetch` accepts only numeric release IDs without a leading zero. An unconfigured adapter still returns an empty list.
