@@ -1,1 +1,13 @@
 * text=auto eol=lf
+
+# Keep policy inputs within the byte limit on every platform.
+AGENTS.md text eol=lf
+CLAUDE.md text eol=lf
+GEMINI.md text eol=lf
+CONVENTIONS.md text eol=lf
+.cursorrules text eol=lf
+.clinerules text eol=lf
+.windsurfrules text eol=lf
+.copilot-instructions text eol=lf
+.github/copilot-instructions.md text eol=lf
+docs/agent-policy/*.md text eol=lf
