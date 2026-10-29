@@ -59,6 +59,25 @@ jobs:
       - name: Run AST and style invariant suite
         run: pytest -p no:pytest-qt tests/unit/test_code_quality_invariants.py
 
+  # Ruff skips the copied abuzucom/agents gate files. This job lints them
+  # with the agents style and prose checks.
+  agents-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Run agents lint
+        run: make lint PYTHON=python
+
   test-matrix:
     needs: lint-and-style
     strategy:
