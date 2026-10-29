@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Final
 
 from infiniteprep.db.repositories import Repository
@@ -12,16 +11,11 @@ from infiniteprep.domain.enums import (
     ProposalReviewStatus,
     ReviewStatus,
 )
-from infiniteprep.domain.models import ApprovedField, CandidateMatch, FieldProposal
+from infiniteprep.domain.models import ApprovedField, CandidateMatch, FieldProposal, utc_now_iso
 
 CORE_IDENTITY_FIELDS: Final[frozenset[str]] = frozenset(
     {FieldName.ARTIST.value, FieldName.TITLE.value}
 )
-
-
-def utc_now_iso() -> str:
-    """Return current UTC timestamp in ISO-8601 format."""
-    return datetime.now(UTC).isoformat()
 
 
 class ReviewService:

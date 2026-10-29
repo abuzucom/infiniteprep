@@ -25,6 +25,8 @@ from infiniteprep.domain.models import FileAsset, SourceGroup
 
 MULTITRACK_DURATION_THRESHOLD_SEC: Final[float] = 1200.0
 MAX_DIRECTORY_DEPTH: Final[int] = 32
+MAX_DISCOVERED_FILES: Final[int] = 10_000
+MAX_IMPORT_FILE_BYTES: Final[int] = 2_147_483_648  # 2 GiB per file
 
 
 @dataclass
@@ -42,12 +44,18 @@ class ImportBatchReport:
 def _scan_single_directory_children(
     current_dir: Path,
     depth: int,
-    max_depth: int,
     discovered: list[Path],
     queue: deque[tuple[Path, int]],
+    *,
+    max_depth: int,
+    max_files: int,
 ) -> None:
-    """Append child files to discovered and enqueue subdirectories within max_depth."""
+    """Append non-symlink child files to discovered and enqueue subdirectories within bounds."""
     for child in sorted(current_dir.iterdir()):
+        if len(discovered) >= max_files:
+            return
+        if child.is_symlink():
+            continue
         resolved_child = child.resolve()
         if resolved_child.is_file():
             discovered.append(resolved_child)
@@ -57,26 +65,40 @@ def _scan_single_directory_children(
 
 
 def discover_files_bounded(
-    paths: list[Path | str], max_depth: int = MAX_DIRECTORY_DEPTH
+    paths: list[Path | str],
+    max_depth: int = MAX_DIRECTORY_DEPTH,
+    max_files: int = MAX_DISCOVERED_FILES,
 ) -> list[Path]:
-    """Iteratively discover files up to max_depth while tracking visited real paths."""
+    """Iteratively discover non-symlink files up to max_depth and max_files."""
     discovered: list[Path] = []
     visited_dirs: set[Path] = set()
     queue: deque[tuple[Path, int]] = deque()
 
     for raw_p in paths:
-        resolved = Path(raw_p).resolve()
+        if len(discovered) >= max_files:
+            break
+        candidate = Path(raw_p)
+        if candidate.is_symlink():
+            continue
+        resolved = candidate.resolve()
         if resolved.is_file():
             discovered.append(resolved)
         elif resolved.is_dir():
             queue.append((resolved, 0))
 
-    while queue:
+    while queue and len(discovered) < max_files:
         current_dir, depth = queue.popleft()
         if current_dir in visited_dirs or depth > max_depth:
             continue
         visited_dirs.add(current_dir)
-        _scan_single_directory_children(current_dir, depth, max_depth, discovered, queue)
+        _scan_single_directory_children(
+            current_dir,
+            depth,
+            discovered,
+            queue,
+            max_depth=max_depth,
+            max_files=max_files,
+        )
 
     return discovered
 

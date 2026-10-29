@@ -104,10 +104,11 @@ jobs:
             libpulse0 \
             libsndfile1
 
-      - name: Install project and pinned dependencies
+      - name: Install locked dependencies and package
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          python -m pip install -r requirements-lock.txt
+          python -m pip install --no-deps -e .
 
       - name: Run full test suite
         run: pytest

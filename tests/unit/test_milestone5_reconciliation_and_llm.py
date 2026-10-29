@@ -159,6 +159,13 @@ def test_artwork_service_resizes_to_xdj_rx3_safe_baseline_jpeg(tmp_path: Path) -
     assert loaded.width() <= 800
     assert loaded.height() <= 800
 
+    # Verify decompression-bomb / oversized dimension rejection
+    bomb_img = QImage(4200, 100, QImage.Format.Format_RGB32)
+    bomb_png = tmp_path / "bomb.png"
+    bomb_img.save(str(bomb_png), "PNG")
+    with pytest.raises(ValueError, match="decompression-bomb"):
+        art_svc.normalize_image_bytes(bomb_png.read_bytes())
+
 
 def test_matching_engine_reconciliation_rules_and_vinyl_pitch_drift(tmp_path: Path) -> None:
     """Verify all 10 reconciliation rules, DJ mix parsing, and Vinyl Pitch Drift detection."""

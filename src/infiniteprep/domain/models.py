@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from infiniteprep.domain.enums import (
@@ -19,6 +20,11 @@ from infiniteprep.domain.enums import (
     SourceType,
     TaskStatus,
 )
+
+
+def utc_now_iso() -> str:
+    """Return current UTC timestamp in ISO-8601 format."""
+    return datetime.now(UTC).isoformat()
 
 
 @dataclass

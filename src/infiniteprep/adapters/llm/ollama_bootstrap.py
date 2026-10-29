@@ -32,10 +32,10 @@ class OllamaBootstrapService:
         """Query local Ollama daemon /api/tags and return installed model names."""
         req = urllib.request.Request(OLLAMA_TAGS_URL)
         try:
-            with urllib.request.urlopen(req, timeout=3) as resp:  # noqa: S310
+            with urllib.request.urlopen(req, timeout=3) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 return [str(m.get("name", "")) for m in data.get("models", []) if m.get("name")]
-        except Exception:
+        except (OSError, ValueError):
             return []
 
     def install_ollama(self, *, user_consented: bool) -> str:

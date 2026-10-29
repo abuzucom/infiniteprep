@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 from typing import Final
@@ -11,6 +12,12 @@ import soundfile as sf
 
 from infiniteprep.domain.enums import KeyMode, PitchClass
 from infiniteprep.domain.models import AnalysisResult
+
+logger = logging.getLogger(__name__)
+
+MAX_ANALYSIS_FILE_BYTES: Final[int] = 524_288_000  # 500 MiB
+MAX_ANALYSIS_DURATION_SEC: Final[float] = 1800.0  # 30 minutes
+ENVELOPE_BINS: Final[int] = 64
 
 PITCH_CLASSES_ORDERED: Final[tuple[PitchClass, ...]] = (
     PitchClass.C,
@@ -55,7 +62,6 @@ MINOR_PROFILE: Final[tuple[float, ...]] = (
     3.34,
     3.17,
 )
-ENVELOPE_BINS: Final[int] = 64
 
 
 def compute_rip_quality_warnings(mono: np.ndarray, sample_rate: int) -> list[str]:
@@ -64,7 +70,6 @@ def compute_rip_quality_warnings(mono: np.ndarray, sample_rate: int) -> list[str
     if mono.size == 0 or sample_rate <= 0:
         return warnings
 
-    # 1. DC Offset check (> 1.5% full scale)
     dc_val = float(np.mean(mono))
     if abs(dc_val) > 0.015:
         warnings.append(
@@ -72,7 +77,6 @@ def compute_rip_quality_warnings(mono: np.ndarray, sample_rate: int) -> list[str
             "apply high-pass / DC-removal filter."
         )
 
-    # 2. Digital clipping check (samples at >= 0.998 full scale)
     clipped_count = int(np.sum(np.abs(mono) >= 0.998))
     if clipped_count >= 12:
         warnings.append(
@@ -80,8 +84,7 @@ def compute_rip_quality_warnings(mono: np.ndarray, sample_rate: int) -> list[str
             "check recording gain."
         )
 
-    # 3. Leading or trailing silence > 2.0 seconds (windowed RMS < -55 dBFS ~ 0.0018)
-    win = max(1, sample_rate // 10)  # 100 ms blocks
+    win = max(1, sample_rate // 10)
     num_blocks = mono.size // win
     if num_blocks >= 4:
         blocks = mono[: num_blocks * win].reshape(num_blocks, win)
@@ -194,6 +197,29 @@ def compute_compact_envelope(mono: np.ndarray, bins: int = ENVELOPE_BINS) -> lis
     return [round(p / peak_max, 4) for p in peaks]
 
 
+def read_bounded_mono_pcm(
+    audio_reference: Path,
+    max_bytes: int = MAX_ANALYSIS_FILE_BYTES,
+    max_duration_sec: float = MAX_ANALYSIS_DURATION_SEC,
+) -> tuple[np.ndarray, int]:
+    """Read up to max_duration_sec of audio as mono float64 after checking file size."""
+    size_bytes = audio_reference.stat().st_size
+    if size_bytes > max_bytes:
+        raise ValueError(
+            f"Audio file '{audio_reference.name}' ({size_bytes} bytes) exceeds maximum "
+            f"analysis limit ({max_bytes} bytes)."
+        )
+    info = sf.info(str(audio_reference))
+    sr = max(1, int(info.samplerate))
+    max_frames = max(1, round(sr * max_duration_sec))
+    frames_to_read = min(int(info.frames), max_frames) if info.frames > 0 else max_frames
+    data, sample_rate = sf.read(
+        str(audio_reference), frames=frames_to_read, dtype="float64", always_2d=True
+    )
+    mono = np.mean(data, axis=1) if data.size > 0 else np.zeros(0, dtype=np.float64)
+    return mono, int(sample_rate)
+
+
 class LocalDspAnalyzer:
     """Built-in local audio analyzer computing BPM, canonical key, and rip diagnostics."""
 
@@ -207,8 +233,9 @@ class LocalDspAnalyzer:
     def analyze(self, audio_reference: Path, file_id: str = "") -> AnalysisResult:
         """Analyze audio file locally for BPM, canonical musical key, and rip warnings."""
         try:
-            data, sample_rate = sf.read(str(audio_reference), dtype="float64", always_2d=True)
-        except Exception as exc:
+            mono, sample_rate = read_bounded_mono_pcm(audio_reference)
+        except (OSError, ValueError, RuntimeError) as exc:
+            logger.warning("Local DSP decode failed for %s: %s", audio_reference, exc)
             return AnalysisResult(
                 id=str(uuid.uuid4()),
                 file_id=file_id,
@@ -222,10 +249,9 @@ class LocalDspAnalyzer:
                 warnings=[f"Audio decode failed ({exc}); verify file integrity."],
             )
 
-        mono = np.mean(data, axis=1) if data.size > 0 else np.zeros(0, dtype=np.float64)
-        warnings = compute_rip_quality_warnings(mono, int(sample_rate))
-        bpm = estimate_bpm_from_onset_envelope(mono, int(sample_rate))
-        tonic, mode, strength = estimate_key_from_chroma(mono, int(sample_rate))
+        warnings = compute_rip_quality_warnings(mono, sample_rate)
+        bpm = estimate_bpm_from_onset_envelope(mono, sample_rate)
+        tonic, mode, strength = estimate_key_from_chroma(mono, sample_rate)
         envelope = compute_compact_envelope(mono, bins=ENVELOPE_BINS)
 
         return AnalysisResult(
@@ -233,7 +259,7 @@ class LocalDspAnalyzer:
             file_id=file_id,
             analyzer_name=self.analyzer_name,
             analyzer_version=self.analyzer_version,
-            configuration={"sample_rate": int(sample_rate), "waveform_envelope": envelope},
+            configuration={"sample_rate": sample_rate, "waveform_envelope": envelope},
             bpm=bpm,
             key_tonic=tonic,
             key_mode=mode,

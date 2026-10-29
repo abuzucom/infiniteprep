@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,6 +19,8 @@ from infiniteprep.domain.ports import (
     MetadataProvider,
     MetadataSearchQuery,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -58,7 +61,11 @@ class JobOrchestrator:
                 self._process_single_asset(asset)
                 summary.completed_files += 1
             except Exception as exc:
-                msg = f"Processing failed ({exc}); retry or check provider settings."
+                logger.error("Job processing failed for file %s: %r", file_id, exc, exc_info=True)
+                msg = (
+                    f"Processing failed ({exc.__class__.__name__}: {exc}); "
+                    "retry or check provider settings."
+                )
                 self.repo.update_file_status(
                     file_id,
                     task_status=TaskStatus.FAILED,

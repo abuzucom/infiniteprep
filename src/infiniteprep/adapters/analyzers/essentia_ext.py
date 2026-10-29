@@ -30,9 +30,11 @@ class EssentiaCliAnalyzer:
         self.runner = runner
 
     def is_available(self) -> tuple[bool, str | None]:
-        """Return True if the external Essentia CLI binary exists."""
-        if self.cli_path and self.cli_path.exists():
-            return True, None
+        """Return True if the external Essentia CLI binary exists and has expected name."""
+        if self.cli_path and self.cli_path.is_file():
+            if self.cli_path.name.lower().startswith("essentia") or self.runner is not None:
+                return True, None
+            return False, "Configured Essentia CLI binary name must start with 'essentia'."
         return (
             False,
             "External Essentia CLI binary not configured; using built-in LocalDspAnalyzer.",

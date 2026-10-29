@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Final
 
@@ -12,7 +13,12 @@ from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_ENVELOPE_BINS: Final[int] = 120
+MAX_PREVIEW_FILE_BYTES: Final[int] = 524_288_000  # 500 MiB
+MAX_PREVIEW_DURATION_SEC: Final[float] = 1800.0  # 30 minutes
+STREAM_BLOCK_FRAMES: Final[int] = 65_536
 
 
 def compute_cue_jump_positions(duration_sec: float) -> dict[str, float]:
@@ -29,23 +35,47 @@ def compute_cue_jump_positions(duration_sec: float) -> dict[str, float]:
     }
 
 
+def _stream_block_peaks(file_path: Path, max_frames: int) -> list[float]:
+    """Read audio in fixed-size blocks up to max_frames and collect per-block peak values."""
+    block_peaks: list[float] = []
+    frames_seen = 0
+    for block in sf.blocks(
+        str(file_path), blocksize=STREAM_BLOCK_FRAMES, dtype="float32", always_2d=True
+    ):
+        if block.size == 0 or frames_seen >= max_frames:
+            break
+        mono = np.abs(np.mean(block, axis=1))
+        block_peaks.append(float(np.max(mono)))
+        frames_seen += int(block.shape[0])
+    return block_peaks
+
+
 def extract_waveform_envelope(file_path: Path, bins: int = DEFAULT_ENVELOPE_BINS) -> list[float]:
-    """Extract normalized peak amplitude envelope bins from an audio file."""
+    """Extract normalized peak amplitude envelope bins using bounded streaming blocks."""
     if bins <= 0 or not file_path.exists():
         return [0.1] * max(1, bins)
     try:
-        data, _ = sf.read(str(file_path), dtype="float32", always_2d=True)
-    except Exception:
+        size_bytes = file_path.stat().st_size
+        if size_bytes > MAX_PREVIEW_FILE_BYTES:
+            logger.warning("Audio preview file %s exceeds size cap (%d B).", file_path, size_bytes)
+            return [0.25] * bins
+        info = sf.info(str(file_path))
+        max_frames = max(1, round(max(1, int(info.samplerate)) * MAX_PREVIEW_DURATION_SEC))
+        raw_peaks = _stream_block_peaks(file_path, max_frames)
+    except (OSError, ValueError, RuntimeError) as exc:
+        logger.warning("Waveform extraction failed for %s: %s", file_path, exc)
         return [0.25] * bins
-    if data.size == 0:
+    if not raw_peaks:
         return [0.1] * bins
-    mono = np.abs(np.mean(data, axis=1))
-    chunks = np.array_split(mono, bins)
-    peaks = [float(np.max(chunk)) if chunk.size > 0 else 0.0 for chunk in chunks]
-    max_peak = max(peaks) if peaks else 0.0
+    arr = np.interp(
+        np.linspace(0.0, max(0, len(raw_peaks) - 1), bins),
+        np.arange(len(raw_peaks), dtype=np.float64),
+        np.array(raw_peaks, dtype=np.float64),
+    )
+    max_peak = float(np.max(arr)) if arr.size > 0 else 0.0
     if max_peak <= 0.0:
         return [0.05] * bins
-    return [round(p / max_peak, 4) for p in peaks]
+    return [round(float(p) / max_peak, 4) for p in arr]
 
 
 class WaveformOverviewBar(QWidget):
@@ -165,7 +195,8 @@ class AudioPreviewWidget(QWidget):
         """Load an audio file, compute its waveform envelope, and update cue positions."""
         self.current_file_path = file_path
         self.current_position_sec = 0.0
-        self.duration_sec = fallback_duration_sec or self._probe_duration(file_path)
+        probed = self._probe_duration(file_path)
+        self.duration_sec = probed if probed > 0.0 else float(fallback_duration_sec or 0.0)
         self.cue_positions = compute_cue_jump_positions(self.duration_sec)
         self.waveform_bar.set_envelope(extract_waveform_envelope(file_path))
         self.waveform_bar.set_playhead_ratio(0.0)
@@ -174,11 +205,12 @@ class AudioPreviewWidget(QWidget):
         self._update_time_label()
 
     def _probe_duration(self, file_path: Path) -> float:
-        """Probe audio duration in seconds via soundfile, falling back to 0.0."""
+        """Probe audio duration in seconds via soundfile, logging and returning 0.0 on error."""
         try:
             info = sf.info(str(file_path))
             return float(info.duration)
-        except Exception:
+        except (OSError, ValueError, RuntimeError) as exc:
+            logger.warning("Duration probe failed for %s: %s", file_path, exc)
             return 0.0
 
     def toggle_play_pause(self) -> None:

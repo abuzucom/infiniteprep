@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import Final
 
 import numpy as np
 import platformdirs
@@ -19,6 +20,9 @@ from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, co
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, OperationStatus
 from infiniteprep.domain.models import ChangeRecord, FileAsset
+
+MAX_TRANSCODE_FILE_BYTES: Final[int] = 1_073_741_824  # 1 GiB
+MAX_TRANSCODE_DURATION_SEC: Final[float] = 7200.0  # 2 hours
 
 
 class TranscodeMode(StrEnum):
@@ -57,6 +61,7 @@ class SafeTranscoderAdapter:
         repository: Repository,
         tag_adapter: MutagenAdapter | None = None,
         backup_dir: Path | None = None,
+        allowed_export_root: Path | None = None,
     ) -> None:
         """Initialize SafeTranscoderAdapter with Repository, MutagenAdapter, and backup_dir."""
         self.repo = repository
@@ -65,6 +70,7 @@ class SafeTranscoderAdapter:
             base = Path(platformdirs.user_data_dir("InfinitePrep", "InfinitePrep"))
             backup_dir = base / "backups"
         self.backup_dir = backup_dir
+        self.allowed_export_root = allowed_export_root
 
     def transcode_file(
         self,
@@ -73,22 +79,26 @@ class SafeTranscoderAdapter:
         preset: TranscodePreset = TranscodePreset.XDJ_RX3_LOSSLESS_AUTO,
         mode: TranscodeMode = TranscodeMode.SIBLING_EXPORT,
         export_dir: Path | None = None,
+        allowed_export_root: Path | None = None,
     ) -> TranscodeResult:
         """Transcode a FileAsset using polyphase resampling and copy approved tags."""
         asset = self.repo.get_file_by_id(file_id)
         if asset is None:
             raise ValueError(f"FileAsset {file_id} not found in database.")
-        src_path = Path(asset.current_path)
+        src_path = Path(asset.current_path).resolve()
         if not src_path.exists():
             raise FileNotFoundError(f"Source audio file missing at {src_path}.")
+        self._verify_audio_bounds(src_path)
 
         pcm, src_sr = sf.read(str(src_path), dtype="float64", always_2d=True)
         target_sr, target_subtype, target_ext, sf_fmt = self._resolve_target_params(
-            asset, src_sr, preset
+            asset, int(src_sr), preset
         )
         resampled = self._resample_audio(pcm, int(src_sr), target_sr)
 
-        out_path = self._determine_output_path(src_path, target_ext, mode, export_dir)
+        out_path = self._determine_output_path(
+            src_path, target_ext, mode, export_dir, allowed_export_root
+        )
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         record_id = None
@@ -107,6 +117,21 @@ class SafeTranscoderAdapter:
             change_record_id=record_id,
         )
 
+    def _verify_audio_bounds(self, src_path: Path) -> None:
+        """Reject audio files exceeding size or duration safety caps before PCM decode."""
+        size_bytes = src_path.stat().st_size
+        if size_bytes > MAX_TRANSCODE_FILE_BYTES:
+            raise ValueError(
+                f"Audio file '{src_path.name}' ({size_bytes} bytes) exceeds maximum "
+                f"transcode limit ({MAX_TRANSCODE_FILE_BYTES} bytes)."
+            )
+        info = sf.info(str(src_path))
+        if float(info.duration) > MAX_TRANSCODE_DURATION_SEC:
+            raise ValueError(
+                f"Audio file '{src_path.name}' duration ({info.duration:.1f}s) exceeds "
+                f"maximum transcode limit ({MAX_TRANSCODE_DURATION_SEC:.0f}s)."
+            )
+
     def _resolve_target_params(
         self, asset: FileAsset, src_sr: int, preset: TranscodePreset
     ) -> tuple[int, str, str, str]:
@@ -116,7 +141,6 @@ class SafeTranscoderAdapter:
         if preset == TranscodePreset.FORCE_WAV_48K_24B:
             return 48000, "PCM_24", ".wav", "WAV"
 
-        # XDJ_RX3_LOSSLESS_AUTO: cap sample rate at 48kHz (or 44.1kHz for 88.2/176.4kHz multiples)
         target_sr = (44100 if (src_sr % 44100 == 0) else 48000) if src_sr > 48000 else src_sr
 
         if asset.format == AudioFormat.FLAC:
@@ -141,12 +165,28 @@ class SafeTranscoderAdapter:
         target_ext: str,
         mode: TranscodeMode,
         export_dir: Path | None,
+        allowed_export_root: Path | None = None,
     ) -> Path:
-        """Compute destination file path for SIBLING_EXPORT or IN_PLACE_BACKED_UP."""
+        """Validate and canonicalize destination file path for SIBLING_EXPORT or IN_PLACE."""
         if mode == TranscodeMode.IN_PLACE_BACKED_UP:
-            return src_path.with_suffix(target_ext)
-        dest_folder = export_dir if export_dir is not None else src_path.parent
-        return dest_folder / f"{src_path.stem}_XDJ_RX3{target_ext}"
+            return src_path.with_suffix(target_ext).resolve()
+        if export_dir is None:
+            dest_folder = src_path.parent.resolve()
+            root_boundary = dest_folder
+        else:
+            if ".." in export_dir.parts:
+                raise ValueError("Path traversal '..' is not permitted in export_dir.")
+            dest_folder = export_dir.resolve()
+            effective_root = allowed_export_root or self.allowed_export_root or dest_folder
+            root_boundary = effective_root.resolve()
+            if not dest_folder.is_relative_to(root_boundary):
+                raise ValueError(
+                    f"Export directory '{dest_folder}' escapes allowed root '{root_boundary}'."
+                )
+        out_path = (dest_folder / f"{src_path.stem}_XDJ_RX3{target_ext}").resolve()
+        if not out_path.is_relative_to(dest_folder):
+            raise ValueError("Resolved output path escapes destination folder boundary.")
+        return out_path
 
     def _backup_and_journal_in_place(self, asset: FileAsset, src_path: Path, out_path: Path) -> str:
         """Create a SHA-256 verified backup and ChangeRecord before in-place replacement."""

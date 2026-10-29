@@ -96,7 +96,12 @@ class WriteService:
         record = self.repo.get_change_record(operation_id)
         if record is None:
             raise ValueError(f"ChangeRecord {operation_id} not found.")
-        backup_path = Path(record.backup_reference)
+        backup_path = Path(record.backup_reference).resolve()
+        allowed_backup_root = self.backup_dir.resolve()
+        if not backup_path.is_relative_to(allowed_backup_root):
+            raise ValueError(
+                f"Backup path '{backup_path}' escapes backup directory '{allowed_backup_root}'."
+            )
         if not backup_path.exists():
             raise FileNotFoundError(
                 f"Backup file missing at {backup_path}; cannot restore operation {operation_id}."
@@ -104,8 +109,8 @@ class WriteService:
         if record.pre_write_hash and compute_sha256(backup_path) != record.pre_write_hash:
             raise ValueError("Backup file SHA-256 mismatch; backup may be corrupted.")
 
-        prev_path = Path(record.previous_path)
-        cur_path = Path(record.new_path)
+        prev_path = Path(record.previous_path).resolve()
+        cur_path = Path(record.new_path).resolve()
         prev_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(backup_path, prev_path)
         if cur_path != prev_path and cur_path.exists():

@@ -198,6 +198,23 @@ def test_safe_transcoder_and_m3u8_playlist_exporter(tmp_path: Path) -> None:
     # Verify original 96kHz file was untouched in SIBLING_EXPORT mode
     assert sf.info(str(highres_wav)).samplerate == 96000
 
+    # Verify export_dir path traversal protection
+    with pytest.raises(ValueError, match="traversal"):
+        transcoder.transcode_file(
+            asset.id,
+            preset=TranscodePreset.XDJ_RX3_LOSSLESS_AUTO,
+            mode=TranscodeMode.SIBLING_EXPORT,
+            export_dir=Path("../escape_dir"),
+        )
+    with pytest.raises(ValueError, match="escapes allowed root"):
+        transcoder.transcode_file(
+            asset.id,
+            preset=TranscodePreset.XDJ_RX3_LOSSLESS_AUTO,
+            mode=TranscodeMode.SIBLING_EXPORT,
+            export_dir=tmp_path / "other_folder",
+            allowed_export_root=out_dir,
+        )
+
     # Export M3U8 playlist
     exporter = PlaylistExporter(repo)
     m3u8_path = tmp_path / "crate.m3u8"

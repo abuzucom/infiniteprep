@@ -202,6 +202,6 @@ class DiscogsAdapter:
             "User-Agent": DISCOGS_USER_AGENT,
             "Authorization": f"Discogs token={self.user_token}",
         }
-        req = urllib.request.Request(full_url, headers=headers)  # noqa: S310
-        with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
+        req = urllib.request.Request(full_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=15) as resp:
             return dict(json.loads(resp.read().decode("utf-8")))

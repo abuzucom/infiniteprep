@@ -8,6 +8,7 @@ import os
 import platform
 import shutil
 import stat
+import tarfile
 import urllib.request
 import zipfile
 from collections.abc import Callable
@@ -17,6 +18,7 @@ from typing import Final
 import platformdirs
 
 FPCALC_VERSION: Final[str] = "1.5.1"
+MAX_FPCALC_BINARY_BYTES: Final[int] = 33_554_432  # 32 MiB cap for extracted binary
 OFFICIAL_FPCALC_URLS: Final[dict[str, str]] = {
     "windows": (
         "https://github.com/acoustid/chromaprint/releases/download/"
@@ -31,6 +33,31 @@ OFFICIAL_FPCALC_URLS: Final[dict[str, str]] = {
         "v1.5.1/chromaprint-fpcalc-1.5.1-linux-x86_64.tar.gz"
     ),
 }
+
+
+def _is_matching_fpcalc_name(member_path: str, exe_name: str) -> bool:
+    """Return True if member_path basename matches fpcalc or fpcalc.exe."""
+    return Path(member_path).name.lower() in (exe_name.lower(), "fpcalc", "fpcalc.exe")
+
+
+def _verify_entry_size(size_bytes: int) -> None:
+    """Raise ValueError if archive entry size exceeds MAX_FPCALC_BINARY_BYTES."""
+    if size_bytes > MAX_FPCALC_BINARY_BYTES:
+        raise ValueError("Extracted fpcalc binary exceeds maximum size limit.")
+
+
+def _try_write_tar_member(
+    tf: tarfile.TarFile,
+    member: tarfile.TarInfo,
+    target_bin: Path,
+) -> bool:
+    """Verify and write a matching tarfile member to target_bin."""
+    _verify_entry_size(member.size)
+    extracted = tf.extractfile(member)
+    if extracted is None:
+        return False
+    target_bin.write_bytes(extracted.read(MAX_FPCALC_BINARY_BYTES))
+    return True
 
 
 class FpcalcBootstrapService:
@@ -55,14 +82,18 @@ class FpcalcBootstrapService:
         return "fpcalc.exe" if platform.system().lower().startswith("win") else "fpcalc"
 
     def resolve_fpcalc_path(self) -> Path | None:
-        """Locate fpcalc via custom_path, install_dir, or system PATH."""
-        if self.custom_path and self.custom_path.exists():
-            return self.custom_path
+        """Locate fpcalc via validated custom_path, install_dir, or system PATH."""
+        if (
+            self.custom_path
+            and self.custom_path.is_file()
+            and self.custom_path.name.lower().startswith("fpcalc")
+        ):
+            return self.custom_path.resolve()
         managed = self.install_dir / self.binary_filename()
-        if managed.exists():
-            return managed
+        if managed.is_file():
+            return managed.resolve()
         sys_found = shutil.which(self.binary_filename()) or shutil.which("fpcalc")
-        return Path(sys_found) if sys_found else None
+        return Path(sys_found).resolve() if sys_found else None
 
     def install_fpcalc(
         self,
@@ -105,28 +136,54 @@ class FpcalcBootstrapService:
             )
         self.install_dir.mkdir(parents=True, exist_ok=True)
         target_bin = self.install_dir / self.binary_filename()
-        self._extract_binary_from_zip(archive_bytes, target_bin)
+        self._extract_binary_from_archive(archive_bytes, target_bin)
         if not os.name.startswith("nt"):
             current_mode = target_bin.stat().st_mode
             target_bin.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP)
         return target_bin
 
+    def _extract_binary_from_archive(self, archive_bytes: bytes, target_bin: Path) -> None:
+        """Detect ZIP or TAR (.tar.gz / .tar.bz2) archive format and extract fpcalc."""
+        if zipfile.is_zipfile(io.BytesIO(archive_bytes)):
+            self._extract_binary_from_zip(archive_bytes, target_bin)
+            return
+        try:
+            self._extract_binary_from_tar(archive_bytes, target_bin)
+        except tarfile.TarError as exc:
+            raise ValueError(f"Unsupported or corrupt fpcalc archive format: {exc}") from exc
+
     def _extract_binary_from_zip(self, archive_bytes: bytes, target_bin: Path) -> None:
         """Extract the fpcalc executable entry from a ZIP byte buffer."""
         exe_name = self.binary_filename()
         with zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as zf:
-            for member in zf.namelist():
-                if Path(member).name.lower() == exe_name.lower():
-                    target_bin.write_bytes(zf.read(member))
+            for info in zf.infolist():
+                if not info.is_dir() and _is_matching_fpcalc_name(info.filename, exe_name):
+                    _verify_entry_size(info.file_size)
+                    target_bin.write_bytes(zf.read(info.filename))
                     return
         raise FileNotFoundError(
-            f"Archive did not contain '{exe_name}'; verify official Chromaprint release bundle."
+            f"ZIP archive did not contain '{exe_name}'; verify official Chromaprint bundle."
+        )
+
+    def _extract_binary_from_tar(self, archive_bytes: bytes, target_bin: Path) -> None:
+        """Extract the fpcalc executable entry from a TAR (.tar.gz / .tar.bz2) byte buffer."""
+        exe_name = self.binary_filename()
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:*") as tf:
+            for member in tf.getmembers():
+                if (
+                    member.isfile()
+                    and _is_matching_fpcalc_name(member.name, exe_name)
+                    and _try_write_tar_member(tf, member, target_bin)
+                ):
+                    return
+        raise FileNotFoundError(
+            f"TAR archive did not contain '{exe_name}'; verify official Chromaprint bundle."
         )
 
     def _default_download(self, url: str) -> bytes:
         """Download archive bytes over HTTPS."""
         if not url.startswith("https://"):
             raise ValueError(f"Bootstrap download URL must use https:// scheme: {url}")
-        req = urllib.request.Request(url, headers={"User-Agent": "InfinitePrep/0.1.0"})  # noqa: S310
-        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
-            return bytes(resp.read())
+        req = urllib.request.Request(url, headers={"User-Agent": "InfinitePrep/0.1.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return bytes(resp.read(MAX_FPCALC_BINARY_BYTES))

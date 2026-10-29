@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import urllib.request
 from collections.abc import Callable
 from typing import Any, Final
@@ -10,8 +11,11 @@ from typing import Any, Final
 from infiniteprep.adapters.llm.validator import ClosedWorldValidator
 from infiniteprep.config.settings import validate_endpoint_url
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_OLLAMA_MODEL: Final[str] = "qwen2.5:3b"
 RECOMMENDED_MODELS: Final[tuple[str, ...]] = ("qwen2.5:3b", "qwen2.5:7b", "llama3.2:3b")
+MAX_LLM_RESPONSE_BYTES: Final[int] = 262_144
 
 SYSTEM_PROMPT: Final[str] = (
     "You are a strict closed-world DJ music metadata arbitrator. "
@@ -75,6 +79,7 @@ class OllamaOpenAIReasoningAdapter:
             raw_resp = self.http_post_json(f"{self.base_url}/chat/completions", body)
             parsed = self._extract_json_message(raw_resp)
         except Exception as exc:
+            logger.warning("LLM arbitration request failed: %s", exc)
             return {
                 "selected_candidate_id": None,
                 "proposed_value": None,
@@ -99,17 +104,22 @@ class OllamaOpenAIReasoningAdapter:
         choices = raw_resp.get("choices") or [{}]
         msg = choices[0].get("message") or {}
         content = str(msg.get("content", "{}"))
+        if len(content) > MAX_LLM_RESPONSE_BYTES:
+            raise ValueError("LLM response content exceeded maximum permitted size.")
         return dict(json.loads(content))
 
     def _default_http_post_json(self, url: str, body: dict[str, Any]) -> dict[str, Any]:
         """Send HTTP(S) POST request to validated Ollama or OpenAI endpoint."""
-        ok, reason = validate_endpoint_url(url)
+        ok, reason = validate_endpoint_url(url, resolve_dns=True)
         if not ok:
             raise ValueError(reason or "Blocked endpoint URL.")
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         data = json.dumps(body).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers=headers, method="POST")  # noqa: S310
-        with urllib.request.urlopen(req, timeout=20) as resp:  # noqa: S310
-            return dict(json.loads(resp.read().decode("utf-8")))
+        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            raw_bytes = resp.read(MAX_LLM_RESPONSE_BYTES + 1)
+            if len(raw_bytes) > MAX_LLM_RESPONSE_BYTES:
+                raise ValueError("LLM HTTP response exceeded maximum byte size limit.")
+            return dict(json.loads(raw_bytes.decode("utf-8")))

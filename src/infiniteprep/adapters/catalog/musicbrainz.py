@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -18,6 +19,14 @@ from infiniteprep.domain.ports import MetadataSearchQuery
 MB_BASE_URL: Final[str] = "https://musicbrainz.org/ws/2"
 MB_USER_AGENT: Final[str] = "InfinitePrep/0.1.0 (https://github.com/infiniteprep/infiniteprep)"
 MB_CACHE_TTL_SEC: Final[int] = 86400
+LUCENE_SPECIAL_RE: Final[re.Pattern[str]] = re.compile(r'([+\-!(){}\[\]^"~*?:\\/]|&&|\|\|)')
+SAFE_ENTITY_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def escape_lucene_term(raw_value: str) -> str:
+    """Escape Lucene special characters before wrapping a search value in quotes."""
+    cleaned = raw_value.replace("\r", " ").replace("\n", " ").replace("\t", " ").strip()
+    return LUCENE_SPECIAL_RE.sub(r"\\\1", cleaned)
 
 
 class MusicBrainzAdapter:
@@ -45,13 +54,13 @@ class MusicBrainzAdapter:
         """Search MusicBrainz recordings and releases matching MetadataSearchQuery."""
         lucene_parts: list[str] = []
         if query.artist:
-            lucene_parts.append(f'artist:"{query.artist}"')
+            lucene_parts.append(f'artist:"{escape_lucene_term(query.artist)}"')
         if query.title:
-            lucene_parts.append(f'recording:"{query.title}"')
+            lucene_parts.append(f'recording:"{escape_lucene_term(query.title)}"')
         if query.release_title:
-            lucene_parts.append(f'release:"{query.release_title}"')
+            lucene_parts.append(f'release:"{escape_lucene_term(query.release_title)}"')
         if query.catalog_number:
-            lucene_parts.append(f'catno:"{query.catalog_number}"')
+            lucene_parts.append(f'catno:"{escape_lucene_term(query.catalog_number)}"')
         lucene_query = " AND ".join(lucene_parts) or "recording:*"
 
         cache_hash = hashlib.sha256(lucene_query.encode("utf-8")).hexdigest()[:24]
@@ -75,6 +84,8 @@ class MusicBrainzAdapter:
         self, entity_id: str, entity_type: EntityType = EntityType.RELEASE, file_id: str = ""
     ) -> list[CandidateMatch]:
         """Fetch a specific MusicBrainz recording or release by MBID."""
+        if not SAFE_ENTITY_ID_RE.match(entity_id):
+            raise ValueError(f"Invalid MusicBrainz entity_id '{entity_id}'.")
         endpoint = "recording" if entity_type == EntityType.RECORDING else "release"
         cache_key = f"mb:fetch:{endpoint}:{entity_id}"
         payload = self.repo.get_cached_response(cache_key)
@@ -194,9 +205,9 @@ class MusicBrainzAdapter:
         if not url.startswith("https://"):
             raise ValueError(f"MusicBrainz URL must use https:// scheme: {url}")
         encoded = urllib.parse.urlencode(params)
-        req = urllib.request.Request(  # noqa: S310
+        req = urllib.request.Request(
             f"{url}?{encoded}",
             headers={"User-Agent": MB_USER_AGENT, "Accept": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=15) as resp:
             return dict(json.loads(resp.read().decode("utf-8")))

@@ -1,0 +1,39 @@
+# Pinned direct and transitive dependency lockfile for InfinitePrep v0.1.0
+# Update together with pyproject.toml.
+altgraph==0.17.5
+cffi==2.1.1
+colorama==0.4.6 ; sys_platform == "win32"
+cryptography==50.0.2 ; sys_platform == "linux"
+iniconfig==2.3.1
+jaraco.classes==3.4.0
+jaraco.context==6.1.2
+jaraco.functools==4.6.0
+jeepney==0.9.0 ; sys_platform == "linux"
+keyring==25.7.0
+macholib==1.16.4 ; sys_platform == "darwin"
+more-itertools==11.2.1
+mutagen==1.48.1
+numpy==2.5.4
+packaging==26.3
+pefile==2024.8.26 ; sys_platform == "win32"
+platformdirs==4.14.0
+pluggy==1.7.0
+pycparser==3.12
+Pygments==2.21.0
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.9
+PySide6==6.12.0
+PySide6_Addons==6.12.0
+PySide6_Essentials==6.12.0
+PySide6_Pdf==6.12.0.140
+PySide6_WebEngine==6.12.0.140
+pytest==9.2.0
+pytest-qt==4.5.0
+pywin32-ctypes==0.2.3 ; sys_platform == "win32"
+ruff==0.17.3
+scipy==1.18.1
+SecretStorage==3.5.0 ; sys_platform == "linux"
+setuptools==84.2.1
+shiboken6==6.12.0
+soundfile==0.14.0
+typing_extensions==4.16.0

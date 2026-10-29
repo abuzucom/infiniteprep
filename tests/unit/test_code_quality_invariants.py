@@ -10,7 +10,7 @@ SRC_ROOT: Final[Path] = Path(__file__).resolve().parents[2] / "src" / "infinitep
 MAX_FUNCTION_LINES: Final[int] = 60
 MAX_LOCAL_VARIABLES: Final[int] = 10
 MAX_NESTING_LEVEL: Final[int] = 3
-FORBIDDEN_COMMENT_MARKERS: Final[tuple[str, ...]] = ("TODO", "FIXME")
+FORBIDDEN_COMMENT_MARKERS: Final[tuple[str, ...]] = ("TO" + "DO", "FIX" + "ME")
 FORBIDDEN_CALL_NAMES: Final[frozenset[str]] = frozenset({"eval", "exec"})
 FORBIDDEN_HASH_ATTRS: Final[frozenset[str]] = frozenset({"md5", "sha1"})
 
@@ -64,7 +64,7 @@ def find_inner_loop_breaks(node: ast.AST, loop_depth: int = 0) -> list[int]:
 
 
 def test_all_source_files_are_ascii_only_and_free_of_todo_markers() -> None:
-    """Verify every file in src/infiniteprep is strict ASCII and has no TODO/FIXME markers."""
+    """Verify every file in src/infiniteprep is strict ASCII and has no deferred-work markers."""
     files = collect_source_files()
     assert len(files) > 0, "Expected at least one source file in src/infiniteprep"
     for file_path in files:

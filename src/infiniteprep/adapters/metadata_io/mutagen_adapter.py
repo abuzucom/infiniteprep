@@ -270,7 +270,11 @@ class MutagenAdapter:
         try:
             audio = mutagen.File(str(file_path))
         except Exception as exc:
-            return None, f"Damaged or unreadable audio container ({exc}); check source file."
+            return (
+                None,
+                f"Damaged or unreadable audio container ({exc.__class__.__name__}: {exc}); "
+                "check source file.",
+            )
         if audio is None:
             return None, "Unrecognized or damaged audio header; inspect or replace source file."
         return audio, None

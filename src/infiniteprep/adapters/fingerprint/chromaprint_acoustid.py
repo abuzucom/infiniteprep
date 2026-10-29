@@ -154,9 +154,9 @@ class ChromaprintAcoustIDAdapter:
         if not url.startswith("https://"):
             raise ValueError(f"AcoustID URL must use https:// scheme: {url}")
         encoded = urllib.parse.urlencode(params)
-        req = urllib.request.Request(  # noqa: S310
+        req = urllib.request.Request(
             f"{url}?{encoded}",
             headers={"User-Agent": "InfinitePrep/0.1.0 (https://infiniteprep.local)"},
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=15) as resp:
             return dict(json.loads(resp.read().decode("utf-8")))
