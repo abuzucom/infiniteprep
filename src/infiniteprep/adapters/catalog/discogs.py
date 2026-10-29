@@ -22,7 +22,7 @@ DISCOGS_TTL_SEC: Final[int] = 21600  # 6 hours per Discogs API caching rules
 MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
 # Discogs release IDs are positive integers. The ID becomes a URL path segment
 # in a request that carries the Discogs token. Digits keep traversal and query
-# characters out of that path.
+# characters out of that path. Sixteen digits exceed every issued release ID.
 SAFE_RELEASE_ID_RE: Final[re.Pattern[str]] = re.compile(r"[0-9]{1,16}")
 
 
@@ -89,7 +89,7 @@ class DiscogsAdapter:
         """Fetch a specific Discogs release by ID and extract tracklist positions."""
         _ = entity_type
         if not SAFE_RELEASE_ID_RE.fullmatch(entity_id):
-            raise ValueError(f"Invalid Discogs release id {entity_id!r}. Use digits only.")
+            raise ValueError(f"Invalid Discogs release id {entity_id!r}. Use 1 to 16 digits.")
         ready, _ = self.is_available()
         if not ready:
             return []

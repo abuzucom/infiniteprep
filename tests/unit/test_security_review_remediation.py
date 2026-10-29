@@ -78,13 +78,30 @@ def test_install_fpcalc_verifies_pinned_digest_by_default(tmp_path: Path) -> Non
     assert not (tmp_path / "bin").exists()
 
 
-def test_install_fpcalc_accepts_explicit_matching_digest(tmp_path: Path) -> None:
+def test_install_fpcalc_rejects_digest_that_differs_from_pin(tmp_path: Path) -> None:
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
-    bootstrap = FpcalcBootstrapService(
-        install_dir=tmp_path / "bin", downloader=lambda _url: archive_bytes
-    )
-    installed = bootstrap.install_fpcalc(
-        user_consented=True, expected_sha256=hashlib.sha256(archive_bytes).hexdigest()
+    downloads: list[str] = []
+
+    def record_download(url: str) -> bytes:
+        downloads.append(url)
+        return archive_bytes
+
+    bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin", downloader=record_download)
+    with pytest.raises(ValueError, match="pinned"):
+        bootstrap.install_fpcalc(
+            user_consented=True, expected_sha256=hashlib.sha256(archive_bytes).hexdigest()
+        )
+    assert downloads == []
+    assert not (tmp_path / "bin").exists()
+
+
+def test_archive_install_accepts_explicit_matching_digest(tmp_path: Path) -> None:
+    archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
+    bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin")
+    installed = bootstrap.install_from_archive_bytes(
+        archive_bytes=archive_bytes,
+        expected_sha256=hashlib.sha256(archive_bytes).hexdigest(),
+        user_consented=True,
     )
     assert installed.read_bytes() == FAKE_BINARY
 
