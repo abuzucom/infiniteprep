@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.1] (2026-10-29)
+## [0.3.2] (2026-10-29)
 
 ### Added
 
@@ -35,6 +35,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `WriteService.apply_single_plan` saves an `IN_PROGRESS` journal record before any file change. A crash mid-write now leaves a journal entry that names the backup.
+- A tag write that fails after its backup restores the original file from the verified backup and records `ROLLED_BACK`. A failure before the backup records `FAILED` and leaves the file untouched.
+- `restore_operation` copies the backup beside the target, verifies its SHA-256 against the pre-write hash, and then swaps it in with `os.replace`. A failed swap keeps the current file and removes the staging copy.
+- Added `tests/unit/test_journal_first_writes.py`.
 - In-place **Transcode to XDJ** no longer fails with `AttributeError`. `OperationStatus` gains the `IN_PROGRESS` value that the in-place journal record uses before the replacement. Added `tests/unit/test_in_place_transcode_journal.py`.
 - The `sync-check` suite steps drop `GITHUB_EVENT_PATH`. Push events to `main` no longer fail the compliance scanner tests in `tests-windows`, `tests-macos`, and `check-sync`.
 - The `security-review-pr` `resolve-pr` job runs only for pull request `ci` runs. A push to `main` now skips the review instead of failing it.
