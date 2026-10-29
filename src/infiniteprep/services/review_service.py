@@ -16,6 +16,7 @@ from infiniteprep.domain.models import ApprovedField, CandidateMatch, FieldPropo
 CORE_IDENTITY_FIELDS: Final[frozenset[str]] = frozenset(
     {FieldName.ARTIST.value, FieldName.TITLE.value}
 )
+MAX_MANUAL_FIELD_LENGTH: Final[int] = 500
 
 
 class ReviewService:
@@ -70,10 +71,16 @@ class ReviewService:
         lock: bool = True,
     ) -> ApprovedField:
         """Set a manual field override and optionally lock it against future proposals."""
+        cleaned = value.strip()
+        if len(cleaned) > MAX_MANUAL_FIELD_LENGTH:
+            raise ValueError(
+                f"Field value for '{field_name}' exceeds maximum length "
+                f"({MAX_MANUAL_FIELD_LENGTH} chars)."
+            )
         approved = ApprovedField(
             file_id=file_id,
             field_name=field_name,
-            approved_value=value.strip(),
+            approved_value=cleaned,
             approval_origin=ApprovalOrigin.MANUAL_EDIT,
             approved_at=utc_now_iso(),
             locked=lock,

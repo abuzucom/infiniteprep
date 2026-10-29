@@ -136,6 +136,11 @@ class ImportService:
             report.previously_imported_paths.append(path_str)
             return
 
+        file_size = file_path.stat().st_size
+        if file_size > MAX_IMPORT_FILE_BYTES:
+            report.unsupported_files.append(path_str)
+            return
+
         fmt = self.tag_adapter.detect_format(file_path)
         if fmt == AudioFormat.UNSUPPORTED:
             report.unsupported_files.append(path_str)
@@ -155,7 +160,7 @@ class ImportService:
             id=str(uuid.uuid4()),
             current_path=path_str,
             original_path=path_str,
-            file_size=file_path.stat().st_size,
+            file_size=file_size,
             content_hash=content_hash,
             format=fmt,
             duration=tech_meta.duration,

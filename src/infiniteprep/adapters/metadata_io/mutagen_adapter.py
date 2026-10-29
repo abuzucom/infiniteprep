@@ -185,6 +185,8 @@ def _strip_existing_riff_list_info_chunks(raw_bytes: bytes) -> list[bytes]:
     while offset + 8 <= total_len:
         chunk_id = raw_bytes[offset : offset + 4]
         chunk_size = struct.unpack("<I", raw_bytes[offset + 4 : offset + 8])[0]
+        if offset + 8 + chunk_size > total_len:
+            raise ValueError("Malformed WAV file: RIFF subchunk size exceeds file bounds.")
         chunk_end = min(total_len, offset + 8 + chunk_size + (chunk_size % 2))
         if not (chunk_id == b"LIST" and raw_bytes[offset + 8 : offset + 12] == b"INFO"):
             kept_chunks.append(raw_bytes[offset:chunk_end])
@@ -192,14 +194,24 @@ def _strip_existing_riff_list_info_chunks(raw_bytes: bytes) -> list[bytes]:
     return kept_chunks
 
 
+MAX_WAV_REWRITE_BYTES: Final[int] = 1_073_741_824  # 1 GiB
+
+
 def synchronize_wav_list_info_chunk(file_path: Path, tags_to_write: dict[str, str]) -> None:
     """Synchronize the RIFF LIST-INFO chunk in a WAV file without modifying the PCM data chunk."""
     new_list_chunk = build_riff_list_info_chunk(tags_to_write)
     if not new_list_chunk:
         return
+    if file_path.stat().st_size > MAX_WAV_REWRITE_BYTES:
+        raise ValueError(
+            f"WAV file '{file_path.name}' exceeds maximum LIST-INFO rewrite size limit."
+        )
     raw_bytes = file_path.read_bytes()
     if len(raw_bytes) < 12 or raw_bytes[:4] != b"RIFF" or raw_bytes[8:12] != b"WAVE":
         return
+    riff_size = struct.unpack("<I", raw_bytes[4:8])[0]
+    if riff_size + 8 > len(raw_bytes):
+        raise ValueError("Malformed WAV file: RIFF header size exceeds file bounds.")
 
     kept_chunks = _strip_existing_riff_list_info_chunks(raw_bytes)
     kept_chunks.append(new_list_chunk)

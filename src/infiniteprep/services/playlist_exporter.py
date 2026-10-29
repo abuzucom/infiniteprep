@@ -8,6 +8,11 @@ from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName
 
 
+def _m3u8_escape(value: str) -> str:
+    """Strip newlines, carriage returns, and commas from M3U8 #EXTINF text values."""
+    return value.replace("\n", " ").replace("\r", " ").replace(",", " ").strip()
+
+
 class PlaylistExporter:
     """Exports ordered tracklists to UTF-8 .m3u8 files with #EXTINF artist and title headers."""
 
@@ -24,12 +29,12 @@ class PlaylistExporter:
                 continue
             std = asset.original_tags.get("standard_tags", {})
             approved = self.repo.get_approved_fields_map(asset.id)
-            artist = (
+            artist = _m3u8_escape(
                 approved[FieldName.ARTIST.value].approved_value
                 if FieldName.ARTIST.value in approved
                 else std.get("artist", "Unknown Artist")
             )
-            title = (
+            title = _m3u8_escape(
                 approved[FieldName.TITLE.value].approved_value
                 if FieldName.TITLE.value in approved
                 else std.get("title", Path(asset.current_path).stem)

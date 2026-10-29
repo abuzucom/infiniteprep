@@ -87,6 +87,25 @@ def _validate_https_host(host: str, port: int, *, resolve_dns: bool) -> tuple[bo
     return True, None
 
 
+def _validate_http_local_host(
+    host: str, port: int, *, resolve_dns: bool
+) -> tuple[bool, str | None]:
+    """Verify an HTTP host is strictly a local loopback address or resolves only to loopback."""
+    if host not in ALLOWED_LOCAL_HOSTS:
+        return False, f"Plain HTTP is only permitted for localhost, got '{host}'."
+    if not resolve_dns or host in {"127.0.0.1", "::1"}:
+        return True, None
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except OSError as exc:
+        return False, f"Localhost DNS resolution failed for '{host}': {exc}"
+    for info in infos:
+        resolved_ip = str(info[4][0])
+        if not ipaddress.ip_address(resolved_ip).is_loopback:
+            return False, f"Host '{host}' resolved to non-loopback IP '{resolved_ip}'."
+    return True, None
+
+
 def validate_endpoint_url(url: str, *, resolve_dns: bool = False) -> tuple[bool, str | None]:
     """Validate an HTTP(S) endpoint URL against SSRF rules (localhost HTTP or public HTTPS)."""
     parsed = urlparse(url.strip())
@@ -97,9 +116,7 @@ def validate_endpoint_url(url: str, *, resolve_dns: bool = False) -> tuple[bool,
     if parsed.username is not None or parsed.password is not None:
         return False, "Endpoint URL must not contain embedded credentials."
     if scheme == "http":
-        if host in ALLOWED_LOCAL_HOSTS:
-            return True, None
-        return False, f"Plain HTTP is only permitted for localhost, got '{host}'."
+        return _validate_http_local_host(host, parsed.port or 80, resolve_dns=resolve_dns)
     if scheme != "https":
         return False, f"Unsupported URL scheme '{scheme}'; only http (local) or https allowed."
     return _validate_https_host(host, parsed.port or 443, resolve_dns=resolve_dns)

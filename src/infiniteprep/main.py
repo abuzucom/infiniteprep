@@ -33,6 +33,8 @@ from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 
 def run_evaluation_sample(input_dir: Path) -> dict[str, Any]:
     """Run non-destructive pilot evaluation on input_dir and return metrics dictionary."""
+    if not input_dir.exists() or not input_dir.is_dir():
+        raise ValueError(f"Input directory does not exist: {input_dir}")
     hashes_before = {
         p: compute_sha256(p) for p in discover_files_bounded([input_dir]) if p.is_file()
     }

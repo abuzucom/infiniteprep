@@ -169,7 +169,12 @@ class SafeTranscoderAdapter:
     ) -> Path:
         """Validate and canonicalize destination file path for SIBLING_EXPORT or IN_PLACE."""
         if mode == TranscodeMode.IN_PLACE_BACKED_UP:
-            return src_path.with_suffix(target_ext).resolve()
+            candidate = src_path.with_suffix(target_ext).resolve()
+            if candidate != src_path and candidate.exists():
+                raise FileExistsError(
+                    f"Target output file '{candidate.name}' already exists; refusing to overwrite."
+                )
+            return candidate
         if export_dir is None:
             dest_folder = src_path.parent.resolve()
             root_boundary = dest_folder

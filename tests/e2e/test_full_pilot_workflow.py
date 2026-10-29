@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
 from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapter
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
@@ -69,6 +71,9 @@ def test_cli_evaluate_sample_harness_writes_metrics_report(tmp_path: Path) -> No
     assert data["identified_files"] == 2
     assert data["analyzed_files"] == 2
     assert data["zero_unintended_file_mutations"] is True
+
+    with pytest.raises(ValueError, match="does not exist"):
+        run_evaluation_sample(tmp_path / "missing_dir")
 
 
 def test_full_end_to_end_core_loop_and_edge_case_scenarios(tmp_path: Path) -> None:

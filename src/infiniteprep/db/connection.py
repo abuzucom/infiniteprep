@@ -15,43 +15,42 @@ def get_schema_sql() -> str:
 
 
 class DatabaseManager:
-    """Manages SQLite connections with WAL mode, foreign keys, and deterministic close."""
+    """Manages thread-local SQLite connections with WAL mode, foreign keys, and cleanup."""
 
     def __init__(self, db_path: Path | str) -> None:
         """Initialize DatabaseManager and execute schema migrations."""
         self.db_path = Path(db_path) if str(db_path) != ":memory:" else Path(":memory:")
         self._is_memory = str(db_path) == ":memory:"
-        self._lock = threading.RLock()
-        self._shared_conn: sqlite3.Connection | None = None
+        self._local = threading.local()
         if not self._is_memory:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.initialize()
 
     def connect(self) -> sqlite3.Connection:
-        """Return the managed SQLite connection instance, initializing it if needed."""
-        with self._lock:
-            if self._shared_conn is None:
-                target = ":memory:" if self._is_memory else str(self.db_path)
-                self._shared_conn = sqlite3.connect(target, timeout=30.0, check_same_thread=False)
-                self._shared_conn.row_factory = sqlite3.Row
-                if not self._is_memory:
-                    self._shared_conn.execute("PRAGMA journal_mode = WAL;")
-                self._shared_conn.execute("PRAGMA foreign_keys = ON;")
-            return self._shared_conn
+        """Return a thread-local SQLite connection instance for the calling thread."""
+        if getattr(self._local, "conn", None) is None:
+            if self._is_memory:
+                uri = f"file:infiniteprep_{id(self)}?mode=memory&cache=shared"
+                self._local.conn = sqlite3.connect(uri, timeout=30.0, uri=True)
+            else:
+                self._local.conn = sqlite3.connect(str(self.db_path), timeout=30.0)
+            self._local.conn.row_factory = sqlite3.Row
+            if not self._is_memory:
+                self._local.conn.execute("PRAGMA journal_mode = WAL;")
+            self._local.conn.execute("PRAGMA foreign_keys = ON;")
+        return self._local.conn
 
     def initialize(self) -> None:
-        """Apply schema.sql idempotently on the managed connection."""
-        with self._lock:
-            conn = self.connect()
-            conn.executescript(get_schema_sql())
-            conn.commit()
+        """Apply schema.sql idempotently on the current thread's connection."""
+        conn = self.connect()
+        conn.executescript(get_schema_sql())
+        conn.commit()
 
     def close(self) -> None:
-        """Close the managed SQLite connection and release file handles."""
-        with self._lock:
-            if self._shared_conn is not None:
-                self._shared_conn.close()
-                self._shared_conn = None
+        """Close the current thread's SQLite connection and release file handles."""
+        if getattr(self._local, "conn", None) is not None:
+            self._local.conn.close()
+            self._local.conn = None
 
     def __enter__(self) -> DatabaseManager:
         """Support context-manager entry for deterministic connection release."""

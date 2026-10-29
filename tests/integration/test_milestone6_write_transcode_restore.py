@@ -215,14 +215,21 @@ def test_safe_transcoder_and_m3u8_playlist_exporter(tmp_path: Path) -> None:
             allowed_export_root=out_dir,
         )
 
-    # Export M3U8 playlist
+    # Export M3U8 playlist (and verify comma/newline injection escaping)
+    review_svc.set_manual_field_value(
+        asset.id, FieldName.ARTIST.value, "Sasha, John\n#EXT-X-INJECT"
+    )
     exporter = PlaylistExporter(repo)
     m3u8_path = tmp_path / "crate.m3u8"
     exporter.export_m3u8([asset.id], m3u8_path)
     content = m3u8_path.read_text(encoding="utf-8")
     assert "#EXTM3U" in content
     assert "#EXTINF:" in content
-    assert "Sasha - Xpander" in content
+    assert "Sasha  John #EXT-X-INJECT - Xpander" in content
+
+    # Verify manual field length validation
+    with pytest.raises(ValueError, match="exceeds maximum length"):
+        review_svc.set_manual_field_value(asset.id, FieldName.TITLE.value, "X" * 501)
     db.close()
 
 

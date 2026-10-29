@@ -46,8 +46,8 @@ class OllamaOpenAIReasoningAdapter:
         self.http_post_json = http_post_json or self._default_http_post_json
 
     def is_available(self) -> tuple[bool, str | None]:
-        """Validate endpoint URL against SSRF rules before allowing requests."""
-        return validate_endpoint_url(self.base_url)
+        """Validate endpoint URL against SSRF and DNS rebinding rules before allowing requests."""
+        return validate_endpoint_url(self.base_url, resolve_dns=True)
 
     def arbitrate(self, evidence_packet: dict[str, Any]) -> dict[str, Any]:
         """Send evidence_packet to LLM and validate response against allowed_candidates."""

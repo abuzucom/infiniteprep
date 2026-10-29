@@ -28,7 +28,7 @@ from infiniteprep.domain.enums import (
     parse_key_string,
 )
 from infiniteprep.domain.models import ApprovedField, FieldProposal, FileAsset
-from infiniteprep.services.review_service import ReviewService
+from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
 from infiniteprep.ui.audio_player import AudioPreviewWidget
 
 DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = (
@@ -175,6 +175,7 @@ class DetailPanel(QWidget):
         self.fields_table.setItem(row_idx, 3, QTableWidgetItem(src_text))
 
         edit_box = QLineEdit(app_val, self.fields_table)
+        edit_box.setMaxLength(MAX_MANUAL_FIELD_LENGTH)
         self.fields_table.setCellWidget(row_idx, 4, edit_box)
 
         action_widget = self._create_row_action_widget(
@@ -275,7 +276,10 @@ class DetailPanel(QWidget):
 
     def _on_save_manual(self, file_id: str, field_name: str, value: str) -> None:
         """Save a manual field edit with lock=True and refresh UI state."""
-        self.review_service.set_manual_field_value(file_id, field_name, value, lock=True)
+        cleaned = value.strip()
+        if len(cleaned) > MAX_MANUAL_FIELD_LENGTH:
+            cleaned = cleaned[:MAX_MANUAL_FIELD_LENGTH]
+        self.review_service.set_manual_field_value(file_id, field_name, cleaned, lock=True)
         self.load_file_asset(file_id)
         if self.on_change_callback:
             self.on_change_callback()
