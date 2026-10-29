@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import Final
 
 OLLAMA_TAGS_URL: Final[str] = "http://127.0.0.1:11434/api/tags"
-# A model reference is name:tag. The leading alphanumeric keeps a crafted
-# name from reaching the ollama CLI as an option. The name allows 128
+# A model reference is name:tag. The CLI parses an argument as an option only
+# when it starts with a hyphen. The first character must be a letter or digit.
+# That rule keeps a crafted name out of option parsing. The name allows 128
 # characters and the tag allows 64. Both bounds exceed published model names.
 SAFE_MODEL_NAME_RE: Final[re.Pattern[str]] = re.compile(
     r"[A-Za-z0-9][A-Za-z0-9._/-]{0,127}:[A-Za-z0-9._-]{1,64}"
