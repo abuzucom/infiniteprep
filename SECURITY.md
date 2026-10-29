@@ -57,5 +57,5 @@ Controlled adopters must preserve license-required attribution and source
 metadata. Each uncontrolled mirror remains responsible for its own legal
 compliance. This repository cannot enforce or verify third-party practices.
 
-Every repository change requires a versioned SemVer changelog entry. Adopting
-repositories must not use `[Unreleased]`.
+Every repository change requires a versioned SemVer changelog entry. This repo 
+does not use `[Unreleased]`.
