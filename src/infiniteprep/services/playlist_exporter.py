@@ -17,7 +17,8 @@ UNSAFE_PATH_CHARACTERS: Final[tuple[str, ...]] = ("\n", "\r")
 NO_FOLLOW_FLAG: Final[int] = getattr(os, "O_NOFOLLOW", 0)
 # O_BINARY stops the Windows C runtime from translating line endings a second time.
 BINARY_FLAG: Final[int] = getattr(os, "O_BINARY", 0)
-PLAYLIST_FILE_MODE: Final[int] = 0o644
+# Owner read and write only. DJ software runs as the same user, and FAT media ignore the mode.
+PLAYLIST_FILE_MODE: Final[int] = 0o600
 
 
 def _m3u8_escape(value: str) -> str:

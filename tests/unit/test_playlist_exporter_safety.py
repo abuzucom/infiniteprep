@@ -72,6 +72,17 @@ def test_export_dialog_counts_and_names_the_skipped_tracks(
     assert "evil #EXTINF:1 Injected.wav" in message.replace(",", " ")
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits apply only on POSIX.")
+def test_new_playlist_is_not_readable_by_group_or_others(tmp_path: Path) -> None:
+    """A newly created playlist carries no group or other permission bits."""
+    repo, file_ids = import_two_tracks(tmp_path)
+    destination = tmp_path / "out" / "crate.m3u8"
+
+    PlaylistExporter(repo).export_m3u8_report(file_ids, destination)
+
+    assert destination.stat().st_mode & 0o077 == 0
+
+
 @pytest.mark.skipif(
     not hasattr(os, "O_NOFOLLOW"),
     reason="The platform has no O_NOFOLLOW flag, so the exporter cannot refuse symlinks.",

@@ -47,7 +47,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Security
 
 - The playlist export leaves out a track whose stored path holds a line break. One entry can no longer split into extra playlist lines. The export dialog names each skipped track.
-- The playlist export opens its destination with `O_NOFOLLOW` where the OS defines it. A symlink at the destination raises an error and leaves the link target unchanged.
+- The playlist export opens its destination with `O_NOFOLLOW` where the OS defines it. A symlink at the destination raises an error and leaves the link target unchanged. A new playlist file gets mode `0o600`, readable and writable by its owner only.
 - `FpcalcBootstrapService` pins the SHA-256 digest of the official Chromaprint 1.5.1 Windows and macOS archives. Extraction requires a 64-character hexadecimal digest and compares it in constant time.
 - `install_fpcalc` refuses Linux and other platforms without a pinned archive. Those platforms install fpcalc from the system package manager.
 - `install_fpcalc` always verifies the download against the pinned digest. A caller `expected_sha256` that differs from the pin raises before any download.
