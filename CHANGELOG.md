@@ -12,7 +12,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The main window adds **Export Playlist (.m3u8)**. It writes the visible rows to a chosen path through `PlaylistExporter` and appends a missing `.m3u8` suffix. A failed write shows a warning.
 - `MainWindow` accepts an optional `on_export_playlist` callback.
 - Added `tests/unit/test_ui_playlist_export_action.py`.
-
+- `PlaylistExporter.export_m3u8_report` returns the written path, the written track count, and the skipped file IDs. `export_m3u8` still returns the written path. Added `tests/unit/test_playlist_exporter_safety.py`.
 - The main window adds **Transcode to XDJ**. It confirms the file count, mode, and preset from Settings, transcodes the visible rows, and lists each output and failure. `services/transcode_batch.py` isolates per-file failures.
 - `MainWindow` accepts an optional `on_transcode_batch` callback.
 - Added `tests/unit/test_ui_transcode_action.py` and the `tests/fixtures/qt_dialogs.py` dialog recorder.
@@ -46,6 +46,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Security
 
+- The playlist export leaves out a track whose stored path holds a line break. One entry can no longer split into extra playlist lines. The export dialog names each skipped track.
+- The playlist export opens its destination with `O_NOFOLLOW` where the OS defines it. A symlink at the destination raises an error and leaves the link target unchanged.
 - `FpcalcBootstrapService` pins the SHA-256 digest of the official Chromaprint 1.5.1 Windows and macOS archives. Extraction requires a 64-character hexadecimal digest and compares it in constant time.
 - `install_fpcalc` refuses Linux and other platforms without a pinned archive. Those platforms install fpcalc from the system package manager.
 - `install_fpcalc` always verifies the download against the pinned digest. A caller `expected_sha256` that differs from the pin raises before any download.

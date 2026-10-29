@@ -100,7 +100,7 @@ def export_playlist_with_feedback(
 ) -> Path | None:
     """Write the playlist and report the destination, or report the failure and return None."""
     try:
-        written = exporter.export_m3u8(file_ids, destination)
+        report = exporter.export_m3u8_report(file_ids, destination)
     except OSError as exc:
         logger.warning("Playlist export to %s failed: %s", destination, exc.__class__.__name__)
         QMessageBox.warning(
@@ -109,7 +109,18 @@ def export_playlist_with_feedback(
             f"Playlist export failed ({exc}). Choose a writable location and retry.",
         )
         return None
-    QMessageBox.information(
-        parent, EXPORT_DIALOG_TITLE, f"Exported {len(file_ids)} track(s) to {written}."
-    )
-    return written
+    message = f"Exported {report.written_count} track(s) to {report.path}."
+    if report.skipped_file_ids:
+        message += "\n\n" + build_skipped_tracks_text(exporter.repo, report.skipped_file_ids)
+    QMessageBox.information(parent, EXPORT_DIALOG_TITLE, message)
+    return report.path
+
+
+def build_skipped_tracks_text(repo: Repository, skipped_file_ids: list[str]) -> str:
+    """Name each track left out because its file path holds a line break."""
+    lines = [f"Skipped {len(skipped_file_ids)} track(s) with a line break in the file name:"]
+    for file_id in skipped_file_ids[:MAX_LISTED_FAILURES]:
+        asset = repo.get_file_by_id(file_id)
+        raw_name = Path(asset.current_path).name if asset is not None else file_id
+        lines.append(raw_name.replace("\n", " ").replace("\r", " "))
+    return "\n".join(lines)
