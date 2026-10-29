@@ -83,23 +83,19 @@ def test_install_fpcalc_verifies_pinned_digest_by_default(
     assert not (tmp_path / "bin").exists()
 
 
-def test_install_fpcalc_rejects_digest_that_differs_from_pin(
+def test_install_fpcalc_rejects_download_that_misses_caller_digest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Windows")
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
-    downloads: list[str] = []
-
-    def record_download(url: str) -> bytes:
-        downloads.append(url)
-        return archive_bytes
-
-    bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin", downloader=record_download)
-    with pytest.raises(ValueError, match="pinned"):
-        bootstrap.install_fpcalc(
-            user_consented=True, expected_sha256=hashlib.sha256(archive_bytes).hexdigest()
-        )
-    assert downloads == []
+    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Windows")
+    monkeypatch.setitem(
+        fpcalc_module.OFFICIAL_FPCALC_SHA256, "windows", hashlib.sha256(archive_bytes).hexdigest()
+    )
+    bootstrap = FpcalcBootstrapService(
+        install_dir=tmp_path / "bin", downloader=lambda _url: archive_bytes
+    )
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        bootstrap.install_fpcalc(user_consented=True, expected_sha256="0" * 64)
     assert not (tmp_path / "bin").exists()
 
 
@@ -312,19 +308,21 @@ def test_pull_model_accepts_namespaced_names(model_name: str) -> None:
 # Deprecated install_fpcalc digest parameter and template fallback observability.
 
 
-def test_install_fpcalc_warns_when_digest_parameter_is_passed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_install_fpcalc_accepts_caller_digest_that_matches_pin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recwarn: pytest.WarningsRecorder
 ) -> None:
+    archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
+    archive_digest = hashlib.sha256(archive_bytes).hexdigest()
     monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Windows")
+    monkeypatch.setitem(fpcalc_module.OFFICIAL_FPCALC_SHA256, "windows", archive_digest)
     bootstrap = FpcalcBootstrapService(
-        install_dir=tmp_path / "bin", downloader=lambda _url: _build_fpcalc_zip(FAKE_BINARY)
+        install_dir=tmp_path / "bin", downloader=lambda _url: archive_bytes
     )
-    pinned = fpcalc_module.OFFICIAL_FPCALC_SHA256["windows"]
-    with (
-        pytest.warns(DeprecationWarning, match="expected_sha256"),
-        pytest.raises(ValueError, match="SHA-256 mismatch"),
-    ):
-        bootstrap.install_fpcalc(user_consented=True, expected_sha256=pinned)
+    installed = bootstrap.install_fpcalc(
+        user_consented=True, expected_sha256=archive_digest.upper()
+    )
+    assert installed.read_bytes() == FAKE_BINARY
+    assert not [w for w in recwarn if issubclass(w.category, DeprecationWarning)]
 
 
 def test_render_filename_logs_template_fallback(caplog: pytest.LogCaptureFixture) -> None:
