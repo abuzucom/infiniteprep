@@ -21,6 +21,8 @@ permissions:
 
 jobs:
   resolve-pr:
+    # A ci run for a push to main has no pull request to review.
+    if: github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest
     outputs:
       same_repository: ${{ steps.resolve.outputs.same_repository }}

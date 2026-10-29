@@ -33,7 +33,12 @@ jobs:
           python-version: '3.x'
       - name: Install checker dependencies
         run: python -m pip install --requirement requirements-checkers.txt
+      # The compliance scanner tests read GITHUB_EVENT_PATH. A push payload
+      # carries no pull request data. The runner ignores a step-level
+      # override of GITHUB_* variables. The shell removes the variable, as in
+      # ci.yml. The command wraps the runner default pwsh template.
       - name: Run tests
+        shell: pwsh -command "Remove-Item Env:GITHUB_EVENT_PATH -ErrorAction SilentlyContinue; . '{0}'; exit $LASTEXITCODE"
         run: python scripts/run_tests.py
       - name: Verify trusted GitHub CLI routing
         run: python -m unittest tests.test_trusted_gh tests.test_gate_parity -v
@@ -52,7 +57,9 @@ jobs:
           python-version: '3.x'
       - name: Install checker dependencies
         run: python -m pip install --requirement requirements-checkers.txt
+      # The tests-windows comment explains the unset. Bash runs here.
       - name: Run tests
+        shell: env -u GITHUB_EVENT_PATH bash -e {0}
         run: python scripts/run_tests.py
 
   pr-authorship:
@@ -150,7 +157,10 @@ jobs:
         run: python scripts/check_conflict_markers.py
       - name: Check workflow action pins
         run: python scripts/check_action_pins.py
+      # The hook coverage run executes the test suite. The tests-windows
+      # comment explains the unset. Bash runs here.
       - name: Check no untested statement entered the hooks
+        shell: env -u GITHUB_EVENT_PATH bash -e {0}
         run: python scripts/check_hook_coverage.py
       - name: Check American spelling (warning only)
         run: python scripts/check_us_spelling.py AGENTS.md README.md CHANGELOG.md docs/project-orientation.md docs/template-drift.md plan/HANDOFF.md.example SECURITY.md CONTRIBUTING.md

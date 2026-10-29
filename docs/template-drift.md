@@ -34,6 +34,9 @@ Source template: `abuzucom/agents` at commit `b452348`.
 ## Expected differences
 
 - `Makefile` and `sync-check.yml` list InfinitePrep prose files.
+- The `sync-check.yml` suite steps run in a shell that drops
+  `GITHUB_EVENT_PATH`. A push payload otherwise fails the compliance scanner
+  tests.
 - `.gitattributes` keeps `* text=auto eol=lf` and adds the policy entries.
 - `pyproject.toml` excludes the copied gate files from Ruff. The agents lint
   in `ci.yml` covers those files.
