@@ -12,7 +12,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The main window adds **Transcode to XDJ**. It confirms the file count, mode, and preset from Settings, transcodes the visible rows, and lists each output and failure. `services/transcode_batch.py` isolates per-file failures.
 - `MainWindow` accepts an optional `on_transcode_batch` callback.
 - Added `tests/unit/test_ui_transcode_action.py` and the `tests/fixtures/qt_dialogs.py` dialog recorder.
-
 - Adopted the `abuzucom/agents` policy at commit `b452348`. `AGENTS.md` holds the canonical policy. `scripts/sync.py` generates the tool copies.
 - Added the complete gate set under `hooks/` with Claude Code, Codex, Gemini, and Antigravity registrations.
 - Added the agents checkers under `scripts/` and the agents test suites under `tests/`.
@@ -23,6 +22,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `TranscodePreset.XDJ_LOSSLESS_AUTO` replaces `XDJ_RX3_LOSSLESS_AUTO` as the default preset. `XDJ_RX3_LOSSLESS_AUTO` stays as an alias, and a stored `"XDJ_RX3_LOSSLESS_AUTO"` settings value still resolves. Settings menus list the preset once.
+- Sibling transcode output files end in `_XDJ` instead of `_XDJ_RX3`.
+- The Settings labels read **XDJ Transcode Mode** and **XDJ Transcode Preset**.
 - Ruff skips the copied agents gate files. The `agents-lint` job and `scripts/run_tests.py` cover those files.
 - `.gitattributes` pins LF line endings for the policy files.
 - The `checks` and `test-matrix` jobs install `requirements-checkers.txt` for the agents tests.

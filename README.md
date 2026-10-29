@@ -157,7 +157,7 @@ Click **Settings & Providers**. The dialog holds these fields:
 - AcoustID API key and Discogs personal token.
 - The closed-world LLM toggle, the Ollama or OpenAI-compatible base URL, and
   the model.
-- The XDJ-RX3 transcode mode and preset.
+- The XDJ transcode mode and preset.
 
 Click **Save Settings**. Secrets go to the OS keyring under the
 `InfinitePrep` service. The application refuses a plaintext fallback when the
@@ -215,7 +215,7 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
 9. **Transcode to XDJ.** Click **Transcode to XDJ** to convert the
    visible rows with the mode and preset from **Settings & Providers**. A
    confirmation names the file count, mode, and preset.
-   - `sibling_export` writes a `<name>_XDJ_RX3` copy next to each original.
+   - `sibling_export` writes a `<name>_XDJ` copy next to each original.
    - `in_place_backed_up` replaces each original. Each replacement first
      takes a SHA-256 verified backup and records a journal entry.
    - A summary lists each output file and each failure.
@@ -243,7 +243,7 @@ command writes no report.
 - The main window exposes no playlist export action. `PlaylistExporter` runs
   only through the Python API.
 - The `MP3_320_CBR` preset produces the same output as
-  `XDJ_RX3_LOSSLESS_AUTO`.
+  `XDJ_LOSSLESS_AUTO`.
 - An in-place transcode of an OGG or M4A file writes a WAV and removes the
   original. The table keeps the old path for that file.
 

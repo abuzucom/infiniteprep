@@ -56,8 +56,24 @@ def test_resolve_transcode_options_falls_back_to_safe_defaults() -> None:
     )
     assert resolve_transcode_options("overwrite", "bogus") == (
         TranscodeMode.SIBLING_EXPORT,
-        TranscodePreset.XDJ_RX3_LOSSLESS_AUTO,
+        TranscodePreset.XDJ_LOSSLESS_AUTO,
     )
+
+
+def test_pre_rename_preset_name_and_value_still_select_lossless_auto() -> None:
+    """The XDJ_RX3 member alias and a stored XDJ_RX3 value both resolve to the renamed preset."""
+    assert TranscodePreset.XDJ_RX3_LOSSLESS_AUTO is TranscodePreset.XDJ_LOSSLESS_AUTO
+    assert TranscodePreset("XDJ_RX3_LOSSLESS_AUTO") is TranscodePreset.XDJ_LOSSLESS_AUTO
+    assert resolve_transcode_options("sibling_export", "XDJ_RX3_LOSSLESS_AUTO") == (
+        TranscodeMode.SIBLING_EXPORT,
+        TranscodePreset.XDJ_LOSSLESS_AUTO,
+    )
+    assert [preset.value for preset in TranscodePreset] == [
+        "XDJ_LOSSLESS_AUTO",
+        "FORCE_WAV_48K_24B",
+        "FORCE_WAV_44K_16B",
+        "MP3_320_CBR",
+    ]
 
 
 def test_confirmed_batch_transcode_converts_and_reports_the_missing_file(
@@ -76,7 +92,7 @@ def test_confirmed_batch_transcode_converts_and_reports_the_missing_file(
     assert summary is not None
     assert len(summary.results) == 1
     output = summary.results[0].output_path
-    assert output.name == "96k_XDJ_RX3.wav"
+    assert output.name == "96k_XDJ.wav"
     assert sf.info(str(output)).samplerate == 48000
     assert list(summary.failures) == [file_ids[1]]
     assert "in mode sibling_export" in dialogs.texts("question")[0]
