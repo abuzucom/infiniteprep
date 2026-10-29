@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.1] (2026-10-29)
+## [0.2.2] (2026-10-29)
 
 ### Added
 
@@ -23,6 +23,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `.gitattributes` pins LF line endings for the policy files.
 - The `checks` and `test-matrix` jobs install `requirements-checkers.txt` for the agents tests.
 - The `checks` and `test-matrix` test steps unset `GITHUB_EVENT_PATH`. Push events no longer reach the compliance scanner tests.
+- The README holds a full setup and usage walkthrough. It covers prerequisites, per-OS install, optional tools, data locations, credentials, each desktop workflow step, the `evaluate-sample` harness, and current limitations.
+- The README test section names the agents policy and gate suites in the `unittest` run. It installs `requirements-checkers.txt` first. Its commands run from an active virtual environment on every OS.
 
 ### Security
 
