@@ -126,7 +126,7 @@ class MainWindow(QMainWindow):
         write_btn.clicked.connect(self._trigger_open_write_dialog)
         toolbar.addWidget(write_btn)
 
-        self.transcode_btn = QPushButton("Transcode for XDJ-RX3", self)
+        self.transcode_btn = QPushButton("Transcode to XDJ", self)
         self.transcode_btn.clicked.connect(self._trigger_transcode_batch)
         toolbar.addWidget(self.transcode_btn)
 

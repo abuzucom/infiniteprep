@@ -20,7 +20,7 @@ from infiniteprep.services.transcode_batch import (
     transcode_files,
 )
 
-TRANSCODE_DIALOG_TITLE: Final[str] = "Transcode for XDJ-RX3"
+TRANSCODE_DIALOG_TITLE: Final[str] = "Transcode to XDJ"
 MAX_LISTED_FAILURES: Final[int] = 10
 SIBLING_EXPORT_NOTE: Final[str] = (
     "Each file gets a new '<name>_XDJ_RX3' copy next to the original. The originals stay unchanged."

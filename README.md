@@ -212,7 +212,7 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
 8. **Restore.** Click **Change Journal & Restore**. Each completed write shows
    a **Restore Backup** button. The restore verifies the backup and returns
    the original file.
-9. **Transcode for XDJ-RX3.** Click **Transcode for XDJ-RX3** to convert the
+9. **Transcode to XDJ.** Click **Transcode to XDJ** to convert the
    visible rows with the mode and preset from **Settings & Providers**. A
    confirmation names the file count, mode, and preset.
    - `sibling_export` writes a `<name>_XDJ_RX3` copy next to each original.

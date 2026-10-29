@@ -1,4 +1,4 @@
-"""Tests for the Transcode for XDJ-RX3 action in the desktop UI."""
+"""Tests for the Transcode to XDJ action in the desktop UI."""
 
 from __future__ import annotations
 
