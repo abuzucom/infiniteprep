@@ -7,6 +7,7 @@ import io
 import logging
 import re
 import subprocess
+import tarfile
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
@@ -476,3 +477,45 @@ def test_install_fpcalc_rejects_caller_digest_before_download(
         bootstrap.install_fpcalc(user_consented=True, expected_sha256="0" * 64)
     assert downloads == []
     assert not (tmp_path / "bin").exists()
+
+
+def _build_fpcalc_tar(payload: bytes) -> bytes:
+    """Return gzip TAR bytes holding one fpcalc entry with the given payload."""
+    buffer = io.BytesIO()
+    with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+        member = tarfile.TarInfo("chromaprint/fpcalc")
+        member.size = len(payload)
+        archive.addfile(member, io.BytesIO(payload))
+    return buffer.getvalue()
+
+
+def test_tar_entry_read_stays_within_binary_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = b"x" * 64
+    archive_bytes = _build_fpcalc_tar(payload)
+    monkeypatch.setattr(fpcalc_module, "MAX_FPCALC_BINARY_BYTES", len(payload) - 1)
+    bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin")
+    with pytest.raises(ValueError, match="maximum size"):
+        bootstrap.install_from_archive_bytes(
+            archive_bytes=archive_bytes,
+            expected_sha256=hashlib.sha256(archive_bytes).hexdigest(),
+            user_consented=True,
+        )
+    assert not any((tmp_path / "bin").glob("fpcalc*"))
+
+
+def test_tar_entry_at_cap_installs_whole_binary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    payload = b"y" * 64
+    archive_bytes = _build_fpcalc_tar(payload)
+    monkeypatch.setattr(fpcalc_module, "MAX_FPCALC_BINARY_BYTES", len(payload))
+    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Darwin")
+    bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin")
+    installed = bootstrap.install_from_archive_bytes(
+        archive_bytes=archive_bytes,
+        expected_sha256=hashlib.sha256(archive_bytes).hexdigest(),
+        user_consented=True,
+    )
+    assert installed.read_bytes() == payload

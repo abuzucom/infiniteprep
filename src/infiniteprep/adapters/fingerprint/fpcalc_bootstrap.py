@@ -61,12 +61,16 @@ def _try_write_tar_member(
     member: tarfile.TarInfo,
     target_bin: Path,
 ) -> bool:
-    """Verify and write a matching tarfile member to target_bin."""
-    _verify_entry_size(member.size)
+    """Read a matching tarfile member within the binary cap and write it to target_bin."""
     extracted = tf.extractfile(member)
     if extracted is None:
         return False
-    target_bin.write_bytes(extracted.read(MAX_FPCALC_BINARY_BYTES))
+    # The bounded read enforces the cap on decompressed bytes. The declared
+    # header size stays untrusted, as on the ZIP path.
+    with extracted:
+        data = extracted.read(MAX_FPCALC_BINARY_BYTES + 1)
+    _verify_entry_size(len(data))
+    target_bin.write_bytes(data)
     return True
 
 
