@@ -29,19 +29,19 @@ OFFICIAL_FPCALC_URLS: Final[dict[str, str]] = {
         "https://github.com/acoustid/chromaprint/releases/download/"
         "v1.5.1/chromaprint-fpcalc-1.5.1-macos-universal.tar.gz"
     ),
-    "linux": (
-        "https://github.com/acoustid/chromaprint/releases/download/"
-        "v1.5.1/chromaprint-fpcalc-1.5.1-linux-x86_64.tar.gz"
-    ),
 }
 # SHA-256 of each OFFICIAL_FPCALC_URLS asset. A digest pins the exact release
 # archive. A replaced asset or redirected download fails before extraction.
-# Recompute with `sha256sum` over a fresh download of each URL before any
-# update to these values.
+# Two sources agree on each value:
+# - a direct download of each URL
+# - the `FPCALC_SHA256SUM` pins for fpcalc 1.5.1 in `metabrainz/picard`
+#   `.github/workflows/package-windows.yml` and `package-macos.yml` at
+#   commit `03323e2ae`
+# No second source confirms the Linux archive digest. Linux installs fpcalc
+# from the distribution package manager instead.
 OFFICIAL_FPCALC_SHA256: Final[dict[str, str]] = {
     "windows": "36b478e16aa69f757f376645db0d436073a42c0097b6bb2677109e7835b59bbc",
     "darwin": "d4d8faff4b5f7c558d9be053da47804f9501eaa6c2f87906a9f040f38d61c860",
-    "linux": "4d7433a7f778e5946d7225230681cbcd634e153316ecac87c538c33ac32387a5",
 }
 
 
@@ -125,6 +125,7 @@ class FpcalcBootstrapService:
         optional expected_sha256 remains for API compatibility. A value that
         differs from the pin raises ValueError. install_from_archive_bytes
         accepts a caller-supplied digest for archives from other sources.
+        Platforms without a pinned archive raise ValueError before any download.
         """
         if not user_consented:
             raise PermissionError(
@@ -132,8 +133,11 @@ class FpcalcBootstrapService:
                 "pass user_consented=True after user approval."
             )
         sys_key = platform.system().lower()
-        if sys_key not in OFFICIAL_FPCALC_URLS:
-            sys_key = "windows"
+        if sys_key not in OFFICIAL_FPCALC_SHA256:
+            raise ValueError(
+                f"No verified fpcalc archive exists for {platform.system() or 'this OS'}. "
+                "Install fpcalc with the system package manager, e.g. libchromaprint-tools."
+            )
         pinned_sha256 = OFFICIAL_FPCALC_SHA256[sys_key]
         # The parameter stays for API compatibility. Only the pinned digest
         # can authorize the official download.

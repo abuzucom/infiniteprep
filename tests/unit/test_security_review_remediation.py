@@ -68,7 +68,10 @@ def test_archive_install_rejects_missing_digest(tmp_path: Path, missing_digest: 
     assert not (tmp_path / "bin").exists()
 
 
-def test_install_fpcalc_verifies_pinned_digest_by_default(tmp_path: Path) -> None:
+def test_install_fpcalc_verifies_pinned_digest_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Windows")
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
     bootstrap = FpcalcBootstrapService(
         install_dir=tmp_path / "bin", downloader=lambda _url: archive_bytes
@@ -78,7 +81,10 @@ def test_install_fpcalc_verifies_pinned_digest_by_default(tmp_path: Path) -> Non
     assert not (tmp_path / "bin").exists()
 
 
-def test_install_fpcalc_rejects_digest_that_differs_from_pin(tmp_path: Path) -> None:
+def test_install_fpcalc_rejects_digest_that_differs_from_pin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Windows")
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
     downloads: list[str] = []
 
@@ -93,6 +99,28 @@ def test_install_fpcalc_rejects_digest_that_differs_from_pin(tmp_path: Path) -> 
         )
     assert downloads == []
     assert not (tmp_path / "bin").exists()
+
+
+@pytest.mark.parametrize("system_name", ["Linux", "FreeBSD", ""])
+def test_install_fpcalc_refuses_platform_without_pinned_archive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, system_name: str
+) -> None:
+    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: system_name)
+    downloads: list[str] = []
+
+    def record_download(url: str) -> bytes:
+        downloads.append(url)
+        return b""
+
+    bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin", downloader=record_download)
+    with pytest.raises(ValueError, match="package manager"):
+        bootstrap.install_fpcalc(user_consented=True)
+    assert downloads == []
+    assert not (tmp_path / "bin").exists()
+
+
+def test_pinned_fpcalc_platforms_are_windows_and_macos() -> None:
+    assert set(fpcalc_module.OFFICIAL_FPCALC_SHA256) == {"windows", "darwin"}
 
 
 def test_archive_install_accepts_explicit_matching_digest(tmp_path: Path) -> None:

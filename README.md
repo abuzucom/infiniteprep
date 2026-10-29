@@ -18,7 +18,7 @@ It is purpose-built for **Native Instruments Traktor Pro 4**, **AlphaTheta / Pio
    - Computes SHA-256 content hashes, detects duplicates across folders, flags suspected continuous mixes (`> 20 min`), and groups shared folders into hypothesis `SourceGroup` entities.
    - Surfaces **Pioneer XDJ-RX3 Hardware Compatibility Warnings** on import for sample rates `> 48000 Hz`, `32-bit float` WAVs, and unsupported `.ogg` containers.
 2. **Acoustic Fingerprinting & Catalog Enrichment**:
-   - Local **Chromaprint (`fpcalc`) + AcoustID** lookup with consent-gated, SHA-256 verified `fpcalc` bootstrap (`FpcalcBootstrapService`).
+   - Local **Chromaprint (`fpcalc`) + AcoustID** lookup with consent-gated, SHA-256 verified `fpcalc` bootstrap (`FpcalcBootstrapService`) on Windows and macOS. Linux uses the distribution `fpcalc` package.
    - **MusicBrainz (`ws/2`)** and **Discogs REST API** adapters with rate limiting (`1 req/sec` / `60 req/min`) and SQLite TTL response caching.
    - Strictly separates **Recording Identity** (`artist`, `title`, `mix_name`, `remixer`, `duration`) from **Release Details** (`release_title`, `label`, `catalog_number`, `vinyl_position`, `year`, `country`, `genre`).
 3. **Local DJ Audio Analysis & Rip Quality Diagnostics**:
