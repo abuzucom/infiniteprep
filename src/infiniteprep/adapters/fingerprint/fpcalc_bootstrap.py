@@ -119,7 +119,13 @@ class FpcalcBootstrapService:
         user_consented: bool,
         expected_sha256: str | None = None,
     ) -> Path:
-        """Download and install fpcalc only when user_consented is explicitly True."""
+        """Download and install fpcalc only when user_consented is explicitly True.
+
+        The pinned OFFICIAL_FPCALC_SHA256 digest verifies the download. The
+        optional expected_sha256 remains for API compatibility. A value that
+        differs from the pin raises ValueError. install_from_archive_bytes
+        accepts a caller-supplied digest for archives from other sources.
+        """
         if not user_consented:
             raise PermissionError(
                 "User consent is required before downloading or installing fpcalc; "
@@ -190,6 +196,8 @@ class FpcalcBootstrapService:
         with zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as zf:
             for info in zf.infolist():
                 if not info.is_dir() and _is_matching_fpcalc_name(info.filename, exe_name):
+                    # The declared size gives an early reject. The bounded read
+                    # enforces the cap on the decompressed bytes.
                     _verify_entry_size(info.file_size)
                     target_bin.write_bytes(_read_bounded_zip_entry(zf, info))
                     return

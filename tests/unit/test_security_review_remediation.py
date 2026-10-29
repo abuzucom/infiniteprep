@@ -188,6 +188,25 @@ def test_discogs_fetch_rejects_unsafe_release_id(entity_id: str) -> None:
     assert requested == []
 
 
+@pytest.mark.parametrize("entity_id", ["0", "0000000000000000", "0249504"])
+def test_discogs_fetch_rejects_zero_led_release_id(entity_id: str) -> None:
+    requested: list[str] = []
+
+    def record_request(url: str, _params: dict[str, str]) -> dict[str, Any]:
+        requested.append(url)
+        return {}
+
+    adapter = DiscogsAdapter(
+        repository=_new_repository(),
+        user_token=DISCOGS_STUB_KEY,
+        http_get_json=record_request,
+        min_interval_sec=0.0,
+    )
+    with pytest.raises(ValueError, match="Discogs"):
+        adapter.fetch(entity_id)
+    assert requested == []
+
+
 def test_discogs_fetch_accepts_numeric_release_id() -> None:
     requested: list[str] = []
 

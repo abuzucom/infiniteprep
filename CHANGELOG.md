@@ -30,7 +30,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `install_fpcalc` rejects an `expected_sha256` that differs from the pinned digest.
 - ZIP extraction of `fpcalc` reads at most `MAX_FPCALC_BINARY_BYTES` plus one byte.
 - `MutagenAdapter.render_filename` substitutes only known `{token}` names. Other brace syntax selects the default `artist - title` layout.
-- `DiscogsAdapter.fetch` accepts only numeric release IDs.
+- `DiscogsAdapter.fetch` accepts only numeric release IDs without a leading zero.
 - `OllamaBootstrapService.pull_model` accepts only `name:tag` model references with a leading alphanumeric character.
 - The Discogs, MusicBrainz, and AcoustID HTTP clients cap each response at 5 MiB.
 - ID3 writes remove an existing `TXXX` frame with the same description before adding the new value.
