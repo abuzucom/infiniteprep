@@ -101,6 +101,7 @@ class ApprovalOrigin(StrEnum):
 
 class OperationStatus(StrEnum):
     PLANNED = "planned"
+    IN_PROGRESS = "in_progress"
     BACKED_UP = "backed_up"
     TAGS_WRITTEN = "tags_written"
     RENAMED = "renamed"

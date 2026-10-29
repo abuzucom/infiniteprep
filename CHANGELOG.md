@@ -40,6 +40,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- In-place **Transcode to XDJ** no longer fails with `AttributeError`. `OperationStatus` gains the `IN_PROGRESS` value that the in-place journal record uses before the replacement. Added `tests/unit/test_in_place_transcode_journal.py`.
 - The `sync-check` suite steps drop `GITHUB_EVENT_PATH`. Push events to `main` no longer fail the compliance scanner tests in `tests-windows`, `tests-macos`, and `check-sync`.
 - The `security-review-pr` `resolve-pr` job runs only for pull request `ci` runs. A push to `main` now skips the review instead of failing it.
 - Added `tests/test_push_event_workflow_wiring.py` for both workflow guards.
