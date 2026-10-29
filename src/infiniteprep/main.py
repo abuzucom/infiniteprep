@@ -23,10 +23,14 @@ from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName, SourceType
 from infiniteprep.services.import_service import ImportService, discover_files_bounded
 from infiniteprep.services.job_orchestrator import JobOrchestrator
+from infiniteprep.services.playlist_exporter import PlaylistExporter
 from infiniteprep.services.reconciliation import ReconciliationService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
-from infiniteprep.ui.action_handlers import run_transcode_with_confirmation
+from infiniteprep.ui.action_handlers import (
+    export_playlist_with_feedback,
+    run_transcode_with_confirmation,
+)
 from infiniteprep.ui.journal_dialog import JournalDialog
 from infiniteprep.ui.main_window import MainWindow
 from infiniteprep.ui.settings_dialog import SettingsDialog
@@ -80,6 +84,7 @@ def launch_desktop_app() -> int:
     orchestrator = JobOrchestrator(repository=repo, audio_analyzer=LocalDspAnalyzer())
     reconciler = ReconciliationService(repo)
     transcoder = SafeTranscoderAdapter(repo, backup_dir=app_dir / "backups")
+    exporter = PlaylistExporter(repo)
     qt_app = QApplication.instance() or QApplication(sys.argv)
 
     def handle_analyze_batch(file_ids: list[str]) -> None:
@@ -99,6 +104,9 @@ def launch_desktop_app() -> int:
         ).exec(),
         on_transcode_batch=lambda fids: run_transcode_with_confirmation(
             window, repo, transcoder, fids, SettingsManager()
+        ),
+        on_export_playlist=lambda fids, dest: export_playlist_with_feedback(
+            window, exporter, fids, dest
         ),
     )
     window.show()

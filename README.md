@@ -219,6 +219,10 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
    - `in_place_backed_up` replaces each original. Each replacement first
      takes a SHA-256 verified backup and records a journal entry.
    - A summary lists each output file and each failure.
+10. **Export a playlist.** Click **Export Playlist (.m3u8)** and pick a
+    destination. The export writes the visible rows to a UTF-8 Extended M3U
+    playlist for Traktor Pro 4 and Rekordbox. A name without the `.m3u8`
+    suffix gains it.
 
 ### Evaluate a folder from the command line
 
@@ -240,8 +244,6 @@ command writes no report.
 - The AcoustID, MusicBrainz, Discogs, and LLM adapters exist in
   `src/infiniteprep/adapters/`. The launcher does not wire those adapters. Saved
   credentials and provider settings do not change the identification results.
-- The main window exposes no playlist export action. `PlaylistExporter` runs
-  only through the Python API.
 - The `MP3_320_CBR` preset produces the same output as
   `XDJ_LOSSLESS_AUTO`.
 - An in-place transcode of an OGG or M4A file writes a WAV and removes the

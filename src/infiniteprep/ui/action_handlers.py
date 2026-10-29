@@ -1,7 +1,8 @@
-"""Confirmation and result dialogs for the batch transcode action."""
+"""Confirmation and result dialogs for the batch transcode and playlist export actions."""
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Final
 
@@ -14,13 +15,17 @@ from infiniteprep.adapters.transcoder.safe_transcoder import (
 )
 from infiniteprep.config.settings import SettingsManager
 from infiniteprep.db.repositories import Repository
+from infiniteprep.services.playlist_exporter import PlaylistExporter
 from infiniteprep.services.transcode_batch import (
     TranscodeBatchSummary,
     resolve_transcode_options,
     transcode_files,
 )
 
+logger = logging.getLogger(__name__)
+
 TRANSCODE_DIALOG_TITLE: Final[str] = "Transcode to XDJ"
+EXPORT_DIALOG_TITLE: Final[str] = "Export Playlist (.m3u8)"
 MAX_LISTED_FAILURES: Final[int] = 10
 SIBLING_EXPORT_NOTE: Final[str] = (
     "Each file gets a new '<name>_XDJ' copy next to the original. The originals stay unchanged."
@@ -85,3 +90,26 @@ def run_transcode_with_confirmation(
     else:
         QMessageBox.information(parent, TRANSCODE_DIALOG_TITLE, message)
     return summary
+
+
+def export_playlist_with_feedback(
+    parent: QWidget | None,
+    exporter: PlaylistExporter,
+    file_ids: list[str],
+    destination: Path,
+) -> Path | None:
+    """Write the playlist and report the destination, or report the failure and return None."""
+    try:
+        written = exporter.export_m3u8(file_ids, destination)
+    except OSError as exc:
+        logger.warning("Playlist export to %s failed: %s", destination, exc.__class__.__name__)
+        QMessageBox.warning(
+            parent,
+            EXPORT_DIALOG_TITLE,
+            f"Playlist export failed ({exc}). Choose a writable location and retry.",
+        )
+        return None
+    QMessageBox.information(
+        parent, EXPORT_DIALOG_TITLE, f"Exported {len(file_ids)} track(s) to {written}."
+    )
+    return written

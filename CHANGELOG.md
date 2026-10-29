@@ -5,9 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] (2026-10-29)
+## [0.4.0] (2026-10-29)
 
 ### Added
+
+- The main window adds **Export Playlist (.m3u8)**. It writes the visible rows to a chosen path through `PlaylistExporter` and appends a missing `.m3u8` suffix. A failed write shows a warning.
+- `MainWindow` accepts an optional `on_export_playlist` callback.
+- Added `tests/unit/test_ui_playlist_export_action.py`.
 
 - The main window adds **Transcode to XDJ**. It confirms the file count, mode, and preset from Settings, transcodes the visible rows, and lists each output and failure. `services/transcode_batch.py` isolates per-file failures.
 - `MainWindow` accepts an optional `on_transcode_batch` callback.
@@ -31,6 +35,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The `checks` and `test-matrix` test steps unset `GITHUB_EVENT_PATH`. Push events no longer reach the compliance scanner tests.
 - The README holds a full setup and usage walkthrough. It covers prerequisites, per-OS install, optional tools, data locations, credentials, each desktop workflow step, the `evaluate-sample` harness, and current limitations.
 - The README documents the transcode step. Its limitations list drops the missing transcode action and records the `MP3_320_CBR` and in-place OGG or M4A behavior.
+- The README documents the playlist export step. Its limitations list drops the missing playlist export action.
 - The README test section names the agents policy and gate suites in the `unittest` run. It installs `requirements-checkers.txt` first. Its commands run from an active virtual environment on every OS.
 
 ### Fixed
