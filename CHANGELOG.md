@@ -5,10 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.3] (2026-10-29)
+## [0.2.4] (2026-10-29)
 
 ### Added
 
+- Added the CodeQL analysis workflow (`.github/workflows/codeql.yml`) for Python semantic security scanning.
+- Added the dependency review workflow (`.github/workflows/dependency-review.yml`) for pull request dependency vulnerability auditing.
+- Added the Microsoft Security DevOps workflow (`.github/workflows/security-devops.yml`) for automated static analysis and SARIF security reporting.
 - Adopted the `abuzucom/agents` policy at commit `b452348`. `AGENTS.md` holds the canonical policy. `scripts/sync.py` generates the tool copies.
 - Added the complete gate set under `hooks/` with Claude Code, Codex, Gemini, and Antigravity registrations.
 - Added the agents checkers under `scripts/` and the agents test suites under `tests/`.
