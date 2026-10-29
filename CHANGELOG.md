@@ -5,13 +5,20 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.4] (2026-10-29)
+## [0.5.0] (2026-10-29)
 
 ### Added
 
-- Added the CodeQL analysis workflow (`.github/workflows/codeql.yml`) for Python semantic security scanning.
-- Added the dependency review workflow (`.github/workflows/dependency-review.yml`) for pull request dependency vulnerability auditing.
-- Added the Microsoft Security DevOps workflow (`.github/workflows/security-devops.yml`) for automated static analysis and SARIF security reporting.
+- Added the `dependency-review` workflow. It audits pull request dependency changes and fails on a high-severity vulnerability.
+- Added the `security-devops` workflow. It runs Microsoft Security DevOps on pushes and pull requests to `main` and uploads the SARIF results to the Security tab.
+- Added `tests/test_security_scan_workflows.py` for the action pins, permissions, and checkout credentials of both workflows.
+- The main window adds **Export Playlist (.m3u8)**. It writes the visible rows to a chosen path through `PlaylistExporter` and appends a missing `.m3u8` suffix. A failed write shows a warning.
+- `MainWindow` accepts an optional `on_export_playlist` callback.
+- Added `tests/unit/test_ui_playlist_export_action.py`.
+- `PlaylistExporter.export_m3u8_report` returns the written path, the written track count, and the skipped file IDs. `export_m3u8` still returns the written path. Added `tests/unit/test_playlist_exporter_safety.py`.
+- The main window adds **Transcode to XDJ**. It confirms the file count, mode, and preset from Settings, transcodes the visible rows, and lists each output and failure. `services/transcode_batch.py` isolates per-file failures.
+- `MainWindow` accepts an optional `on_transcode_batch` callback.
+- Added `tests/unit/test_ui_transcode_action.py` and the `tests/fixtures/qt_dialogs.py` dialog recorder.
 - Adopted the `abuzucom/agents` policy at commit `b452348`. `AGENTS.md` holds the canonical policy. `scripts/sync.py` generates the tool copies.
 - Added the complete gate set under `hooks/` with Claude Code, Codex, Gemini, and Antigravity registrations.
 - Added the agents checkers under `scripts/` and the agents test suites under `tests/`.
@@ -22,21 +29,36 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `TranscodePreset.XDJ_LOSSLESS_AUTO` replaces `XDJ_RX3_LOSSLESS_AUTO` as the default preset. `XDJ_RX3_LOSSLESS_AUTO` stays as an alias, and a stored `"XDJ_RX3_LOSSLESS_AUTO"` settings value still resolves. Settings menus list the preset once.
+- Sibling transcode output files end in `_XDJ` instead of `_XDJ_RX3`.
+- The Settings labels read **XDJ Transcode Mode** and **XDJ Transcode Preset**.
 - Ruff skips the copied agents gate files. The `agents-lint` job and `scripts/run_tests.py` cover those files.
 - `.gitattributes` pins LF line endings for the policy files.
 - The `checks` and `test-matrix` jobs install `requirements-checkers.txt` for the agents tests.
 - The `checks` and `test-matrix` test steps unset `GITHUB_EVENT_PATH`. Push events no longer reach the compliance scanner tests.
 - The README holds a full setup and usage walkthrough. It covers prerequisites, per-OS install, optional tools, data locations, credentials, each desktop workflow step, the `evaluate-sample` harness, and current limitations.
+- The README documents the transcode step. Its limitations list drops the missing transcode action and records the `MP3_320_CBR` and in-place OGG or M4A behavior.
+- The README documents the playlist export step. Its limitations list drops the missing playlist export action.
 - The README test section names the agents policy and gate suites in the `unittest` run. It installs `requirements-checkers.txt` first. Its commands run from an active virtual environment on every OS.
 
 ### Fixed
 
+- `WriteService.apply_single_plan` saves an `IN_PROGRESS` journal record before any file change. A crash mid-write now leaves a journal entry that names the backup.
+- A tag write that fails after its backup restores the original file from the verified backup and records `ROLLED_BACK`. A failure before the backup records `FAILED` and leaves the file untouched.
+- `restore_operation` copies the backup beside the target, verifies its SHA-256 against the pre-write hash, and then swaps it in with `os.replace`. A failed swap keeps the current file and removes the staging copy.
+- Added `tests/unit/test_journal_first_writes.py`.
+- Added `tests/unit/test_unsafe_plan_side_effects.py`. An unsafe plan raises its preflight error before any backup file, file change, or journal entry exists.
+- In-place **Transcode to XDJ** no longer fails with `AttributeError`. `OperationStatus` gains the `IN_PROGRESS` value that the in-place journal record uses before the replacement. Added `tests/unit/test_in_place_transcode_journal.py`.
 - The `sync-check` suite steps drop `GITHUB_EVENT_PATH`. Push events to `main` no longer fail the compliance scanner tests in `tests-windows`, `tests-macos`, and `check-sync`.
 - The `security-review-pr` `resolve-pr` job runs only for pull request `ci` runs. A push to `main` now skips the review instead of failing it.
 - Added `tests/test_push_event_workflow_wiring.py` for both workflow guards.
 
 ### Security
 
+- The playlist export leaves out a track whose stored or resolved path holds a line break, another C0 control character, or DEL. One entry can no longer split into extra playlist lines. The export dialog names each skipped track with its control characters shown as spaces. A stale file ID shows as an unknown track. Added `tests/unit/test_playlist_export_review_fixes.py`.
+- The export button appends `.m3u8` to a name with another suffix instead of replacing that suffix. A chosen `set.v2` becomes `set.v2.m3u8`, and `set.M3U8` keeps its name.
+- The playlist export opens its destination with `O_NOFOLLOW` where the OS defines it. A symlink at the destination raises an error and leaves the link target unchanged. A new playlist file gets mode `0o600`, readable and writable by its owner only. An overwritten playlist gets the same mode on POSIX. Added `tests/unit/test_playlist_overwrite_mode.py`.
+- The playlist export dialogs render as plain text through `show_plain_message`. A destination or file name that holds HTML tags shows literally. `DialogRecorder` records the helper. Added `tests/unit/test_plain_text_dialogs.py`.
 - `FpcalcBootstrapService` pins the SHA-256 digest of the official Chromaprint 1.5.1 Windows and macOS archives. Extraction requires a 64-character hexadecimal digest and compares it in constant time.
 - `install_fpcalc` refuses Linux and other platforms without a pinned archive. Those platforms install fpcalc from the system package manager.
 - `install_fpcalc` always verifies the download against the pinned digest. A caller `expected_sha256` that differs from the pin raises before any download.

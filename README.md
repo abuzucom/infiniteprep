@@ -157,7 +157,7 @@ Click **Settings & Providers**. The dialog holds these fields:
 - AcoustID API key and Discogs personal token.
 - The closed-world LLM toggle, the Ollama or OpenAI-compatible base URL, and
   the model.
-- The XDJ-RX3 transcode mode and preset.
+- The XDJ transcode mode and preset.
 
 Click **Save Settings**. Secrets go to the OS keyring under the
 `InfinitePrep` service. The application refuses a plaintext fallback when the
@@ -208,10 +208,23 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
      Preview** after an edit.
    - A `BLOCKED` row names its validation errors or filename collisions.
    - **Apply Safe Writes** writes only the `READY` rows. Each write first
-     takes a verified backup and records a journal entry.
+     records an in-progress journal entry, then takes a verified backup.
+   - A write that fails partway restores the original from its verified
+     backup and records the journal entry as rolled back.
 8. **Restore.** Click **Change Journal & Restore**. Each completed write shows
    a **Restore Backup** button. The restore verifies the backup and returns
    the original file.
+9. **Transcode to XDJ.** Click **Transcode to XDJ** to convert the
+   visible rows with the mode and preset from **Settings & Providers**. A
+   confirmation names the file count, mode, and preset.
+   - `sibling_export` writes a `<name>_XDJ` copy next to each original.
+   - `in_place_backed_up` replaces each original. Each replacement first
+     takes a SHA-256 verified backup and records a journal entry.
+   - A summary lists each output file and each failure.
+10. **Export a playlist.** Click **Export Playlist (.m3u8)** and pick a
+    destination. The export writes the visible rows to a UTF-8 Extended M3U
+    playlist for Traktor Pro 4 and Rekordbox. A name without the `.m3u8`
+    suffix gains it.
 
 ### Evaluate a folder from the command line
 
@@ -233,8 +246,10 @@ command writes no report.
 - The AcoustID, MusicBrainz, Discogs, and LLM adapters exist in
   `src/infiniteprep/adapters/`. The launcher does not wire those adapters. Saved
   credentials and provider settings do not change the identification results.
-- The main window exposes no transcode action. `SafeTranscoderAdapter` and
-  `PlaylistExporter` run only through the Python API.
+- The `MP3_320_CBR` preset produces the same output as
+  `XDJ_LOSSLESS_AUTO`.
+- An in-place transcode of an OGG or M4A file writes a WAV and removes the
+  original. The table keeps the old path for that file.
 
 ---
 

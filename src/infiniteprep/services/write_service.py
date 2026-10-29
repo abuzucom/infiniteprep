@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import shutil
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import platformdirs
@@ -13,6 +16,8 @@ from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import OperationStatus, ReviewStatus
 from infiniteprep.domain.models import ChangeRecord
 from infiniteprep.domain.ports import FileWritePlan
+
+logger = logging.getLogger(__name__)
 
 
 class WriteService:
@@ -76,12 +81,91 @@ class WriteService:
     def apply_single_plan(
         self, plan: FileWritePlan, batch_operation_id: str | None = None
     ) -> ChangeRecord:
-        """Execute a single FileWritePlan and persist its ChangeRecord and updated FileAsset."""
-        op_id = str(uuid.uuid4())
-        record = self.tag_adapter.apply(plan, operation_id=op_id)
+        """Journal the plan as IN_PROGRESS, apply it, then complete the record or roll back."""
+        if not plan.is_safe_to_apply:
+            # The adapter raises the preflight error before it touches the file.
+            return self.tag_adapter.apply(plan, operation_id=str(uuid.uuid4()))
+        pending = self._journal_in_progress(plan, batch_operation_id)
+        try:
+            record = self.tag_adapter.apply(plan, operation_id=pending.operation_id)
+        except Exception as exc:
+            # Any failure after the journal entry may leave a partial write. Roll back, re-raise.
+            self._roll_back_failed_write(pending, exc)
+            raise
         record.batch_operation_id = batch_operation_id
         self.repo.upsert_change_record(record)
+        self._update_asset_after_write(plan, record)
+        return record
 
+    def _journal_in_progress(
+        self, plan: FileWritePlan, batch_operation_id: str | None
+    ) -> ChangeRecord:
+        """Persist an IN_PROGRESS ChangeRecord that names the backup before any file change."""
+        pending = ChangeRecord(
+            operation_id=str(uuid.uuid4()),
+            file_id=plan.file_id,
+            previous_path=str(plan.source_path),
+            new_path=str(plan.destination_path),
+            previous_tags=plan.existing_tags,
+            written_tags=plan.proposed_tags_to_write,
+            backup_reference=str(plan.backup_destination_path),
+            operation_status=OperationStatus.IN_PROGRESS,
+            timestamp=datetime.now(UTC).isoformat(),
+            batch_operation_id=batch_operation_id,
+            pre_write_hash=plan.expected_content_hash,
+        )
+        self.repo.upsert_change_record(pending)
+        return pending
+
+    def _roll_back_failed_write(self, pending: ChangeRecord, failure: Exception) -> None:
+        """Restore the verified backup after a failed write, or mark the record FAILED."""
+        pending.error_message = f"{failure.__class__.__name__}: {failure}"
+        pending.operation_status = OperationStatus.FAILED
+        backup_path = Path(pending.backup_reference)
+        backup_matches = (
+            backup_path.is_file() and compute_sha256(backup_path) == pending.pre_write_hash
+        )
+        if backup_matches:
+            try:
+                self._restore_into_place(backup_path, pending)
+                pending.operation_status = OperationStatus.ROLLED_BACK
+            except (OSError, ValueError) as rollback_exc:
+                logger.error("Rollback of %s failed: %r", pending.operation_id, rollback_exc)
+                pending.error_message += f"; rollback failed ({rollback_exc})"
+        self.repo.upsert_change_record(pending)
+
+    def _restore_into_place(self, backup_path: Path, record: ChangeRecord) -> str:
+        """Swap the backup into previous_path through a verified staging copy, then clean up."""
+        prev_path = Path(record.previous_path)
+        cur_path = Path(record.new_path)
+        restored_hash = self._replace_with_staged_copy(
+            backup_path, prev_path, record.pre_write_hash
+        )
+        if cur_path.resolve() != prev_path.resolve() and cur_path.exists():
+            cur_path.unlink()
+        return restored_hash
+
+    def _replace_with_staged_copy(
+        self, source: Path, target: Path, expected_hash: str | None
+    ) -> str:
+        """Copy source beside target, verify its SHA-256, then atomically replace target."""
+        target.parent.mkdir(parents=True, exist_ok=True)
+        staging = target.with_name(f".{target.name}.restore_{uuid.uuid4().hex}")
+        try:
+            shutil.copy2(source, staging)
+            staged_hash = compute_sha256(staging)
+            if expected_hash and staged_hash != expected_hash:
+                raise ValueError(
+                    "Staged restore copy failed SHA-256 verification; the current file is "
+                    "unchanged. Check the backup disk and retry."
+                )
+            os.replace(staging, target)
+        finally:
+            staging.unlink(missing_ok=True)
+        return staged_hash
+
+    def _update_asset_after_write(self, plan: FileWritePlan, record: ChangeRecord) -> None:
+        """Point the FileAsset at the written file and merge the written tags."""
         asset = self.repo.get_file_by_id(plan.file_id)
         if asset is not None:
             asset.current_path = record.new_path
@@ -91,7 +175,6 @@ class WriteService:
             std.update(plan.proposed_tags_to_write)
             asset.original_tags["standard_tags"] = std
             self.repo.upsert_file_asset(asset)
-        return record
 
     def restore_operation(
         self,
@@ -99,7 +182,7 @@ class WriteService:
         *,
         allowed_library_root: Path | None = None,
     ) -> ChangeRecord:
-        """Restore a file from its backup_reference and verify SHA-256 integrity."""
+        """Restore a file from its backup_reference through a SHA-256 verified staging copy."""
         record = self.repo.get_change_record(operation_id)
         if record is None:
             raise ValueError(f"ChangeRecord {operation_id} not found.")
@@ -107,12 +190,12 @@ class WriteService:
         prev_path, cur_path = self._resolve_and_verify_restore_paths(
             record, allowed_library_root=allowed_library_root
         )
-        prev_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(backup_path, prev_path)
+        restored_hash = self._replace_with_staged_copy(
+            backup_path, prev_path, record.pre_write_hash
+        )
         if cur_path != prev_path and cur_path.exists():
             cur_path.unlink()
 
-        restored_hash = compute_sha256(prev_path)
         record.operation_status = OperationStatus.RESTORED
         self.repo.upsert_change_record(record)
 

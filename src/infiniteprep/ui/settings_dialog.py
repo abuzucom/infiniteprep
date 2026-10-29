@@ -78,12 +78,12 @@ class SettingsDialog(QDialog):
         for mode in TranscodeMode:
             self.transcode_mode_combo.addItem(mode.value)
         self.transcode_mode_combo.setCurrentText(self.current_settings.transcode_mode)
-        form.addRow("XDJ-RX3 Transcode Mode:", self.transcode_mode_combo)
+        form.addRow("XDJ Transcode Mode:", self.transcode_mode_combo)
 
         for preset in TranscodePreset:
             self.transcode_preset_combo.addItem(preset.value)
         self.transcode_preset_combo.setCurrentText(self.current_settings.transcode_preset)
-        form.addRow("XDJ-RX3 Transcode Preset:", self.transcode_preset_combo)
+        form.addRow("XDJ Transcode Preset:", self.transcode_preset_combo)
 
         root.addLayout(form)
         buttons = QHBoxLayout()
