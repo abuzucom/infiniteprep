@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Final
 
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
@@ -17,6 +17,15 @@ from infiniteprep.domain.enums import (
 from infiniteprep.domain.models import AnalysisResult, CandidateMatch, FieldProposal, FileAsset
 from infiniteprep.services.matching_engine import MatchingEngine, parse_dj_title_and_mix
 
+MIN_DURATION_FOR_PITCH_DRIFT_SEC: Final[float] = 10.0
+PERCENT_MULTIPLIER: Final[float] = 100.0
+PITCH_DRIFT_MIN_PCT: Final[float] = 1.8
+PITCH_DRIFT_MAX_PCT: Final[float] = 8.5
+RPM_33_3: Final[float] = 33.333
+RPM_45: Final[float] = 45.0
+RPM_RATIO_TOLERANCE: Final[float] = 0.06
+DEFAULT_ANALYSIS_CONFIDENCE: Final[float] = 0.85
+
 
 def detect_vinyl_pitch_drift(
     *,
@@ -28,13 +37,13 @@ def detect_vinyl_pitch_drift(
     if (
         file_duration_sec is None
         or catalog_duration_sec is None
-        or file_duration_sec <= 10.0
-        or catalog_duration_sec <= 10.0
+        or file_duration_sec <= MIN_DURATION_FOR_PITCH_DRIFT_SEC
+        or catalog_duration_sec <= MIN_DURATION_FOR_PITCH_DRIFT_SEC
     ):
         return None
     speed_ratio = catalog_duration_sec / file_duration_sec
-    pct_shift = (speed_ratio - 1.0) * 100.0
-    if 1.8 <= abs(pct_shift) <= 8.5:
+    pct_shift = (speed_ratio - 1.0) * PERCENT_MULTIPLIER
+    if PITCH_DRIFT_MIN_PCT <= abs(pct_shift) <= PITCH_DRIFT_MAX_PCT:
         bpm_note = ""
         if analyzed_bpm and speed_ratio > 0.0:
             zero_pitch_bpm = round(analyzed_bpm / speed_ratio, 1)
@@ -44,7 +53,10 @@ def detect_vinyl_pitch_drift(
             f"({catalog_duration_sec:.1f}s) suggests turntable pitch shift of "
             f"{pct_shift:+.1f}%{bpm_note}."
         )
-    if abs(speed_ratio - (45.0 / 33.333)) <= 0.06 or abs(speed_ratio - (33.333 / 45.0)) <= 0.06:
+    if (
+        abs(speed_ratio - (RPM_45 / RPM_33_3)) <= RPM_RATIO_TOLERANCE
+        or abs(speed_ratio - (RPM_33_3 / RPM_45)) <= RPM_RATIO_TOLERANCE
+    ):
         return (
             "Vinyl Speed Mismatch Warning: Duration ratio matches 33 1/3 vs 45 RPM "
             "turntable speed error."
@@ -163,7 +175,11 @@ class ReconciliationService:
     def _proposals_from_analysis(self, file_id: str, ana: AnalysisResult) -> list[FieldProposal]:
         """Create authoritative BPM and Key FieldProposals from local audio analysis (Rule 5)."""
         props: list[FieldProposal] = []
-        strength = ana.analysis_strength if ana.analysis_strength is not None else 0.85
+        strength = (
+            ana.analysis_strength
+            if ana.analysis_strength is not None
+            else DEFAULT_ANALYSIS_CONFIDENCE
+        )
         if ana.bpm is not None:
             bpm_str = f"{ana.bpm:.1f}"
             props.append(

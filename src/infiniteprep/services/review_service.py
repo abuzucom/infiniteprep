@@ -17,6 +17,7 @@ CORE_IDENTITY_FIELDS: Final[frozenset[str]] = frozenset(
     {FieldName.ARTIST.value, FieldName.TITLE.value}
 )
 MAX_MANUAL_FIELD_LENGTH: Final[int] = 500
+DEFAULT_BULK_APPROVE_MIN_SCORE: Final[float] = 0.85
 
 
 class ReviewService:
@@ -94,7 +95,9 @@ class ReviewService:
         """Explicitly lock or unlock an approved field on a file."""
         self.repo.set_field_lock(file_id, field_name, locked=locked)
 
-    def bulk_approve_non_conflicting(self, file_ids: list[str], min_score: float = 0.85) -> int:
+    def bulk_approve_non_conflicting(
+        self, file_ids: list[str], min_score: float = DEFAULT_BULK_APPROVE_MIN_SCORE
+    ) -> int:
         """Approve fields where all pending proposals agree and meet min_score."""
         approved_count = 0
         for file_id in file_ids:

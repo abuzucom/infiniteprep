@@ -49,6 +49,12 @@ TABLE_COLUMNS: Final[tuple[str, ...]] = (
     "Review Status",
     "Hardware / Rip Warnings",
 )
+MAIN_WINDOW_WIDTH: Final[int] = 1360
+MAIN_WINDOW_HEIGHT: Final[int] = 820
+SEARCH_INPUT_STRETCH: Final[int] = 3
+STATUS_FILTER_STRETCH: Final[int] = 1
+SPLITTER_TOP_HEIGHT: Final[int] = 380
+SPLITTER_BOTTOM_HEIGHT: Final[int] = 420
 
 
 class MainWindow(QMainWindow):
@@ -80,7 +86,7 @@ class MainWindow(QMainWindow):
         self.visible_file_ids: list[str] = []
 
         self.setWindowTitle("InfinitePrep - DJ Music Metadata & Audio Preparation")
-        self.resize(1360, 820)
+        self.resize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
 
         self.search_input = QLineEdit(self)
         self.status_filter_combo = QComboBox(self)
@@ -144,7 +150,7 @@ class MainWindow(QMainWindow):
             "Filter by filename, artist, title, label, or warning..."
         )
         self.search_input.textChanged.connect(self.refresh_file_table)
-        filter_bar.addWidget(self.search_input, stretch=3)
+        filter_bar.addWidget(self.search_input, stretch=SEARCH_INPUT_STRETCH)
 
         self.status_filter_combo.addItems(
             [
@@ -159,7 +165,7 @@ class MainWindow(QMainWindow):
             ]
         )
         self.status_filter_combo.currentTextChanged.connect(self.refresh_file_table)
-        filter_bar.addWidget(self.status_filter_combo, stretch=1)
+        filter_bar.addWidget(self.status_filter_combo, stretch=STATUS_FILTER_STRETCH)
         root_layout.addLayout(filter_bar)
 
         self.file_table.setHorizontalHeaderLabels(list(TABLE_COLUMNS))
@@ -170,7 +176,7 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Orientation.Vertical, self)
         splitter.addWidget(self.file_table)
         splitter.addWidget(self.detail_panel)
-        splitter.setSizes([380, 420])
+        splitter.setSizes([SPLITTER_TOP_HEIGHT, SPLITTER_BOTTOM_HEIGHT])
         root_layout.addWidget(splitter)
         self.setCentralWidget(central)
 

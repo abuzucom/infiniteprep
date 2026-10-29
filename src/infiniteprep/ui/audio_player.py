@@ -19,19 +19,48 @@ DEFAULT_ENVELOPE_BINS: Final[int] = 120
 MAX_PREVIEW_FILE_BYTES: Final[int] = 524_288_000  # 500 MiB
 MAX_PREVIEW_DURATION_SEC: Final[float] = 1800.0  # 30 minutes
 STREAM_BLOCK_FRAMES: Final[int] = 65_536
+INTRO_MAX_SEC: Final[float] = 15.0
+SHORT_TRACK_THRESHOLD_SEC: Final[float] = 30.0
+LONG_TRACK_OUTRO_THRESHOLD_SEC: Final[float] = 60.0
+OUTRO_OFFSET_SEC: Final[float] = 30.0
+INTRO_RATIO_FALLBACK: Final[float] = 0.10
+OUTRO_RATIO_FALLBACK: Final[float] = 0.90
+CUE_RATIO_25: Final[float] = 0.25
+CUE_RATIO_50: Final[float] = 0.50
+CUE_RATIO_75: Final[float] = 0.75
+CUE_ROUND_DIGITS: Final[int] = 3
+ENVELOPE_ROUND_DIGITS: Final[int] = 4
+FALLBACK_ENVELOPE_EMPTY: Final[float] = 0.1
+FALLBACK_ENVELOPE_ERROR: Final[float] = 0.25
+FALLBACK_ENVELOPE_SILENT: Final[float] = 0.05
+WAVEFORM_MIN_HEIGHT_PX: Final[int] = 44
+WAVEFORM_HALF_HEIGHT_SCALE: Final[float] = 0.45
+WAVEFORM_MIN_HALF_BAR_PX: Final[float] = 2.0
+PLAYHEAD_WIDTH_PX: Final[int] = 2
+LAYOUT_MARGIN_PX: Final[int] = 4
+MS_PER_SECOND: Final[float] = 1000.0
+SECONDS_PER_MINUTE: Final[float] = 60.0
 
 
 def compute_cue_jump_positions(duration_sec: float) -> dict[str, float]:
     """Compute target needle-drop cue positions in seconds for a given track duration."""
     safe_dur = max(0.0, float(duration_sec))
-    intro_pos = min(15.0, safe_dur * 0.10) if safe_dur < 30.0 else 15.0
-    outro_pos = max(0.0, safe_dur - 30.0) if safe_dur >= 60.0 else safe_dur * 0.90
+    intro_pos = (
+        min(INTRO_MAX_SEC, safe_dur * INTRO_RATIO_FALLBACK)
+        if safe_dur < SHORT_TRACK_THRESHOLD_SEC
+        else INTRO_MAX_SEC
+    )
+    outro_pos = (
+        max(0.0, safe_dur - OUTRO_OFFSET_SEC)
+        if safe_dur >= LONG_TRACK_OUTRO_THRESHOLD_SEC
+        else safe_dur * OUTRO_RATIO_FALLBACK
+    )
     return {
-        "Intro": round(intro_pos, 3),
-        "25%": round(safe_dur * 0.25, 3),
-        "50% Drop": round(safe_dur * 0.50, 3),
-        "75%": round(safe_dur * 0.75, 3),
-        "Outro": round(outro_pos, 3),
+        "Intro": round(intro_pos, CUE_ROUND_DIGITS),
+        "25%": round(safe_dur * CUE_RATIO_25, CUE_ROUND_DIGITS),
+        "50% Drop": round(safe_dur * CUE_RATIO_50, CUE_ROUND_DIGITS),
+        "75%": round(safe_dur * CUE_RATIO_75, CUE_ROUND_DIGITS),
+        "Outro": round(outro_pos, CUE_ROUND_DIGITS),
     }
 
 
@@ -53,20 +82,20 @@ def _stream_block_peaks(file_path: Path, max_frames: int) -> list[float]:
 def extract_waveform_envelope(file_path: Path, bins: int = DEFAULT_ENVELOPE_BINS) -> list[float]:
     """Extract normalized peak amplitude envelope bins using bounded streaming blocks."""
     if bins <= 0 or not file_path.exists():
-        return [0.1] * max(1, bins)
+        return [FALLBACK_ENVELOPE_EMPTY] * max(1, bins)
     try:
         size_bytes = file_path.stat().st_size
         if size_bytes > MAX_PREVIEW_FILE_BYTES:
             logger.warning("Audio preview file %s exceeds size cap (%d B).", file_path, size_bytes)
-            return [0.25] * bins
+            return [FALLBACK_ENVELOPE_ERROR] * bins
         info = sf.info(str(file_path))
         max_frames = max(1, round(max(1, int(info.samplerate)) * MAX_PREVIEW_DURATION_SEC))
         raw_peaks = _stream_block_peaks(file_path, max_frames)
     except (OSError, ValueError, RuntimeError) as exc:
         logger.warning("Waveform extraction failed for %s: %s", file_path, exc)
-        return [0.25] * bins
+        return [FALLBACK_ENVELOPE_ERROR] * bins
     if not raw_peaks:
-        return [0.1] * bins
+        return [FALLBACK_ENVELOPE_EMPTY] * bins
     arr = np.interp(
         np.linspace(0.0, max(0, len(raw_peaks) - 1), bins),
         np.arange(len(raw_peaks), dtype=np.float64),
@@ -74,8 +103,8 @@ def extract_waveform_envelope(file_path: Path, bins: int = DEFAULT_ENVELOPE_BINS
     )
     max_peak = float(np.max(arr)) if arr.size > 0 else 0.0
     if max_peak <= 0.0:
-        return [0.05] * bins
-    return [round(float(p) / max_peak, 4) for p in arr]
+        return [FALLBACK_ENVELOPE_SILENT] * bins
+    return [round(float(p) / max_peak, ENVELOPE_ROUND_DIGITS) for p in arr]
 
 
 class WaveformOverviewBar(QWidget):
@@ -84,14 +113,14 @@ class WaveformOverviewBar(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize WaveformOverviewBar."""
         super().__init__(parent)
-        self.setMinimumHeight(44)
-        self.envelope: list[float] = [0.1] * DEFAULT_ENVELOPE_BINS
+        self.setMinimumHeight(WAVEFORM_MIN_HEIGHT_PX)
+        self.envelope: list[float] = [FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS
         self.playhead_ratio: float = 0.0
         self.on_seek_ratio = None
 
     def set_envelope(self, envelope: list[float]) -> None:
         """Update the waveform envelope values and trigger a repaint."""
-        self.envelope = envelope or [0.1] * DEFAULT_ENVELOPE_BINS
+        self.envelope = envelope or [FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS
         self.update()
 
     def set_playhead_ratio(self, ratio: float) -> None:
@@ -116,7 +145,9 @@ class WaveformOverviewBar(QWidget):
         bar_w = max(1.0, rect.width() / float(count))
         mid_y = rect.height() / 2.0
         for idx, amp in enumerate(self.envelope):
-            half_h = max(2.0, amp * (rect.height() * 0.45))
+            half_h = max(
+                WAVEFORM_MIN_HALF_BAR_PX, amp * (rect.height() * WAVEFORM_HALF_HEIGHT_SCALE)
+            )
             color = (
                 QColor("#3b82f6")
                 if (idx / float(count)) <= self.playhead_ratio
@@ -130,7 +161,7 @@ class WaveformOverviewBar(QWidget):
                 color,
             )
         play_x = int(self.playhead_ratio * rect.width())
-        painter.fillRect(play_x, 0, 2, rect.height(), QColor("#f59e0b"))
+        painter.fillRect(play_x, 0, PLAYHEAD_WIDTH_PX, rect.height(), QColor("#f59e0b"))
         painter.end()
 
 
@@ -168,7 +199,9 @@ class AudioPreviewWidget(QWidget):
     def _build_layout(self) -> None:
         """Construct the widget layout with waveform bar, transport, and cue buttons."""
         root = QVBoxLayout(self)
-        root.setContentsMargins(4, 4, 4, 4)
+        root.setContentsMargins(
+            LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX
+        )
         root.addWidget(self.waveform_bar)
 
         controls = QHBoxLayout()
@@ -244,7 +277,7 @@ class AudioPreviewWidget(QWidget):
         clamped = max(0.0, min(self.duration_sec, float(position_sec)))
         self.current_position_sec = clamped
         if self.player is not None:
-            self.player.setPosition(int(clamped * 1000.0))
+            self.player.setPosition(int(clamped * MS_PER_SECOND))
         ratio = clamped / self.duration_sec if self.duration_sec > 0.0 else 0.0
         self.waveform_bar.set_playhead_ratio(ratio)
         self._update_time_label()
@@ -256,7 +289,7 @@ class AudioPreviewWidget(QWidget):
     def _on_media_position_changed(self, position_ms: int) -> None:
         """Handle positionChanged signal from QMediaPlayer."""
         if position_ms > 0:
-            self.current_position_sec = position_ms / 1000.0
+            self.current_position_sec = position_ms / MS_PER_SECOND
             ratio = (
                 self.current_position_sec / self.duration_sec if self.duration_sec > 0.0 else 0.0
             )
@@ -266,13 +299,13 @@ class AudioPreviewWidget(QWidget):
     def _on_media_duration_changed(self, duration_ms: int) -> None:
         """Handle durationChanged signal from QMediaPlayer."""
         if duration_ms > 0 and self.duration_sec <= 0.0:
-            self.duration_sec = duration_ms / 1000.0
+            self.duration_sec = duration_ms / MS_PER_SECOND
             self.cue_positions = compute_cue_jump_positions(self.duration_sec)
             self._update_time_label()
 
     def _update_time_label(self) -> None:
         """Format current and total duration into MM:SS.d display."""
-        cur_m, cur_s = divmod(self.current_position_sec, 60.0)
-        tot_m, tot_s = divmod(self.duration_sec, 60.0)
+        cur_m, cur_s = divmod(self.current_position_sec, SECONDS_PER_MINUTE)
+        tot_m, tot_s = divmod(self.duration_sec, SECONDS_PER_MINUTE)
         self.time_label.setText(f"{int(cur_m):02d}:{cur_s:04.1f} / {int(tot_m):02d}:{tot_s:04.1f}")
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)

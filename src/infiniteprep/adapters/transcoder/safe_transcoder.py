@@ -23,6 +23,10 @@ from infiniteprep.domain.models import ChangeRecord, FileAsset
 
 MAX_TRANSCODE_FILE_BYTES: Final[int] = 1_073_741_824  # 1 GiB
 MAX_TRANSCODE_DURATION_SEC: Final[float] = 7200.0  # 2 hours
+SAMPLE_RATE_44K1: Final[int] = 44100
+SAMPLE_RATE_48K: Final[int] = 48000
+# Headroom guard against inter-sample peaks during polyphase resampling
+RESAMPLE_HEADROOM: Final[float] = 0.999
 
 
 class TranscodeMode(StrEnum):
@@ -101,12 +105,16 @@ class SafeTranscoderAdapter:
         )
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
-        record_id = None
-        if mode == TranscodeMode.IN_PLACE_BACKED_UP:
-            record_id = self._backup_and_journal_in_place(asset, src_path, out_path)
-
-        sf.write(str(out_path), resampled, target_sr, subtype=target_subtype, format=sf_fmt)
-        self._apply_effective_tags_to_output(asset, out_path)
+        record_id = self._execute_transcode_write(
+            asset=asset,
+            src_path=src_path,
+            out_path=out_path,
+            resampled=resampled,
+            target_sr=target_sr,
+            target_subtype=target_subtype,
+            sf_fmt=sf_fmt,
+            mode=mode,
+        )
 
         return TranscodeResult(
             file_id=asset.id,
@@ -116,6 +124,44 @@ class SafeTranscoderAdapter:
             target_subtype=target_subtype,
             change_record_id=record_id,
         )
+
+    def _execute_transcode_write(
+        self,
+        *,
+        asset: FileAsset,
+        src_path: Path,
+        out_path: Path,
+        resampled: np.ndarray,
+        target_sr: int,
+        target_subtype: str,
+        sf_fmt: str,
+        mode: TranscodeMode,
+    ) -> str | None:
+        """Write resampled audio via a temp file, verify hash, and update journal if in-place."""
+        temp_out = out_path.with_name(f".{out_path.stem}.tmp_{uuid.uuid4().hex}{out_path.suffix}")
+        rec: ChangeRecord | None = None
+        if mode == TranscodeMode.IN_PLACE_BACKED_UP:
+            rec = self._backup_and_journal_in_place(asset, src_path, out_path)
+        try:
+            sf.write(str(temp_out), resampled, target_sr, subtype=target_subtype, format=sf_fmt)
+            self._apply_effective_tags_to_output(asset, temp_out)
+            post_hash = compute_sha256(temp_out)
+            temp_out.replace(out_path)
+        except BaseException:
+            temp_out.unlink(missing_ok=True)
+            if rec is not None:
+                rec.operation_status = OperationStatus.FAILED
+                self.repo.upsert_change_record(rec)
+            raise
+
+        if rec is not None:
+            if src_path != out_path and src_path.exists():
+                src_path.unlink()
+            rec.post_write_hash = post_hash
+            rec.operation_status = OperationStatus.COMPLETED
+            self.repo.upsert_change_record(rec)
+            return rec.operation_id
+        return None
 
     def _verify_audio_bounds(self, src_path: Path) -> None:
         """Reject audio files exceeding size or duration safety caps before PCM decode."""
@@ -137,11 +183,15 @@ class SafeTranscoderAdapter:
     ) -> tuple[int, str, str, str]:
         """Determine (target_sample_rate, subtype, extension, sf_format) for preset."""
         if preset == TranscodePreset.FORCE_WAV_44K_16B:
-            return 44100, "PCM_16", ".wav", "WAV"
+            return SAMPLE_RATE_44K1, "PCM_16", ".wav", "WAV"
         if preset == TranscodePreset.FORCE_WAV_48K_24B:
-            return 48000, "PCM_24", ".wav", "WAV"
+            return SAMPLE_RATE_48K, "PCM_24", ".wav", "WAV"
 
-        target_sr = (44100 if (src_sr % 44100 == 0) else 48000) if src_sr > 48000 else src_sr
+        target_sr = (
+            (SAMPLE_RATE_44K1 if (src_sr % SAMPLE_RATE_44K1 == 0) else SAMPLE_RATE_48K)
+            if src_sr > SAMPLE_RATE_48K
+            else src_sr
+        )
 
         if asset.format == AudioFormat.FLAC:
             return target_sr, "PCM_24", ".flac", "FLAC"
@@ -152,12 +202,12 @@ class SafeTranscoderAdapter:
     def _resample_audio(self, pcm: np.ndarray, src_sr: int, target_sr: int) -> np.ndarray:
         """Resample multi-channel PCM using polyphase filtering when sample rates differ."""
         if src_sr == target_sr or src_sr <= 0 or target_sr <= 0:
-            return np.clip(pcm, -0.999, 0.999)
+            return np.clip(pcm, -RESAMPLE_HEADROOM, RESAMPLE_HEADROOM)
         divisor = math.gcd(src_sr, target_sr)
         up = target_sr // divisor
         down = src_sr // divisor
         resampled = resample_poly(pcm, up, down, axis=0)
-        return np.clip(resampled, -0.999, 0.999)
+        return np.clip(resampled, -RESAMPLE_HEADROOM, RESAMPLE_HEADROOM)
 
     def _determine_output_path(
         self,
@@ -193,8 +243,10 @@ class SafeTranscoderAdapter:
             raise ValueError("Resolved output path escapes destination folder boundary.")
         return out_path
 
-    def _backup_and_journal_in_place(self, asset: FileAsset, src_path: Path, out_path: Path) -> str:
-        """Create a SHA-256 verified backup and ChangeRecord before in-place replacement."""
+    def _backup_and_journal_in_place(
+        self, asset: FileAsset, src_path: Path, out_path: Path
+    ) -> ChangeRecord:
+        """Create a SHA-256 verified backup and IN_PROGRESS ChangeRecord before replacement."""
         self.backup_dir.mkdir(parents=True, exist_ok=True)
         backup_path = self.backup_dir / f"{asset.id}_transcode_{src_path.name}"
         pre_hash = compute_sha256(src_path)
@@ -210,12 +262,12 @@ class SafeTranscoderAdapter:
             previous_tags=asset.original_tags.get("standard_tags", {}),
             written_tags={},
             backup_reference=str(backup_path),
-            operation_status=OperationStatus.COMPLETED,
+            operation_status=OperationStatus.IN_PROGRESS,
             timestamp=datetime.now(UTC).isoformat(),
             pre_write_hash=pre_hash,
         )
         self.repo.upsert_change_record(rec)
-        return op_id
+        return rec
 
     def _apply_effective_tags_to_output(self, asset: FileAsset, out_path: Path) -> None:
         """Write original standard tags merged with user-approved fields onto output file."""

@@ -22,6 +22,14 @@ from infiniteprep.domain.ports import (
 
 logger = logging.getLogger(__name__)
 
+EXPECTED_JOB_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    ValueError,
+    RuntimeError,
+    TimeoutError,
+    LookupError,
+)
+
 
 @dataclass
 class BatchJobSummary:
@@ -50,7 +58,9 @@ class JobOrchestrator:
         ]
         self.audio_analyzer: AudioAnalyzer = audio_analyzer or MockAudioAnalyzerAdapter()
 
-    def process_files(self, file_ids: list[str]) -> BatchJobSummary:
+    def process_files(
+        self, file_ids: list[str], *, raise_on_unexpected: bool = False
+    ) -> BatchJobSummary:
         """Execute identification, catalog search, and audio analysis for each file_id."""
         summary = BatchJobSummary()
         for file_id in file_ids:
@@ -60,7 +70,7 @@ class JobOrchestrator:
             try:
                 self._process_single_asset(asset)
                 summary.completed_files += 1
-            except Exception as exc:
+            except EXPECTED_JOB_ERRORS as exc:
                 logger.error("Job processing failed for file %s: %r", file_id, exc, exc_info=True)
                 msg = (
                     f"Processing failed ({exc.__class__.__name__}: {exc}); "
@@ -74,6 +84,8 @@ class JobOrchestrator:
                 )
                 summary.failed_files += 1
                 summary.errors[file_id] = msg
+                if raise_on_unexpected:
+                    raise RuntimeError(msg) from exc
         return summary
 
     def _process_single_asset(self, asset: FileAsset) -> None:

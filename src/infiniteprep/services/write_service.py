@@ -23,6 +23,7 @@ class WriteService:
         repository: Repository,
         tag_adapter: MutagenAdapter | None = None,
         backup_dir: Path | None = None,
+        allowed_library_root: Path | None = None,
     ) -> None:
         """Initialize WriteService with Repository, MutagenAdapter, and backup directory."""
         self.repo = repository
@@ -31,6 +32,7 @@ class WriteService:
             base = Path(platformdirs.user_data_dir("InfinitePrep", "InfinitePrep"))
             backup_dir = base / "backups"
         self.backup_dir = backup_dir
+        self.allowed_library_root = allowed_library_root
 
     def build_batch_preview(
         self,
@@ -91,26 +93,20 @@ class WriteService:
             self.repo.upsert_file_asset(asset)
         return record
 
-    def restore_operation(self, operation_id: str) -> ChangeRecord:
+    def restore_operation(
+        self,
+        operation_id: str,
+        *,
+        allowed_library_root: Path | None = None,
+    ) -> ChangeRecord:
         """Restore a file from its backup_reference and verify SHA-256 integrity."""
         record = self.repo.get_change_record(operation_id)
         if record is None:
             raise ValueError(f"ChangeRecord {operation_id} not found.")
-        backup_path = Path(record.backup_reference).resolve()
-        allowed_backup_root = self.backup_dir.resolve()
-        if not backup_path.is_relative_to(allowed_backup_root):
-            raise ValueError(
-                f"Backup path '{backup_path}' escapes backup directory '{allowed_backup_root}'."
-            )
-        if not backup_path.exists():
-            raise FileNotFoundError(
-                f"Backup file missing at {backup_path}; cannot restore operation {operation_id}."
-            )
-        if record.pre_write_hash and compute_sha256(backup_path) != record.pre_write_hash:
-            raise ValueError("Backup file SHA-256 mismatch; backup may be corrupted.")
-
-        prev_path = Path(record.previous_path).resolve()
-        cur_path = Path(record.new_path).resolve()
+        backup_path = self._verify_backup_file(record, operation_id)
+        prev_path, cur_path = self._resolve_and_verify_restore_paths(
+            record, allowed_library_root=allowed_library_root
+        )
         prev_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(backup_path, prev_path)
         if cur_path != prev_path and cur_path.exists():
@@ -128,3 +124,48 @@ class WriteService:
             asset.original_tags["standard_tags"] = dict(record.previous_tags)
             self.repo.upsert_file_asset(asset)
         return record
+
+    def _verify_backup_file(self, record: ChangeRecord, operation_id: str) -> Path:
+        """Verify backup_reference is within backup_dir, exists, and matches pre_write_hash."""
+        backup_path = Path(record.backup_reference).resolve()
+        allowed_backup_root = self.backup_dir.resolve()
+        if not backup_path.is_relative_to(allowed_backup_root):
+            raise ValueError(
+                f"Backup path '{backup_path}' escapes backup directory '{allowed_backup_root}'."
+            )
+        if not backup_path.exists():
+            raise FileNotFoundError(
+                f"Backup file missing at {backup_path}; cannot restore operation {operation_id}."
+            )
+        if record.pre_write_hash and compute_sha256(backup_path) != record.pre_write_hash:
+            raise ValueError("Backup file SHA-256 mismatch; backup may be corrupted.")
+        return backup_path
+
+    def _resolve_and_verify_restore_paths(
+        self,
+        record: ChangeRecord,
+        *,
+        allowed_library_root: Path | None = None,
+    ) -> tuple[Path, Path]:
+        """Resolve previous_path and new_path and verify both stay within library root."""
+        raw_prev = Path(record.previous_path)
+        raw_cur = Path(record.new_path)
+        if ".." in raw_prev.parts or ".." in raw_cur.parts:
+            raise ValueError("Path traversal '..' is not permitted in ChangeRecord restore paths.")
+        prev_path = raw_prev.resolve()
+        cur_path = raw_cur.resolve()
+        asset = self.repo.get_file_by_id(record.file_id)
+        default_root = (
+            Path(asset.original_path).resolve().parent if asset is not None else prev_path.parent
+        )
+        effective_root = (
+            allowed_library_root or self.allowed_library_root or default_root
+        ).resolve()
+        if not prev_path.is_relative_to(effective_root) or not cur_path.is_relative_to(
+            effective_root
+        ):
+            raise ValueError(
+                f"Restore paths '{prev_path}' / '{cur_path}' escape allowed library root "
+                f"'{effective_root}'."
+            )
+        return prev_path, cur_path

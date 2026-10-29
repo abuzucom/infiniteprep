@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Final
+
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -18,6 +20,9 @@ from infiniteprep.adapters.llm.ollama_openai import RECOMMENDED_MODELS
 from infiniteprep.adapters.transcoder.safe_transcoder import TranscodeMode, TranscodePreset
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import AppSettings, SettingsManager
+
+SETTINGS_DIALOG_WIDTH: Final[int] = 620
+SETTINGS_DIALOG_HEIGHT: Final[int] = 460
 
 
 class SettingsDialog(QDialog):
@@ -36,7 +41,7 @@ class SettingsDialog(QDialog):
         self.current_settings: AppSettings = self.settings_mgr.load()
 
         self.setWindowTitle("InfinitePrep Settings & Providers")
-        self.resize(620, 460)
+        self.resize(SETTINGS_DIALOG_WIDTH, SETTINGS_DIALOG_HEIGHT)
 
         self.acoustid_key_input = QLineEdit(self.creds.get_secret("acoustid_api_key") or "", self)
         self.discogs_token_input = QLineEdit(self.creds.get_secret("discogs_token") or "", self)

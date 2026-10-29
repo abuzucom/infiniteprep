@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Final
 
 from PySide6.QtWidgets import (
     QDialog,
@@ -19,6 +20,11 @@ from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import OperationStatus
 from infiniteprep.domain.models import ChangeRecord
 from infiniteprep.services.write_service import WriteService
+
+JOURNAL_DIALOG_WIDTH: Final[int] = 960
+JOURNAL_DIALOG_HEIGHT: Final[int] = 520
+JOURNAL_TABLE_COLUMNS: Final[int] = 6
+COL_RESTORE_ACTION: Final[int] = 5
 
 
 class JournalDialog(QDialog):
@@ -37,9 +43,9 @@ class JournalDialog(QDialog):
         self.records: list[ChangeRecord] = []
 
         self.setWindowTitle("Change Journal & Backup Restore")
-        self.resize(960, 520)
+        self.resize(JOURNAL_DIALOG_WIDTH, JOURNAL_DIALOG_HEIGHT)
 
-        self.table = QTableWidget(0, 6, self)
+        self.table = QTableWidget(0, JOURNAL_TABLE_COLUMNS, self)
         self.close_btn = QPushButton("Close", self)
         self._build_layout()
         self.refresh_journal()
@@ -91,9 +97,11 @@ class JournalDialog(QDialog):
             btn.clicked.connect(
                 lambda _c=False, op_id=rec.operation_id: self._restore_single(op_id)
             )
-            self.table.setCellWidget(row_idx, 5, btn)
+            self.table.setCellWidget(row_idx, COL_RESTORE_ACTION, btn)
         else:
-            self.table.setItem(row_idx, 5, QTableWidgetItem(str(rec.operation_status)))
+            self.table.setItem(
+                row_idx, COL_RESTORE_ACTION, QTableWidgetItem(str(rec.operation_status))
+            )
 
     def _restore_single(self, operation_id: str) -> None:
         """Execute verified backup restore for operation_id and refresh table."""

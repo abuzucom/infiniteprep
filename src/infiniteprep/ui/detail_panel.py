@@ -45,6 +45,16 @@ DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = (
     FieldName.BPM,
     FieldName.KEY,
 )
+FIELDS_TABLE_COLUMN_COUNT: Final[int] = 6
+FIELDS_TABLE_STRETCH: Final[int] = 3
+CANDIDATE_BOX_STRETCH: Final[int] = 1
+COL_FIELD_NAME: Final[int] = 0
+COL_EXISTING_TAG: Final[int] = 1
+COL_TOP_PROPOSAL: Final[int] = 2
+COL_PROPOSAL_SOURCE: Final[int] = 3
+COL_APPROVED_EDIT: Final[int] = 4
+COL_ACTIONS: Final[int] = 5
+ACTION_ROW_MARGIN_PX: Final[int] = 2
 
 
 class DetailPanel(QWidget):
@@ -69,7 +79,7 @@ class DetailPanel(QWidget):
         self.warnings_label = QLabel("", self)
         self.warnings_label.setStyleSheet("color: #d97706; font-weight: bold;")
         self.audio_player = AudioPreviewWidget(self)
-        self.fields_table = QTableWidget(0, 6, self)
+        self.fields_table = QTableWidget(0, FIELDS_TABLE_COLUMN_COUNT, self)
         self.candidates_list = QListWidget(self)
 
         self._build_layout()
@@ -93,12 +103,12 @@ class DetailPanel(QWidget):
         )
         header = self.fields_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        root.addWidget(self.fields_table, stretch=3)
+        root.addWidget(self.fields_table, stretch=FIELDS_TABLE_STRETCH)
 
         cand_box = QGroupBox("Candidate Releases & Analysis Evidence", self)
         cand_layout = QVBoxLayout(cand_box)
         cand_layout.addWidget(self.candidates_list)
-        root.addWidget(cand_box, stretch=1)
+        root.addWidget(cand_box, stretch=CANDIDATE_BOX_STRETCH)
 
     def set_key_notation(self, notation: KeyDisplayNotation) -> None:
         """Change key display notation and refresh the current file view."""
@@ -167,21 +177,23 @@ class DetailPanel(QWidget):
         src_text = self._format_proposal_source(top_prop) if top_prop else "-"
         app_val = self._format_display_val(field_name, approved.approved_value if approved else "")
 
-        self.fields_table.setItem(row_idx, 0, QTableWidgetItem(field_name))
+        self.fields_table.setItem(row_idx, COL_FIELD_NAME, QTableWidgetItem(field_name))
         self.fields_table.setItem(
-            row_idx, 1, QTableWidgetItem(self._format_display_val(field_name, existing_val))
+            row_idx,
+            COL_EXISTING_TAG,
+            QTableWidgetItem(self._format_display_val(field_name, existing_val)),
         )
-        self.fields_table.setItem(row_idx, 2, QTableWidgetItem(prop_val))
-        self.fields_table.setItem(row_idx, 3, QTableWidgetItem(src_text))
+        self.fields_table.setItem(row_idx, COL_TOP_PROPOSAL, QTableWidgetItem(prop_val))
+        self.fields_table.setItem(row_idx, COL_PROPOSAL_SOURCE, QTableWidgetItem(src_text))
 
         edit_box = QLineEdit(app_val, self.fields_table)
         edit_box.setMaxLength(MAX_MANUAL_FIELD_LENGTH)
-        self.fields_table.setCellWidget(row_idx, 4, edit_box)
+        self.fields_table.setCellWidget(row_idx, COL_APPROVED_EDIT, edit_box)
 
         action_widget = self._create_row_action_widget(
             file_id, field_name, top_prop, approved, edit_box
         )
-        self.fields_table.setCellWidget(row_idx, 5, action_widget)
+        self.fields_table.setCellWidget(row_idx, COL_ACTIONS, action_widget)
 
     def _create_row_action_widget(
         self,
@@ -194,7 +206,12 @@ class DetailPanel(QWidget):
         """Create Accept, Save Edit, and Lock toggle buttons for a field row."""
         container = QWidget(self.fields_table)
         layout = QHBoxLayout(container)
-        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setContentsMargins(
+            ACTION_ROW_MARGIN_PX,
+            ACTION_ROW_MARGIN_PX,
+            ACTION_ROW_MARGIN_PX,
+            ACTION_ROW_MARGIN_PX,
+        )
 
         if top_prop is not None:
             acc_btn = QPushButton("Accept", container)

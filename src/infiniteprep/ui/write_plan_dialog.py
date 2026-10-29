@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Final
+
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -18,6 +20,10 @@ from PySide6.QtWidgets import (
 
 from infiniteprep.domain.ports import FileWritePlan
 from infiniteprep.services.write_service import WriteService
+
+WRITE_PLAN_DIALOG_WIDTH: Final[int] = 980
+WRITE_PLAN_DIALOG_HEIGHT: Final[int] = 560
+WRITE_PLAN_TABLE_COLUMNS: Final[int] = 6
 
 
 class WritePlanDialog(QDialog):
@@ -37,11 +43,11 @@ class WritePlanDialog(QDialog):
         self.current_plans: list[FileWritePlan] = []
 
         self.setWindowTitle("Preview & Apply Metadata Writes")
-        self.resize(980, 560)
+        self.resize(WRITE_PLAN_DIALOG_WIDTH, WRITE_PLAN_DIALOG_HEIGHT)
 
         self.rename_checkbox = QCheckBox("Rename files using template:", self)
         self.template_input = QLineEdit(default_template, self)
-        self.table = QTableWidget(0, 6, self)
+        self.table = QTableWidget(0, WRITE_PLAN_TABLE_COLUMNS, self)
         self.status_label = QLabel("", self)
         self.apply_btn = QPushButton("Apply Safe Writes", self)
         self.close_btn = QPushButton("Cancel", self)
