@@ -32,7 +32,11 @@ jobs:
       - name: Install checker dependencies
         run: python3 -m pip install --requirement requirements-checkers.txt
 
+      # The compliance scanner tests read GITHUB_EVENT_PATH. A push payload
+      # carries no pull request data. The tests supply their own events.
       - name: Review wiring tests
+        env:
+          GITHUB_EVENT_PATH: ""
         run: python3 -m unittest discover -s tests -v
 
   lint-and-style:
@@ -135,4 +139,6 @@ jobs:
           python -m pip install --no-deps -e .
 
       - name: Run full test suite
+        env:
+          GITHUB_EVENT_PATH: ""
         run: pytest

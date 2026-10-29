@@ -22,6 +22,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Ruff skips the copied agents gate files. The `agents-lint` job and `scripts/run_tests.py` cover those files.
 - `.gitattributes` pins LF line endings for the policy files.
 - The `checks` and `test-matrix` jobs install `requirements-checkers.txt` for the agents tests.
+- The `checks` and `test-matrix` test steps clear `GITHUB_EVENT_PATH`. Push events no longer reach the compliance scanner tests.
 
 ## [0.1.0] (2026-10-28)
 
