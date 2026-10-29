@@ -132,10 +132,10 @@ class FpcalcBootstrapService:
         """Download and install fpcalc only when user_consented is explicitly True.
 
         The pinned OFFICIAL_FPCALC_SHA256 digest always verifies the download.
-        An expected_sha256 adds a second check of the same bytes. It can only
-        narrow what installs. A download that misses either digest raises
-        ValueError before extraction. Platforms without a pinned archive raise
-        ValueError before any download.
+        An expected_sha256 must equal that pin. A different value can never
+        match the verified bytes. It raises ValueError before any download.
+        Platforms without a pinned archive also raise ValueError before any
+        download.
         """
         if not user_consented:
             raise PermissionError(
@@ -148,12 +148,16 @@ class FpcalcBootstrapService:
                 f"No verified fpcalc archive exists for {platform.system() or 'this OS'}. "
                 "Install fpcalc with the system package manager, e.g. libchromaprint-tools."
             )
+        pinned_sha256 = OFFICIAL_FPCALC_SHA256[sys_key]
+        if expected_sha256 and not hmac.compare_digest(expected_sha256.lower(), pinned_sha256):
+            raise ValueError(
+                "SHA-256 mismatch: expected_sha256 differs from the pinned fpcalc digest. "
+                "Omit it or pass the pinned value."
+            )
         raw_bytes = self.downloader(OFFICIAL_FPCALC_URLS[sys_key])
-        if expected_sha256:
-            _verify_archive_digest(raw_bytes, expected_sha256)
         return self.install_from_archive_bytes(
             archive_bytes=raw_bytes,
-            expected_sha256=OFFICIAL_FPCALC_SHA256[sys_key],
+            expected_sha256=pinned_sha256,
             user_consented=user_consented,
         )
 
