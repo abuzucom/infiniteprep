@@ -15,6 +15,11 @@ from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
 from tests.fixtures.audio_factory import create_wav_fixture
 
+TAMPER_STATEMENTS = {
+    "previous_path": "UPDATE change_records SET previous_path = ? WHERE operation_id = ?",
+    "new_path": "UPDATE change_records SET new_path = ? WHERE operation_id = ?",
+}
+
 
 @pytest.mark.parametrize("tampered_field", ["previous_path", "new_path"])
 def test_restore_interrupted_refuses_a_path_outside_the_library(
@@ -42,12 +47,9 @@ def test_restore_interrupted_refuses_a_path_outside_the_library(
     victim.parent.mkdir()
     victim.write_bytes(b"keep")
     # upsert_change_record never rewrites previous_path, so tamper the stored row the way an
-    # edited database file would. The column name comes from the fixed parametrize list.
+    # edited database file would.
     conn = repo.db.connect()
-    conn.execute(
-        f"UPDATE change_records SET {tampered_field} = ? WHERE operation_id = ?",
-        (str(victim), record.operation_id),
-    )
+    conn.execute(TAMPER_STATEMENTS[tampered_field], (str(victim), record.operation_id))
     conn.commit()
 
     with pytest.raises(ValueError, match="escape allowed library root"):
