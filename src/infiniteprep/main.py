@@ -106,7 +106,11 @@ def launch_desktop_app() -> int:
             window, repo, transcoder, fids, SettingsManager()
         ),
         on_export_playlist=lambda fids, dest: export_playlist_with_feedback(
-            window, exporter, fids, dest
+            window,
+            exporter,
+            fids,
+            dest,
+            relative_paths=SettingsManager().load().playlist_relative_paths,
         ),
     )
     window.show()

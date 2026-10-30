@@ -107,6 +107,8 @@ def export_playlist_with_feedback(
     exporter: PlaylistExporter,
     file_ids: list[str],
     destination: Path,
+    *,
+    relative_paths: bool = False,
 ) -> Path | None:
     """Write the playlist and report the destination, or report the failure and return None.
 
@@ -115,7 +117,7 @@ def export_playlist_with_feedback(
     exception is a defect and propagates to the application error handler.
     """
     try:
-        report = exporter.export_m3u8_report(file_ids, destination)
+        report = exporter.export_m3u8_report(file_ids, destination, relative_paths=relative_paths)
     except OSError as exc:
         logger.warning("Playlist export to %s failed: %s", destination, exc.__class__.__name__)
         show_plain_message(
