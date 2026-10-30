@@ -1,11 +1,20 @@
 {
   "active_provider": "ollama",
+  "large_input_provider": "ollama-large",
   "providers": {
     "ollama": {
       "protocol": "ollama",
       "endpoint": "https://ollama.com/api",
       "model": "kimi-k2.7-code",
-      "max_output_tokens": 16384
+      "max_output_tokens": 16384,
+      "max_input_tokens": 230000
+    },
+    "ollama-large": {
+      "protocol": "ollama",
+      "endpoint": "https://ollama.com/api",
+      "model": "minimax-m3.1-flash",
+      "max_output_tokens": 16384,
+      "max_input_tokens": 900000
     },
     "openai-compatible": {
       "protocol": "openai-compatible",
