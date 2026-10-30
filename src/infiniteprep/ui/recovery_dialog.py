@@ -80,9 +80,7 @@ class RecoveryDialog(QDialog):
         for col_idx, text in enumerate(cells):
             self.table.setItem(row_idx, col_idx, QTableWidgetItem(text))
         restore_btn = QPushButton("Restore from backup", self.table)
-        restore_btn.clicked.connect(
-            lambda _c=False, op_id=record.operation_id: self.restore(op_id)
-        )
+        restore_btn.clicked.connect(lambda _c=False, op_id=record.operation_id: self.restore(op_id))
         keep_btn = QPushButton("Mark as finished", self.table)
         keep_btn.clicked.connect(
             lambda _c=False, op_id=record.operation_id: self.mark_finished(op_id)
