@@ -158,6 +158,8 @@ Click **Settings & Providers**. The dialog holds these fields:
 - The closed-world LLM toggle, the Ollama or OpenAI-compatible base URL, and
   the model.
 - The XDJ transcode mode and preset.
+- **Write paths relative to the playlist**, on by default, for playlist
+  export.
 
 Click **Save Settings**. Secrets go to the OS keyring under the
 `InfinitePrep` service. The application refuses a plaintext fallback when the
@@ -225,6 +227,13 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
     destination. The export writes the visible rows to a UTF-8 Extended M3U
     playlist for Traktor Pro 4 and Rekordbox. A name without the `.m3u8`
     suffix gains it.
+    - By default each track path is relative to the playlist folder. Copy
+      the playlist and the music together, and the crate still loads.
+    - A track on another Windows drive keeps its absolute path.
+    - Uncheck **Write paths relative to the playlist** in **Settings &
+      Providers** to write absolute paths.
+    - A track whose path holds a control character is left out and named
+      in the result dialog.
 
 ### Evaluate a folder from the command line
 

@@ -45,6 +45,17 @@ def _safe_path_line(stored_path: str) -> str | None:
     return None if has_unsafe_path_characters(path_line) else path_line
 
 
+def _relative_path_line(path_line: str, playlist_dir: Path) -> str:
+    """Return the track path relative to the playlist folder, or absolute across drives."""
+    try:
+        relative = os.path.relpath(path_line, playlist_dir).replace(os.sep, "/")
+    except ValueError:
+        # Windows cannot express a path on another drive relative to the playlist.
+        return path_line
+    # A line that starts with "#" reads as a comment or directive in M3U8.
+    return f"./{relative}" if relative.startswith("#") else relative
+
+
 def _write_without_following_links(destination: Path, content: str) -> None:
     """Write UTF-8 text, refusing a symlink at the destination where the OS supports it."""
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | NO_FOLLOW_FLAG | BINARY_FLAG
@@ -73,16 +84,25 @@ class PlaylistExporter:
         """Initialize PlaylistExporter with a Repository."""
         self.repo = repository
 
-    def export_m3u8(self, file_ids: list[str], destination_path: Path) -> Path:
+    def export_m3u8(
+        self, file_ids: list[str], destination_path: Path, *, relative_paths: bool = False
+    ) -> Path:
         """Write a UTF-8 .m3u8 playlist file for the given ordered file_ids."""
-        return self.export_m3u8_report(file_ids, destination_path).path
+        return self.export_m3u8_report(
+            file_ids, destination_path, relative_paths=relative_paths
+        ).path
 
     def export_m3u8_report(
-        self, file_ids: list[str], destination_path: Path
+        self, file_ids: list[str], destination_path: Path, *, relative_paths: bool = False
     ) -> PlaylistExportResult:
-        """Write the playlist and report written tracks and tracks left out for unsafe paths."""
+        """Write the playlist and report written tracks and tracks left out for unsafe paths.
+
+        With relative_paths, each track line is relative to the playlist folder, so the crate
+        keeps working when the whole folder moves to another drive or computer.
+        """
         lines: list[str] = ["#EXTM3U", "#EXTENC:UTF-8"]
         result = PlaylistExportResult(path=destination_path)
+        playlist_dir = destination_path.parent.resolve()
         for file_id in file_ids:
             asset = self.repo.get_file_by_id(file_id)
             if asset is None:
@@ -91,6 +111,8 @@ class PlaylistExporter:
             if path_line is None:
                 result.skipped_file_ids.append(file_id)
                 continue
+            if relative_paths:
+                path_line = _relative_path_line(path_line, playlist_dir)
             lines.append(self._extinf_line(asset))
             lines.append(path_line)
             result.written_count += 1
