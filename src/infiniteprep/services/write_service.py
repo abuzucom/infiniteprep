@@ -98,9 +98,9 @@ class WriteService:
     def mark_interrupted_finished(self, operation_id: str) -> ChangeRecord:
         """Accept the file on disk for an interrupted write and mark its record COMPLETED."""
         record = self._get_interrupted(operation_id)
-        current = Path(record.new_path)
-        if not current.is_file():
-            current = Path(record.previous_path)
+        # The chosen path becomes the asset's write target, so a stored path must stay in the library.
+        prev_path, cur_path = self._resolve_and_verify_restore_paths(record)
+        current = cur_path if cur_path.is_file() else prev_path
         record.post_write_hash = compute_sha256(current)
         record.new_path = str(current)
         record.operation_status = OperationStatus.COMPLETED
