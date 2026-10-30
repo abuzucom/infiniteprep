@@ -41,8 +41,14 @@ def test_restore_interrupted_refuses_a_path_outside_the_library(
     victim = tmp_path / "elsewhere" / "victim.wav"
     victim.parent.mkdir()
     victim.write_bytes(b"keep")
-    setattr(record, tampered_field, str(victim))
-    repo.upsert_change_record(record)
+    # upsert_change_record never rewrites previous_path, so tamper the stored row the way an
+    # edited database file would. The column name comes from the fixed parametrize list.
+    conn = repo.db.connect()
+    conn.execute(
+        f"UPDATE change_records SET {tampered_field} = ? WHERE operation_id = ?",
+        (str(victim), record.operation_id),
+    )
+    conn.commit()
 
     with pytest.raises(ValueError, match="escape allowed library root"):
         write_svc.restore_interrupted(record.operation_id)
