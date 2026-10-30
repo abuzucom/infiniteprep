@@ -40,6 +40,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Security
 
 - **Mark as finished** checks both journal paths against the library root before it uses either one. A tampered journal record can no longer point a later tag write at a file outside the library. Added `tests/unit/test_recovery_path_confinement.py`.
+- Added `tests/unit/test_restore_interrupted_confinement.py`. **Restore from backup** refuses a tampered `previous_path` or `new_path` outside the library root, and no file changes.
 - Each in-memory `DatabaseManager` gets a private database named with a random UUID. The name came from `id(self)`. Python can reuse that value after garbage collection. A new manager could then open a database that an old connection still held, and see its rows. Added `tests/unit/test_in_memory_database_isolation.py`.
 
 ## [0.5.0] (2026-10-29)
