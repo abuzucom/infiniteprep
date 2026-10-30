@@ -5,10 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.2] (2026-10-29)
+## [0.5.0] (2026-10-29)
 
 ### Added
 
+- Added the `dependency-review` workflow. It audits pull request dependency changes and fails on a high-severity vulnerability.
+- Added the `security-devops` workflow. It runs Microsoft Security DevOps on pushes and pull requests to `main` and uploads the SARIF results to the Security tab.
+- Added `tests/test_security_scan_workflows.py` for the approved action commits, permissions, and checkout credentials of both workflows.
 - The main window adds **Export Playlist (.m3u8)**. It writes the visible rows to a chosen path through `PlaylistExporter` and appends a missing `.m3u8` suffix. A failed write shows a warning.
 - `MainWindow` accepts an optional `on_export_playlist` callback.
 - Added `tests/unit/test_ui_playlist_export_action.py`.
