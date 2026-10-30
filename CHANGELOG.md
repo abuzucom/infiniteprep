@@ -5,9 +5,14 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.0] (2026-10-30)
+## [0.9.0] (2026-10-30)
 
 ### Added
+
+- At launch, the desktop app opens **Recover Interrupted Writes** when a tag write or in-place transcode left a journal record `IN_PROGRESS`. Each row offers **Restore from backup** or **Mark as finished**.
+- `WriteService.list_interrupted_operations`, `restore_interrupted`, and `mark_interrupted_finished` back the dialog. A restore verifies the backup SHA-256 and records `ROLLED_BACK`. A failed restore leaves the record pending.
+- `WriteService.apply_batch` and `apply_single_plan` raise `PendingRecoveryError` before any file change while an interrupted write is pending. **Preview & Apply Writes** shows the reason and stays open.
+- Added `tests/unit/test_interrupted_write_recovery.py` and `tests/unit/test_ui_recovery_dialog.py`.
 
 - `scripts/check_branch_name.py` rejects generated `<adjective>-<surname>-<suffix>` branch names such as `chore/dreamy-goldberg-nwjlsu`. Detection covers only the listed words. Added `tests/test_check_branch_name_generated.py`.
 
@@ -27,6 +32,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A rollback that fails with any exception type keeps the original write error. The journal records the rollback failure, and the write error still reaches the caller.
 - Each in-memory `DatabaseManager` gets a private database named with a random UUID. The name came from `id(self)`. Python can reuse that value after garbage collection. A new manager could then open a database that an old connection still held, and see its rows. Added `tests/unit/test_in_memory_database_isolation.py`.
 
 ## [0.5.0] (2026-10-29)

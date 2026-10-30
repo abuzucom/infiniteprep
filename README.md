@@ -213,6 +213,12 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
      records an in-progress journal entry, then takes a verified backup.
    - A write that fails partway restores the original from its verified
      backup and records the journal entry as rolled back.
+   - A crash or power loss can stop a write before it finishes. At the next
+     launch, **Recover Interrupted Writes** lists each such write.
+     **Restore from backup** returns the verified original. **Mark as
+     finished** keeps the file as it is. The app blocks new writes until the
+     dialog lists no rows. A dialog closed early leaves the block in place
+     until the next launch.
 8. **Restore.** Click **Change Journal & Restore**. Each completed write shows
    a **Restore Backup** button. The restore verifies the backup and returns
    the original file.
