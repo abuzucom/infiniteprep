@@ -105,6 +105,12 @@ class WriteService:
         record.new_path = str(current)
         record.operation_status = OperationStatus.COMPLETED
         self.repo.upsert_change_record(record)
+        # The next write preflights against the stored path and hash, so match the file on disk.
+        asset = self.repo.get_file_by_id(record.file_id)
+        if asset is not None:
+            asset.current_path = str(current)
+            asset.content_hash = record.post_write_hash
+            self.repo.upsert_file_asset(asset)
         return record
 
     def _get_interrupted(self, operation_id: str) -> ChangeRecord:
@@ -165,22 +171,26 @@ class WriteService:
         return pending
 
     def _roll_back_failed_write(self, pending: ChangeRecord, failure: Exception) -> None:
-        """Restore the verified backup after a failed write, or mark the record FAILED."""
+        """Record a failed write as FAILED or ROLLED_BACK, or keep it pending for recovery."""
         pending.error_message = f"{failure.__class__.__name__}: {failure}"
-        pending.operation_status = OperationStatus.FAILED
-        backup_path = Path(pending.backup_reference)
-        backup_matches = (
-            backup_path.is_file() and compute_sha256(backup_path) == pending.pre_write_hash
-        )
-        if backup_matches:
-            try:
-                self._restore_into_place(backup_path, pending)
-                pending.operation_status = OperationStatus.ROLLED_BACK
-            except Exception as rollback_exc:
-                # Any rollback error stays secondary: the caller re-raises the original failure.
-                logger.error("Rollback of %s failed: %r", pending.operation_id, rollback_exc)
-                pending.error_message += f"; rollback failed ({rollback_exc})"
+        try:
+            pending.operation_status = self._restore_after_failure(pending)
+        except Exception as rollback_exc:
+            # The file may be half-written. IN_PROGRESS keeps it in startup recovery and blocks
+            # new writes. The caller still re-raises the original failure.
+            logger.error("Rollback of %s failed: %r", pending.operation_id, rollback_exc)
+            pending.error_message += f"; rollback failed ({rollback_exc})"
+            pending.operation_status = OperationStatus.IN_PROGRESS
         self.repo.upsert_change_record(pending)
+
+    def _restore_after_failure(self, pending: ChangeRecord) -> OperationStatus:
+        """Swap the verified backup back in, or report FAILED when no backup was taken."""
+        backup_path = Path(pending.backup_reference)
+        if not backup_path.is_file() or compute_sha256(backup_path) != pending.pre_write_hash:
+            # The adapter verifies the backup before it writes, so the file is still untouched.
+            return OperationStatus.FAILED
+        self._restore_into_place(backup_path, pending)
+        return OperationStatus.ROLLED_BACK
 
     def _restore_into_place(self, backup_path: Path, record: ChangeRecord) -> str:
         """Swap the backup into previous_path through a verified staging copy, then clean up."""

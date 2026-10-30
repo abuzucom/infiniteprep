@@ -33,6 +33,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - A rollback that fails with any exception type keeps the original write error. The journal records the rollback failure, and the write error still reaches the caller.
+- A failed rollback keeps its journal record `IN_PROGRESS`. The possibly half-written file then appears in **Recover Interrupted Writes**, and new writes stay blocked. An unreadable backup during rollback takes the same path.
+- **Mark as finished** stores the file's current path and SHA-256 on its library entry. The next write on that file passes preflight without a re-import.
+- Added `tests/unit/test_recovery_edge_cases.py`.
 - Each in-memory `DatabaseManager` gets a private database named with a random UUID. The name came from `id(self)`. Python can reuse that value after garbage collection. A new manager could then open a database that an old connection still held, and see its rows. Added `tests/unit/test_in_memory_database_isolation.py`.
 
 ## [0.5.0] (2026-10-29)
