@@ -46,9 +46,7 @@ def interrupted(
     return repo, write_svc, source, original_hash
 
 
-def test_restore_button_returns_the_original_and_closes_the_dialog(
-    qtbot, interrupted: Any
-) -> None:
+def test_restore_button_returns_the_original_and_closes_the_dialog(qtbot, interrupted: Any) -> None:
     """Clicking Restore from backup recovers the file, and the empty dialog accepts."""
     repo, write_svc, source, original_hash = interrupted
     dialog = RecoveryDialog(write_svc)
@@ -90,9 +88,9 @@ def test_a_failed_restore_warns_and_keeps_the_row(
     monkeypatch.setattr(
         recovery_module,
         "show_plain_message",
-        lambda _parent, icon, _title, text: warnings.append(text)
-        if icon == QMessageBox.Icon.Warning
-        else None,
+        lambda _parent, icon, _title, text: (
+            warnings.append(text) if icon == QMessageBox.Icon.Warning else None
+        ),
     )
     dialog = RecoveryDialog(write_svc)
     qtbot.addWidget(dialog)
