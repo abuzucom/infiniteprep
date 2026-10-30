@@ -194,10 +194,10 @@ jobs:
   review:
     needs: resolve-pr
     if: needs.resolve-pr.result == 'success' && needs.resolve-pr.outputs.same_repository == 'true' && needs.resolve-pr.outputs.already_reviewed != 'true'
-    # Foucault 3.4.7. Keep the uses: pin and audit_ref on the same commit.
-    uses: abuzucom/foucault/.github/workflows/security-review.yml@c398b5a29890ba01dee5065a7dc97a91e3e2b08b
+    # Foucault 3.5.0. Keep the uses: pin and audit_ref on the same commit.
+    uses: abuzucom/foucault/.github/workflows/security-review.yml@fbb09487cdbbe85ca64b2e8c46605c3120b62c54
     with:
-      audit_ref: "c398b5a29890ba01dee5065a7dc97a91e3e2b08b"
+      audit_ref: "fbb09487cdbbe85ca64b2e8c46605c3120b62c54"
       model_call_command: "python3 ci/call_model.py"
       pr_comment: true
       fail_on_block: true
@@ -213,10 +213,10 @@ jobs:
   fork-review:
     needs: resolve-pr
     if: needs.resolve-pr.result == 'success' && needs.resolve-pr.outputs.same_repository == 'false' && needs.resolve-pr.outputs.fork_review_approved == 'true' && needs.resolve-pr.outputs.compliance_passed == 'true' && needs.resolve-pr.outputs.already_reviewed != 'true'
-    # Foucault 3.4.7. Keep the uses: pin and audit_ref on the same commit.
-    uses: abuzucom/foucault/.github/workflows/security-review.yml@c398b5a29890ba01dee5065a7dc97a91e3e2b08b
+    # Foucault 3.5.0. Keep the uses: pin and audit_ref on the same commit.
+    uses: abuzucom/foucault/.github/workflows/security-review.yml@fbb09487cdbbe85ca64b2e8c46605c3120b62c54
     with:
-      audit_ref: "c398b5a29890ba01dee5065a7dc97a91e3e2b08b"
+      audit_ref: "fbb09487cdbbe85ca64b2e8c46605c3120b62c54"
       model_call_command: "python3 ci/call_model.py"
       pr_comment: true
       fail_on_block: true

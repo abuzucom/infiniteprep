@@ -23,6 +23,14 @@ RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 RETRY_DELAY_SECONDS = 2
 RETRY_DELAY_JITTER_SECONDS = 2
 MAX_RETRY_DELAY_SECONDS = 30
+# Code and JSON-escaped text average more than three characters per token
+# in common tokenizers. This estimate therefore overcounts.
+CHARS_PER_TOKEN_ESTIMATE = 3
+# Providers reject a request above the context window with one of these.
+CONTEXT_OVERFLOW_STATUS_CODES = {400, 413}
+# The workflow reads this exit code as "no configured model can hold the
+# review input" and records a NEEDS-HUMAN verdict instead of failing.
+CAPACITY_EXIT_CODE = 3
 ALLOWED_PROTOCOLS = {"ollama", "openai-compatible", "anthropic", "google"}
 ALLOWED_ENDPOINTS = {
     "https://ollama.com/api",
@@ -40,6 +48,14 @@ ENDPOINTS_BY_PROTOCOL = {
 
 class ProviderError(RuntimeError):
     """Report a provider failure without exposing request or response data."""
+
+
+class InputTooLargeError(ProviderError):
+    """Report review input that exceeds every configured model budget."""
+
+
+class ContextOverflowError(ProviderError):
+    """Report a provider rejection that a larger context window can avoid."""
 
 
 def _read_text_from_env(name: str) -> str:
@@ -75,9 +91,10 @@ def _validate_endpoint(endpoint: str) -> str:
     return normalized
 
 
-def _load_profile() -> dict[str, Any]:
+def _load_profile(provider_name: str | None = None) -> dict[str, Any]:
     config = _load_config()
-    provider_name = config.get("active_provider")
+    if provider_name is None:
+        provider_name = config.get("active_provider")
     providers = config.get("providers")
     if not isinstance(provider_name, str) or not isinstance(providers, dict):
         raise ProviderError("provider configuration has an invalid registry")
@@ -100,6 +117,55 @@ def _load_profile() -> dict[str, Any]:
     profile["endpoint"] = normalized_endpoint
     profile["name"] = provider_name
     return profile
+
+
+def _input_budget(profile: dict[str, Any]) -> int | None:
+    """Return the profile's input token budget, or None when unset."""
+    budget = profile.get("max_input_tokens")
+    if budget is None:
+        return None
+    if not isinstance(budget, int) or isinstance(budget, bool) or budget < 1:
+        raise ProviderError("provider max_input_tokens is invalid")
+    return budget
+
+
+def _fits(profile: dict[str, Any], estimated_tokens: int) -> bool:
+    budget = _input_budget(profile)
+    return budget is None or estimated_tokens <= budget
+
+
+def _large_profile() -> dict[str, Any] | None:
+    """Return the configured large-input profile, or None when absent."""
+    name = _load_config().get("large_input_provider")
+    if name is None:
+        return None
+    if not isinstance(name, str) or not name:
+        raise ProviderError("large_input_provider is invalid")
+    return _load_profile(name)
+
+
+def estimate_tokens(system_prompt: str, case_text: str) -> int:
+    """Return a conservative token estimate for one review request."""
+    characters = len(system_prompt) + len(case_text)
+    return -(-characters // CHARS_PER_TOKEN_ESTIMATE)
+
+
+def select_profile(estimated_tokens: int) -> dict[str, Any]:
+    """Return the active profile when the input fits, else the large one.
+
+    A profile without max_input_tokens has no pre-check. Registries written
+    before the field existed keep their prior behavior.
+    """
+    active = _load_profile()
+    if _fits(active, estimated_tokens):
+        return active
+    large = _large_profile()
+    if large is not None and _fits(large, estimated_tokens):
+        return large
+    raise InputTooLargeError(
+        f"review input of about {estimated_tokens} tokens exceeds every "
+        "configured model budget"
+    )
 
 
 def _headers(protocol: str, api_key: str) -> dict[str, str]:
@@ -257,22 +323,19 @@ def _request_once(request: Request) -> tuple[dict[str, Any], int | None, str | N
         if error.code in RETRYABLE_STATUS_CODES:
             retry_after = error.headers.get("Retry-After") if error.headers else None
             return {}, error.code, retry_after
-        raise ProviderError(f"provider request failed with HTTP {error.code}") from error
+        message = f"provider request failed with HTTP {error.code}"
+        if error.code in CONTEXT_OVERFLOW_STATUS_CODES:
+            raise ContextOverflowError(message) from error
+        raise ProviderError(message) from error
     except URLError as error:
         raise ProviderError("provider network request failed") from error
     except (OSError, ValueError) as error:
         raise ProviderError("provider response could not be read") from error
 
 
-def call_model(system_prompt: str, mode: str, case_text: str) -> str:
-    """Return the configured provider response for one evaluator request."""
-    del mode
-    if len(system_prompt) + len(case_text) > MAX_INPUT_CHARS:
-        raise ProviderError("review input exceeds the configured limit")
-    api_key = os.environ.get("MODEL_API_KEY")
-    if not api_key:
-        raise ProviderError("MODEL_API_KEY is not configured")
-    profile = _load_profile()
+def _send(profile: dict[str, Any], system_prompt: str, case_text: str,
+          api_key: str) -> str:
+    """Return one profile's response, retrying once on a transient status."""
     request = _build_request(profile, system_prompt, case_text, api_key)
     for attempt in range(2):
         result, retry_status, retry_after = _request_once(request)
@@ -283,6 +346,47 @@ def call_model(system_prompt: str, mode: str, case_text: str) -> str:
     raise ProviderError("provider request failed after one retry")
 
 
+def _send_large(profile: dict[str, Any], system_prompt: str, case_text: str,
+                api_key: str) -> str:
+    """Return the large profile's response or report a capacity failure.
+
+    No larger model exists. A context rejection here means the review
+    exceeds every configured model and needs a recorded NEEDS-HUMAN.
+    """
+    try:
+        return _send(profile, system_prompt, case_text, api_key)
+    except ContextOverflowError as error:
+        raise InputTooLargeError(
+            "review input exceeds the large-input model context"
+        ) from error
+
+
+def call_model(system_prompt: str, mode: str, case_text: str) -> str:
+    """Return the configured provider response for one evaluator request."""
+    del mode
+    if len(system_prompt) + len(case_text) > MAX_INPUT_CHARS:
+        raise InputTooLargeError("review input exceeds the configured limit")
+    api_key = os.environ.get("MODEL_API_KEY")
+    if not api_key:
+        raise ProviderError("MODEL_API_KEY is not configured")
+    estimated_tokens = estimate_tokens(system_prompt, case_text)
+    profile = select_profile(estimated_tokens)
+    large = _large_profile()
+    if large is not None and large["name"] == profile["name"]:
+        return _send_large(profile, system_prompt, case_text, api_key)
+    try:
+        return _send(profile, system_prompt, case_text, api_key)
+    except ContextOverflowError as error:
+        # The character estimate can undercount a dense tokenizer. A context
+        # rejection gets one attempt on the large-input model. Without one,
+        # the review exceeds every configured model.
+        if large is None or not _fits(large, estimated_tokens):
+            raise InputTooLargeError(
+                "review input exceeds every configured model context"
+            ) from error
+    return _send_large(large, system_prompt, case_text, api_key)
+
+
 def main() -> int:
     """Run the adapter command used by the workflow."""
     try:
@@ -291,6 +395,9 @@ def main() -> int:
             "PR",
             _read_text_from_env("CASE_TEXT_FILE"),
         )
+    except InputTooLargeError as error:
+        print(f"model call skipped: {error}", file=sys.stderr)
+        return CAPACITY_EXIT_CODE
     except ProviderError as error:
         print(f"model call failed: {error}", file=sys.stderr)
         return 1

@@ -20,6 +20,13 @@ MAX_DIFF_BYTES = 3_000_000
 DEFAULT_DIFF_TIMEOUT_SECONDS = 60
 SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
 REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+# The workflow reads this exit code as "the diff exceeds review capacity"
+# and records a NEEDS-HUMAN verdict instead of failing.
+CAPACITY_EXIT_CODE = 3
+
+
+class DiffTooLargeError(RuntimeError):
+    """Report a pull request diff above the configured byte limit."""
 
 
 def _read_pull_request_from_api() -> dict[str, object]:
@@ -132,7 +139,7 @@ def _read_bounded_stdout(
             process.wait()
             if thread.is_alive():
                 thread.join(timeout=1.0)
-            raise RuntimeError("pull request diff exceeds the configured limit")
+            raise DiffTooLargeError("pull request diff exceeds the configured limit")
         try:
             return_code = process.wait(timeout=timeout)
         except subprocess.TimeoutExpired as error:
@@ -213,6 +220,9 @@ def main() -> int:
             json.dumps(envelope, ensure_ascii=True, sort_keys=True),
             encoding="utf-8",
         )
+    except DiffTooLargeError as error:
+        print(f"case construction skipped: {error}", file=sys.stderr)
+        return CAPACITY_EXIT_CODE
     except (OSError, RuntimeError, subprocess.SubprocessError, ValueError) as error:
         print(f"case construction failed: {error}", file=sys.stderr)
         return 1

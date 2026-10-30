@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.0] (2026-10-30)
+## [0.7.0] (2026-10-30)
 
 ### Added
 
@@ -14,6 +14,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `AppSettings.playlist_relative_paths` defaults to `True`. A settings file without the key loads that default. **Settings & Providers** adds the **Write paths relative to the playlist** checkbox.
 - `PlaylistExporter.export_m3u8`, `export_m3u8_report`, and `export_playlist_with_feedback` accept an optional `relative_paths` keyword. It defaults to `False`. Existing callers keep absolute paths.
 - Added `tests/unit/test_playlist_relative_paths.py`.
+
+### Changed
+
+- Upgraded the foucault security review caller to foucault 3.5.0 (`fbb09487cdbbe85ca64b2e8c46605c3120b62c54`). Oversized review input now routes to the `ollama-large` profile. A diff above every model budget receives a `NEEDS-HUMAN` verdict instead of no verdict.
+- Recopied `ci/build_pr_case.py`, `ci/call_model.py`, and `ci/model_providers.json` from the pinned foucault commit.
+- Updated the pinned commit and adapter digests in `tests/test_review_wiring.py`.
+- Documented the large-diff behavior in `docs/pr-review.md`.
 
 ### Fixed
 
