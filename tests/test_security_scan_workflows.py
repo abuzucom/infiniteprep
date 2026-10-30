@@ -16,6 +16,12 @@ SECURITY_DEVOPS: Final[Path] = WORKFLOWS / "security-devops.yml"
 ADVANCED_CODEQL: Final[Path] = WORKFLOWS / "codeql.yml"
 FULL_SHA_PIN: Final[re.Pattern[str]] = re.compile(r"^[\w.-]+/[\w./-]+@[0-9a-f]{40}$")
 CHECKOUT_ACTION: Final[str] = "actions/checkout@"
+# Each pin names the commit of the release tag the maintainer approved under Rule 9.
+APPROVED_PINS: Final[dict[str, str]] = {
+    "actions/dependency-review-action": "3b139cfc5fae8b618d3eae3675e383bb1769c019",
+    "github/codeql-action/upload-sarif": "b56ba49b26e50535fa1e7f7db0f4f7b4bf65d80d",
+    "microsoft/security-devops-action": "cf28f87c67770dbaa208cce3665fafc849f77507",
+}
 # PyYAML reads the bare `on` key as the boolean True.
 TRIGGER_KEY: Final[bool] = True
 
@@ -40,6 +46,15 @@ class SecurityScanWorkflowTest(unittest.TestCase):
             for step in collect_steps(load_workflow(path)):
                 if "uses" in step:
                     self.assertRegex(str(step["uses"]), FULL_SHA_PIN, path.name)
+
+    def test_each_scan_action_uses_its_approved_commit(self) -> None:
+        pinned: dict[str, str] = {}
+        for path in (DEPENDENCY_REVIEW, SECURITY_DEVOPS):
+            for step in collect_steps(load_workflow(path)):
+                action, _, commit = str(step.get("uses", "")).partition("@")
+                if action in APPROVED_PINS:
+                    pinned[action] = commit
+        self.assertEqual(pinned, APPROVED_PINS)
 
     def test_checkout_steps_do_not_persist_credentials(self) -> None:
         for path in (DEPENDENCY_REVIEW, SECURITY_DEVOPS):
