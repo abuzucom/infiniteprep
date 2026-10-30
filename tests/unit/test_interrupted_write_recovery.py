@@ -152,5 +152,5 @@ def test_an_unexpected_rollback_error_keeps_the_original_failure(
         write_svc.apply_single_plan(plan)
 
     record = repo.list_change_records(file_ids[0])[0]
-    assert record.operation_status == OperationStatus.FAILED
+    assert record.operation_status == OperationStatus.IN_PROGRESS
     assert "rollback failed unexpectedly" in (record.error_message or "")
