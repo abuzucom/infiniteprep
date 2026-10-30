@@ -5,9 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0] (2026-10-30)
+## [0.8.0] (2026-10-30)
 
 ### Added
+
+- `scripts/check_branch_name.py` rejects generated `<adjective>-<surname>-<suffix>` branch names such as `chore/dreamy-goldberg-nwjlsu`. Detection covers only the listed words. Added `tests/test_check_branch_name_generated.py`.
 
 - Playlist export writes track paths relative to the playlist folder by default. A crate copied to another drive or computer with its music keeps working. A track on another Windows drive keeps its absolute path.
 - A relative line that starts with `#` gains a `./` prefix. M3U8 players cannot read it as a comment or directive.
@@ -21,6 +23,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Recopied `ci/build_pr_case.py`, `ci/call_model.py`, and `ci/model_providers.json` from the pinned foucault commit.
 - Updated the pinned commit and adapter digests in `tests/test_review_wiring.py`.
 - Documented the large-diff behavior in `docs/pr-review.md`.
+- Synchronized policy from `abuzucom/agents` 2.14.0. Branch preflight now runs `check_branch_name.py --strict-agent-preflight`. A harness-assigned branch receives no exemption. `docs/agent-policy/clients.md` discloses that a multi-repository Claude Code cloud session loads no repository hooks.
 
 ### Fixed
 

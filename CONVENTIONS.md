@@ -393,6 +393,10 @@ This command emits bounded structured output. This command may run before
 ordinary repository actions. Hook-based clients inspect bounded `.git/HEAD`
 metadata before every observable tool.
 
+Then run `python scripts/check_branch_name.py --strict-agent-preflight`. A
+nonzero exit marks the branch invalid. A harness-assigned branch receives no
+exemption.
+
 Invalid branches block every ordinary repository action. Only the exact
 compliant recovery command remains available for authorization. Read-only
 inspection does not bypass branch correction.
@@ -410,7 +414,8 @@ vulgarity, or clearly non-English tokens. Do not request an exact branch name
 from the task author. Agents must infer a task-specific name.
 
 Match the prefix to the task. Never create `release/`, `hotfix/`, or `claude/`
-branches. `scripts/check_branch_name.py` backs this rule.
+branches. `scripts/check_branch_name.py` backs this rule. Its generated-name
+check covers only its listed words.
 
 Use the task type and description to select a compliant replacement. Ask for
 consent before the applicable exact recovery command. See
@@ -1149,6 +1154,11 @@ from `PreToolUse`.
 
 Client APIs differ. Do not claim coverage that the client cannot observe.
 Repository hooks remain defense in depth only.
+
+A multi-repository Claude Code cloud session starts above the clones. It loads
+no repository hooks. Agents there run the branch checker manually. A setup
+script running `pre-commit install --hook-type pre-push` restores the pre-push
+check.
 
 ## Compaction events
 Claude and Codex report compaction through the session payload `source`
