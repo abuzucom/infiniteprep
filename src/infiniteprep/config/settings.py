@@ -140,6 +140,7 @@ class AppSettings:
     fpcalc_custom_path: str = ""
     transcode_mode: str = "sibling_export"
     transcode_preset: str = "XDJ_LOSSLESS_AUTO"
+    playlist_relative_paths: bool = True
 
 
 class SettingsManager:
