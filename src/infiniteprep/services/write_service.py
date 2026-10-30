@@ -20,6 +20,10 @@ from infiniteprep.domain.ports import FileWritePlan
 logger = logging.getLogger(__name__)
 
 
+class PendingRecoveryError(RuntimeError):
+    """Raised when a write starts while an interrupted write still waits for recovery."""
+
+
 class WriteService:
     """Executes preflight checks, full backups, tag writes, renames, and verified restores."""
 
@@ -69,8 +73,50 @@ class WriteService:
             plans.append(plan)
         return plans
 
+    def list_interrupted_operations(self) -> list[ChangeRecord]:
+        """Return journal records left IN_PROGRESS by a crash or power loss mid-write."""
+        return [
+            record
+            for record in self.repo.list_change_records()
+            if record.operation_status == OperationStatus.IN_PROGRESS
+        ]
+
+    def _ensure_no_pending_recovery(self) -> None:
+        """Refuse a new write while an interrupted write may have left a half-written file."""
+        pending = self.list_interrupted_operations()
+        if pending:
+            raise PendingRecoveryError(
+                f"{len(pending)} interrupted write(s) wait for recovery. Restore or mark each "
+                "one as finished in the startup recovery dialog, then retry."
+            )
+
+    def restore_interrupted(self, operation_id: str) -> ChangeRecord:
+        """Restore an interrupted write from its verified backup and mark it ROLLED_BACK."""
+        record = self._get_interrupted(operation_id)
+        return self._restore_record(record, OperationStatus.ROLLED_BACK)
+
+    def mark_interrupted_finished(self, operation_id: str) -> ChangeRecord:
+        """Accept the file on disk for an interrupted write and mark its record COMPLETED."""
+        record = self._get_interrupted(operation_id)
+        current = Path(record.new_path)
+        if not current.is_file():
+            current = Path(record.previous_path)
+        record.post_write_hash = compute_sha256(current)
+        record.new_path = str(current)
+        record.operation_status = OperationStatus.COMPLETED
+        self.repo.upsert_change_record(record)
+        return record
+
+    def _get_interrupted(self, operation_id: str) -> ChangeRecord:
+        """Return the IN_PROGRESS record for operation_id, or raise ValueError."""
+        record = self.repo.get_change_record(operation_id)
+        if record is None or record.operation_status != OperationStatus.IN_PROGRESS:
+            raise ValueError(f"ChangeRecord {operation_id} is not an interrupted write.")
+        return record
+
     def apply_batch(self, write_plans: list[FileWritePlan]) -> list[ChangeRecord]:
         """Apply all safe FileWritePlans, recording ChangeRecords and updating FileAssets."""
+        self._ensure_no_pending_recovery()
         batch_op_id = str(uuid.uuid4())
         records: list[ChangeRecord] = []
         for plan in write_plans:
@@ -82,6 +128,7 @@ class WriteService:
         self, plan: FileWritePlan, batch_operation_id: str | None = None
     ) -> ChangeRecord:
         """Journal the plan as IN_PROGRESS, apply it, then complete the record or roll back."""
+        self._ensure_no_pending_recovery()
         if not plan.is_safe_to_apply:
             # The adapter raises the preflight error before it touches the file.
             return self.tag_adapter.apply(plan, operation_id=str(uuid.uuid4()))
@@ -129,7 +176,8 @@ class WriteService:
             try:
                 self._restore_into_place(backup_path, pending)
                 pending.operation_status = OperationStatus.ROLLED_BACK
-            except (OSError, ValueError) as rollback_exc:
+            except Exception as rollback_exc:
+                # Any rollback error stays secondary: the caller re-raises the original failure.
                 logger.error("Rollback of %s failed: %r", pending.operation_id, rollback_exc)
                 pending.error_message += f"; rollback failed ({rollback_exc})"
         self.repo.upsert_change_record(pending)
@@ -186,7 +234,19 @@ class WriteService:
         record = self.repo.get_change_record(operation_id)
         if record is None:
             raise ValueError(f"ChangeRecord {operation_id} not found.")
-        backup_path = self._verify_backup_file(record, operation_id)
+        return self._restore_record(
+            record, OperationStatus.RESTORED, allowed_library_root=allowed_library_root
+        )
+
+    def _restore_record(
+        self,
+        record: ChangeRecord,
+        final_status: OperationStatus,
+        *,
+        allowed_library_root: Path | None = None,
+    ) -> ChangeRecord:
+        """Swap the verified backup in for the record, then store final_status and the asset."""
+        backup_path = self._verify_backup_file(record, record.operation_id)
         prev_path, cur_path = self._resolve_and_verify_restore_paths(
             record, allowed_library_root=allowed_library_root
         )
@@ -196,7 +256,7 @@ class WriteService:
         if cur_path != prev_path and cur_path.exists():
             cur_path.unlink()
 
-        record.operation_status = OperationStatus.RESTORED
+        record.operation_status = final_status
         self.repo.upsert_change_record(record)
 
         asset = self.repo.get_file_by_id(record.file_id)

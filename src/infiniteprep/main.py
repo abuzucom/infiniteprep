@@ -33,6 +33,7 @@ from infiniteprep.ui.action_handlers import (
 )
 from infiniteprep.ui.journal_dialog import JournalDialog
 from infiniteprep.ui.main_window import MainWindow
+from infiniteprep.ui.recovery_dialog import RecoveryDialog
 from infiniteprep.ui.settings_dialog import SettingsDialog
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 
@@ -114,6 +115,8 @@ def launch_desktop_app() -> int:
         ),
     )
     window.show()
+    if write_svc.list_interrupted_operations():
+        RecoveryDialog(write_svc, parent=window).exec()
     return int(qt_app.exec())
 
 
