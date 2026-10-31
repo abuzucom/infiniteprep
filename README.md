@@ -336,10 +336,9 @@ Preview and analysis:
    through the Qt playback rate. Key lock uses Qt pitch compensation. Rate
    range presets run from 4% to 50%.
 2. **A/B looping.** Loop points snap to the beat, with halve and double.
-3. **BPM accuracy.** A selectable detector: a wavelet beat histogram
-   (Tzanetakis, Essl, and Cook, 2001), a comb filter, or both combined.
-   Half and double tempo correction, a separate confidence score, and
-   user-set ranges.
+3. **BPM accuracy.** A selectable detector: a wavelet beat histogram, a comb
+   filter, or both combined. Half and double tempo correction, a separate
+   confidence score, and user-set ranges.
 4. **Energy rating.** A 1 to 10 score from BS.1770 loudness, onset density,
    and spectral brightness, written to `TXXX:ENERGY` and the FLAC `ENERGY`
    comment.
