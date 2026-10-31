@@ -11,7 +11,11 @@ from pathlib import Path
 
 import platformdirs
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
+from infiniteprep.adapters.metadata_io.mutagen_adapter import (
+    MutagenAdapter,
+    compute_sha256,
+    operation_backup_path,
+)
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import OperationStatus, ReviewStatus
 from infiniteprep.domain.models import ChangeRecord
@@ -155,14 +159,19 @@ class WriteService:
         self, plan: FileWritePlan, batch_operation_id: str | None
     ) -> ChangeRecord:
         """Persist an IN_PROGRESS ChangeRecord that names the backup before any file change."""
+        operation_id = str(uuid.uuid4())
+        # The adapter derives the same per-operation name, so the journal names the real backup.
+        backup_path = operation_backup_path(
+            plan.backup_destination_path.parent, plan.file_id, operation_id, plan.source_path.name
+        )
         pending = ChangeRecord(
-            operation_id=str(uuid.uuid4()),
+            operation_id=operation_id,
             file_id=plan.file_id,
             previous_path=str(plan.source_path),
             new_path=str(plan.destination_path),
             previous_tags=plan.existing_tags,
             written_tags=plan.proposed_tags_to_write,
-            backup_reference=str(plan.backup_destination_path),
+            backup_reference=str(backup_path),
             operation_status=OperationStatus.IN_PROGRESS,
             timestamp=datetime.now(UTC).isoformat(),
             batch_operation_id=batch_operation_id,
