@@ -130,9 +130,7 @@ RIFF_INFO_TAG_MAP: Final[dict[str, bytes]] = {
 }
 
 
-ID3_STORED_FIELDS: Final[frozenset[str]] = frozenset(
-    {*ID3_FRAME_TO_FIELD.values(), *ID3_TXXX_MAP}
-)
+ID3_STORED_FIELDS: Final[frozenset[str]] = frozenset({*ID3_FRAME_TO_FIELD.values(), *ID3_TXXX_MAP})
 VORBIS_STORED_FIELDS: Final[frozenset[str]] = frozenset(VORBIS_FIELD_MAP)
 
 
