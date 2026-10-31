@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
 import shutil
 import struct
@@ -127,6 +128,20 @@ RIFF_INFO_TAG_MAP: Final[dict[str, bytes]] = {
     FieldName.GENRE.value: b"IGNR",
     FieldName.YEAR.value: b"ICRD",
 }
+
+
+ID3_STORED_FIELDS: Final[frozenset[str]] = frozenset(
+    {*ID3_FRAME_TO_FIELD.values(), *ID3_TXXX_MAP}
+)
+VORBIS_STORED_FIELDS: Final[frozenset[str]] = frozenset(VORBIS_FIELD_MAP)
+
+
+def operation_backup_path(
+    backup_dir: Path, file_id: str, operation_id: str, file_name: str, kind: str = ""
+) -> Path:
+    """Return the backup path for one operation, so a later backup never replaces this one."""
+    kind_part = f"{kind}_" if kind else ""
+    return backup_dir / f"{file_id}_{operation_id}_{kind_part}{file_name}"
 
 
 def compute_sha256(file_path: Path) -> str:
@@ -494,10 +509,30 @@ class MutagenAdapter:
         if not source_path.exists():
             errors.append(f"Source file missing at {source_path}; re-import or locate file.")
             return errors
+        errors.extend(self._validate_replaceable(source_path))
         if compute_sha256(source_path) != file_asset.content_hash:
             errors.append(
                 "External modification detected: disk SHA-256 differs from imported content_hash; "
                 "re-import file before writing."
+            )
+        return errors
+
+    @staticmethod
+    def _validate_replaceable(source_path: Path) -> list[str]:
+        """Refuse files that a swap of a written copy would detach from their other names."""
+        errors: list[str] = []
+        stat_result = source_path.stat()
+        if stat_result.st_nlink > 1:
+            errors.append(
+                f"File has {stat_result.st_nlink} hard links; writing would split them. "
+                "Copy the file to a single-link location before writing."
+            )
+        # Windows has no getuid. NTFS ownership does not change when a copy replaces a file.
+        get_uid = getattr(os, "getuid", None)
+        if get_uid is not None and stat_result.st_uid != get_uid():
+            errors.append(
+                "File is owned by another user; writing would change its owner. "
+                "Ask the owner to write it, or take ownership first."
             )
         return errors
 
@@ -535,8 +570,14 @@ class MutagenAdapter:
                 "External file change detected prior to write; re-import file to refresh hash."
             )
 
-        self._create_verified_backup(source_path, write_plan.backup_destination_path, current_hash)
-        self._write_tags_by_format(source_path, write_plan.proposed_tags_to_write)
+        backup_path = operation_backup_path(
+            write_plan.backup_destination_path.parent,
+            write_plan.file_id,
+            operation_id,
+            source_path.name,
+        )
+        self._create_verified_backup(source_path, backup_path, current_hash)
+        self._write_verified_copy(source_path, write_plan.proposed_tags_to_write, operation_id)
         final_path = self._execute_optional_rename(source_path, write_plan)
         post_hash = compute_sha256(final_path)
 
@@ -549,16 +590,62 @@ class MutagenAdapter:
             post_write_hash=post_hash,
             previous_tags=write_plan.existing_tags,
             written_tags=write_plan.proposed_tags_to_write,
-            backup_reference=str(write_plan.backup_destination_path),
+            backup_reference=str(backup_path),
             operation_status=OperationStatus.COMPLETED,
             timestamp=datetime.now(UTC).isoformat(),
         )
 
+    def _write_verified_copy(
+        self, source_path: Path, tags_to_write: dict[str, str], operation_id: str
+    ) -> None:
+        """Write tags to a sibling copy, verify it, then atomically swap it over the source.
+
+        A crash at any point leaves the source with its original bytes. The copy keeps the
+        source suffix, because detect_format reads the extension.
+        """
+        staged = source_path.with_name(
+            f".{source_path.stem}.{operation_id}.staged{source_path.suffix}"
+        )
+        try:
+            shutil.copy2(source_path, staged)
+            self._write_tags_by_format(staged, tags_to_write)
+            self._verify_written_copy(source_path, staged, tags_to_write)
+            os.replace(staged, source_path)
+        finally:
+            staged.unlink(missing_ok=True)
+
+    def _verify_written_copy(
+        self, source_path: Path, staged: Path, tags_to_write: dict[str, str]
+    ) -> None:
+        """Check the copy parses, keeps the audio properties, and reads back each written tag."""
+        before = self.read_metadata(source_path)
+        after = self.read_metadata(staged)
+        problems: list[str] = []
+        if after.duration is None:
+            problems.append("the audio no longer parses")
+        if (after.sample_rate, after.channels) != (before.sample_rate, before.channels):
+            problems.append("the sample rate or channel count changed")
+        stored = VORBIS_STORED_FIELDS if before.format == AudioFormat.FLAC else ID3_STORED_FIELDS
+        problems.extend(
+            f"{field_name} reads back as {after.standard_tags.get(field_name)!r}"
+            for field_name, value in tags_to_write.items()
+            if field_name in stored and after.standard_tags.get(field_name) != value
+        )
+        if problems:
+            raise OSError(
+                f"Written copy failed verification ({'; '.join(problems)}); the original file "
+                "is unchanged. Check the file with another tag editor and retry."
+            )
+
     def _create_verified_backup(
         self, source_path: Path, backup_path: Path, expected_hash: str
     ) -> None:
-        """Copy source file to backup path and verify SHA-256 integrity."""
+        """Copy source file to a new backup path and verify SHA-256 integrity."""
         backup_path.parent.mkdir(parents=True, exist_ok=True)
+        if backup_path.exists():
+            raise FileExistsError(
+                f"Backup {backup_path} already exists; refusing to replace it. Retry the write."
+            )
         shutil.copy2(source_path, backup_path)
         if compute_sha256(backup_path) != expected_hash:
             raise OSError(

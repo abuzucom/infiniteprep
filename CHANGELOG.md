@@ -5,6 +5,22 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] (2026-10-31)
+
+### Added
+
+- Added `tests/unit/test_verified_copy_writes.py`.
+
+### Changed
+
+- A tag write goes to a copy next to the file. The copy must parse, keep its sample rate and channel count, and read back every written tag. It then atomically replaces the original. A crash or failed write leaves the original bytes in place.
+- Each tag-write backup takes the name `{asset_id}_{operation_id}_{filename}`. Each in-place transcode backup takes `{asset_id}_{operation_id}_transcode_{filename}`. A later backup of the same track no longer replaces an earlier one. A backup never overwrites an existing file.
+- Four recovery test assertions now expect the original file intact after a crash mid-write. The maintainer approved the edit.
+
+### Fixed
+
+- Write preflight refuses a file with more than one hard link, or a file owned by another user. Swapping in a written copy would split the links or change the owner.
+
 ## [0.9.0] (2026-10-30)
 
 ### Added

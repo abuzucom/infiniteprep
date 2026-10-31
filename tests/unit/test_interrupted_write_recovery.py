@@ -65,7 +65,8 @@ def test_a_crash_mid_write_leaves_one_interrupted_record(
     operation_id = crash_mid_write(write_svc, file_ids[0], monkeypatch)
 
     assert [r.operation_id for r in write_svc.list_interrupted_operations()] == [operation_id]
-    assert source.read_bytes() == CORRUPT_BYTES
+    assert compute_sha256(source) == library[4]
+    assert sorted(p.name for p in source.parent.iterdir()) == ["track_0.wav", "track_1.wav"]
 
 
 def test_restore_returns_the_original_and_marks_rolled_back(
@@ -97,7 +98,7 @@ def test_restore_with_a_tampered_backup_keeps_the_record_pending(
     with pytest.raises(ValueError, match="SHA-256"):
         write_svc.restore_interrupted(operation_id)
 
-    assert source.read_bytes() == CORRUPT_BYTES
+    assert compute_sha256(source) == library[4]
     assert [r.operation_id for r in write_svc.list_interrupted_operations()] == [operation_id]
 
 
@@ -114,7 +115,7 @@ def test_mark_finished_keeps_the_file_and_records_its_hash(
     assert stored is not None
     assert stored.operation_status == OperationStatus.COMPLETED
     assert stored.post_write_hash == compute_sha256(source)
-    assert source.read_bytes() == CORRUPT_BYTES
+    assert compute_sha256(source) == library[4]
 
 
 def test_writes_are_blocked_while_a_record_is_pending(

@@ -211,8 +211,11 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
    - A `BLOCKED` row names its validation errors or filename collisions.
    - **Apply Safe Writes** writes only the `READY` rows. Each write first
      records an in-progress journal entry, then takes a verified backup.
-   - A write that fails partway restores the original from its verified
-     backup and records the journal entry as rolled back.
+     Each write keeps its own backup, named with its operation id.
+   - The tags go to a copy next to the file. The copy replaces the original
+     only after it reads back every written tag. A failed write leaves the
+     original untouched and records the journal entry as rolled back.
+   - Preflight blocks a file with more than one hard link or another owner.
    - A crash or power loss can stop a write before it finishes. At the next
      launch, **Recover Interrupted Writes** lists each such write.
      **Restore from backup** returns the verified original. **Mark as

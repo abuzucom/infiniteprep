@@ -16,7 +16,11 @@ import platformdirs
 import soundfile as sf
 from scipy.signal import resample_poly
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
+from infiniteprep.adapters.metadata_io.mutagen_adapter import (
+    MutagenAdapter,
+    compute_sha256,
+    operation_backup_path,
+)
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, OperationStatus
 from infiniteprep.domain.models import ChangeRecord, FileAsset
@@ -260,12 +264,14 @@ class SafeTranscoderAdapter:
     ) -> ChangeRecord:
         """Create a SHA-256 verified backup and IN_PROGRESS ChangeRecord before replacement."""
         self.backup_dir.mkdir(parents=True, exist_ok=True)
-        backup_path = self.backup_dir / f"{asset.id}_transcode_{src_path.name}"
+        op_id = str(uuid.uuid4())
+        backup_path = operation_backup_path(
+            self.backup_dir, asset.id, op_id, src_path.name, kind="transcode"
+        )
         pre_hash = compute_sha256(src_path)
         shutil.copy2(src_path, backup_path)
         if compute_sha256(backup_path) != pre_hash:
             raise OSError("Transcode backup SHA-256 verification failed; aborting.")
-        op_id = str(uuid.uuid4())
         rec = ChangeRecord(
             operation_id=op_id,
             file_id=asset.id,

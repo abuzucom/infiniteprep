@@ -72,7 +72,7 @@ def test_keep_button_marks_the_write_finished(qtbot, interrupted: Any) -> None:
 
     dialog.table.cellWidget(0, COL_KEEP).click()
 
-    assert source.read_bytes() == b"half-written"
+    assert compute_sha256(source) == interrupted[3]
     stored = repo.get_change_record(operation_id)
     assert stored is not None
     assert stored.operation_status == OperationStatus.COMPLETED
