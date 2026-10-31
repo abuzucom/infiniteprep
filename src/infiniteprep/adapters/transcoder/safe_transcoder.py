@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import shutil
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -19,6 +18,7 @@ from scipy.signal import resample_poly
 from infiniteprep.adapters.metadata_io.mutagen_adapter import (
     MutagenAdapter,
     compute_sha256,
+    copy_to_new_verified_file,
     operation_backup_path,
 )
 from infiniteprep.db.repositories import Repository
@@ -269,9 +269,7 @@ class SafeTranscoderAdapter:
             self.backup_dir, asset.id, op_id, src_path.name, kind="transcode"
         )
         pre_hash = compute_sha256(src_path)
-        shutil.copy2(src_path, backup_path)
-        if compute_sha256(backup_path) != pre_hash:
-            raise OSError("Transcode backup SHA-256 verification failed; aborting.")
+        copy_to_new_verified_file(src_path, backup_path, pre_hash)
         rec = ChangeRecord(
             operation_id=op_id,
             file_id=asset.id,

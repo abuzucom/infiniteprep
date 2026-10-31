@@ -145,7 +145,11 @@ class WriteService:
             return self.tag_adapter.apply(plan, operation_id=str(uuid.uuid4()))
         pending = self._journal_in_progress(plan, batch_operation_id)
         try:
-            record = self.tag_adapter.apply(plan, operation_id=pending.operation_id)
+            record = self.tag_adapter.apply(
+                plan,
+                operation_id=pending.operation_id,
+                backup_path=Path(pending.backup_reference),
+            )
         except Exception as exc:
             # Any failure after the journal entry may leave a partial write. Roll back, re-raise.
             self._roll_back_failed_write(pending, exc)
@@ -160,7 +164,7 @@ class WriteService:
     ) -> ChangeRecord:
         """Persist an IN_PROGRESS ChangeRecord that names the backup before any file change."""
         operation_id = str(uuid.uuid4())
-        # The adapter derives the same per-operation name, so the journal names the real backup.
+        # apply receives this path, so the journal always names the backup the adapter writes.
         backup_path = operation_backup_path(
             plan.backup_destination_path.parent, plan.file_id, operation_id, plan.source_path.name
         )
