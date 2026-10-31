@@ -5,11 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.10.0] (2026-10-31)
+## [0.11.0] (2026-10-31)
 
 ### Added
 
-- Added `tests/unit/test_verified_copy_writes.py`.
+- **Change Journal** asks before **Restore Backup** and names the file it replaces. When the file changed after the recorded write, a second question names the change before the restore overwrites anything.
+- `WriteService.restore_operation` raises the new `RestoreConflictError` when the file changed after the write. The new optional `allow_modified` keyword restores anyway. Each restore first copies every file it replaces or removes to the backup folder as `{asset_id}_{id}_pre_restore_{filename}`.
+- Added `tests/unit/test_verified_copy_writes.py` and `tests/unit/test_restore_guard.py`.
 
 ### Changed
 

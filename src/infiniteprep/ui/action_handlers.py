@@ -46,6 +46,20 @@ def show_plain_message(
     box.exec()
 
 
+def ask_plain_question(parent: QWidget | None, title: str, text: str) -> bool:
+    """Ask a Yes/No question in plain text, defaulting to No, and return True on Yes."""
+    box = QMessageBox(
+        QMessageBox.Icon.Question,
+        title,
+        text,
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        parent,
+    )
+    box.setTextFormat(Qt.TextFormat.PlainText)
+    box.setDefaultButton(QMessageBox.StandardButton.No)
+    return box.exec() == QMessageBox.StandardButton.Yes
+
+
 def build_transcode_confirmation_text(
     file_count: int, mode: TranscodeMode, preset: TranscodePreset
 ) -> str:
