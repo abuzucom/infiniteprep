@@ -74,8 +74,12 @@ class MainWindow(QMainWindow):
         parent: QWidget | None = None,
         on_transcode_batch: Callable[[list[str]], object] | None = None,
         on_export_playlist: Callable[[list[str], Path], object] | None = None,
+        enable_audio_backend: bool = False,
     ) -> None:
-        """Initialize MainWindow with core services and callbacks."""
+        """Initialize MainWindow with core services and callbacks.
+
+        enable_audio_backend turns on real audio playback in the detail panel preview.
+        """
         super().__init__(parent)
         self.repo = repository
         self.import_service = import_service
@@ -102,6 +106,7 @@ class MainWindow(QMainWindow):
             review_service=self.review_service,
             on_change_callback=self.refresh_file_table,
             parent=self,
+            enable_audio_backend=enable_audio_backend,
         )
 
         self._setup_toolbar()

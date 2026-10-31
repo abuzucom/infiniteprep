@@ -195,8 +195,12 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
    detail panel between Standard, Camelot, and Open Key.
 5. **Review one track.** Select a row. The detail panel shows hardware
    warnings, the audio preview, and each field proposal.
-   - **Play**, **Stop**, and the `Intro`, `25%`, `50% Drop`, `75%`, and
-     `Outro` buttons jump through the track.
+   - **Play** plays the track through the system audio output. **Stop**
+     returns to the start. The `Intro`, `25%`, `50% Drop`, `75%`, and `Outro`
+     buttons jump through the track.
+   - The **Playback position** slider seeks by mouse or keyboard. The arrow
+     keys move 1 second, and Page Up and Page Down move 10 seconds.
+   - A file that cannot play shows the reason under the transport.
    - **Accept** approves a proposal.
    - **Save** stores a manual edit.
    - **Lock** protects a field from later proposals. **Unlock** releases it.
