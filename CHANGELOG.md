@@ -5,9 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.12.0] (2026-10-31)
+## [0.12.1] (2026-10-31)
 
 ### Added
+
+- README **Roadmap** section lists the planned stages in order.
 
 - The audio preview has a **Playback position** slider with an accessible name and time. The arrow keys seek 1 second, and Page Up and Page Down seek 10 seconds.
 - The audio preview shows playback failures and an unavailable audio backend as plain text under the transport. The Play button follows the real player state.
@@ -20,6 +22,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- README **Capabilities** separates features the desktop application runs from modules that exist without a caller. **Current limitations** lists the known gaps in identification, analysis, writing, export, and the interface.
 - A tag write goes to a copy next to the file. The copy must parse, keep its pre-write sample rate and channel count, and read back every written tag. It then atomically replaces the original. A crash or failed write leaves the original bytes in place. A successful write gives the file a new inode. `shutil.copy2` carries over the mode and timestamps, plus extended attributes on platforms with xattr support.
 - Just before the swap, the write checks the source SHA-256 again. A file another program changed during the write keeps that change. The journal records the write as failed, and no rollback runs.
 - Each tag-write backup takes the name `{asset_id}_{operation_id}_{filename}`. Each in-place transcode backup takes `{asset_id}_{operation_id}_transcode_{filename}`. A later backup of the same track no longer replaces an earlier one.

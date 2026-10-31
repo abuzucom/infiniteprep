@@ -10,29 +10,49 @@
 
 ---
 
-## Key Capabilities
+## Capabilities
 
-1. **Non-Destructive Import & Inventory**:
-   - Computes SHA-256 content hashes, detects duplicates across folders, flags suspected continuous mixes (`> 20 min`), and groups shared folders into hypothesis `SourceGroup` entities.
-   - Surfaces **Pioneer XDJ-RX3 Hardware Compatibility Warnings** on import for sample rates `> 48000 Hz`, `32-bit float` WAVs, and unsupported `.ogg` containers.
-2. **Acoustic Fingerprinting & Catalog Enrichment**:
-   - Local **Chromaprint (`fpcalc`) + AcoustID** lookup with consent-gated, SHA-256 verified `fpcalc` bootstrap (`FpcalcBootstrapService`) on Windows and macOS. Linux uses the distribution `fpcalc` package.
-   - **MusicBrainz (`ws/2`)** and **Discogs REST API** adapters with rate limiting (`1 req/sec` / `60 req/min`) and SQLite TTL response caching.
-   - Strictly separates **Recording Identity** (`artist`, `title`, `mix_name`, `remixer`, `duration`) from **Release Details** (`release_title`, `label`, `catalog_number`, `vinyl_position`, `year`, `country`, `genre`).
-3. **Local DJ Audio Analysis & Rip Quality Diagnostics**:
-   - Built-in BSD-compatible `LocalDspAnalyzer` (`scipy` / `numpy` / `soundfile`) computing **BPM**, canonical musical key (`PitchClass` + `KeyMode`), and waveform overview envelopes.
-   - Displays keys in **Standard (`F#m`)**, **Camelot (`11A`)**, or **Open Key (`4m`)** notation.
-   - Detects **Vinyl Turntable Pitch Drift** (`2%` to `8%` speed offset or `33.3` vs `45 RPM` error) and **Rip Quality Warnings** (digital clipping, DC offset, and leading/trailing silence).
-   - Optional external `EssentiaCliAnalyzer` subprocess support (`shell=False`).
-4. **Optional Closed-World Local LLM Arbitration**:
-   - Connects to local **Ollama** (`qwen2.5:3b` default, `qwen2.5:7b`, `llama3.2:3b`) or OpenAI-compatible endpoints (`temperature=0.0`, JSON schema mode).
-   - Enforces strict `ClosedWorldValidator` verification so the model can only select from `allowed_candidates` and can never invent facts.
-   - Includes consent-gated `OllamaBootstrapService` (`user_consented=True` required).
-5. **Safe Tag Writing, XDJ-RX3 Transcoder, and Verified Backup Restore**:
-   - Writes `ID3v2.3` (`UTF-16`) for MP3/WAV/AIFF, synchronized dual `ID3v2.3` + RIFF `LIST-INFO` chunks for WAV, and dual `LABEL` + `ORGANIZATION` Vorbis comments for FLAC.
-   - Preserves `PRIV:TRAKTOR4` / `TRAKTOR4` cue and beatgrid frames, `GEOB`, and `APIC` artwork (`<= 800x800` baseline JPEG via `ArtworkService`).
-   - Includes `SafeTranscoderAdapter` (`SIBLING_EXPORT` default + `IN_PLACE_BACKED_UP` mode) and UTF-8 `.m3u8` crate export (`PlaylistExporter`).
-   - Every write or rename is preflight-checked (SHA-256 external modification check + collision check), backed up with SHA-256 verification, logged in `ChangeRecord`, and restorable in one click.
+### Working in the desktop application
+
+1. **Import and inventory.**
+   - Import reads tags and computes a SHA-256 content hash for each file. It never modifies the file.
+   - Import detects duplicates across folders and flags files over 20 minutes as suspected continuous mixes.
+   - Import groups files that share a folder into `SourceGroup` records.
+   - Pioneer XDJ-RX3 warnings mark sample rates above 48 kHz, 32-bit float WAV files, and OGG containers.
+2. **Local analysis.**
+   - `LocalDspAnalyzer` computes BPM, musical key, and a waveform overview with `numpy`, `scipy`, and `soundfile`.
+   - Keys display in Standard (`F#m`), Camelot (`11A`), or Open Key (`4m`) notation.
+   - Warnings flag vinyl pitch drift, digital clipping, DC offset, and leading or trailing silence.
+3. **Review.**
+   - Each field shows the existing tag, the top proposal, its source, and its score.
+   - **Accept** approves one proposal. **Bulk Approve Non-Conflicting** approves every proposal without a competing value.
+   - Manual edits and field locks take priority over later proposals.
+4. **Audio preview.**
+   - The detail panel plays the selected track through the system audio output.
+   - A keyboard-accessible position slider and five jump buttons seek through the track.
+   - Playback failures appear as plain text under the transport.
+5. **Safe tag writing.**
+   - MP3, WAV, and AIFF receive ID3v2.3 UTF-16 frames. WAV also receives a matching RIFF `LIST-INFO` chunk. FLAC receives Vorbis comments, with the label in both `LABEL` and `ORGANIZATION`.
+   - Writes preserve `PRIV:TRAKTOR4`, `GEOB`, `APIC`, and every other frame that the write does not manage.
+   - Preflight refuses a file that changed since import. It also refuses a symbolic link, a file with more than one hard link, or a file owned by another user.
+   - Each write records an in-progress journal entry and takes a verified per-operation backup. Tags go to a copy next to the file. The copy replaces the original only after it parses and reads back every written tag.
+   - A file changed by another program during the write keeps that change. The write stops before the swap.
+6. **Recovery and restore.**
+   - At launch, **Recover Interrupted Writes** lists each write that a crash left unfinished. New writes stay blocked while any row remains.
+   - **Change Journal & Restore** restores any completed write from its verified backup. The restore asks for confirmation and copies the current file aside first. A file edited after the write gets a second confirmation.
+7. **Transcode and export.**
+   - **Transcode to XDJ** converts tracks for the XDJ-RX3, either as a `_XDJ` copy or in place with a verified backup.
+   - **Export Playlist (.m3u8)** writes a UTF-8 Extended M3U playlist with paths relative to the playlist folder by default.
+
+### Built but not wired into the application
+
+These modules exist under `src/infiniteprep/` with tests. The desktop launcher and `evaluate-sample` do not call these modules.
+
+- Chromaprint (`fpcalc`) and AcoustID fingerprinting, with the consent-gated, SHA-256 verified `FpcalcBootstrapService` for Windows and macOS.
+- MusicBrainz (`ws/2`) and Discogs adapters with rate limits of 1 request per second and 60 requests per minute, plus a SQLite TTL response cache.
+- Closed-world LLM arbitration through Ollama or an OpenAI-compatible endpoint. `ClosedWorldValidator` limits the model to the supplied candidates. `OllamaBootstrapService` requires explicit consent.
+- `EssentiaCliAnalyzer`, a subprocess wrapper for the Essentia command-line extractor.
+- `ArtworkService` normalizes cover art to a baseline JPEG of at most 800 by 800 pixels.
 
 ---
 
@@ -264,16 +284,108 @@ command writes no report.
 
 ### Current limitations
 
+Identification:
+
 - The desktop launcher and `evaluate-sample` use the offline mock fingerprint
   and catalog adapters. Proposals for artist, title, label, and release
   fields come from those deterministic mock candidates.
-- The AcoustID, MusicBrainz, Discogs, and LLM adapters exist in
-  `src/infiniteprep/adapters/`. The launcher does not wire those adapters. Saved
-  credentials and provider settings do not change the identification results.
+- Saved credentials and provider settings do not change the identification
+  results.
+
+Analysis:
+
+- Analysis runs on the GUI thread. A large batch blocks the window until it
+  finishes. No control cancels a running batch.
+- Key detection reads only the first 30 seconds of each track. A track with
+  no clear pitch content reports A minor.
+- BPM detection searches 80 to 175 BPM. Tracks outside that range report a
+  half or double tempo, and nothing corrects it.
+- BPM proposals take the key strength as the confidence score.
+- No energy rating, beat grid, or cue point analysis exists.
+
+Writing and export:
+
+- Written keys always use Standard notation. The notation menu changes only
+  the display.
+- `settings.json` stores `key_display_notation` and `rename_template`. No
+  code reads either setting.
+- Export covers M3U8 playlists only. No cue, beat grid, or library export to
+  rekordbox, Serato, Traktor, or XDJ/CDJ USB media exists.
 - The `MP3_320_CBR` preset produces the same output as
   `XDJ_LOSSLESS_AUTO`.
 - An in-place transcode of an OGG or M4A file writes a WAV and removes the
   original. The table keeps the old path for that file.
+
+Interface:
+
+- Saving one field rebuilds every field editor. Unsaved text in other rows is
+  lost.
+- The audio preview has no tempo control, key lock, or loop.
+
+---
+
+## Roadmap
+
+Each stage ships as one reviewed pull request. The order reflects current
+priority. Stages that add a dependency wait for an approved dependency
+proposal.
+
+Preview and analysis:
+
+1. **Tempo control with key lock.** A target BPM for the preview, applied
+   through the Qt playback rate. Key lock uses Qt pitch compensation. Rate
+   range presets run from 4% to 50%.
+2. **A/B looping.** Loop points snap to the beat, with halve and double.
+3. **BPM accuracy.** A selectable detector: a wavelet beat histogram
+   (Tzanetakis, Essl, and Cook, 2001), a comb filter, or both combined.
+   Half and double tempo correction, a separate confidence score, and
+   user-set ranges.
+4. **Energy rating.** A 1 to 10 score from BS.1770 loudness, onset density,
+   and spectral brightness, written to `TXXX:ENERGY` and the FLAC `ENERGY`
+   comment.
+5. **Configurable tag output.** Key notation for written tags, integer BPM, a
+   comment template with `{key}`, `{bpm}`, and `{energy}`, and an audio
+   payload digest check on every write.
+
+Fixes and infrastructure:
+
+6. **Field editing.** Saving one field keeps unsaved edits in other rows.
+7. **Transcode preflight.** Skip compatible files, reuse unchanged output, and
+   flag fake-lossless sources by spectral cutoff.
+8. **Background analysis.** A worker thread with a process pool, progress,
+   cancellation, and versioned results.
+9. **MP3 320 CBR output.** Requires an approved LAME dependency.
+10. **`fpcalc` install button.** A consent-gated install from Settings.
+11. **Live identification.** AcoustID, MusicBrainz, and Discogs replace the
+    mock adapters.
+12. **Local LLM arbitration.** The local model flags one recommended proposal
+    per conflict. A person still approves.
+
+Preparation and export:
+
+13. **Two-deck preview.** Pairing auditions with a crossfader, sync, and a
+    harmonic compatibility hint.
+14. **Beat grid.** Beat and downbeat detection with variable tempo, stored as
+    anchors. Uncertain grids appear in a filter for review.
+15. **Neural key detection.** A neural key model that analyzes the full track.
+16. **Beat grid editor.** Set the downbeat, nudge, tap, halve, double, warp
+    markers, a metronome, lock, and undo.
+17. **Cue templates.** A user-defined rule set places up to 8 cues per track.
+    Generated cues never overwrite existing cues.
+18. **Cue templates from a prompt.** The local LLM converts a plain-text
+    description into a validated template. A person confirms it before use.
+19. **Cue review.** Cue markers on the waveform, audition, drag, and nudge by
+    beat.
+20. **Cue and grid export.** rekordbox XML, Serato markers, and Traktor NML.
+    Each export writes a report of every cue it moved, merged, or dropped.
+21. **Playlists and crates.** Ordered playlists, unordered crates, and next
+    track suggestions scored on key, tempo, and energy.
+22. **Pitch shift in the preview.** Semitone shifts with tempo held, through a
+    dedicated time-stretch library.
+23. **Library import.** rekordbox XML and USB exports, Serato, Traktor NML,
+    and iTunes XML. Import never overwrites user data.
+24. **XDJ and CDJ USB export.** A device database and analysis files that the
+    players read directly. Requires testing on hardware.
 
 ---
 
