@@ -12,13 +12,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Change Journal** asks before **Restore Backup** and names the file it replaces. When the file changed after the recorded write, a second question names the change before the restore overwrites anything.
 - `WriteService.restore_operation` raises the new `RestoreConflictError` when the file changed after the write. The new optional `allow_modified` keyword restores anyway. Each restore first copies every file it replaces or removes to the backup folder as `{asset_id}_{id}_pre_restore_{filename}`.
 - `MutagenAdapter.apply` accepts an optional `backup_path` keyword. `WriteService` passes the backup path it journaled. The journal and the written backup always agree.
-- Added `tests/unit/test_verified_copy_writes.py`, `tests/unit/test_write_hardening.py`, and `tests/unit/test_restore_guard.py`.
+- Added `tests/unit/test_verified_copy_writes.py`, `tests/unit/test_write_hardening.py`, `tests/unit/test_write_race_guards.py`, and `tests/unit/test_restore_guard.py`.
 
 ### Changed
 
-- A tag write goes to a copy next to the file. The copy must parse, keep its pre-write sample rate and channel count, and read back every written tag. It then atomically replaces the original. A crash or failed write leaves the original bytes in place. A successful write gives the file a new inode with the copied permissions, timestamps, and extended attributes.
+- A tag write goes to a copy next to the file. The copy must parse, keep its pre-write sample rate and channel count, and read back every written tag. It then atomically replaces the original. A crash or failed write leaves the original bytes in place. A successful write gives the file a new inode. `shutil.copy2` carries over the mode and timestamps, plus extended attributes on platforms with xattr support.
+- Just before the swap, the write checks the source SHA-256 again. A file another program changed during the write keeps that change. The journal records the write as failed, and no rollback runs.
 - Each tag-write backup takes the name `{asset_id}_{operation_id}_{filename}`. Each in-place transcode backup takes `{asset_id}_{operation_id}_transcode_{filename}`. A later backup of the same track no longer replaces an earlier one.
-- Backups use exclusive file creation. A backup never overwrites an existing file. The app deletes a backup that fails its SHA-256 check. Backup names refuse any part that could leave the backup folder.
+- Backups use exclusive file creation. A backup never overwrites an existing file. The app deletes a backup that fails its SHA-256 check. Backup names refuse any part that could leave the backup folder on any platform, such as a slash, backslash, colon, control character, or blank part.
 - Four recovery test assertions now expect the original file intact after a crash mid-write. The maintainer approved the edit.
 
 ### Fixed
