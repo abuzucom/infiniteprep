@@ -161,6 +161,8 @@ class TagWriter(Protocol):
         """Build a preflighted FileWritePlan without modifying any file on disk."""
         ...
 
-    def apply(self, write_plan: FileWritePlan, operation_id: str) -> ChangeRecord:
-        """Apply approved tags (and optional rename) to the file on disk."""
+    def apply(
+        self, write_plan: FileWritePlan, operation_id: str, backup_path: Path | None = None
+    ) -> ChangeRecord:
+        """Apply approved tags (and optional rename), backing up to backup_path when given."""
         ...

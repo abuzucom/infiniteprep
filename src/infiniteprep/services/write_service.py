@@ -14,6 +14,7 @@ import platformdirs
 from infiniteprep.adapters.metadata_io.mutagen_adapter import (
     MutagenAdapter,
     compute_sha256,
+    copy_to_new_verified_file,
     operation_backup_path,
 )
 from infiniteprep.db.repositories import Repository
@@ -149,7 +150,11 @@ class WriteService:
             return self.tag_adapter.apply(plan, operation_id=str(uuid.uuid4()))
         pending = self._journal_in_progress(plan, batch_operation_id)
         try:
-            record = self.tag_adapter.apply(plan, operation_id=pending.operation_id)
+            record = self.tag_adapter.apply(
+                plan,
+                operation_id=pending.operation_id,
+                backup_path=Path(pending.backup_reference),
+            )
         except Exception as exc:
             # Any failure after the journal entry may leave a partial write. Roll back, re-raise.
             self._roll_back_failed_write(pending, exc)
@@ -164,7 +169,7 @@ class WriteService:
     ) -> ChangeRecord:
         """Persist an IN_PROGRESS ChangeRecord that names the backup before any file change."""
         operation_id = str(uuid.uuid4())
-        # The adapter derives the same per-operation name, so the journal names the real backup.
+        # apply receives this path, so the journal always names the backup the adapter writes.
         backup_path = operation_backup_path(
             plan.backup_destination_path.parent, plan.file_id, operation_id, plan.source_path.name
         )
@@ -354,13 +359,7 @@ class WriteService:
             destination = operation_backup_path(
                 self.backup_dir, record.file_id, uuid.uuid4().hex, path.name, kind="pre_restore"
             )
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, destination)
-            if compute_sha256(destination) != compute_sha256(path):
-                raise OSError(
-                    f"Copy of '{path.name}' before restore failed verification; the file is "
-                    "unchanged. Check the backup disk and retry."
-                )
+            copy_to_new_verified_file(path, destination, compute_sha256(path))
             logger.info("Saved %s before restore of %s", destination.name, record.operation_id)
 
     def _resolve_and_verify_restore_paths(
