@@ -133,7 +133,7 @@ RIFF_INFO_TAG_MAP: Final[dict[str, bytes]] = {
 ID3_STORED_FIELDS: Final[frozenset[str]] = frozenset({*ID3_FRAME_TO_FIELD.values(), *ID3_TXXX_MAP})
 VORBIS_STORED_FIELDS: Final[frozenset[str]] = frozenset(VORBIS_FIELD_MAP)
 BACKUP_NAME_FORBIDDEN_CHARS: Final[frozenset[str]] = frozenset({"/", "\\", ":"})
-ASCII_SPACE: Final[int] = 0x20
+FIRST_PRINTABLE_ASCII: Final[int] = 0x20
 
 
 class SourceChangedDuringWriteError(OSError):
@@ -153,7 +153,10 @@ def _require_plain_name(component: str) -> str:
         not component.strip()
         or component in {".", ".."}
         or Path(component).name != component
-        or any(char in BACKUP_NAME_FORBIDDEN_CHARS or ord(char) < ASCII_SPACE for char in component)
+        or any(
+            char in BACKUP_NAME_FORBIDDEN_CHARS or ord(char) < FIRST_PRINTABLE_ASCII
+            for char in component
+        )
     ):
         raise ValueError(
             f"Backup name part {component!r} is not a plain file name; refusing to build the "
@@ -177,9 +180,13 @@ def copy_to_new_verified_file(source: Path, destination: Path, expected_hash: st
     fails or does not verify is removed, so no unverified backup stays behind.
     """
     destination.parent.mkdir(parents=True, exist_ok=True)
+    created = False
+    verified = False
     try:
-        with destination.open("xb") as destination_handle, source.open("rb") as source_handle:
-            shutil.copyfileobj(source_handle, destination_handle)
+        with destination.open("xb") as destination_handle:
+            created = True
+            with source.open("rb") as source_handle:
+                shutil.copyfileobj(source_handle, destination_handle)
         shutil.copystat(source, destination)
         verified = compute_sha256(destination) == expected_hash
     except FileExistsError as exc:
@@ -187,11 +194,11 @@ def copy_to_new_verified_file(source: Path, destination: Path, expected_hash: st
         raise FileExistsError(
             f"Backup {destination} already exists; refusing to replace it. Retry the write."
         ) from exc
-    except OSError:
-        destination.unlink(missing_ok=True)
-        raise
+    finally:
+        # Any exit before a matching hash, an interrupt included, removes the partial copy.
+        if created and not verified:
+            destination.unlink(missing_ok=True)
     if not verified:
-        destination.unlink(missing_ok=True)
         raise OSError(
             f"Backup verification failed for {destination}; check disk space and permissions."
         )
