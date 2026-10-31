@@ -223,8 +223,10 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
      dialog lists no rows. A dialog closed early leaves the block in place
      until the next launch.
 8. **Restore.** Click **Change Journal & Restore**. Each completed write shows
-   a **Restore Backup** button. The restore verifies the backup and returns
-   the original file.
+   a **Restore Backup** button. A confirmation names the file first. The
+   restore verifies the backup and returns the original file.
+   - A file edited after the write gets a second confirmation.
+   - The restore copies the current file to `backups/` before replacing it.
 9. **Transcode to XDJ.** Click **Transcode to XDJ** to convert the
    visible rows with the mode and preset from **Settings & Providers**. A
    confirmation names the file count, mode, and preset.

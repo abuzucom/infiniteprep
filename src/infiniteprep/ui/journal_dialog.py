@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QHeaderView,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -19,8 +20,10 @@ from PySide6.QtWidgets import (
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import OperationStatus
 from infiniteprep.domain.models import ChangeRecord
-from infiniteprep.services.write_service import WriteService
+from infiniteprep.services.write_service import RestoreConflictError, WriteService
+from infiniteprep.ui.action_handlers import ask_plain_question, show_plain_message
 
+JOURNAL_DIALOG_TITLE: Final[str] = "Change Journal & Backup Restore"
 JOURNAL_DIALOG_WIDTH: Final[int] = 960
 JOURNAL_DIALOG_HEIGHT: Final[int] = 520
 JOURNAL_TABLE_COLUMNS: Final[int] = 6
@@ -42,7 +45,7 @@ class JournalDialog(QDialog):
         self.write_service = write_service
         self.records: list[ChangeRecord] = []
 
-        self.setWindowTitle("Change Journal & Backup Restore")
+        self.setWindowTitle(JOURNAL_DIALOG_TITLE)
         self.resize(JOURNAL_DIALOG_WIDTH, JOURNAL_DIALOG_HEIGHT)
 
         self.table = QTableWidget(0, JOURNAL_TABLE_COLUMNS, self)
@@ -104,6 +107,32 @@ class JournalDialog(QDialog):
             )
 
     def _restore_single(self, operation_id: str) -> None:
-        """Execute verified backup restore for operation_id and refresh table."""
-        self.write_service.restore_operation(operation_id)
+        """Confirm the target file, restore it from its verified backup, and refresh the table."""
+        record = self.repo.get_change_record(operation_id)
+        if record is None:
+            return
+        question = (
+            f"Replace this file with its backup from before the write?\n\n{record.new_path}\n\n"
+            "The current file is copied to the backup folder first."
+        )
+        if not ask_plain_question(self, JOURNAL_DIALOG_TITLE, question):
+            return
+        try:
+            self._restore_with_conflict_check(operation_id)
+        except (OSError, ValueError) as exc:
+            show_plain_message(
+                self,
+                QMessageBox.Icon.Warning,
+                JOURNAL_DIALOG_TITLE,
+                f"Restore failed ({exc}). The current file is unchanged. Check the backup disk "
+                "and retry.",
+            )
         self.refresh_journal()
+
+    def _restore_with_conflict_check(self, operation_id: str) -> None:
+        """Restore, and ask again before overwriting a file edited after the write."""
+        try:
+            self.write_service.restore_operation(operation_id)
+        except RestoreConflictError as conflict:
+            if ask_plain_question(self, JOURNAL_DIALOG_TITLE, f"{conflict}\n\nRestore anyway?"):
+                self.write_service.restore_operation(operation_id, allow_modified=True)

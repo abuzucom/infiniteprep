@@ -15,6 +15,7 @@ from infiniteprep.adapters.metadata_io.mutagen_adapter import (
     MutagenAdapter,
     SourceChangedDuringWriteError,
     compute_sha256,
+    copy_to_new_verified_file,
     operation_backup_path,
 )
 from infiniteprep.db.repositories import Repository
@@ -27,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 class PendingRecoveryError(RuntimeError):
     """Raised when a write starts while an interrupted write still waits for recovery."""
+
+
+class RestoreConflictError(ValueError):
+    """Raised when a restore would overwrite a file that changed after the recorded write."""
 
 
 class WriteService:
@@ -259,13 +264,23 @@ class WriteService:
         operation_id: str,
         *,
         allowed_library_root: Path | None = None,
+        allow_modified: bool = False,
     ) -> ChangeRecord:
-        """Restore a file from its backup_reference through a SHA-256 verified staging copy."""
+        """Restore a file from its backup_reference through a SHA-256 verified staging copy.
+
+        Raises RestoreConflictError when the file changed after the recorded write, unless
+        allow_modified is True. Every file the restore replaces or removes is first copied to
+        the backup directory.
+        """
         record = self.repo.get_change_record(operation_id)
         if record is None:
             raise ValueError(f"ChangeRecord {operation_id} not found.")
         return self._restore_record(
-            record, OperationStatus.RESTORED, allowed_library_root=allowed_library_root
+            record,
+            OperationStatus.RESTORED,
+            allowed_library_root=allowed_library_root,
+            guard_later_edits=True,
+            allow_modified=allow_modified,
         )
 
     def _restore_record(
@@ -274,12 +289,18 @@ class WriteService:
         final_status: OperationStatus,
         *,
         allowed_library_root: Path | None = None,
+        guard_later_edits: bool = False,
+        allow_modified: bool = False,
     ) -> ChangeRecord:
         """Swap the verified backup in for the record, then store final_status and the asset."""
         backup_path = self._verify_backup_file(record, record.operation_id)
         prev_path, cur_path = self._resolve_and_verify_restore_paths(
             record, allowed_library_root=allowed_library_root
         )
+        if guard_later_edits:
+            if not allow_modified:
+                self._refuse_restore_over_later_edits(record, prev_path, cur_path)
+            self._preserve_files_before_restore(record, prev_path, cur_path)
         restored_hash = self._replace_with_staged_copy(
             backup_path, prev_path, record.pre_write_hash
         )
@@ -313,6 +334,39 @@ class WriteService:
         if record.pre_write_hash and compute_sha256(backup_path) != record.pre_write_hash:
             raise ValueError("Backup file SHA-256 mismatch; backup may be corrupted.")
         return backup_path
+
+    @staticmethod
+    def _refuse_restore_over_later_edits(
+        record: ChangeRecord, prev_path: Path, cur_path: Path
+    ) -> None:
+        """Raise RestoreConflictError when a restore would overwrite edits made after the write."""
+        changed: list[str] = []
+        if (
+            cur_path.exists()
+            and record.post_write_hash
+            and compute_sha256(cur_path) != record.post_write_hash
+        ):
+            changed.append(f"'{cur_path.name}' changed after this write")
+        if cur_path != prev_path and prev_path.exists():
+            changed.append(f"a new file now exists at '{prev_path.name}'")
+        if changed:
+            raise RestoreConflictError(
+                f"Restore would overwrite later edits: {'; '.join(changed)}. Confirm to restore "
+                "anyway. The current file is copied to the backup folder first."
+            )
+
+    def _preserve_files_before_restore(
+        self, record: ChangeRecord, prev_path: Path, cur_path: Path
+    ) -> None:
+        """Copy each file the restore replaces or removes into the backup directory, verified."""
+        for path in dict.fromkeys((cur_path, prev_path)):
+            if not path.is_file():
+                continue
+            destination = operation_backup_path(
+                self.backup_dir, record.file_id, uuid.uuid4().hex, path.name, kind="pre_restore"
+            )
+            copy_to_new_verified_file(path, destination, compute_sha256(path))
+            logger.info("Saved %s before restore of %s", destination.name, record.operation_id)
 
     def _resolve_and_verify_restore_paths(
         self,
