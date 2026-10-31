@@ -13,6 +13,7 @@ import platformdirs
 
 from infiniteprep.adapters.metadata_io.mutagen_adapter import (
     MutagenAdapter,
+    SourceChangedDuringWriteError,
     compute_sha256,
     operation_backup_path,
 )
@@ -187,6 +188,11 @@ class WriteService:
     def _roll_back_failed_write(self, pending: ChangeRecord, failure: Exception) -> None:
         """Record a failed write as FAILED or ROLLED_BACK, or keep it pending for recovery."""
         pending.error_message = f"{failure.__class__.__name__}: {failure}"
+        if isinstance(failure, SourceChangedDuringWriteError):
+            # The source holds another program's newer edit and none of this write.
+            pending.operation_status = OperationStatus.FAILED
+            self.repo.upsert_change_record(pending)
+            return
         try:
             pending.operation_status = self._restore_after_failure(pending)
         except Exception as rollback_exc:

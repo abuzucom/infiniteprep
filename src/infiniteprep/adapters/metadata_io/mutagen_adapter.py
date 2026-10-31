@@ -132,11 +132,29 @@ RIFF_INFO_TAG_MAP: Final[dict[str, bytes]] = {
 
 ID3_STORED_FIELDS: Final[frozenset[str]] = frozenset({*ID3_FRAME_TO_FIELD.values(), *ID3_TXXX_MAP})
 VORBIS_STORED_FIELDS: Final[frozenset[str]] = frozenset(VORBIS_FIELD_MAP)
+BACKUP_NAME_FORBIDDEN_CHARS: Final[frozenset[str]] = frozenset({"/", "\\", ":"})
+ASCII_SPACE: Final[int] = 0x20
+
+
+class SourceChangedDuringWriteError(OSError):
+    """Raised when another program changes the source before the written copy replaces it.
+
+    No tags reach the source, so a rollback must not restore the backup over the new edit.
+    """
 
 
 def _require_plain_name(component: str) -> str:
-    """Return component, or raise ValueError when it could name a different directory."""
-    if component in {"", ".", ".."} or Path(component).name != component:
+    """Return component, or raise ValueError when it could name a different directory.
+
+    Backslash and colon are refused on every platform, because a library can move between
+    POSIX and Windows. Windows reads them as a separator and a drive or stream marker.
+    """
+    if (
+        not component.strip()
+        or component in {".", ".."}
+        or Path(component).name != component
+        or any(char in BACKUP_NAME_FORBIDDEN_CHARS or ord(char) < ASCII_SPACE for char in component)
+    ):
         raise ValueError(
             f"Backup name part {component!r} is not a plain file name; refusing to build the "
             "backup path."
@@ -628,7 +646,9 @@ class MutagenAdapter:
                 source_path.name,
             )
         self._create_verified_backup(source_path, backup_path, current_hash)
-        self._write_verified_copy(source_path, write_plan.proposed_tags_to_write, operation_id)
+        self._write_verified_copy(
+            source_path, write_plan.proposed_tags_to_write, operation_id, current_hash
+        )
         final_path = self._execute_optional_rename(source_path, write_plan)
         post_hash = compute_sha256(final_path)
 
@@ -647,24 +667,36 @@ class MutagenAdapter:
         )
 
     def _write_verified_copy(
-        self, source_path: Path, tags_to_write: dict[str, str], operation_id: str
+        self,
+        source_path: Path,
+        tags_to_write: dict[str, str],
+        operation_id: str,
+        expected_hash: str,
     ) -> None:
         """Write tags to a sibling copy, verify it, then atomically swap it over the source.
 
-        A crash at any point leaves the source with its original bytes. The copy keeps the
-        source suffix, because detect_format reads the extension.
+        A crash at any point leaves the source with its original bytes. The copy name depends
+        only on the operation id and the suffix, which detect_format reads.
         """
-        staged = source_path.with_name(
-            f".{source_path.stem}.{operation_id}.staged{source_path.suffix}"
-        )
+        staged = source_path.with_name(f".{operation_id}.staged{source_path.suffix}")
         try:
             shutil.copy2(source_path, staged)
             baseline = self.read_metadata(staged)
             self._write_tags_by_format(staged, tags_to_write)
             self._verify_written_copy(baseline, staged, tags_to_write)
+            self._ensure_source_unchanged(source_path, expected_hash)
             os.replace(staged, source_path)
         finally:
             self._discard_staged_copy(staged)
+
+    @staticmethod
+    def _ensure_source_unchanged(source_path: Path, expected_hash: str) -> None:
+        """Raise when another program changed the source while its copy was written."""
+        if compute_sha256(source_path) != expected_hash:
+            raise SourceChangedDuringWriteError(
+                "The file changed in another program during the write; the change is kept and "
+                "no tags were written. Re-import the file and retry."
+            )
 
     @staticmethod
     def _discard_staged_copy(staged: Path) -> None:
