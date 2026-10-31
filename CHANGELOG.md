@@ -5,9 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.11.0] (2026-10-31)
+## [0.12.0] (2026-10-31)
 
 ### Added
+
+- The audio preview has a **Playback position** slider with an accessible name and time. The arrow keys seek 1 second, and Page Up and Page Down seek 10 seconds.
+- The audio preview shows playback failures and an unavailable audio backend as plain text under the transport. The Play button follows the real player state.
+- `MainWindow` and `DetailPanel` accept an optional keyword-only `enable_audio_backend`, defaulting to False. Added `tests/unit/test_audio_preview_playback.py`.
 
 - **Change Journal** asks before **Restore Backup** and names the file it replaces. When the file changed after the recorded write, a second question names the change before the restore overwrites anything.
 - `WriteService.restore_operation` raises the new `RestoreConflictError` when the file changed after the write. The new optional `allow_modified` keyword restores anyway. Each restore first copies every file it replaces or removes to the backup folder as `{asset_id}_{id}_pre_restore_{filename}`.
@@ -24,6 +28,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The desktop app's audio preview plays sound. The launcher now turns on the Qt multimedia backend. Before, no caller turned it on, and **Play** only changed the button label.
 - Write preflight refuses a symbolic link, a file with more than one hard link, or a file owned by another user. Swapping in a written copy would replace the link, split the hard links, or change the owner. The apply step checks again before the backup.
 
 ## [0.9.0] (2026-10-30)

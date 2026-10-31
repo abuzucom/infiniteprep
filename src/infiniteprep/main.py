@@ -113,6 +113,7 @@ def launch_desktop_app() -> int:
             dest,
             relative_paths=SettingsManager().load().playlist_relative_paths,
         ),
+        enable_audio_backend=True,
     )
     window.show()
     if write_svc.list_interrupted_operations():
