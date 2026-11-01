@@ -5,9 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.16.0] (2026-11-01)
+## [0.17.0] (2026-11-01)
 
 ### Added
+
+- Spectrum waveform analysis streams bounded audio into low, mid, high, and overall peaks.
+  Content-addressed compressed caches enforce a size cap. Overview sampling preserves peaks.
+  Generated sine tests cover band separation, column counts, cache reuse, and eviction.
 
 - `scripts/dev/update_and_check.cmd`, `scripts/dev/update_and_check.ps1`, and `scripts/dev/update_and_check.sh` pull `main`, refresh `.venv`, run every local check, print a PASS or FAIL summary, and launch the app when all checks pass. A dirty checkout or a branch other than `main` stops the run. `scripts/dev/make_test_copies.ps1` and `scripts/dev/make_test_copies.sh` copy a few files of each format into `scratch/test-library/`. Added `tests/unit/test_dev_scripts.py`.
 - `.gitignore` keeps the tracked `infiniteprep.spec` and ignores local state, stray databases, music files, `.env` variants, and OS and editor files.
