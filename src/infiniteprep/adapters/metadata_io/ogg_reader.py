@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import struct
 from dataclasses import dataclass
 from pathlib import Path
+import struct
 from typing import Final
 
 from infiniteprep.adapters.metadata_io.flac_vorbis import (
@@ -47,12 +47,11 @@ class OggMetadata:
 
 def _read_page_header(
     data: bytes, offset: int
-) -> tuple[int, int, int, int, int, int, int, int]:
-    """Read the 27-byte Ogg page header fields at offset."""
+) -> tuple[int, int, int, int, int]:
+    """Read essential header fields and offset past the 27-byte header."""
     if offset + HEADER_SIZE > len(data):
         raise OggFormatError("Truncated Ogg page header.")
-    magic = data[offset : offset + 4]
-    if magic != OGG_MAGIC:
+    if data[offset:offset + 4] != OGG_MAGIC:
         raise OggFormatError("Expected OggS capture pattern.")
     version = data[offset + 4]
     if version != 0:
@@ -60,16 +59,11 @@ def _read_page_header(
     header_type = data[offset + 5]
     granule = struct.unpack_from("<q", data, offset + 6)[0]
     serial = struct.unpack_from("<I", data, offset + 14)[0]
-    seq_no = struct.unpack_from("<I", data, offset + 18)[0]
-    crc = struct.unpack_from("<I", data, offset + 22)[0]
     num_segments = data[offset + 26]
     return (
-        version,
         header_type,
         granule,
         serial,
-        seq_no,
-        crc,
         num_segments,
         offset + HEADER_SIZE,
     )
@@ -79,19 +73,15 @@ def _parse_page(
     data: bytes, offset: int
 ) -> tuple[int, int, int, list[int], bytes, int]:
     """Parse one Ogg page at offset into header info, lacing, body, and next offset."""
-    _ver, flags, granule, serial, _seq, _crc, num_segs, seg_offset = _read_page_header(
-        data, offset
-    )
+    flags, granule, serial, num_segs, seg_offset = _read_page_header(data, offset)
     if seg_offset + num_segs > len(data):
         raise OggFormatError("Truncated Ogg segment table.")
-    lacing = list(data[seg_offset : seg_offset + num_segs])
-    body_offset = seg_offset + num_segs
-    body_size = sum(lacing)
-    if body_offset + body_size > len(data):
+    lacing = list(data[seg_offset:seg_offset + num_segs])
+    body_start = seg_offset + num_segs
+    body_end = body_start + sum(lacing)
+    if body_end > len(data):
         raise OggFormatError("Truncated Ogg page body.")
-    body = data[body_offset : body_offset + body_size]
-    next_offset = body_offset + body_size
-    return flags, granule, serial, lacing, body, next_offset
+    return flags, granule, serial, lacing, data[body_start:body_end], body_end
 
 
 def _extract_page_packets(
@@ -103,7 +93,7 @@ def _extract_page_packets(
     """Consume lacing entries and body slices, appending completed packets."""
     body_pos = 0
     for seg_len in lacing:
-        pending.append(body[body_pos : body_pos + seg_len])
+        pending.append(body[body_pos:body_pos + seg_len])
         body_pos += seg_len
         current_size = sum(len(chunk) for chunk in pending)
         if current_size > MAX_PACKET_SIZE:
@@ -130,14 +120,16 @@ def _assemble_stream_headers(data: bytes) -> tuple[int, list[bytes]]:
     while offset < len(data) and len(packets) < 2:
         if page_count >= MAX_PAGE_COUNT:
             raise OggFormatError(f"Page count exceeded maximum limit {MAX_PAGE_COUNT}.")
-        flags, _granule, serial, lacing, body, offset = _parse_page(data, offset)
+        page_info = _parse_page(data, offset)
+        offset = page_info[5]
         page_count += 1
+        serial = page_info[2]
         if target_serial == -1:
             target_serial = serial
         if serial != target_serial:
             continue
-        _validate_continuation(flags, bool(pending))
-        _extract_page_packets(lacing, body, pending, packets)
+        _validate_continuation(page_info[0], bool(pending))
+        _extract_page_packets(page_info[3], page_info[4], pending, packets)
     if len(packets) < 2:
         raise OggFormatError("Stream ended before header packets could be assembled.")
     return target_serial, packets
@@ -156,7 +148,7 @@ def _check_page_for_granule(data: bytes, pos: int, target_serial: int) -> int | 
     seg_end = pos + HEADER_SIZE + num_segs
     if seg_end > len(data):
         return None
-    body_size = sum(data[pos + HEADER_SIZE : seg_end])
+    body_size = sum(data[pos + HEADER_SIZE:seg_end])
     if seg_end + body_size > len(data):
         return None
     granule = struct.unpack_from("<q", data, pos + 6)[0]
@@ -212,11 +204,11 @@ def _parse_comment_packet(codec: str, packet: bytes) -> VorbisComment:
     if codec == "vorbis":
         if not packet.startswith(VORBIS_COMMENT_MAGIC):
             raise OggFormatError("Invalid Vorbis comment packet magic.")
-        body = packet[len(VORBIS_COMMENT_MAGIC) :]
+        body = packet[len(VORBIS_COMMENT_MAGIC):]
     else:
         if not packet.startswith(OPUS_TAGS_MAGIC):
             raise OggFormatError("Invalid OpusTags packet magic.")
-        body = packet[len(OPUS_TAGS_MAGIC) :]
+        body = packet[len(OPUS_TAGS_MAGIC):]
     try:
         return parse_vorbis_comment(body)
     except (FlacFormatError, ValueError) as exc:

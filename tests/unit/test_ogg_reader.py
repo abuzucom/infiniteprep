@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import struct
 from pathlib import Path
+import struct
 
 import pytest
 
@@ -104,11 +104,6 @@ def test_multipage_comment_packet() -> None:
     id_pkt = make_vorbis_id_header(channels=2, sample_rate=44100, nominal_bitrate=128000)
     comment_pkt = make_vorbis_comment_header(vendor="SpanVendor", fields=fields)
 
-    # First chunk is multiple of 255 to continue onto next page
-    part1_len = 510
-    pkt_part1 = comment_pkt[:part1_len]
-    pkt_part2 = comment_pkt[part1_len:]
-
     p1 = make_ogg_page(
         serial=100,
         sequence_number=0,
@@ -116,23 +111,13 @@ def test_multipage_comment_packet() -> None:
         packets=[id_pkt],
         header_type=0x02,
     )
-    header_p2 = struct.pack(
-        "<4sBBqIIIB",
-        OGG_MAGIC,
-        0,
-        0,
-        0,
-        100,
-        1,
-        0,
-        2,
-    )
-    p2 = header_p2 + bytes([255, 255]) + pkt_part1
+    header_bytes = struct.pack("<4sBBqIIIB", OGG_MAGIC, 0, 0, 0, 100, 1, 0, 2)
+    p2 = header_bytes + bytes([255, 255]) + comment_pkt[:510]
     p3 = make_ogg_page(
         serial=100,
         sequence_number=2,
         granule_position=0,
-        packets=[pkt_part2],
+        packets=[comment_pkt[510:]],
         header_type=0x01,
     )
     p4 = make_ogg_page(
@@ -184,8 +169,7 @@ def test_multiplexed_stream_ignores_other_serials() -> None:
         header_type=0x04,
     )
 
-    raw = p1 + p_other + p2 + p3
-    metadata = read_ogg(raw)
+    metadata = read_ogg(p1 + p_other + p2 + p3)
 
     assert metadata.codec == "vorbis"
     assert metadata.comment.vendor == "MultiVendor"
