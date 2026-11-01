@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 import soundfile as sf
-from mutagen.flac import FLAC
-from mutagen.id3 import ID3
-from mutagen.wave import WAVE
 
+from infiniteprep.adapters.metadata_io.flac_vorbis import get_field_values, read_flac_comment
+from infiniteprep.adapters.metadata_io.id3_containers import read_wav_tag
+from infiniteprep.adapters.metadata_io.id3v2 import frame_key
 from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
 from infiniteprep.adapters.transcoder.safe_transcoder import (
     SafeTranscoderAdapter,
@@ -101,16 +101,17 @@ def test_write_service_applies_tags_renames_preserves_traktor_and_restores(
 
     # Verify FLAC has both LABEL and ORGANIZATION and preserved TRAKTOR4
     flac_record = records[1]
-    flac_after = FLAC(flac_record.new_path)
-    assert flac_after["LABEL"] == ["Tribal America"]
-    assert flac_after["ORGANIZATION"] == ["Tribal America"]
-    assert "TRAKTOR4" in flac_after
+    flac_after = read_flac_comment(Path(flac_record.new_path).read_bytes())
+    assert flac_after is not None
+    assert get_field_values(flac_after, "LABEL") == ["Tribal America"]
+    assert get_field_values(flac_after, "ORGANIZATION") == ["Tribal America"]
+    assert get_field_values(flac_after, "TRAKTOR4")
 
     # Verify WAV has both ID3v2.3 PRIV:TRAKTOR4 and RIFF LIST-INFO chunk
     wav_record = records[2]
-    wav_after = WAVE(wav_record.new_path)
-    assert isinstance(wav_after.tags, ID3)
-    assert any(k.startswith("PRIV:TRAKTOR4") for k in wav_after.tags)
+    wav_after = read_wav_tag(Path(wav_record.new_path).read_bytes())
+    assert wav_after is not None
+    assert any(frame_key(frame).startswith("PRIV:TRAKTOR4") for frame in wav_after.frames)
     raw_wav_bytes = Path(wav_record.new_path).read_bytes()
     assert b"LIST" in raw_wav_bytes
     assert b"INFOINAM" in raw_wav_bytes

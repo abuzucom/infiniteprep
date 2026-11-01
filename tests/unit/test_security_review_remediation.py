@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from mutagen.id3 import ID3
 
 from infiniteprep.adapters.catalog import discogs as discogs_module
 from infiniteprep.adapters.catalog import musicbrainz as musicbrainz_module
@@ -26,6 +25,8 @@ from infiniteprep.adapters.fingerprint.chromaprint_acoustid import ChromaprintAc
 from infiniteprep.adapters.fingerprint.fpcalc_bootstrap import FpcalcBootstrapService
 from infiniteprep.adapters.llm.ollama_bootstrap import OllamaBootstrapService
 from infiniteprep.adapters.metadata_io import mutagen_adapter as mutagen_adapter_module
+from infiniteprep.adapters.metadata_io.id3_containers import read_mp3_tag
+from infiniteprep.adapters.metadata_io.id3v2 import decode_txxx, frame_key
 from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
@@ -427,9 +428,11 @@ def test_repeated_mp3_writes_keep_one_txxx_frame(tmp_path: Path) -> None:
     adapter = MutagenAdapter()
     adapter._write_mp3_tags(mp3_path, {FieldName.CATALOG_NUMBER: "TRIUK014"})
     adapter._write_mp3_tags(mp3_path, {FieldName.CATALOG_NUMBER: "TRIUK015"})
-    frames = ID3(str(mp3_path)).getall("TXXX:CATALOGNUMBER")
+    tag = read_mp3_tag(mp3_path.read_bytes())
+    assert tag is not None
+    frames = [frame for frame in tag.frames if frame_key(frame) == "TXXX:CATALOGNUMBER"]
     assert len(frames) == 1
-    assert list(frames[0].text) == ["TRIUK015"]
+    assert decode_txxx(frames[0])[1] == ["TRIUK015"]
 
 
 # Escaped braces and Discogs availability order.
