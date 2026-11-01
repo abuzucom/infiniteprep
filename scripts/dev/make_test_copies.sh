@@ -16,12 +16,17 @@ if [ -z "$source_dir" ] || [ ! -d "$source_dir" ]; then
     echo "Pass an existing music folder as the first argument."
     exit 2
 fi
+# The bounds match ValidateRange(1, 1000) in make_test_copies.ps1.
 case "$per_format" in
     '' | *[!0-9]*)
-        echo "PER_FORMAT must be a whole number, for example 3."
+        echo "PER_FORMAT must be a whole number from 1 to 1000, for example 3."
         exit 2
         ;;
 esac
+if [ "$per_format" -lt 1 ] || [ "$per_format" -gt 1000 ]; then
+    echo "PER_FORMAT must be a whole number from 1 to 1000, for example 3."
+    exit 2
+fi
 
 dest="$repo_root/scratch/test-library/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$dest"

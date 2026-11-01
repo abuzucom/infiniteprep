@@ -122,6 +122,22 @@ def test_copy_script_rejects_a_missing_folder(tmp_path: Path) -> None:
     assert not (repo / "scratch").exists()
 
 
+@needs_bash
+@pytest.mark.parametrize("per_format", ["0", "1001", "x"])
+def test_copy_script_rejects_a_count_outside_one_to_a_thousand(
+    tmp_path: Path, per_format: str
+) -> None:
+    """PER_FORMAT outside 1 to 1000 stops the helper before it creates anything."""
+    repo = make_repo(tmp_path)
+    source = tmp_path / "music"
+    source.mkdir()
+    script = repo / "scripts" / "dev" / "make_test_copies.sh"
+    result = run_bash(script, source.as_posix(), per_format)
+    assert result.returncode == GUARD_EXIT
+    assert "from 1 to 1000" in result.stdout
+    assert not (repo / "scratch").exists()
+
+
 @needs_pwsh
 @pytest.mark.parametrize("script", ["update_and_check.ps1", "make_test_copies.ps1"])
 def test_powershell_scripts_parse_without_errors(script: str) -> None:
