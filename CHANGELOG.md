@@ -9,7 +9,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `adapters/metadata_io/id3v2.py` reads ID3v2.2, 2.3, and 2.4 tags and writes ID3v2.3. Unknown frames keep their bytes. No caller uses it yet. Added `tests/unit/test_id3v2_codec.py`, `tests/unit/test_id3v2_codec_frame_paths.py`, and `tests/unit/test_id3v2_codec_spec_conformance.py`.
+- `adapters/metadata_io/id3v2.py` reads ID3v2.2, 2.3, and 2.4 tags and writes ID3v2.3. Unknown frames keep their bytes. No caller uses it yet. Added `tests/unit/test_id3v2_codec.py`, `tests/unit/test_id3v2_codec_frame_paths.py`, `tests/unit/test_id3v2_codec_spec_conformance.py`, and `tests/unit/test_id3v2_codec_dates.py`.
+- ID3v2.3 output keeps a TDRC or TDOR frame whose value does not start with a year. Out-of-range month, day, hour, or minute parts produce no TDAT or TIME frame.
 
 ## [0.12.1] (2026-10-31)
 

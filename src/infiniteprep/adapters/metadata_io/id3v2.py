@@ -47,6 +47,11 @@ FRAME_ID_RE: Final[re.Pattern[bytes]] = re.compile(rb"[A-Z0-9]{3,4}")
 TDRC_RE: Final[re.Pattern[str]] = re.compile(
     r"(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2}):(\d{2}))?)?)?"
 )
+DATE_FRAMES: Final[frozenset[str]] = frozenset({"TDRC", "TDOR"})
+VALID_MONTHS: Final[range] = range(1, 13)
+VALID_DAYS: Final[range] = range(1, 32)
+VALID_HOURS: Final[range] = range(24)
+VALID_MINUTES: Final[range] = range(60)
 
 V22_TO_V23: Final[dict[str, str]] = {
     "TT1": "TIT1", "TT2": "TIT2", "TT3": "TIT3", "TP1": "TPE1", "TP2": "TPE2",
@@ -382,15 +387,29 @@ def _frames_for_v23(frames: tuple[Id3Frame, ...]) -> list[Id3Frame]:
     present = {frame.frame_id for frame in frames}
     converted: list[Id3Frame] = []
     for frame in frames:
-        if frame.frame_id in ("TDRC", "TDOR"):
-            converted.extend(f for f in _convert_date(frame) if f.frame_id not in present)
+        if frame.frame_id in DATE_FRAMES:
+            converted.extend(_date_frames_for_v23(frame, present))
         elif frame.frame_id not in V24_ONLY_FRAMES:
             converted.append(_to_v23_encoding(frame))
     return converted
 
 
+def _date_frames_for_v23(frame: Id3Frame, present: set[str]) -> list[Id3Frame]:
+    """Convert a TDRC or TDOR frame. A timestamp without a leading year stays as it is."""
+    replacements = _convert_date(frame)
+    if not replacements:
+        # v2.3 readers skip frames they do not define, so keeping the frame loses no data.
+        return [_to_v23_encoding(frame)]
+    return [replacement for replacement in replacements if replacement.frame_id not in present]
+
+
+def _in_range(digits: str | None, valid: range) -> bool:
+    """Return True when digits is present and its value lies in valid."""
+    return digits is not None and int(digits) in valid
+
+
 def _convert_date(frame: Id3Frame) -> list[Id3Frame]:
-    """Turn a v2.4 timestamp frame into the v2.3 year, date, and time frames."""
+    """Turn a v2.4 timestamp frame into v2.3 year, date, and time frames with valid parts only."""
     values = decode_text_values(frame)
     match = TDRC_RE.match(values[0].strip()) if values else None
     if match is None:
@@ -399,9 +418,9 @@ def _convert_date(frame: Id3Frame) -> list[Id3Frame]:
     if frame.frame_id == "TDOR":
         return [build_text_frame("TORY", year)]
     result = [build_text_frame("TYER", year)]
-    if month and day:
+    if _in_range(month, VALID_MONTHS) and _in_range(day, VALID_DAYS):
         result.append(build_text_frame("TDAT", f"{day}{month}"))
-    if hour and minute:
+    if _in_range(hour, VALID_HOURS) and _in_range(minute, VALID_MINUTES):
         result.append(build_text_frame("TIME", f"{hour}{minute}"))
     return result
 
