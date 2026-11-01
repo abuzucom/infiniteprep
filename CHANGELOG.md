@@ -5,9 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.13.2] (2026-11-01)
+## [0.14.0] (2026-11-01)
 
 ### Added
+
+- `adapters/metadata_io/id3_containers.py` locates, reads, and replaces the ID3v2 tag in MP3, WAV, and AIFF bytes. MP3 tags sit at the start of the file. WAV and AIFF tags sit in an `id3 ` or `ID3 ` chunk. Audio, other chunks, and a trailing ID3v1 tag stay byte for byte. A smaller tag fills the old tag's space. The audio offset then stays the same. No caller uses the module yet. Added `tests/unit/test_id3_containers.py` and `tests/fixtures/audio_container_bytes.py`.
 
 - `adapters/metadata_io/id3v2.py` reads ID3v2.2, 2.3, and 2.4 tags and writes ID3v2.3. Unknown frames keep original bytes. No caller uses the module yet. Added `tests/unit/test_id3v2_codec.py`, `tests/unit/test_id3v2_codec_frame_paths.py`, `tests/unit/test_id3v2_codec_spec_conformance.py`, `tests/unit/test_id3v2_codec_dates.py`, `tests/unit/test_id3v2_codec_limits.py`, `tests/unit/test_id3v2_codec_v24_unsync.py`, `tests/unit/test_id3v2_codec_calendar.py`, and `tests/unit/test_id3v2_codec_header_flags.py`, with shared byte builders in `tests/fixtures/id3v2_bytes.py`.
 - An ID3v2.4 tag header with the unsynchronisation flag reverses unsynchronisation in every frame body, once per frame.
