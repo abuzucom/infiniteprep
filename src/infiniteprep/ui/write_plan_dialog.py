@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -19,7 +20,7 @@ from PySide6.QtWidgets import (
 )
 
 from infiniteprep.domain.ports import FileWritePlan
-from infiniteprep.services.write_service import WriteService
+from infiniteprep.services.write_service import PendingRecoveryError, WriteService
 
 WRITE_PLAN_DIALOG_WIDTH: Final[int] = 980
 WRITE_PLAN_DIALOG_HEIGHT: Final[int] = 560
@@ -125,5 +126,10 @@ class WritePlanDialog(QDialog):
         """Apply all safe plans in current_plans and accept the dialog."""
         safe_plans = [p for p in self.current_plans if p.is_safe_to_apply]
         if safe_plans:
-            self.write_service.apply_batch(safe_plans)
+            try:
+                self.write_service.apply_batch(safe_plans)
+            except PendingRecoveryError as exc:
+                # The dialog stays open, because no file changed.
+                QMessageBox.warning(self, "Writes Blocked", str(exc))
+                return
         self.accept()

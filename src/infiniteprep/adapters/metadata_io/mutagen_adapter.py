@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
 import shutil
 import struct
@@ -127,6 +128,80 @@ RIFF_INFO_TAG_MAP: Final[dict[str, bytes]] = {
     FieldName.GENRE.value: b"IGNR",
     FieldName.YEAR.value: b"ICRD",
 }
+
+
+ID3_STORED_FIELDS: Final[frozenset[str]] = frozenset({*ID3_FRAME_TO_FIELD.values(), *ID3_TXXX_MAP})
+VORBIS_STORED_FIELDS: Final[frozenset[str]] = frozenset(VORBIS_FIELD_MAP)
+BACKUP_NAME_FORBIDDEN_CHARS: Final[frozenset[str]] = frozenset({"/", "\\", ":"})
+FIRST_PRINTABLE_ASCII: Final[int] = 0x20
+
+
+class SourceChangedDuringWriteError(OSError):
+    """Raised when another program changes the source before the written copy replaces it.
+
+    No tags reach the source, so a rollback must not restore the backup over the new edit.
+    """
+
+
+def _require_plain_name(component: str) -> str:
+    """Return component, or raise ValueError when it could name a different directory.
+
+    Backslash and colon are refused on every platform, because a library can move between
+    POSIX and Windows. Windows reads them as a separator and a drive or stream marker.
+    """
+    if (
+        not component.strip()
+        or component in {".", ".."}
+        or Path(component).name != component
+        or any(
+            char in BACKUP_NAME_FORBIDDEN_CHARS or ord(char) < FIRST_PRINTABLE_ASCII
+            for char in component
+        )
+    ):
+        raise ValueError(
+            f"Backup name part {component!r} is not a plain file name; refusing to build the "
+            "backup path."
+        )
+    return component
+
+
+def operation_backup_path(
+    backup_dir: Path, file_id: str, operation_id: str, file_name: str, kind: str = ""
+) -> Path:
+    """Return the backup path for one operation, so a later backup never replaces this one."""
+    parts = [file_id, operation_id, *([kind] if kind else []), file_name]
+    return backup_dir / "_".join(_require_plain_name(part) for part in parts)
+
+
+def copy_to_new_verified_file(source: Path, destination: Path, expected_hash: str) -> None:
+    """Copy source to a destination that must not exist yet, then verify its SHA-256.
+
+    Exclusive creation closes the gap between an existence check and the copy. A copy that
+    fails or does not verify is removed, so no unverified backup stays behind.
+    """
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    created = False
+    verified = False
+    try:
+        with destination.open("xb") as destination_handle:
+            created = True
+            with source.open("rb") as source_handle:
+                shutil.copyfileobj(source_handle, destination_handle)
+        shutil.copystat(source, destination)
+        verified = compute_sha256(destination) == expected_hash
+    except FileExistsError as exc:
+        # Only the exclusive open raises this, so the existing file is not ours to remove.
+        raise FileExistsError(
+            f"Backup {destination} already exists; refusing to replace it. Retry the write."
+        ) from exc
+    finally:
+        # Any exit before a matching hash, an interrupt included, removes the partial copy.
+        if created and not verified:
+            destination.unlink(missing_ok=True)
+    if not verified:
+        raise OSError(
+            f"Backup verification failed for {destination}; check disk space and permissions."
+        )
 
 
 def compute_sha256(file_path: Path) -> str:
@@ -494,10 +569,35 @@ class MutagenAdapter:
         if not source_path.exists():
             errors.append(f"Source file missing at {source_path}; re-import or locate file.")
             return errors
+        errors.extend(self._validate_replaceable(source_path))
         if compute_sha256(source_path) != file_asset.content_hash:
             errors.append(
                 "External modification detected: disk SHA-256 differs from imported content_hash; "
                 "re-import file before writing."
+            )
+        return errors
+
+    @staticmethod
+    def _validate_replaceable(source_path: Path) -> list[str]:
+        """Refuse files that a swap of a written copy would detach from their other names."""
+        if source_path.is_symlink():
+            return [
+                "File is a symbolic link; writing would replace the link with a copy. "
+                "Import the link target instead."
+            ]
+        errors: list[str] = []
+        stat_result = source_path.stat()
+        if stat_result.st_nlink > 1:
+            errors.append(
+                f"File has {stat_result.st_nlink} hard links; writing would split them. "
+                "Copy the file to a single-link location before writing."
+            )
+        # Windows has no getuid. NTFS ownership does not change when a copy replaces a file.
+        get_uid = getattr(os, "getuid", None)
+        if get_uid is not None and stat_result.st_uid != get_uid():
+            errors.append(
+                "File is owned by another user; writing would change its owner. "
+                "Ask the owner to write it, or take ownership first."
             )
         return errors
 
@@ -522,8 +622,14 @@ class MutagenAdapter:
             ]
         return destination_path, []
 
-    def apply(self, write_plan: FileWritePlan, operation_id: str) -> ChangeRecord:
-        """Apply approved tags and optional rename after verified backup creation."""
+    def apply(
+        self, write_plan: FileWritePlan, operation_id: str, backup_path: Path | None = None
+    ) -> ChangeRecord:
+        """Apply approved tags and optional rename after verified backup creation.
+
+        backup_path names the backup the caller journaled. Without it, the per-operation name
+        in the plan's backup folder applies.
+        """
         if not write_plan.is_safe_to_apply:
             reasons = "; ".join(write_plan.validation_errors + write_plan.collision_warnings)
             raise ValueError(f"Write plan failed preflight checks ({reasons}); aborting write.")
@@ -534,9 +640,22 @@ class MutagenAdapter:
             raise ValueError(
                 "External file change detected prior to write; re-import file to refresh hash."
             )
+        # The file can gain a link or change owner between preview and apply.
+        replace_errors = self._validate_replaceable(source_path)
+        if replace_errors:
+            raise ValueError(f"{'; '.join(replace_errors)} Aborting write.")
 
-        self._create_verified_backup(source_path, write_plan.backup_destination_path, current_hash)
-        self._write_tags_by_format(source_path, write_plan.proposed_tags_to_write)
+        if backup_path is None:
+            backup_path = operation_backup_path(
+                write_plan.backup_destination_path.parent,
+                write_plan.file_id,
+                operation_id,
+                source_path.name,
+            )
+        self._create_verified_backup(source_path, backup_path, current_hash)
+        self._write_verified_copy(
+            source_path, write_plan.proposed_tags_to_write, operation_id, current_hash
+        )
         final_path = self._execute_optional_rename(source_path, write_plan)
         post_hash = compute_sha256(final_path)
 
@@ -549,21 +668,78 @@ class MutagenAdapter:
             post_write_hash=post_hash,
             previous_tags=write_plan.existing_tags,
             written_tags=write_plan.proposed_tags_to_write,
-            backup_reference=str(write_plan.backup_destination_path),
+            backup_reference=str(backup_path),
             operation_status=OperationStatus.COMPLETED,
             timestamp=datetime.now(UTC).isoformat(),
         )
 
+    def _write_verified_copy(
+        self,
+        source_path: Path,
+        tags_to_write: dict[str, str],
+        operation_id: str,
+        expected_hash: str,
+    ) -> None:
+        """Write tags to a sibling copy, verify it, then atomically swap it over the source.
+
+        A crash at any point leaves the source with its original bytes. The copy name depends
+        only on the operation id and the suffix, which detect_format reads.
+        """
+        staged = source_path.with_name(f".{operation_id}.staged{source_path.suffix}")
+        try:
+            shutil.copy2(source_path, staged)
+            baseline = self.read_metadata(staged)
+            self._write_tags_by_format(staged, tags_to_write)
+            self._verify_written_copy(baseline, staged, tags_to_write)
+            self._ensure_source_unchanged(source_path, expected_hash)
+            os.replace(staged, source_path)
+        finally:
+            self._discard_staged_copy(staged)
+
+    @staticmethod
+    def _ensure_source_unchanged(source_path: Path, expected_hash: str) -> None:
+        """Raise when another program changed the source while its copy was written."""
+        if compute_sha256(source_path) != expected_hash:
+            raise SourceChangedDuringWriteError(
+                "The file changed in another program during the write; the change is kept and "
+                "no tags were written. Re-import the file and retry."
+            )
+
+    @staticmethod
+    def _discard_staged_copy(staged: Path) -> None:
+        """Remove a leftover staged copy without hiding the error that ended the write."""
+        try:
+            staged.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Could not remove staged copy %s (%s); delete it by hand.", staged, exc)
+
+    def _verify_written_copy(
+        self, baseline: TechnicalAndTagMetadata, staged: Path, tags_to_write: dict[str, str]
+    ) -> None:
+        """Check the copy parses, keeps its audio properties, and reads back each written tag."""
+        after = self.read_metadata(staged)
+        problems: list[str] = []
+        if after.duration is None:
+            problems.append("the audio no longer parses")
+        if (after.sample_rate, after.channels) != (baseline.sample_rate, baseline.channels):
+            problems.append("the sample rate or channel count changed")
+        stored = VORBIS_STORED_FIELDS if after.format == AudioFormat.FLAC else ID3_STORED_FIELDS
+        problems.extend(
+            f"{field_name} reads back as {after.standard_tags.get(field_name)!r}"
+            for field_name, value in tags_to_write.items()
+            if field_name in stored and after.standard_tags.get(field_name) != value
+        )
+        if problems:
+            raise OSError(
+                f"Written copy failed verification ({'; '.join(problems)}); the original file "
+                "is unchanged. Check the file with another tag editor and retry."
+            )
+
     def _create_verified_backup(
         self, source_path: Path, backup_path: Path, expected_hash: str
     ) -> None:
-        """Copy source file to backup path and verify SHA-256 integrity."""
-        backup_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_path, backup_path)
-        if compute_sha256(backup_path) != expected_hash:
-            raise OSError(
-                f"Backup verification failed for {backup_path}; check disk space and permissions."
-            )
+        """Copy source file to a new backup path and verify SHA-256 integrity."""
+        copy_to_new_verified_file(source_path, backup_path, expected_hash)
 
     def _execute_optional_rename(self, source_path: Path, write_plan: FileWritePlan) -> Path:
         """Perform atomic rename if enabled, refusing to overwrite any existing file."""

@@ -15,6 +15,7 @@ from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
 from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapter
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
 from infiniteprep.adapters.metadata_io.mutagen_adapter import compute_sha256
+from infiniteprep.adapters.transcoder.safe_transcoder import SafeTranscoderAdapter
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import SettingsManager
 from infiniteprep.db.connection import DatabaseManager
@@ -22,11 +23,17 @@ from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName, SourceType
 from infiniteprep.services.import_service import ImportService, discover_files_bounded
 from infiniteprep.services.job_orchestrator import JobOrchestrator
+from infiniteprep.services.playlist_exporter import PlaylistExporter
 from infiniteprep.services.reconciliation import ReconciliationService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
+from infiniteprep.ui.action_handlers import (
+    export_playlist_with_feedback,
+    run_transcode_with_confirmation,
+)
 from infiniteprep.ui.journal_dialog import JournalDialog
 from infiniteprep.ui.main_window import MainWindow
+from infiniteprep.ui.recovery_dialog import RecoveryDialog
 from infiniteprep.ui.settings_dialog import SettingsDialog
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 
@@ -77,6 +84,8 @@ def launch_desktop_app() -> int:
     write_svc = WriteService(repo, backup_dir=app_dir / "backups")
     orchestrator = JobOrchestrator(repository=repo, audio_analyzer=LocalDspAnalyzer())
     reconciler = ReconciliationService(repo)
+    transcoder = SafeTranscoderAdapter(repo, backup_dir=app_dir / "backups")
+    exporter = PlaylistExporter(repo)
     qt_app = QApplication.instance() or QApplication(sys.argv)
 
     def handle_analyze_batch(file_ids: list[str]) -> None:
@@ -94,8 +103,21 @@ def launch_desktop_app() -> int:
         on_open_settings_dialog=lambda: SettingsDialog(
             SettingsManager(), CredentialStore(), parent=window
         ).exec(),
+        on_transcode_batch=lambda fids: run_transcode_with_confirmation(
+            window, repo, transcoder, fids, SettingsManager()
+        ),
+        on_export_playlist=lambda fids, dest: export_playlist_with_feedback(
+            window,
+            exporter,
+            fids,
+            dest,
+            relative_paths=SettingsManager().load().playlist_relative_paths,
+        ),
+        enable_audio_backend=True,
     )
     window.show()
+    if write_svc.list_interrupted_operations():
+        RecoveryDialog(write_svc, parent=window).exec()
     return int(qt_app.exec())
 
 

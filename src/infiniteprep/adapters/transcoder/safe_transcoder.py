@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import shutil
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -16,7 +15,12 @@ import platformdirs
 import soundfile as sf
 from scipy.signal import resample_poly
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
+from infiniteprep.adapters.metadata_io.mutagen_adapter import (
+    MutagenAdapter,
+    compute_sha256,
+    copy_to_new_verified_file,
+    operation_backup_path,
+)
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, OperationStatus
 from infiniteprep.domain.models import ChangeRecord, FileAsset
@@ -27,6 +31,9 @@ SAMPLE_RATE_44K1: Final[int] = 44100
 SAMPLE_RATE_48K: Final[int] = 48000
 # Headroom guard against inter-sample peaks during polyphase resampling
 RESAMPLE_HEADROOM: Final[float] = 0.999
+SIBLING_OUTPUT_TAG: Final[str] = "_XDJ"
+# Settings files written before 0.3.0 store the lossless auto preset under this value.
+LEGACY_LOSSLESS_AUTO_VALUE: Final[str] = "XDJ_RX3_LOSSLESS_AUTO"
 
 
 class TranscodeMode(StrEnum):
@@ -39,10 +46,19 @@ class TranscodeMode(StrEnum):
 class TranscodePreset(StrEnum):
     """Target audio format and resolution presets for XDJ-RX3 compatibility."""
 
-    XDJ_RX3_LOSSLESS_AUTO = "XDJ_RX3_LOSSLESS_AUTO"
+    XDJ_LOSSLESS_AUTO = "XDJ_LOSSLESS_AUTO"
     FORCE_WAV_48K_24B = "FORCE_WAV_48K_24B"
     FORCE_WAV_44K_16B = "FORCE_WAV_44K_16B"
     MP3_320_CBR = "MP3_320_CBR"
+    # Alias for callers written before 0.3.0. Iteration skips aliases, so menus list one entry.
+    XDJ_RX3_LOSSLESS_AUTO = "XDJ_LOSSLESS_AUTO"
+
+    @classmethod
+    def _missing_(cls, value: object) -> TranscodePreset | None:
+        """Map the pre-0.3.0 stored lossless auto value to its current member."""
+        if value == LEGACY_LOSSLESS_AUTO_VALUE:
+            return cls.XDJ_LOSSLESS_AUTO
+        return None
 
 
 @dataclass
@@ -80,7 +96,7 @@ class SafeTranscoderAdapter:
         self,
         file_id: str,
         *,
-        preset: TranscodePreset = TranscodePreset.XDJ_RX3_LOSSLESS_AUTO,
+        preset: TranscodePreset = TranscodePreset.XDJ_LOSSLESS_AUTO,
         mode: TranscodeMode = TranscodeMode.SIBLING_EXPORT,
         export_dir: Path | None = None,
         allowed_export_root: Path | None = None,
@@ -238,7 +254,7 @@ class SafeTranscoderAdapter:
                 raise ValueError(
                     f"Export directory '{dest_folder}' escapes allowed root '{root_boundary}'."
                 )
-        out_path = (dest_folder / f"{src_path.stem}_XDJ_RX3{target_ext}").resolve()
+        out_path = (dest_folder / f"{src_path.stem}{SIBLING_OUTPUT_TAG}{target_ext}").resolve()
         if not out_path.is_relative_to(dest_folder):
             raise ValueError("Resolved output path escapes destination folder boundary.")
         return out_path
@@ -248,12 +264,12 @@ class SafeTranscoderAdapter:
     ) -> ChangeRecord:
         """Create a SHA-256 verified backup and IN_PROGRESS ChangeRecord before replacement."""
         self.backup_dir.mkdir(parents=True, exist_ok=True)
-        backup_path = self.backup_dir / f"{asset.id}_transcode_{src_path.name}"
-        pre_hash = compute_sha256(src_path)
-        shutil.copy2(src_path, backup_path)
-        if compute_sha256(backup_path) != pre_hash:
-            raise OSError("Transcode backup SHA-256 verification failed; aborting.")
         op_id = str(uuid.uuid4())
+        backup_path = operation_backup_path(
+            self.backup_dir, asset.id, op_id, src_path.name, kind="transcode"
+        )
+        pre_hash = compute_sha256(src_path)
+        copy_to_new_verified_file(src_path, backup_path, pre_hash)
         rec = ChangeRecord(
             operation_id=op_id,
             file_id=asset.id,

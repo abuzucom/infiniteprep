@@ -2,17 +2,36 @@
 
 from __future__ import annotations
 
+import logging
+import os
 import shutil
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 import platformdirs
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
+from infiniteprep.adapters.metadata_io.mutagen_adapter import (
+    MutagenAdapter,
+    SourceChangedDuringWriteError,
+    compute_sha256,
+    copy_to_new_verified_file,
+    operation_backup_path,
+)
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import OperationStatus, ReviewStatus
 from infiniteprep.domain.models import ChangeRecord
 from infiniteprep.domain.ports import FileWritePlan
+
+logger = logging.getLogger(__name__)
+
+
+class PendingRecoveryError(RuntimeError):
+    """Raised when a write starts while an interrupted write still waits for recovery."""
+
+
+class RestoreConflictError(ValueError):
+    """Raised when a restore would overwrite a file that changed after the recorded write."""
 
 
 class WriteService:
@@ -64,8 +83,57 @@ class WriteService:
             plans.append(plan)
         return plans
 
+    def list_interrupted_operations(self) -> list[ChangeRecord]:
+        """Return journal records left IN_PROGRESS by a crash or power loss mid-write."""
+        return [
+            record
+            for record in self.repo.list_change_records()
+            if record.operation_status == OperationStatus.IN_PROGRESS
+        ]
+
+    def _ensure_no_pending_recovery(self) -> None:
+        """Refuse a new write while an interrupted write may have left a half-written file."""
+        pending = self.list_interrupted_operations()
+        if pending:
+            raise PendingRecoveryError(
+                f"{len(pending)} interrupted write(s) wait for recovery. Restore or mark each "
+                "one as finished in the startup recovery dialog, then retry."
+            )
+
+    def restore_interrupted(self, operation_id: str) -> ChangeRecord:
+        """Restore an interrupted write from its verified backup and mark it ROLLED_BACK."""
+        record = self._get_interrupted(operation_id)
+        return self._restore_record(record, OperationStatus.ROLLED_BACK)
+
+    def mark_interrupted_finished(self, operation_id: str) -> ChangeRecord:
+        """Accept the file on disk for an interrupted write and mark its record COMPLETED."""
+        record = self._get_interrupted(operation_id)
+        # The chosen path becomes the asset's write target. Both stored paths must stay in the
+        # library root.
+        prev_path, cur_path = self._resolve_and_verify_restore_paths(record)
+        current = cur_path if cur_path.is_file() else prev_path
+        record.post_write_hash = compute_sha256(current)
+        record.new_path = str(current)
+        record.operation_status = OperationStatus.COMPLETED
+        self.repo.upsert_change_record(record)
+        # The next write preflights against the stored path and hash, so match the file on disk.
+        asset = self.repo.get_file_by_id(record.file_id)
+        if asset is not None:
+            asset.current_path = str(current)
+            asset.content_hash = record.post_write_hash
+            self.repo.upsert_file_asset(asset)
+        return record
+
+    def _get_interrupted(self, operation_id: str) -> ChangeRecord:
+        """Return the IN_PROGRESS record for operation_id, or raise ValueError."""
+        record = self.repo.get_change_record(operation_id)
+        if record is None or record.operation_status != OperationStatus.IN_PROGRESS:
+            raise ValueError(f"ChangeRecord {operation_id} is not an interrupted write.")
+        return record
+
     def apply_batch(self, write_plans: list[FileWritePlan]) -> list[ChangeRecord]:
         """Apply all safe FileWritePlans, recording ChangeRecords and updating FileAssets."""
+        self._ensure_no_pending_recovery()
         batch_op_id = str(uuid.uuid4())
         records: list[ChangeRecord] = []
         for plan in write_plans:
@@ -76,12 +144,111 @@ class WriteService:
     def apply_single_plan(
         self, plan: FileWritePlan, batch_operation_id: str | None = None
     ) -> ChangeRecord:
-        """Execute a single FileWritePlan and persist its ChangeRecord and updated FileAsset."""
-        op_id = str(uuid.uuid4())
-        record = self.tag_adapter.apply(plan, operation_id=op_id)
+        """Journal the plan as IN_PROGRESS, apply it, then complete the record or roll back."""
+        self._ensure_no_pending_recovery()
+        if not plan.is_safe_to_apply:
+            # The adapter raises the preflight error before it touches the file.
+            return self.tag_adapter.apply(plan, operation_id=str(uuid.uuid4()))
+        pending = self._journal_in_progress(plan, batch_operation_id)
+        try:
+            record = self.tag_adapter.apply(
+                plan,
+                operation_id=pending.operation_id,
+                backup_path=Path(pending.backup_reference),
+            )
+        except Exception as exc:
+            # Any failure after the journal entry may leave a partial write. Roll back, re-raise.
+            self._roll_back_failed_write(pending, exc)
+            raise
         record.batch_operation_id = batch_operation_id
         self.repo.upsert_change_record(record)
+        self._update_asset_after_write(plan, record)
+        return record
 
+    def _journal_in_progress(
+        self, plan: FileWritePlan, batch_operation_id: str | None
+    ) -> ChangeRecord:
+        """Persist an IN_PROGRESS ChangeRecord that names the backup before any file change."""
+        operation_id = str(uuid.uuid4())
+        # apply receives this path, so the journal always names the backup the adapter writes.
+        backup_path = operation_backup_path(
+            plan.backup_destination_path.parent, plan.file_id, operation_id, plan.source_path.name
+        )
+        pending = ChangeRecord(
+            operation_id=operation_id,
+            file_id=plan.file_id,
+            previous_path=str(plan.source_path),
+            new_path=str(plan.destination_path),
+            previous_tags=plan.existing_tags,
+            written_tags=plan.proposed_tags_to_write,
+            backup_reference=str(backup_path),
+            operation_status=OperationStatus.IN_PROGRESS,
+            timestamp=datetime.now(UTC).isoformat(),
+            batch_operation_id=batch_operation_id,
+            pre_write_hash=plan.expected_content_hash,
+        )
+        self.repo.upsert_change_record(pending)
+        return pending
+
+    def _roll_back_failed_write(self, pending: ChangeRecord, failure: Exception) -> None:
+        """Record a failed write as FAILED or ROLLED_BACK, or keep it pending for recovery."""
+        pending.error_message = f"{failure.__class__.__name__}: {failure}"
+        if isinstance(failure, SourceChangedDuringWriteError):
+            # The source holds another program's newer edit and none of this write.
+            pending.operation_status = OperationStatus.FAILED
+            self.repo.upsert_change_record(pending)
+            return
+        try:
+            pending.operation_status = self._restore_after_failure(pending)
+        except Exception as rollback_exc:
+            # The file may be half-written. IN_PROGRESS keeps it in startup recovery and blocks
+            # new writes. The caller still re-raises the original failure.
+            logger.error("Rollback of %s failed: %r", pending.operation_id, rollback_exc)
+            pending.error_message += f"; rollback failed ({rollback_exc})"
+            pending.operation_status = OperationStatus.IN_PROGRESS
+        self.repo.upsert_change_record(pending)
+
+    def _restore_after_failure(self, pending: ChangeRecord) -> OperationStatus:
+        """Swap the verified backup back in, or report FAILED when no backup was taken."""
+        backup_path = Path(pending.backup_reference)
+        if not backup_path.is_file() or compute_sha256(backup_path) != pending.pre_write_hash:
+            # The adapter verifies the backup before it writes, so the file is still untouched.
+            return OperationStatus.FAILED
+        self._restore_into_place(backup_path, pending)
+        return OperationStatus.ROLLED_BACK
+
+    def _restore_into_place(self, backup_path: Path, record: ChangeRecord) -> str:
+        """Swap the backup into previous_path through a verified staging copy, then clean up."""
+        prev_path = Path(record.previous_path)
+        cur_path = Path(record.new_path)
+        restored_hash = self._replace_with_staged_copy(
+            backup_path, prev_path, record.pre_write_hash
+        )
+        if cur_path.resolve() != prev_path.resolve() and cur_path.exists():
+            cur_path.unlink()
+        return restored_hash
+
+    def _replace_with_staged_copy(
+        self, source: Path, target: Path, expected_hash: str | None
+    ) -> str:
+        """Copy source beside target, verify its SHA-256, then atomically replace target."""
+        target.parent.mkdir(parents=True, exist_ok=True)
+        staging = target.with_name(f".{target.name}.restore_{uuid.uuid4().hex}")
+        try:
+            shutil.copy2(source, staging)
+            staged_hash = compute_sha256(staging)
+            if expected_hash and staged_hash != expected_hash:
+                raise ValueError(
+                    "Staged restore copy failed SHA-256 verification; the current file is "
+                    "unchanged. Check the backup disk and retry."
+                )
+            os.replace(staging, target)
+        finally:
+            staging.unlink(missing_ok=True)
+        return staged_hash
+
+    def _update_asset_after_write(self, plan: FileWritePlan, record: ChangeRecord) -> None:
+        """Point the FileAsset at the written file and merge the written tags."""
         asset = self.repo.get_file_by_id(plan.file_id)
         if asset is not None:
             asset.current_path = record.new_path
@@ -91,29 +258,56 @@ class WriteService:
             std.update(plan.proposed_tags_to_write)
             asset.original_tags["standard_tags"] = std
             self.repo.upsert_file_asset(asset)
-        return record
 
     def restore_operation(
         self,
         operation_id: str,
         *,
         allowed_library_root: Path | None = None,
+        allow_modified: bool = False,
     ) -> ChangeRecord:
-        """Restore a file from its backup_reference and verify SHA-256 integrity."""
+        """Restore a file from its backup_reference through a SHA-256 verified staging copy.
+
+        Raises RestoreConflictError when the file changed after the recorded write, unless
+        allow_modified is True. Every file the restore replaces or removes is first copied to
+        the backup directory.
+        """
         record = self.repo.get_change_record(operation_id)
         if record is None:
             raise ValueError(f"ChangeRecord {operation_id} not found.")
-        backup_path = self._verify_backup_file(record, operation_id)
+        return self._restore_record(
+            record,
+            OperationStatus.RESTORED,
+            allowed_library_root=allowed_library_root,
+            guard_later_edits=True,
+            allow_modified=allow_modified,
+        )
+
+    def _restore_record(
+        self,
+        record: ChangeRecord,
+        final_status: OperationStatus,
+        *,
+        allowed_library_root: Path | None = None,
+        guard_later_edits: bool = False,
+        allow_modified: bool = False,
+    ) -> ChangeRecord:
+        """Swap the verified backup in for the record, then store final_status and the asset."""
+        backup_path = self._verify_backup_file(record, record.operation_id)
         prev_path, cur_path = self._resolve_and_verify_restore_paths(
             record, allowed_library_root=allowed_library_root
         )
-        prev_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(backup_path, prev_path)
+        if guard_later_edits:
+            if not allow_modified:
+                self._refuse_restore_over_later_edits(record, prev_path, cur_path)
+            self._preserve_files_before_restore(record, prev_path, cur_path)
+        restored_hash = self._replace_with_staged_copy(
+            backup_path, prev_path, record.pre_write_hash
+        )
         if cur_path != prev_path and cur_path.exists():
             cur_path.unlink()
 
-        restored_hash = compute_sha256(prev_path)
-        record.operation_status = OperationStatus.RESTORED
+        record.operation_status = final_status
         self.repo.upsert_change_record(record)
 
         asset = self.repo.get_file_by_id(record.file_id)
@@ -140,6 +334,39 @@ class WriteService:
         if record.pre_write_hash and compute_sha256(backup_path) != record.pre_write_hash:
             raise ValueError("Backup file SHA-256 mismatch; backup may be corrupted.")
         return backup_path
+
+    @staticmethod
+    def _refuse_restore_over_later_edits(
+        record: ChangeRecord, prev_path: Path, cur_path: Path
+    ) -> None:
+        """Raise RestoreConflictError when a restore would overwrite edits made after the write."""
+        changed: list[str] = []
+        if (
+            cur_path.exists()
+            and record.post_write_hash
+            and compute_sha256(cur_path) != record.post_write_hash
+        ):
+            changed.append(f"'{cur_path.name}' changed after this write")
+        if cur_path != prev_path and prev_path.exists():
+            changed.append(f"a new file now exists at '{prev_path.name}'")
+        if changed:
+            raise RestoreConflictError(
+                f"Restore would overwrite later edits: {'; '.join(changed)}. Confirm to restore "
+                "anyway. The current file is copied to the backup folder first."
+            )
+
+    def _preserve_files_before_restore(
+        self, record: ChangeRecord, prev_path: Path, cur_path: Path
+    ) -> None:
+        """Copy each file the restore replaces or removes into the backup directory, verified."""
+        for path in dict.fromkeys((cur_path, prev_path)):
+            if not path.is_file():
+                continue
+            destination = operation_backup_path(
+                self.backup_dir, record.file_id, uuid.uuid4().hex, path.name, kind="pre_restore"
+            )
+            copy_to_new_verified_file(path, destination, compute_sha256(path))
+            logger.info("Saved %s before restore of %s", destination.name, record.operation_id)
 
     def _resolve_and_verify_restore_paths(
         self,

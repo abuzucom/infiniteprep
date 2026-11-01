@@ -8,10 +8,17 @@ from typing import Final
 
 import numpy as np
 import soundfile as sf
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import QSignalBlocker, Qt, QUrl
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSlider,
+    QVBoxLayout,
+    QWidget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +47,13 @@ PLAYHEAD_WIDTH_PX: Final[int] = 2
 LAYOUT_MARGIN_PX: Final[int] = 4
 MS_PER_SECOND: Final[float] = 1000.0
 SECONDS_PER_MINUTE: Final[float] = 60.0
+SLIDER_SINGLE_STEP_MS: Final[int] = 1000
+SLIDER_PAGE_STEP_MS: Final[int] = 10_000
+POSITION_SLIDER_NAME: Final[str] = "Playback position"
+BACKEND_UNAVAILABLE_TEXT: Final[str] = (
+    "Audio playback is unavailable on this system. Check the audio device and the Qt "
+    "multimedia backend, then restart the app."
+)
 
 
 def compute_cue_jump_positions(duration_sec: float) -> dict[str, float]:
@@ -62,6 +76,12 @@ def compute_cue_jump_positions(duration_sec: float) -> dict[str, float]:
         "75%": round(safe_dur * CUE_RATIO_75, CUE_ROUND_DIGITS),
         "Outro": round(outro_pos, CUE_ROUND_DIGITS),
     }
+
+
+def format_clock(seconds: float) -> str:
+    """Format a time in seconds as MM:SS.d."""
+    minutes, rest = divmod(max(0.0, float(seconds)), SECONDS_PER_MINUTE)
+    return f"{int(minutes):02d}:{rest:04.1f}"
 
 
 def _stream_block_peaks(file_path: Path, max_frames: int) -> list[float]:
@@ -188,6 +208,15 @@ class AudioPreviewWidget(QWidget):
 
         self.waveform_bar = WaveformOverviewBar(self)
         self.waveform_bar.on_seek_ratio = self._seek_by_ratio
+        self.position_slider = QSlider(Qt.Orientation.Horizontal, self)
+        self.position_slider.setRange(0, 0)
+        self.position_slider.setSingleStep(SLIDER_SINGLE_STEP_MS)
+        self.position_slider.setPageStep(SLIDER_PAGE_STEP_MS)
+        self.position_slider.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.position_slider.setAccessibleName(POSITION_SLIDER_NAME)
+        self.status_label = QLabel("", self)
+        self.status_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.status_label.setWordWrap(True)
         self.time_label = QLabel("00:00.0 / 00:00.0", self)
         self.play_btn = QPushButton("Play", self)
         self.stop_btn = QPushButton("Stop", self)
@@ -195,6 +224,8 @@ class AudioPreviewWidget(QWidget):
 
         self._build_layout()
         self._connect_signals()
+        if self.player is not None and not self.player.isAvailable():
+            self.show_status(BACKEND_UNAVAILABLE_TEXT)
 
     def _build_layout(self) -> None:
         """Construct the widget layout with waveform bar, transport, and cue buttons."""
@@ -203,6 +234,7 @@ class AudioPreviewWidget(QWidget):
             LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX
         )
         root.addWidget(self.waveform_bar)
+        root.addWidget(self.position_slider)
 
         controls = QHBoxLayout()
         controls.addWidget(self.play_btn)
@@ -215,14 +247,47 @@ class AudioPreviewWidget(QWidget):
         controls.addStretch()
         controls.addWidget(self.time_label)
         root.addLayout(controls)
+        root.addWidget(self.status_label)
 
     def _connect_signals(self) -> None:
-        """Connect QMediaPlayer and button signals."""
+        """Connect QMediaPlayer, slider, and button signals."""
         self.play_btn.clicked.connect(self.toggle_play_pause)
         self.stop_btn.clicked.connect(self.stop_playback)
+        self.position_slider.valueChanged.connect(self._on_slider_value_changed)
         if self.player is not None:
             self.player.positionChanged.connect(self._on_media_position_changed)
             self.player.durationChanged.connect(self._on_media_duration_changed)
+            self.player.errorOccurred.connect(self._on_player_error)
+            self.player.playbackStateChanged.connect(self._on_playback_state_changed)
+
+    def show_status(self, text: str) -> None:
+        """Show a plain-text playback status message, or clear it with an empty string."""
+        self.status_label.setText(text)
+
+    def _on_player_error(self, _error: QMediaPlayer.Error, error_string: str) -> None:
+        """Report a playback failure and return the transport to its stopped state."""
+        detail = error_string or "unknown error"
+        self.show_status(
+            f"Playback failed: {detail}. Check that the file plays in another app, then retry."
+        )
+        self.play_btn.setText("Play")
+
+    def _on_playback_state_changed(self, state: QMediaPlayer.PlaybackState) -> None:
+        """Keep the Play button label in step with the real player state."""
+        playing = state == QMediaPlayer.PlaybackState.PlayingState
+        self.play_btn.setText("Pause" if playing else "Play")
+
+    def _on_slider_value_changed(self, value_ms: int) -> None:
+        """Seek when the user moves the position slider by mouse or keyboard."""
+        self.seek_to_seconds(value_ms / MS_PER_SECOND)
+
+    def _sync_position_slider(self) -> None:
+        """Mirror the current position and duration on the slider without re-seeking."""
+        blocker = QSignalBlocker(self.position_slider)
+        self.position_slider.setMaximum(int(self.duration_sec * MS_PER_SECOND))
+        self.position_slider.setValue(int(self.current_position_sec * MS_PER_SECOND))
+        blocker.unblock()
+        self.position_slider.setAccessibleDescription(format_clock(self.current_position_sec))
 
     def load_file(self, file_path: Path, fallback_duration_sec: float | None = None) -> None:
         """Load an audio file, compute its waveform envelope, and update cue positions."""
@@ -233,6 +298,7 @@ class AudioPreviewWidget(QWidget):
         self.cue_positions = compute_cue_jump_positions(self.duration_sec)
         self.waveform_bar.set_envelope(extract_waveform_envelope(file_path))
         self.waveform_bar.set_playhead_ratio(0.0)
+        self.show_status("")
         if self.player is not None:
             self.player.setSource(QUrl.fromLocalFile(str(file_path)))
         self._update_time_label()
@@ -304,8 +370,9 @@ class AudioPreviewWidget(QWidget):
             self._update_time_label()
 
     def _update_time_label(self) -> None:
-        """Format current and total duration into MM:SS.d display."""
-        cur_m, cur_s = divmod(self.current_position_sec, SECONDS_PER_MINUTE)
-        tot_m, tot_s = divmod(self.duration_sec, SECONDS_PER_MINUTE)
-        self.time_label.setText(f"{int(cur_m):02d}:{cur_s:04.1f} / {int(tot_m):02d}:{tot_s:04.1f}")
+        """Show the current and total time, and mirror the position on the slider."""
+        self.time_label.setText(
+            f"{format_clock(self.current_position_sec)} / {format_clock(self.duration_sec)}"
+        )
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._sync_position_slider()

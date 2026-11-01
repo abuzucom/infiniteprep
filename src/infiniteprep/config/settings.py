@@ -139,7 +139,8 @@ class AppSettings:
     essentia_cli_path: str = ""
     fpcalc_custom_path: str = ""
     transcode_mode: str = "sibling_export"
-    transcode_preset: str = "XDJ_RX3_LOSSLESS_AUTO"
+    transcode_preset: str = "XDJ_LOSSLESS_AUTO"
+    playlist_relative_paths: bool = True
 
 
 class SettingsManager:

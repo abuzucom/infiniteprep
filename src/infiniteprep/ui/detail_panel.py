@@ -66,8 +66,14 @@ class DetailPanel(QWidget):
         review_service: ReviewService,
         on_change_callback: Callable[[], None] | None = None,
         parent: QWidget | None = None,
+        *,
+        enable_audio_backend: bool = False,
     ) -> None:
-        """Initialize DetailPanel with Repository, ReviewService, and AudioPreviewWidget."""
+        """Initialize DetailPanel with Repository, ReviewService, and AudioPreviewWidget.
+
+        enable_audio_backend creates a real QMediaPlayer for the preview. The desktop app
+        passes True. Tests keep the silent default, so no audio device is needed.
+        """
         super().__init__(parent)
         self.repo = repository
         self.review_service = review_service
@@ -78,7 +84,7 @@ class DetailPanel(QWidget):
         self.header_label = QLabel("Select a track to inspect metadata and proposals.", self)
         self.warnings_label = QLabel("", self)
         self.warnings_label.setStyleSheet("color: #d97706; font-weight: bold;")
-        self.audio_player = AudioPreviewWidget(self)
+        self.audio_player = AudioPreviewWidget(self, enable_multimedia_backend=enable_audio_backend)
         self.fields_table = QTableWidget(0, FIELDS_TABLE_COLUMN_COUNT, self)
         self.candidates_list = QListWidget(self)
 

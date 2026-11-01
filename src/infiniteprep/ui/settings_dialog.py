@@ -50,6 +50,7 @@ class SettingsDialog(QDialog):
         self.ollama_model_combo = QComboBox(self)
         self.transcode_mode_combo = QComboBox(self)
         self.transcode_preset_combo = QComboBox(self)
+        self.playlist_relative_checkbox = QCheckBox("Write paths relative to the playlist", self)
         self.save_btn = QPushButton("Save Settings", self)
         self.cancel_btn = QPushButton("Cancel", self)
 
@@ -78,12 +79,15 @@ class SettingsDialog(QDialog):
         for mode in TranscodeMode:
             self.transcode_mode_combo.addItem(mode.value)
         self.transcode_mode_combo.setCurrentText(self.current_settings.transcode_mode)
-        form.addRow("XDJ-RX3 Transcode Mode:", self.transcode_mode_combo)
+        form.addRow("XDJ Transcode Mode:", self.transcode_mode_combo)
 
         for preset in TranscodePreset:
             self.transcode_preset_combo.addItem(preset.value)
         self.transcode_preset_combo.setCurrentText(self.current_settings.transcode_preset)
-        form.addRow("XDJ-RX3 Transcode Preset:", self.transcode_preset_combo)
+        form.addRow("XDJ Transcode Preset:", self.transcode_preset_combo)
+
+        self.playlist_relative_checkbox.setChecked(self.current_settings.playlist_relative_paths)
+        form.addRow("Playlist Export:", self.playlist_relative_checkbox)
 
         root.addLayout(form)
         buttons = QHBoxLayout()
@@ -107,5 +111,6 @@ class SettingsDialog(QDialog):
         self.current_settings.ollama_model = self.ollama_model_combo.currentText().strip()
         self.current_settings.transcode_mode = self.transcode_mode_combo.currentText()
         self.current_settings.transcode_preset = self.transcode_preset_combo.currentText()
+        self.current_settings.playlist_relative_paths = self.playlist_relative_checkbox.isChecked()
         self.settings_mgr.save(self.current_settings)
         self.accept()

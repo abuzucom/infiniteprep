@@ -13,7 +13,7 @@ euler.
 
 | Reviewer | Release | Commit |
 |---|---|---|
-| foucault | 3.4.7 | `c398b5a29890ba01dee5065a7dc97a91e3e2b08b` |
+| foucault | 3.5.0 | `fbb09487cdbbe85ca64b2e8c46605c3120b62c54` |
 | euler | 0.6.5 | `1a3f67cba9d6ed7f45af4822f9ca27dd14db6a46` |
 
 Each caller pins the reusable workflow `uses:` reference and the policy ref
@@ -48,6 +48,15 @@ this wiring reaches `main`. Renaming the `ci` workflow stops both reviews.
 - `tests/test_review_wiring.py` checks the triggers, the pins, the secret
   mapping, the fork handling, the action pins, and the SHA-256 digest of
   each copied adapter file.
+
+## Large diffs
+
+`ci/model_providers.json` sends review input above the `kimi-k2.7-code`
+budget to the `ollama-large` profile with `minimax-m3.1-flash`. Both profiles
+use the same `MODEL_API_KEY` mapping. Input above every budget skips the model
+call. The foucault workflow then records a fixed `NEEDS-HUMAN` verdict. With
+`fail_on_block: true`, that verdict fails the `security-review` check. A human
+reviewer must assess the complete diff.
 
 ## Repository settings
 

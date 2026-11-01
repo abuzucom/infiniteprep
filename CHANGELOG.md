@@ -5,10 +5,105 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.3] (2026-10-29)
+## [0.15.0] (2026-11-01)
 
 ### Added
 
+- `adapters/metadata_io/flac_vorbis.py` reads and writes the Vorbis comment block of FLAC bytes. Field names match without regard to case. Entries without `=` appear in `dropped_entries`. APPLICATION, SEEKTABLE, PICTURE, and other blocks stay byte for byte and in order. Padding absorbs size changes where it can. A leading ID3v2 tag and the audio frames stay byte for byte. No caller uses the module yet. Added `tests/unit/test_flac_vorbis.py` and `tests/fixtures/flac_bytes.py`.
+
+- `adapters/metadata_io/id3_containers.py` locates, reads, and replaces the ID3v2 tag in MP3, WAV, and AIFF bytes. MP3 tags sit at the start of the file. WAV and AIFF tags sit in an `id3 ` or `ID3 ` chunk. Audio, other chunks, and a trailing ID3v1 tag stay byte for byte. A smaller tag fills the old tag's space. The audio offset then stays the same. No caller uses the module yet. Added `tests/unit/test_id3_containers.py` and `tests/fixtures/audio_container_bytes.py`.
+
+- `adapters/metadata_io/id3v2.py` reads ID3v2.2, 2.3, and 2.4 tags and writes ID3v2.3. Unknown frames keep original bytes. No caller uses the module yet. Added `tests/unit/test_id3v2_codec.py`, `tests/unit/test_id3v2_codec_frame_paths.py`, `tests/unit/test_id3v2_codec_spec_conformance.py`, `tests/unit/test_id3v2_codec_dates.py`, `tests/unit/test_id3v2_codec_limits.py`, `tests/unit/test_id3v2_codec_v24_unsync.py`, `tests/unit/test_id3v2_codec_calendar.py`, and `tests/unit/test_id3v2_codec_header_flags.py`, with shared byte builders in `tests/fixtures/id3v2_bytes.py`.
+- An ID3v2.4 tag header with the unsynchronisation flag reverses unsynchronisation in every frame body, once per frame.
+- Compressed ID3v2 frames inflate to at most 16 MiB each and 64 MiB per tag. The codec drops frames past either cap and records dropped frame IDs in `dropped_frames`. `render_id3v23` raises `ValueError` for padding outside 0 to 64 KiB.
+- ID3v2.3 output keeps a TDRC or TDOR frame whose value does not start with a year. A timestamp must match the whole v2.4 form, with an optional Z or offset after a time, or the frame stays as it is. TDAT needs a real calendar date, leap years included, and TIME needs a valid time of day. TIME keeps the written hour and minutes.
+
+### Fixed
+
+- `_split_language_frame` in `adapters/metadata_io/id3v2.py` validates the 4-byte header length before slicing language bytes and raises `Id3FormatError` on truncated bodies.
+- String decoding in `adapters/metadata_io/id3v2.py` preserves detected UTF-16 endianness across null-separated values to prevent secondary string mojibake in big-endian frames.
+
+## [0.12.1] (2026-10-31)
+
+### Added
+
+- README **Roadmap** section lists the planned stages in order.
+
+- The audio preview has a **Playback position** slider with an accessible name and time. The arrow keys seek 1 second, and Page Up and Page Down seek 10 seconds.
+- The audio preview shows playback failures and an unavailable audio backend as plain text under the transport. The Play button follows the real player state.
+- `MainWindow` and `DetailPanel` accept an optional keyword-only `enable_audio_backend`, defaulting to False. Added `tests/unit/test_audio_preview_playback.py`.
+
+- **Change Journal** asks before **Restore Backup** and names the file it replaces. When the file changed after the recorded write, a second question names the change before the restore overwrites anything.
+- `WriteService.restore_operation` raises the new `RestoreConflictError` when the file changed after the write. The new optional `allow_modified` keyword restores anyway. Each restore first copies every file it replaces or removes to the backup folder as `{asset_id}_{id}_pre_restore_{filename}`.
+- `MutagenAdapter.apply` accepts an optional `backup_path` keyword. `WriteService` passes the backup path it journaled. The journal and the written backup always agree.
+- Added `tests/unit/test_verified_copy_writes.py`, `tests/unit/test_write_hardening.py`, `tests/unit/test_write_race_guards.py`, and `tests/unit/test_restore_guard.py`.
+
+### Changed
+
+- README **Capabilities** separates features the desktop application runs from modules that exist without a caller. **Current limitations** lists the known gaps in identification, analysis, writing, export, and the interface.
+- A tag write goes to a copy next to the file. The copy must parse, keep its pre-write sample rate and channel count, and read back every written tag. It then atomically replaces the original. A crash or failed write leaves the original bytes in place. A successful write gives the file a new inode. `shutil.copy2` carries over the mode and timestamps, plus extended attributes on platforms with xattr support.
+- Just before the swap, the write checks the source SHA-256 again. A file another program changed during the write keeps that change. The journal records the write as failed, and no rollback runs.
+- Each tag-write backup takes the name `{asset_id}_{operation_id}_{filename}`. Each in-place transcode backup takes `{asset_id}_{operation_id}_transcode_{filename}`. A later backup of the same track no longer replaces an earlier one.
+- Backups use exclusive file creation. A backup never overwrites an existing file. The app deletes a backup that fails its SHA-256 check. Backup names refuse any part that could leave the backup folder on any platform, such as a slash, backslash, colon, control character, or blank part.
+- Four recovery test assertions now expect the original file intact after a crash mid-write. The maintainer approved the edit.
+
+### Fixed
+
+- The desktop app's audio preview plays sound. The launcher now turns on the Qt multimedia backend. Before, no caller turned it on, and **Play** only changed the button label.
+- Write preflight refuses a symbolic link, a file with more than one hard link, or a file owned by another user. Swapping in a written copy would replace the link, split the hard links, or change the owner. The apply step checks again before the backup.
+
+## [0.9.0] (2026-10-30)
+
+### Added
+
+- At launch, the desktop app opens **Recover Interrupted Writes** when a tag write or in-place transcode left a journal record `IN_PROGRESS`. Each row offers **Restore from backup** or **Mark as finished**.
+- `WriteService.list_interrupted_operations`, `restore_interrupted`, and `mark_interrupted_finished` back the dialog. A restore verifies the backup SHA-256 and records `ROLLED_BACK`. A failed restore leaves the record pending.
+- `WriteService.apply_batch` and `apply_single_plan` raise `PendingRecoveryError` before any file change while an interrupted write is pending. **Preview & Apply Writes** shows the reason and stays open.
+- Added `tests/unit/test_interrupted_write_recovery.py` and `tests/unit/test_ui_recovery_dialog.py`.
+
+- `scripts/check_branch_name.py` rejects generated `<adjective>-<surname>-<suffix>` branch names such as `chore/dreamy-goldberg-nwjlsu`. Detection covers only the listed words. Added `tests/test_check_branch_name_generated.py`.
+
+- Playlist export writes track paths relative to the playlist folder by default. A crate copied to another drive or computer with its music keeps working. A track on another Windows drive keeps its absolute path.
+- A relative line that starts with `#` gains a `./` prefix. M3U8 players cannot read it as a comment or directive.
+- `AppSettings.playlist_relative_paths` defaults to `True`. A settings file without the key loads that default. **Settings & Providers** adds the **Write paths relative to the playlist** checkbox.
+- `PlaylistExporter.export_m3u8`, `export_m3u8_report`, and `export_playlist_with_feedback` accept an optional `relative_paths` keyword. It defaults to `False`. Existing callers keep absolute paths.
+- Added `tests/unit/test_playlist_relative_paths.py`.
+
+### Changed
+
+- Upgraded the foucault security review caller to foucault 3.5.0 (`fbb09487cdbbe85ca64b2e8c46605c3120b62c54`). Oversized review input now routes to the `ollama-large` profile. A diff above every model budget receives a `NEEDS-HUMAN` verdict instead of no verdict.
+- Recopied `ci/build_pr_case.py`, `ci/call_model.py`, and `ci/model_providers.json` from the pinned foucault commit.
+- Updated the pinned commit and adapter digests in `tests/test_review_wiring.py`.
+- Documented the large-diff behavior in `docs/pr-review.md`.
+- Synchronized policy from `abuzucom/agents` 2.14.0. Branch preflight now runs `check_branch_name.py --strict-agent-preflight`. A harness-assigned branch receives no exemption. `docs/agent-policy/clients.md` discloses that a multi-repository Claude Code cloud session loads no repository hooks.
+
+### Fixed
+
+- A rollback that fails with any exception type keeps the original write error. The journal records the rollback failure, and the write error still reaches the caller.
+- A failed rollback keeps its journal record `IN_PROGRESS`. The possibly half-written file then appears in **Recover Interrupted Writes**, and new writes stay blocked. An unreadable backup during rollback takes the same path.
+- **Mark as finished** stores the file's current path and SHA-256 on its library entry. The next write on that file passes preflight without a re-import.
+- Added `tests/unit/test_recovery_edge_cases.py`.
+
+### Security
+
+- **Mark as finished** checks both journal paths against the library root before it uses either one. A tampered journal record can no longer point a later tag write at a file outside the library. Added `tests/unit/test_recovery_path_confinement.py`.
+- Added `tests/unit/test_restore_interrupted_confinement.py`. **Restore from backup** refuses a tampered `previous_path` or `new_path` outside the library root, and no file changes.
+- Each in-memory `DatabaseManager` gets a private database named with a random UUID. The name came from `id(self)`. Python can reuse that value after garbage collection. A new manager could then open a database that an old connection still held, and see its rows. Added `tests/unit/test_in_memory_database_isolation.py`.
+
+## [0.5.0] (2026-10-29)
+
+### Added
+
+- Added the `dependency-review` workflow. It audits pull request dependency changes and fails on a high-severity vulnerability.
+- Added the `security-devops` workflow. It runs Microsoft Security DevOps on pushes and pull requests to `main` and uploads the SARIF results to the Security tab.
+- Added `tests/test_security_scan_workflows.py` for the approved action commits, permissions, and checkout credentials of both workflows.
+- The main window adds **Export Playlist (.m3u8)**. It writes the visible rows to a chosen path through `PlaylistExporter` and appends a missing `.m3u8` suffix. A failed write shows a warning.
+- `MainWindow` accepts an optional `on_export_playlist` callback.
+- Added `tests/unit/test_ui_playlist_export_action.py`.
+- `PlaylistExporter.export_m3u8_report` returns the written path, the written track count, and the skipped file IDs. `export_m3u8` still returns the written path. Added `tests/unit/test_playlist_exporter_safety.py`.
+- The main window adds **Transcode to XDJ**. It confirms the file count, mode, and preset from Settings, transcodes the visible rows, and lists each output and failure. `services/transcode_batch.py` isolates per-file failures.
+- `MainWindow` accepts an optional `on_transcode_batch` callback.
+- Added `tests/unit/test_ui_transcode_action.py` and the `tests/fixtures/qt_dialogs.py` dialog recorder.
 - Adopted the `abuzucom/agents` policy at commit `b452348`. `AGENTS.md` holds the canonical policy. `scripts/sync.py` generates the tool copies.
 - Added the complete gate set under `hooks/` with Claude Code, Codex, Gemini, and Antigravity registrations.
 - Added the agents checkers under `scripts/` and the agents test suites under `tests/`.
@@ -19,21 +114,36 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `TranscodePreset.XDJ_LOSSLESS_AUTO` replaces `XDJ_RX3_LOSSLESS_AUTO` as the default preset. `XDJ_RX3_LOSSLESS_AUTO` stays as an alias, and a stored `"XDJ_RX3_LOSSLESS_AUTO"` settings value still resolves. Settings menus list the preset once.
+- Sibling transcode output files end in `_XDJ` instead of `_XDJ_RX3`.
+- The Settings labels read **XDJ Transcode Mode** and **XDJ Transcode Preset**.
 - Ruff skips the copied agents gate files. The `agents-lint` job and `scripts/run_tests.py` cover those files.
 - `.gitattributes` pins LF line endings for the policy files.
 - The `checks` and `test-matrix` jobs install `requirements-checkers.txt` for the agents tests.
 - The `checks` and `test-matrix` test steps unset `GITHUB_EVENT_PATH`. Push events no longer reach the compliance scanner tests.
 - The README holds a full setup and usage walkthrough. It covers prerequisites, per-OS install, optional tools, data locations, credentials, each desktop workflow step, the `evaluate-sample` harness, and current limitations.
+- The README documents the transcode step. Its limitations list drops the missing transcode action and records the `MP3_320_CBR` and in-place OGG or M4A behavior.
+- The README documents the playlist export step. Its limitations list drops the missing playlist export action.
 - The README test section names the agents policy and gate suites in the `unittest` run. It installs `requirements-checkers.txt` first. Its commands run from an active virtual environment on every OS.
 
 ### Fixed
 
+- `WriteService.apply_single_plan` saves an `IN_PROGRESS` journal record before any file change. A crash mid-write now leaves a journal entry that names the backup.
+- A tag write that fails after its backup restores the original file from the verified backup and records `ROLLED_BACK`. A failure before the backup records `FAILED` and leaves the file untouched.
+- `restore_operation` copies the backup beside the target, verifies its SHA-256 against the pre-write hash, and then swaps it in with `os.replace`. A failed swap keeps the current file and removes the staging copy.
+- Added `tests/unit/test_journal_first_writes.py`.
+- Added `tests/unit/test_unsafe_plan_side_effects.py`. An unsafe plan raises its preflight error before any backup file, file change, or journal entry exists.
+- In-place **Transcode to XDJ** no longer fails with `AttributeError`. `OperationStatus` gains the `IN_PROGRESS` value that the in-place journal record uses before the replacement. Added `tests/unit/test_in_place_transcode_journal.py`.
 - The `sync-check` suite steps drop `GITHUB_EVENT_PATH`. Push events to `main` no longer fail the compliance scanner tests in `tests-windows`, `tests-macos`, and `check-sync`.
 - The `security-review-pr` `resolve-pr` job runs only for pull request `ci` runs. A push to `main` now skips the review instead of failing it.
 - Added `tests/test_push_event_workflow_wiring.py` for both workflow guards.
 
 ### Security
 
+- The playlist export leaves out a track whose stored or resolved path holds a line break, another C0 control character, or DEL. One entry can no longer split into extra playlist lines. The export dialog names each skipped track with its control characters shown as spaces. A stale file ID shows as an unknown track. Added `tests/unit/test_playlist_export_review_fixes.py`.
+- The export button appends `.m3u8` to a name with another suffix instead of replacing that suffix. A chosen `set.v2` becomes `set.v2.m3u8`, and `set.M3U8` keeps its name.
+- The playlist export opens its destination with `O_NOFOLLOW` where the OS defines it. A symlink at the destination raises an error and leaves the link target unchanged. A new playlist file gets mode `0o600`, readable and writable by its owner only. An overwritten playlist gets the same mode on POSIX. Added `tests/unit/test_playlist_overwrite_mode.py`.
+- The playlist export dialogs render as plain text through `show_plain_message`. A destination or file name that holds HTML tags shows literally. `DialogRecorder` records the helper. Added `tests/unit/test_plain_text_dialogs.py`.
 - `FpcalcBootstrapService` pins the SHA-256 digest of the official Chromaprint 1.5.1 Windows and macOS archives. Extraction requires a 64-character hexadecimal digest and compares it in constant time.
 - `install_fpcalc` refuses Linux and other platforms without a pinned archive. Those platforms install fpcalc from the system package manager.
 - `install_fpcalc` always verifies the download against the pinned digest. A caller `expected_sha256` that differs from the pin raises before any download.

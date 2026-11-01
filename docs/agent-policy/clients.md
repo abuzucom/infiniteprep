@@ -18,6 +18,11 @@ from `PreToolUse`.
 Client APIs differ. Do not claim coverage that the client cannot observe.
 Repository hooks remain defense in depth only.
 
+A multi-repository Claude Code cloud session starts above the clones. It loads
+no repository hooks. Agents there run the branch checker manually. A setup
+script running `pre-commit install --hook-type pre-push` restores the pre-push
+check.
+
 ## Compaction events
 Claude and Codex report compaction through the session payload `source`
 field. The reinjection hook prepends a compaction directive to policy

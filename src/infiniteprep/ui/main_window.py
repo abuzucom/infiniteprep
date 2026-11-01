@@ -55,6 +55,7 @@ SEARCH_INPUT_STRETCH: Final[int] = 3
 STATUS_FILTER_STRETCH: Final[int] = 1
 SPLITTER_TOP_HEIGHT: Final[int] = 380
 SPLITTER_BOTTOM_HEIGHT: Final[int] = 420
+PLAYLIST_SUFFIX: Final[str] = ".m3u8"
 
 
 class MainWindow(QMainWindow):
@@ -71,8 +72,14 @@ class MainWindow(QMainWindow):
         on_open_journal_dialog: Callable[[], None] | None = None,
         on_open_settings_dialog: Callable[[], None] | None = None,
         parent: QWidget | None = None,
+        on_transcode_batch: Callable[[list[str]], object] | None = None,
+        on_export_playlist: Callable[[list[str], Path], object] | None = None,
+        enable_audio_backend: bool = False,
     ) -> None:
-        """Initialize MainWindow with core services and callbacks."""
+        """Initialize MainWindow with core services and callbacks.
+
+        enable_audio_backend turns on real audio playback in the detail panel preview.
+        """
         super().__init__(parent)
         self.repo = repository
         self.import_service = import_service
@@ -81,6 +88,8 @@ class MainWindow(QMainWindow):
         self.on_open_write_dialog = on_open_write_dialog
         self.on_open_journal_dialog = on_open_journal_dialog
         self.on_open_settings_dialog = on_open_settings_dialog
+        self.on_transcode_batch = on_transcode_batch
+        self.on_export_playlist = on_export_playlist
 
         self.current_key_notation: KeyDisplayNotation = KeyDisplayNotation.CAMELOT
         self.visible_file_ids: list[str] = []
@@ -97,6 +106,7 @@ class MainWindow(QMainWindow):
             review_service=self.review_service,
             on_change_callback=self.refresh_file_table,
             parent=self,
+            enable_audio_backend=enable_audio_backend,
         )
 
         self._setup_toolbar()
@@ -123,6 +133,14 @@ class MainWindow(QMainWindow):
         write_btn = QPushButton("Preview & Apply Writes", self)
         write_btn.clicked.connect(self._trigger_open_write_dialog)
         toolbar.addWidget(write_btn)
+
+        self.transcode_btn = QPushButton("Transcode to XDJ", self)
+        self.transcode_btn.clicked.connect(self._trigger_transcode_batch)
+        toolbar.addWidget(self.transcode_btn)
+
+        self.export_playlist_btn = QPushButton("Export Playlist (.m3u8)", self)
+        self.export_playlist_btn.clicked.connect(self._trigger_export_playlist)
+        toolbar.addWidget(self.export_playlist_btn)
 
         journal_btn = QPushButton("Change Journal & Restore", self)
         journal_btn.clicked.connect(self._trigger_open_journal)
@@ -328,6 +346,27 @@ class MainWindow(QMainWindow):
         """Open write preview and execution dialog if callback is registered."""
         if self.on_open_write_dialog:
             self.on_open_write_dialog(list(self.visible_file_ids))
+
+    def _trigger_transcode_batch(self) -> None:
+        """Invoke the batch transcode callback on visible files and refresh the table."""
+        if self.on_transcode_batch and self.visible_file_ids:
+            self.on_transcode_batch(list(self.visible_file_ids))
+            self.refresh_file_table()
+
+    def _trigger_export_playlist(self) -> None:
+        """Ask for a .m3u8 destination and invoke the playlist export callback."""
+        if not self.on_export_playlist or not self.visible_file_ids:
+            return
+        chosen, _ = QFileDialog.getSaveFileName(
+            self, "Export Playlist", "crate.m3u8", "M3U8 Playlist (*.m3u8)"
+        )
+        if not chosen:
+            return
+        destination = Path(chosen)
+        # Append rather than replace, so a name like "set.v2" keeps its full stem.
+        if destination.suffix.lower() != PLAYLIST_SUFFIX:
+            destination = destination.with_name(destination.name + PLAYLIST_SUFFIX)
+        self.on_export_playlist(list(self.visible_file_ids), destination)
 
     def _trigger_open_journal(self) -> None:
         """Open change journal and restore dialog if callback is registered."""

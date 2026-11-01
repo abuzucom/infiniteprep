@@ -49,13 +49,5 @@ hooks.
 Use an external harness, filesystem isolation, or server-side controls for
 tamper resistance.
 
-Hosted GitHub operations use the trusted wrapper. A managed Codex loopback
-proxy at `127.0.0.1:9` does not prove GitHub CLI failure. Agents cannot modify
-Git Credential Manager or refresh GitHub tokens through a browser.
-
-Controlled adopters must preserve license-required attribution and source
-metadata. Each uncontrolled mirror remains responsible for its own legal
-compliance. This repository cannot enforce or verify third-party practices.
-
 Every repository change requires a versioned SemVer changelog entry. This repo 
 does not use `[Unreleased]`.

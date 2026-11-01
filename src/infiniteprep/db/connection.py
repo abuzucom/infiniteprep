@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import uuid
 from pathlib import Path
 from types import TracebackType
 
@@ -22,6 +23,9 @@ class DatabaseManager:
         self.db_path = Path(db_path) if str(db_path) != ":memory:" else Path(":memory:")
         self._is_memory = str(db_path) == ":memory:"
         self._local = threading.local()
+        # A unique name keeps each in-memory database private. id(self) can repeat after
+        # garbage collection while an old connection still holds that shared-cache database.
+        self._memory_name = f"infiniteprep_{uuid.uuid4().hex}"
         if not self._is_memory:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.initialize()
@@ -30,7 +34,7 @@ class DatabaseManager:
         """Return a thread-local SQLite connection instance for the calling thread."""
         if getattr(self._local, "conn", None) is None:
             if self._is_memory:
-                uri = f"file:infiniteprep_{id(self)}?mode=memory&cache=shared"
+                uri = f"file:{self._memory_name}?mode=memory&cache=shared"
                 self._local.conn = sqlite3.connect(uri, timeout=30.0, uri=True)
             else:
                 self._local.conn = sqlite3.connect(str(self.db_path), timeout=30.0)
