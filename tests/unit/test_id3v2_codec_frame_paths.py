@@ -114,13 +114,15 @@ def test_undefined_text_encoding_byte_raises_format_error() -> None:
         decode_text_values(Id3Frame("TIT2", b"\x07Title"))
 
 
-def test_v23_compressed_frame_exceeding_max_size_raises_format_error() -> None:
-    """A compressed frame whose decompressed size exceeds the maximum raises Id3FormatError."""
+def test_v23_compressed_frame_exceeding_max_size_is_dropped() -> None:
+    """A compressed frame whose decompressed size exceeds the maximum is dropped and named."""
     large_data = b"\x00" * (17 * 1024 * 1024)
     compressed = zlib.compress(large_data)
     raw = struct.pack(">I", len(large_data)) + compressed
-    with pytest.raises(Id3FormatError):
-        parse_id3v2(tag_bytes(3, v23_frame("TIT2", raw, V23_COMPRESSED)))
+    tag = parse_id3v2(tag_bytes(3, v23_frame("TIT2", raw, V23_COMPRESSED)))
+    assert tag is not None
+    assert tag.frames == ()
+    assert tag.dropped_frames == ("TIT2",)
 
 
 def test_truncated_language_frame_raises_format_error() -> None:
