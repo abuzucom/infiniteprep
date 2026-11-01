@@ -31,6 +31,8 @@ MANIFEST
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+# The InfinitePrep PyInstaller build file is tracked on purpose.
+!infiniteprep.spec
 
 # Installer logs
 pip-log.txt
@@ -218,3 +220,51 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# InfinitePrep local state. The scripts under scripts/dev write logs/ and scratch/.
+logs/
+scratch/
+# Only plan/HANDOFF.md.example is committed. The live handoff stays local.
+plan/HANDOFF.md
+# Gate adoption stages candidates here before the installer copies them.
+.gate-staging/
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Databases. The app keeps its database in the per-user data folder, so a copy here is stray.
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Music files. Tests generate their audio, so none belongs in the repository.
+*.mp3
+*.wav
+*.wave
+*.aif
+*.aiff
+*.aifc
+*.flac
+*.m4a
+*.mp4
+*.aac
+*.ogg
+*.opus
+*.alac
+
+# Environment files. Committing .env.example needs a separate sign-off.
+.env.*
+!.env.example
+
+# Operating system files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*~
