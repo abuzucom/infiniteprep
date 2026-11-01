@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import struct
 from dataclasses import dataclass
 from pathlib import Path
-import struct
 from typing import Final
 
 from infiniteprep.adapters.metadata_io.flac_vorbis import (

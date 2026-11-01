@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import struct
+from pathlib import Path
 
 import pytest
 
@@ -200,7 +200,7 @@ def test_read_from_path_and_str(tmp_path: Path) -> None:
 def test_invalid_type_raises_type_error() -> None:
     """Raise TypeError when input source is neither bytes nor file path."""
     with pytest.raises(TypeError, match="Ogg source must be"):
-        read_ogg(12345)  # type: ignore[arg-type]
+        read_ogg(12345)
 
 
 def test_damage_non_ogg_magic_raises_ogg_format_error() -> None:
