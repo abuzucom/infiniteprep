@@ -162,7 +162,9 @@ def parse_id3v2(data: bytes) -> Id3Tag | None:
         # Bit 6 in v2.2 marks a compression scheme the standard never defined.
         return Id3Tag(source_version=major, dropped_frames=("compressed ID3v2.2 tag",))
     start = _extended_header_length(body, major) if flags & TAG_FLAG_EXTENDED else 0
-    frames, dropped = _parse_frames(body, start, major)
+    # A v2.4 header flag marks every frame body as unsynchronised. Frame headers stay plain.
+    forced_flags = V24_UNSYNC if major == V24 and flags & TAG_FLAG_UNSYNC else 0
+    frames, dropped = _parse_frames(body, start, major, forced_flags)
     return Id3Tag(source_version=major, frames=tuple(frames), dropped_frames=tuple(dropped))
 
 
@@ -175,8 +177,13 @@ def _extended_header_length(body: bytes, major: int) -> int:
     return COMPRESSED_SIZE_BYTES + struct.unpack(">I", body[:4])[0]
 
 
-def _parse_frames(body: bytes, offset: int, major: int) -> tuple[list[Id3Frame], list[str]]:
-    """Walk frame headers from offset until padding, damage, or the end of body."""
+def _parse_frames(
+    body: bytes, offset: int, major: int, forced_flags: int = 0
+) -> tuple[list[Id3Frame], list[str]]:
+    """Walk frame headers from offset until padding, damage, or the end of body.
+
+    forced_flags adds format flags to every frame, as the v2.4 header unsync flag requires.
+    """
     frames: list[Id3Frame] = []
     dropped: list[str] = []
     header_size = V22_FRAME_HEADER_SIZE if major == V22 else FRAME_HEADER_SIZE
@@ -192,7 +199,7 @@ def _parse_frames(body: bytes, offset: int, major: int) -> tuple[list[Id3Frame],
             dropped.append(f"{frame_id.decode('ascii')} (truncated)")
             break
         raw = body[start : start + size]
-        frame = _build_frame(frame_id.decode("ascii"), flags, raw, major, budget)
+        frame = _build_frame(frame_id.decode("ascii"), flags | forced_flags, raw, major, budget)
         if frame is None:
             dropped.append(frame_id.decode("ascii"))
         else:
