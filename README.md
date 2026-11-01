@@ -144,6 +144,33 @@ The `dev` extra adds pytest, pytest-qt, Ruff, and PyInstaller. Run
 The install registers the `infiniteprep` command inside the virtual
 environment. Every command below assumes an active virtual environment.
 
+#### One-click update and test
+
+On Windows, double-click `scripts\dev\update_and_check.cmd`. On macOS and
+Linux, run `scripts/dev/update_and_check.sh`. Each run does these steps:
+
+1. Stop with a message when the checkout has uncommitted changes or is not
+   on `main`. The script never stashes, resets, or deletes anything.
+2. Pull `main` with a fast-forward only.
+3. Create `.venv` when it is missing. Install `-e ".[dev]"` and
+   `requirements-checkers.txt`.
+4. Run Ruff, the format check, pytest, the policy tests, the prose lint, the
+   conflict marker check, and the sync check. The run continues past a
+   failure and prints a PASS or FAIL summary. The full log goes to
+   `logs/update_and_check-<UTC time>.log`.
+5. Launch `infiniteprep` when every check passes. A failure exits with
+   code 1.
+
+Options: `-NoPull`, `-NoLaunch`, `-ChecksOnly`, and `-DryRun` on Windows, or
+`--no-pull`, `--no-launch`, `--checks-only`, and `--dry-run` on macOS and
+Linux. Pass options to the `.cmd` file from a terminal.
+
+To build a smoke-test library, run
+`scripts\dev\make_test_copies.ps1 -Source <music folder>` or
+`scripts/dev/make_test_copies.sh <music folder>`. The helper copies up to
+three files of each format into `scratch/test-library/<UTC time>/` and only
+reads the source folder.
+
 ### 4. Optional external tools
 
 - `fpcalc` (Chromaprint). Linux installs it from the distribution package,

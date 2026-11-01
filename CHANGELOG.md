@@ -5,9 +5,12 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.15.0] (2026-11-01)
+## [0.16.0] (2026-11-01)
 
 ### Added
+
+- `scripts/dev/update_and_check.cmd`, `scripts/dev/update_and_check.ps1`, and `scripts/dev/update_and_check.sh` pull `main`, refresh `.venv`, run every local check, print a PASS or FAIL summary, and launch the app when all checks pass. A dirty checkout or a branch other than `main` stops the run. `scripts/dev/make_test_copies.ps1` and `scripts/dev/make_test_copies.sh` copy a few files of each format into `scratch/test-library/`. Added `tests/unit/test_dev_scripts.py`.
+- `.gitignore` keeps the tracked `infiniteprep.spec` and ignores local state, stray databases, music files, `.env` variants, and OS and editor files.
 
 - `adapters/metadata_io/flac_vorbis.py` reads and writes the Vorbis comment block of FLAC bytes. Field names match without regard to case. Entries without `=` appear in `dropped_entries`. APPLICATION, SEEKTABLE, PICTURE, and other blocks stay byte for byte and in order. Padding absorbs size changes where it can. A leading ID3v2 tag and the audio frames stay byte for byte. No caller uses the module yet. Added `tests/unit/test_flac_vorbis.py` and `tests/fixtures/flac_bytes.py`.
 
