@@ -6,6 +6,7 @@ not interpret keep their body bytes unchanged, so tags from DJ software survive 
 
 from __future__ import annotations
 
+import datetime
 import re
 import struct
 import zlib
@@ -21,6 +22,11 @@ V22, V23, V24 = 2, 3, 4
 SYNCHSAFE_LIMIT: Final[int] = 0x80
 MAX_SYNCHSAFE_SIZE: Final[int] = (1 << 28) - 1
 DEFAULT_PADDING_BYTES: Final[int] = 1024
+MAX_PADDING_BYTES: Final[int] = 64 * 1024
+# Inflation caps bound the memory a crafted compressed frame can claim. 16 MiB holds large
+# cover art, and 64 MiB covers every compressed frame of one tag together.
+MAX_INFLATED_FRAME_BYTES: Final[int] = 16 * 1024 * 1024
+MAX_INFLATED_TAG_BYTES: Final[int] = 64 * 1024 * 1024
 
 TAG_FLAG_UNSYNC: Final[int] = 0x80
 TAG_FLAG_EXTENDED: Final[int] = 0x40
@@ -45,15 +51,13 @@ MAX_DECOMPRESSED_FRAME_SIZE: Final[int] = 16 * 1024 * 1024
 V23_VALUE_SEPARATOR: Final[str] = "/"
 
 FRAME_ID_RE: Final[re.Pattern[bytes]] = re.compile(rb"[A-Z0-9]{3,4}")
-# A v2.4 timestamp: yyyy, then optional -MM, -dd, and THH:mm parts.
+# A whole v2.4 timestamp: yyyy[-MM[-dd[THH[:mm[:ss]][Z or UTC offset]]]]. The offset only
+# follows a time. Each part has a fixed width, so the optional groups cannot backtrack.
 TDRC_RE: Final[re.Pattern[str]] = re.compile(
-    r"(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2}):(\d{2}))?)?)?"
+    r"(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2})(?::(\d{2})(?::(\d{2}))?)?"
+    r"(?:Z|[+-]\d{2}(?::?\d{2})?)?)?)?)?"
 )
 DATE_FRAMES: Final[frozenset[str]] = frozenset({"TDRC", "TDOR"})
-VALID_MONTHS: Final[range] = range(1, 13)
-VALID_DAYS: Final[range] = range(1, 32)
-VALID_HOURS: Final[range] = range(24)
-VALID_MINUTES: Final[range] = range(60)
 
 V22_TO_V23: Final[dict[str, str]] = {
     "TT1": "TIT1", "TT2": "TIT2", "TT3": "TIT3", "TP1": "TPE1", "TP2": "TPE2",
@@ -101,6 +105,13 @@ class Id3Tag:
     source_version: int = V23
     frames: tuple[Id3Frame, ...] = ()
     dropped_frames: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass
+class _InflateBudget:
+    """Bytes that compressed frames of one tag may still inflate to."""
+
+    remaining: int = MAX_INFLATED_TAG_BYTES
 
 
 def decode_synchsafe(raw: bytes) -> int:
@@ -152,7 +163,9 @@ def parse_id3v2(data: bytes) -> Id3Tag | None:
         # Bit 6 in v2.2 marks a compression scheme the standard never defined.
         return Id3Tag(source_version=major, dropped_frames=("compressed ID3v2.2 tag",))
     start = _extended_header_length(body, major) if flags & TAG_FLAG_EXTENDED else 0
-    frames, dropped = _parse_frames(body, start, major)
+    # A v2.4 header flag marks every frame body as unsynchronised. Frame headers stay plain.
+    forced_flags = V24_UNSYNC if major == V24 and flags & TAG_FLAG_UNSYNC else 0
+    frames, dropped = _parse_frames(body, start, major, forced_flags)
     return Id3Tag(source_version=major, frames=tuple(frames), dropped_frames=tuple(dropped))
 
 
@@ -165,12 +178,18 @@ def _extended_header_length(body: bytes, major: int) -> int:
     return COMPRESSED_SIZE_BYTES + struct.unpack(">I", body[:4])[0]
 
 
-def _parse_frames(body: bytes, offset: int, major: int) -> tuple[list[Id3Frame], list[str]]:
-    """Walk frame headers from offset until padding, damage, or the end of body."""
+def _parse_frames(
+    body: bytes, offset: int, major: int, forced_flags: int = 0
+) -> tuple[list[Id3Frame], list[str]]:
+    """Walk frame headers from offset until padding, damage, or the end of body.
+
+    forced_flags adds format flags to every frame, as the v2.4 header unsync flag requires.
+    """
     frames: list[Id3Frame] = []
     dropped: list[str] = []
     header_size = V22_FRAME_HEADER_SIZE if major == V22 else FRAME_HEADER_SIZE
     id_length = 3 if major == V22 else 4
+    budget = _InflateBudget()
     while offset + header_size <= len(body):
         frame_id = body[offset : offset + id_length]
         if FRAME_ID_RE.fullmatch(frame_id) is None:
@@ -180,7 +199,8 @@ def _parse_frames(body: bytes, offset: int, major: int) -> tuple[list[Id3Frame],
         if start + size > len(body):
             dropped.append(f"{frame_id.decode('ascii')} (truncated)")
             break
-        frame = _build_frame(frame_id.decode("ascii"), flags, body[start : start + size], major)
+        raw = body[start : start + size]
+        frame = _build_frame(frame_id.decode("ascii"), flags | forced_flags, raw, major, budget)
         if frame is None:
             dropped.append(frame_id.decode("ascii"))
         else:
@@ -200,7 +220,9 @@ def _frame_size_and_flags(header: bytes, major: int) -> tuple[int, int]:
     return struct.unpack(">I", header[4:8])[0], flags
 
 
-def _build_frame(frame_id: str, flags: int, raw: bytes, major: int) -> Id3Frame | None:
+def _build_frame(
+    frame_id: str, flags: int, raw: bytes, major: int, budget: _InflateBudget
+) -> Id3Frame | None:
     """Undo frame-level encodings. Return None for frames that cannot be kept."""
     if major == V22:
         upgraded = V22_TO_V23.get(frame_id)
@@ -208,13 +230,14 @@ def _build_frame(frame_id: str, flags: int, raw: bytes, major: int) -> Id3Frame 
             return None
         return Id3Frame(upgraded, _upgrade_v22_picture(raw) if frame_id == "PIC" else raw)
     status, fmt = flags >> 8, flags & 0xFF
-    body = _decode_v24_body(fmt, raw) if major == V24 else _decode_v23_body(fmt, raw)
+    decode_body = _decode_v24_body if major == V24 else _decode_v23_body
+    body = decode_body(fmt, raw, budget)
     if body is None:
         return None
     return Id3Frame(frame_id, body, _status_as_v23(status, major))
 
 
-def _decode_v23_body(fmt: int, raw: bytes) -> bytes | None:
+def _decode_v23_body(fmt: int, raw: bytes, budget: _InflateBudget) -> bytes | None:
     """Undo v2.3 grouping and compression. Encrypted frames are not kept."""
     if fmt & V23_ENCRYPTED:
         return None
@@ -223,10 +246,10 @@ def _decode_v23_body(fmt: int, raw: bytes) -> bytes | None:
         body = body[COMPRESSED_SIZE_BYTES:]
     if fmt & V23_GROUPED:
         body = body[1:]
-    return _inflate(body) if fmt & V23_COMPRESSED else body
+    return _inflate(body, budget) if fmt & V23_COMPRESSED else body
 
 
-def _decode_v24_body(fmt: int, raw: bytes) -> bytes | None:
+def _decode_v24_body(fmt: int, raw: bytes, budget: _InflateBudget) -> bytes | None:
     """Undo v2.4 grouping, length indicator, unsynchronisation, and compression."""
     if fmt & V24_ENCRYPTED:
         return None
@@ -235,22 +258,25 @@ def _decode_v24_body(fmt: int, raw: bytes) -> bytes | None:
         body = body[COMPRESSED_SIZE_BYTES:]
     if fmt & V24_UNSYNC:
         body = remove_unsynchronisation(body)
-    return _inflate(body) if fmt & V24_COMPRESSED else body
+    return _inflate(body, budget) if fmt & V24_COMPRESSED else body
 
 
-def _inflate(body: bytes, max_length: int = MAX_DECOMPRESSED_FRAME_SIZE) -> bytes | None:
-    """Decompress a zlib frame body, or return None when it is damaged."""
-    decompressor = zlib.decompressobj()
+def _inflate(body: bytes, budget: _InflateBudget) -> bytes | None:
+    """Decompress a zlib frame body within the frame and tag caps.
+
+    Return None when the body is damaged or would inflate past a cap.
+    """
+    limit = min(MAX_INFLATED_FRAME_BYTES, budget.remaining)
+    inflater = zlib.decompressobj()
     try:
-        decompressed = decompressor.decompress(body, max_length + 1)
-        decompressed += decompressor.flush()
+        # One byte past the limit shows an oversized stream without inflating the rest.
+        inflated = inflater.decompress(body, limit + 1)
     except zlib.error:
         return None
-    if len(decompressed) > max_length or decompressor.unconsumed_tail:
-        raise Id3FormatError("Decompressed frame exceeds the maximum allowed size.")
-    if not decompressor.eof:
+    if len(inflated) > limit or not inflater.eof:
         return None
-    return decompressed
+    budget.remaining -= len(inflated)
+    return inflated
 
 
 def _status_as_v23(status: int, major: int) -> int:
@@ -404,6 +430,10 @@ def remove_frames(tag: Id3Tag, frame_id: str) -> Id3Tag:
 
 def render_id3v23(tag: Id3Tag, padding: int = DEFAULT_PADDING_BYTES) -> bytes:
     """Render tag as ID3v2.3 with padding, converting frames that v2.3 cannot hold."""
+    if not 0 <= padding <= MAX_PADDING_BYTES:
+        raise ValueError(
+            f"ID3v2 padding {padding} is outside 0 to {MAX_PADDING_BYTES}; pass a smaller value."
+        )
     frames = _frames_for_v23(tag.frames)
     payload = b"".join(_render_frame(frame) for frame in frames) + b"\x00" * padding
     return ID3_MAGIC + bytes((V23, 0, 0)) + encode_synchsafe(len(payload)) + payload
@@ -436,25 +466,47 @@ def _date_frames_for_v23(frame: Id3Frame, present: set[str]) -> list[Id3Frame]:
     return [replacement for replacement in replacements if replacement.frame_id not in present]
 
 
-def _in_range(digits: str | None, valid: range) -> bool:
-    """Return True when digits is present and its value lies in valid."""
-    return digits is not None and int(digits) in valid
+def _tdat_value(year: str, month: str | None, day: str | None) -> str | None:
+    """Return the DDMM TDAT value, or None unless year, month, and day form a calendar date."""
+    if month is None or day is None:
+        return None
+    try:
+        datetime.date(int(year), int(month), int(day))
+    except ValueError:
+        return None
+    return f"{day}{month}"
+
+
+def _time_value(hour: str | None, minute: str | None, second: str | None) -> str | None:
+    """Return the HHMM TIME value, or None unless the parts form a valid time of day."""
+    if hour is None or minute is None:
+        return None
+    try:
+        datetime.time(int(hour), int(minute), int(second or 0))
+    except ValueError:
+        return None
+    return f"{hour}{minute}"
 
 
 def _convert_date(frame: Id3Frame) -> list[Id3Frame]:
-    """Turn a v2.4 timestamp frame into v2.3 year, date, and time frames with valid parts only."""
+    """Turn a v2.4 timestamp frame into v2.3 year, date, and time frames with valid parts only.
+
+    TIME keeps the written hour and minutes. A Z or offset suffix does not shift them.
+    """
     values = decode_text_values(frame)
-    match = TDRC_RE.match(values[0].strip()) if values else None
+    match = TDRC_RE.fullmatch(values[0].strip()) if values else None
     if match is None:
         return []
-    year, month, day, hour, minute = match.groups()
+    year, month, day, hour, minute, second = match.groups()
     if frame.frame_id == "TDOR":
         return [build_text_frame("TORY", year)]
     result = [build_text_frame("TYER", year)]
-    if _in_range(month, VALID_MONTHS) and _in_range(day, VALID_DAYS):
-        result.append(build_text_frame("TDAT", f"{day}{month}"))
-    if _in_range(hour, VALID_HOURS) and _in_range(minute, VALID_MINUTES):
-        result.append(build_text_frame("TIME", f"{hour}{minute}"))
+    tdat = _tdat_value(year, month, day)
+    if tdat is not None:
+        result.append(build_text_frame("TDAT", tdat))
+    time_of_day = _time_value(hour, minute, second)
+    if time_of_day is not None:
+        result.append(build_text_frame("TIME", time_of_day))
     return result
 
 

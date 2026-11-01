@@ -24,44 +24,13 @@ from infiniteprep.adapters.metadata_io.id3v2 import (
     remove_frames,
     render_id3v23,
 )
+from tests.fixtures.id3v2_bytes import tag_bytes, utf16, v22_frame, v23_frame, v24_frame
 
-UTF16_BOM_LE = b"\xff\xfe"
 V23_COMPRESSED = b"\x00\x80"
 V23_COMPRESSED_AND_GROUPED = b"\x00\xa0"
 V23_ENCRYPTED = b"\x00\x40"
 # 200 stored as a plain integer sets the top bit of the last size byte.
 PLAIN_SIZE_WITH_TOP_BIT = 200
-
-
-def synchsafe(value: int) -> bytes:
-    """Encode value as a 4-byte synchsafe integer."""
-    return bytes((value >> shift) & 0x7F for shift in (21, 14, 7, 0))
-
-
-def utf16(text: str) -> bytes:
-    """Encode text as BOM-prefixed little-endian UTF-16."""
-    return UTF16_BOM_LE + text.encode("utf-16-le")
-
-
-def v23_frame(frame_id: str, body: bytes, flags: bytes = b"\x00\x00") -> bytes:
-    """Build one ID3v2.3 frame with a plain big-endian size."""
-    return frame_id.encode("ascii") + struct.pack(">I", len(body)) + flags + body
-
-
-def v24_frame(frame_id: str, body: bytes) -> bytes:
-    """Build one ID3v2.4 frame with a synchsafe size."""
-    return frame_id.encode("ascii") + synchsafe(len(body)) + b"\x00\x00" + body
-
-
-def v22_frame(frame_id: str, body: bytes) -> bytes:
-    """Build one ID3v2.2 frame with a 3-byte size."""
-    return frame_id.encode("ascii") + len(body).to_bytes(3, "big") + body
-
-
-def tag_bytes(major: int, frames: bytes, flags: int = 0, padding: int = 16) -> bytes:
-    """Wrap frames in an ID3v2 header of the given major version."""
-    body = frames + b"\x00" * padding
-    return b"ID3" + bytes((major, 0, flags)) + synchsafe(len(body)) + body
 
 
 def test_comm_frame_key_names_description_and_language() -> None:
