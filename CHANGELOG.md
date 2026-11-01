@@ -5,9 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.15.0] (2026-11-01)
+## [0.16.0] (2026-11-01)
 
 ### Added
+
+- `adapters/metadata_io/ogg_reader.py` reads metadata, codec parameters, and Vorbis comments from Ogg Vorbis and Ogg Opus audio bytes. Damage raises `OggFormatError`. No caller uses the module yet. Added `tests/unit/test_ogg_reader.py` and `tests/fixtures/ogg_bytes.py`.
 
 - `adapters/metadata_io/flac_vorbis.py` reads and writes the Vorbis comment block of FLAC bytes. Field names match without regard to case. Entries without `=` appear in `dropped_entries`. APPLICATION, SEEKTABLE, PICTURE, and other blocks stay byte for byte and in order. Padding absorbs size changes where it can. A leading ID3v2 tag and the audio frames stay byte for byte. No caller uses the module yet. Added `tests/unit/test_flac_vorbis.py` and `tests/fixtures/flac_bytes.py`.
 
