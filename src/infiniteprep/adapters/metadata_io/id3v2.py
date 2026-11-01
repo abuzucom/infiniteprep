@@ -21,6 +21,11 @@ V22, V23, V24 = 2, 3, 4
 SYNCHSAFE_LIMIT: Final[int] = 0x80
 MAX_SYNCHSAFE_SIZE: Final[int] = (1 << 28) - 1
 DEFAULT_PADDING_BYTES: Final[int] = 1024
+MAX_PADDING_BYTES: Final[int] = 64 * 1024
+# Inflation caps bound the memory a crafted compressed frame can claim. 16 MiB holds large
+# cover art, and 64 MiB covers every compressed frame of one tag together.
+MAX_INFLATED_FRAME_BYTES: Final[int] = 16 * 1024 * 1024
+MAX_INFLATED_TAG_BYTES: Final[int] = 64 * 1024 * 1024
 
 TAG_FLAG_UNSYNC: Final[int] = 0x80
 TAG_FLAG_EXTENDED: Final[int] = 0x40
@@ -101,6 +106,13 @@ class Id3Tag:
     dropped_frames: tuple[str, ...] = field(default_factory=tuple)
 
 
+@dataclass
+class _InflateBudget:
+    """Bytes that compressed frames of one tag may still inflate to."""
+
+    remaining: int = MAX_INFLATED_TAG_BYTES
+
+
 def decode_synchsafe(raw: bytes) -> int:
     """Decode a synchsafe integer, raising Id3FormatError when a byte has its top bit set."""
     if any(byte >= SYNCHSAFE_LIMIT for byte in raw):
@@ -169,6 +181,7 @@ def _parse_frames(body: bytes, offset: int, major: int) -> tuple[list[Id3Frame],
     dropped: list[str] = []
     header_size = V22_FRAME_HEADER_SIZE if major == V22 else FRAME_HEADER_SIZE
     id_length = 3 if major == V22 else 4
+    budget = _InflateBudget()
     while offset + header_size <= len(body):
         frame_id = body[offset : offset + id_length]
         if FRAME_ID_RE.fullmatch(frame_id) is None:
@@ -178,7 +191,8 @@ def _parse_frames(body: bytes, offset: int, major: int) -> tuple[list[Id3Frame],
         if start + size > len(body):
             dropped.append(f"{frame_id.decode('ascii')} (truncated)")
             break
-        frame = _build_frame(frame_id.decode("ascii"), flags, body[start : start + size], major)
+        raw = body[start : start + size]
+        frame = _build_frame(frame_id.decode("ascii"), flags, raw, major, budget)
         if frame is None:
             dropped.append(frame_id.decode("ascii"))
         else:
@@ -198,7 +212,9 @@ def _frame_size_and_flags(header: bytes, major: int) -> tuple[int, int]:
     return struct.unpack(">I", header[4:8])[0], flags
 
 
-def _build_frame(frame_id: str, flags: int, raw: bytes, major: int) -> Id3Frame | None:
+def _build_frame(
+    frame_id: str, flags: int, raw: bytes, major: int, budget: _InflateBudget
+) -> Id3Frame | None:
     """Undo frame-level encodings. Return None for frames that cannot be kept."""
     if major == V22:
         upgraded = V22_TO_V23.get(frame_id)
@@ -206,13 +222,14 @@ def _build_frame(frame_id: str, flags: int, raw: bytes, major: int) -> Id3Frame 
             return None
         return Id3Frame(upgraded, _upgrade_v22_picture(raw) if frame_id == "PIC" else raw)
     status, fmt = flags >> 8, flags & 0xFF
-    body = _decode_v24_body(fmt, raw) if major == V24 else _decode_v23_body(fmt, raw)
+    decode_body = _decode_v24_body if major == V24 else _decode_v23_body
+    body = decode_body(fmt, raw, budget)
     if body is None:
         return None
     return Id3Frame(frame_id, body, _status_as_v23(status, major))
 
 
-def _decode_v23_body(fmt: int, raw: bytes) -> bytes | None:
+def _decode_v23_body(fmt: int, raw: bytes, budget: _InflateBudget) -> bytes | None:
     """Undo v2.3 grouping and compression. Encrypted frames are not kept."""
     if fmt & V23_ENCRYPTED:
         return None
@@ -221,10 +238,10 @@ def _decode_v23_body(fmt: int, raw: bytes) -> bytes | None:
         body = body[COMPRESSED_SIZE_BYTES:]
     if fmt & V23_GROUPED:
         body = body[1:]
-    return _inflate(body) if fmt & V23_COMPRESSED else body
+    return _inflate(body, budget) if fmt & V23_COMPRESSED else body
 
 
-def _decode_v24_body(fmt: int, raw: bytes) -> bytes | None:
+def _decode_v24_body(fmt: int, raw: bytes, budget: _InflateBudget) -> bytes | None:
     """Undo v2.4 grouping, length indicator, unsynchronisation, and compression."""
     if fmt & V24_ENCRYPTED:
         return None
@@ -233,15 +250,25 @@ def _decode_v24_body(fmt: int, raw: bytes) -> bytes | None:
         body = body[COMPRESSED_SIZE_BYTES:]
     if fmt & V24_UNSYNC:
         body = remove_unsynchronisation(body)
-    return _inflate(body) if fmt & V24_COMPRESSED else body
+    return _inflate(body, budget) if fmt & V24_COMPRESSED else body
 
 
-def _inflate(body: bytes) -> bytes | None:
-    """Decompress a zlib frame body, or return None when it is damaged."""
+def _inflate(body: bytes, budget: _InflateBudget) -> bytes | None:
+    """Decompress a zlib frame body within the frame and tag caps.
+
+    Return None when the body is damaged or would inflate past a cap.
+    """
+    limit = min(MAX_INFLATED_FRAME_BYTES, budget.remaining)
+    inflater = zlib.decompressobj()
     try:
-        return zlib.decompress(body)
+        # One byte past the limit shows an oversized stream without inflating the rest.
+        inflated = inflater.decompress(body, limit + 1)
     except zlib.error:
         return None
+    if len(inflated) > limit or not inflater.eof:
+        return None
+    budget.remaining -= len(inflated)
+    return inflated
 
 
 def _status_as_v23(status: int, major: int) -> int:
@@ -371,6 +398,10 @@ def remove_frames(tag: Id3Tag, frame_id: str) -> Id3Tag:
 
 def render_id3v23(tag: Id3Tag, padding: int = DEFAULT_PADDING_BYTES) -> bytes:
     """Render tag as ID3v2.3 with padding, converting frames that v2.3 cannot hold."""
+    if not 0 <= padding <= MAX_PADDING_BYTES:
+        raise ValueError(
+            f"ID3v2 padding {padding} is outside 0 to {MAX_PADDING_BYTES}; pass a smaller value."
+        )
     frames = _frames_for_v23(tag.frames)
     payload = b"".join(_render_frame(frame) for frame in frames) + b"\x00" * padding
     return ID3_MAGIC + bytes((V23, 0, 0)) + encode_synchsafe(len(payload)) + payload
