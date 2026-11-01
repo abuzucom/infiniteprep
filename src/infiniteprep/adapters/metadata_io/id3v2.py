@@ -323,9 +323,8 @@ def frame_key(frame: Id3Frame) -> str:
             owner = frame.body.partition(OWNER_TERMINATOR)[0].decode("latin-1")
             return f"{frame_id}:{owner}"
         if frame_id in LANGUAGE_FRAMES and len(frame.body) > LANGUAGE_BYTES:
-            language = frame.body[1 : 1 + LANGUAGE_BYTES].decode("latin-1")
-            described = frame.body[:1] + frame.body[1 + LANGUAGE_BYTES :]
-            return f"{frame_id}:{_split_described(described)[1]}:{language}"
+            language, _, description, _ = _split_language_frame(frame.body)
+            return f"{frame_id}:{description}:{language}"
     except Id3FormatError:
         return frame_id
     return frame_id
@@ -427,12 +426,18 @@ def _to_v23_encoding(frame: Id3Frame) -> Id3Frame:
     return frame
 
 
+def _split_language_frame(body: bytes) -> tuple[str, int, str, bytes]:
+    """Split a COMM or USLT body into its language, encoding, description, and text bytes."""
+    language = body[1 : 1 + LANGUAGE_BYTES].decode("latin-1")
+    encoding, description, rest = _split_described(body[:1] + body[1 + LANGUAGE_BYTES :])
+    return language, encoding, description, rest
+
+
 def _reencode_language_frame(body: bytes) -> bytes:
     """Re-encode a COMM or USLT body from UTF-8 or UTF-16BE to UTF-16 with a BOM."""
-    language = body[1 : 1 + LANGUAGE_BYTES]
-    encoding, description, rest = _split_described(body[:1] + body[1 + LANGUAGE_BYTES :])
+    language, encoding, description, rest = _split_language_frame(body)
     text = _decode_string(rest.rstrip(b"\x00") if encoding in (LATIN1, UTF8) else rest, encoding)
     return (
-        bytes((UTF16,)) + language + encode_utf16(description) + b"\x00\x00"
+        bytes((UTF16,)) + language.encode("latin-1") + encode_utf16(description) + b"\x00\x00"
         + encode_utf16(text.rstrip("\x00"))
     )  # fmt: skip
