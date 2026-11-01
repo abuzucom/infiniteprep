@@ -16,8 +16,6 @@ from infiniteprep.adapters.metadata_io.ogg_reader import (
 from tests.fixtures.ogg_bytes import (
     OGG_MAGIC,
     make_ogg_page,
-    make_opus_head_header,
-    make_opus_tags_header,
     make_synthetic_opus_ogg,
     make_synthetic_vorbis_ogg,
     make_vorbis_comment_header,
