@@ -5,9 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.14.0] (2026-11-01)
+## [0.15.0] (2026-11-01)
 
 ### Added
+
+- `adapters/metadata_io/flac_vorbis.py` reads and writes the Vorbis comment block of FLAC bytes. Field names match without regard to case. Entries without `=` appear in `dropped_entries`. APPLICATION, SEEKTABLE, PICTURE, and other blocks stay byte for byte and in order. Padding absorbs size changes where it can. A leading ID3v2 tag and the audio frames stay byte for byte. No caller uses the module yet. Added `tests/unit/test_flac_vorbis.py` and `tests/fixtures/flac_bytes.py`.
 
 - `adapters/metadata_io/id3_containers.py` locates, reads, and replaces the ID3v2 tag in MP3, WAV, and AIFF bytes. MP3 tags sit at the start of the file. WAV and AIFF tags sit in an `id3 ` or `ID3 ` chunk. Audio, other chunks, and a trailing ID3v1 tag stay byte for byte. A smaller tag fills the old tag's space. The audio offset then stays the same. No caller uses the module yet. Added `tests/unit/test_id3_containers.py` and `tests/fixtures/audio_container_bytes.py`.
 
