@@ -6,6 +6,7 @@ not interpret keep their body bytes unchanged, so tags from DJ software survive 
 
 from __future__ import annotations
 
+import datetime
 import re
 import struct
 import zlib
@@ -48,15 +49,13 @@ UTF16_BOM_LE: Final[bytes] = b"\xff\xfe"
 V23_VALUE_SEPARATOR: Final[str] = "/"
 
 FRAME_ID_RE: Final[re.Pattern[bytes]] = re.compile(rb"[A-Z0-9]{3,4}")
-# A v2.4 timestamp: yyyy, then optional -MM, -dd, and THH:mm parts.
+# A whole v2.4 timestamp: yyyy[-MM[-dd[THH[:mm[:ss]][Z or UTC offset]]]]. The offset only
+# follows a time. Each part has a fixed width, so the optional groups cannot backtrack.
 TDRC_RE: Final[re.Pattern[str]] = re.compile(
-    r"(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2}):(\d{2}))?)?)?"
+    r"(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2})(?::(\d{2})(?::(\d{2}))?)?"
+    r"(?:Z|[+-]\d{2}(?::?\d{2})?)?)?)?)?"
 )
 DATE_FRAMES: Final[frozenset[str]] = frozenset({"TDRC", "TDOR"})
-VALID_MONTHS: Final[range] = range(1, 13)
-VALID_DAYS: Final[range] = range(1, 32)
-VALID_HOURS: Final[range] = range(24)
-VALID_MINUTES: Final[range] = range(60)
 
 V22_TO_V23: Final[dict[str, str]] = {
     "TT1": "TIT1", "TT2": "TIT2", "TT3": "TIT3", "TP1": "TPE1", "TP2": "TPE2",
@@ -441,25 +440,47 @@ def _date_frames_for_v23(frame: Id3Frame, present: set[str]) -> list[Id3Frame]:
     return [replacement for replacement in replacements if replacement.frame_id not in present]
 
 
-def _in_range(digits: str | None, valid: range) -> bool:
-    """Return True when digits is present and its value lies in valid."""
-    return digits is not None and int(digits) in valid
+def _tdat_value(year: str, month: str | None, day: str | None) -> str | None:
+    """Return the DDMM TDAT value, or None unless year, month, and day form a calendar date."""
+    if month is None or day is None:
+        return None
+    try:
+        datetime.date(int(year), int(month), int(day))
+    except ValueError:
+        return None
+    return f"{day}{month}"
+
+
+def _time_value(hour: str | None, minute: str | None, second: str | None) -> str | None:
+    """Return the HHMM TIME value, or None unless the parts form a valid time of day."""
+    if hour is None or minute is None:
+        return None
+    try:
+        datetime.time(int(hour), int(minute), int(second or 0))
+    except ValueError:
+        return None
+    return f"{hour}{minute}"
 
 
 def _convert_date(frame: Id3Frame) -> list[Id3Frame]:
-    """Turn a v2.4 timestamp frame into v2.3 year, date, and time frames with valid parts only."""
+    """Turn a v2.4 timestamp frame into v2.3 year, date, and time frames with valid parts only.
+
+    TIME keeps the written hour and minutes. A Z or offset suffix does not shift them.
+    """
     values = decode_text_values(frame)
-    match = TDRC_RE.match(values[0].strip()) if values else None
+    match = TDRC_RE.fullmatch(values[0].strip()) if values else None
     if match is None:
         return []
-    year, month, day, hour, minute = match.groups()
+    year, month, day, hour, minute, second = match.groups()
     if frame.frame_id == "TDOR":
         return [build_text_frame("TORY", year)]
     result = [build_text_frame("TYER", year)]
-    if _in_range(month, VALID_MONTHS) and _in_range(day, VALID_DAYS):
-        result.append(build_text_frame("TDAT", f"{day}{month}"))
-    if _in_range(hour, VALID_HOURS) and _in_range(minute, VALID_MINUTES):
-        result.append(build_text_frame("TIME", f"{hour}{minute}"))
+    tdat = _tdat_value(year, month, day)
+    if tdat is not None:
+        result.append(build_text_frame("TDAT", tdat))
+    time_of_day = _time_value(hour, minute, second)
+    if time_of_day is not None:
+        result.append(build_text_frame("TIME", time_of_day))
     return result
 
 
