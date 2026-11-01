@@ -5,6 +5,20 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.2] (2026-11-01)
+
+### Added
+
+- `adapters/metadata_io/id3v2.py` reads ID3v2.2, 2.3, and 2.4 tags and writes ID3v2.3. Unknown frames keep original bytes. No caller uses the module yet. Added `tests/unit/test_id3v2_codec.py`, `tests/unit/test_id3v2_codec_frame_paths.py`, `tests/unit/test_id3v2_codec_spec_conformance.py`, `tests/unit/test_id3v2_codec_dates.py`, `tests/unit/test_id3v2_codec_limits.py`, `tests/unit/test_id3v2_codec_v24_unsync.py`, `tests/unit/test_id3v2_codec_calendar.py`, and `tests/unit/test_id3v2_codec_header_flags.py`, with shared byte builders in `tests/fixtures/id3v2_bytes.py`.
+- An ID3v2.4 tag header with the unsynchronisation flag reverses unsynchronisation in every frame body, once per frame.
+- Compressed ID3v2 frames inflate to at most 16 MiB each and 64 MiB per tag. The codec drops frames past either cap and records dropped frame IDs in `dropped_frames`. `render_id3v23` raises `ValueError` for padding outside 0 to 64 KiB.
+- ID3v2.3 output keeps a TDRC or TDOR frame whose value does not start with a year. A timestamp must match the whole v2.4 form, with an optional Z or offset after a time, or the frame stays as it is. TDAT needs a real calendar date, leap years included, and TIME needs a valid time of day. TIME keeps the written hour and minutes.
+
+### Fixed
+
+- `_split_language_frame` in `adapters/metadata_io/id3v2.py` validates the 4-byte header length before slicing language bytes and raises `Id3FormatError` on truncated bodies.
+- String decoding in `adapters/metadata_io/id3v2.py` preserves detected UTF-16 endianness across null-separated values to prevent secondary string mojibake in big-endian frames.
+
 ## [0.12.1] (2026-10-31)
 
 ### Added
