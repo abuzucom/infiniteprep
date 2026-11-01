@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.13.1] (2026-11-01)
+## [0.13.2] (2026-11-01)
 
 ### Added
 
@@ -16,7 +16,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- Frame decompression in `adapters/metadata_io/id3v2.py` bounds zlib inflation to 16 MiB with `zlib.decompressobj` and drops oversized output to block decompression bombs.
 - `_split_language_frame` in `adapters/metadata_io/id3v2.py` validates the 4-byte header length before slicing language bytes and raises `Id3FormatError` on truncated bodies.
 - String decoding in `adapters/metadata_io/id3v2.py` preserves detected UTF-16 endianness across null-separated values to prevent secondary string mojibake in big-endian frames.
 

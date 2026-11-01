@@ -47,7 +47,6 @@ CODECS: Final[dict[int, str]] = {
 }
 UTF16_BOM_LE: Final[bytes] = b"\xff\xfe"
 UTF16_BOM_BE: Final[bytes] = b"\xfe\xff"
-MAX_DECOMPRESSED_FRAME_SIZE: Final[int] = 16 * 1024 * 1024
 V23_VALUE_SEPARATOR: Final[str] = "/"
 
 FRAME_ID_RE: Final[re.Pattern[bytes]] = re.compile(rb"[A-Z0-9]{3,4}")
