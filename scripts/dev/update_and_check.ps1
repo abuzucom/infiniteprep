@@ -31,7 +31,8 @@ if (-not $NoPull -and $branch -ne "main") {
 if ($DryRun) {
     if (-not $NoPull) { Write-Output "Would run: git pull --ff-only" }
     if (-not $ChecksOnly) { Write-Output "Would install: -e .[dev] and requirements-checkers.txt" }
-    Write-Output "Would run checks: ruff-check ruff-format pytest policy-tests prose-lint sync-check"
+    Write-Output ("Would run checks: ruff-check ruff-format pytest policy-tests prose-lint " +
+        "prose-advisory conflict-markers sync-check")
     if (-not $NoLaunch) { Write-Output "Would launch: infiniteprep" }
     exit 0
 }
@@ -57,7 +58,9 @@ if (-not $NoPull) {
 $venvPython = Join-Path $repoRoot ".venv\Scripts\python.exe"
 if (-not $ChecksOnly) {
     if (-not (Test-Path $venvPython)) {
-        python -m venv .venv
+        # The py launcher picks the newest Python 3 on Windows. Plain python is the fallback.
+        if (Get-Command py -ErrorAction SilentlyContinue) { py -3 -m venv .venv }
+        else { python -m venv .venv }
         if ($LASTEXITCODE -ne 0) { Stop-Run 2 }
     }
     $installs = @(
