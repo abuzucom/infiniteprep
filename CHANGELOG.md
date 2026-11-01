@@ -5,9 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.16.0] (2026-11-01)
+## [0.17.0] (2026-11-01)
 
 ### Added
+
+- `adapters/metadata_io/mp4_reader.py` reads iTunes-style tags and audio properties from MP4 and M4A bytes. It decodes text, number pairs, integers, freeform `----` items, and cover art sizes. Duration comes from `mvhd`. Channels, sample rate, and bitrate come from the first sound track, including ALAC above 65,535 Hz. A FairPlay or common-encryption sample entry sets `encrypted`. The module never writes, and no caller uses it yet. Added `tests/unit/test_mp4_reader.py` and `tests/fixtures/mp4_bytes.py`.
 
 - `scripts/dev/update_and_check.cmd`, `scripts/dev/update_and_check.ps1`, and `scripts/dev/update_and_check.sh` pull `main`, refresh `.venv`, run every local check, print a PASS or FAIL summary, and launch the app when all checks pass. A dirty checkout or a branch other than `main` stops the run. `scripts/dev/make_test_copies.ps1` and `scripts/dev/make_test_copies.sh` copy a few files of each format into `scratch/test-library/`. Added `tests/unit/test_dev_scripts.py`.
 - `.gitignore` keeps the tracked `infiniteprep.spec` and ignores local state, stray databases, music files, `.env` variants, and OS and editor files.
