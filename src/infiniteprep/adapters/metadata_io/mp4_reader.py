@@ -200,7 +200,7 @@ def _read_audio_entry(data: bytes, entry: _Atom) -> _Track:
     fields = data[entry.body_start : entry.body_start + SAMPLE_ENTRY_FIELDS]
     if len(fields) < SAMPLE_ENTRY_FIELDS:
         raise Mp4FormatError(f"The {entry.atom_type!r} sample entry is truncated.")
-    channels = struct.unpack(">H", fields[ENTRY_CHANNELS_OFFSET : ENTRY_SAMPLE_SIZE_OFFSET])[0]
+    channels = struct.unpack(">H", fields[ENTRY_CHANNELS_OFFSET:ENTRY_SAMPLE_SIZE_OFFSET])[0]
     sample_size = struct.unpack(">H", fields[ENTRY_SAMPLE_SIZE_OFFSET:20])[0]
     rate = struct.unpack(">I", fields[ENTRY_RATE_OFFSET:SAMPLE_ENTRY_FIELDS])[0]
     children = _children(data, entry.body_start + SAMPLE_ENTRY_FIELDS, entry.end)
