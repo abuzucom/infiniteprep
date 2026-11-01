@@ -25,9 +25,21 @@ from tests.fixtures.mp4_bytes import (
 RATE_44K = 44_100
 RATE_96K = 96_000
 SECONDS = 180
+DEFAULT_AAC_BITRATE = 256_000
+BITS_PER_BYTE = 8
+FALLBACK_SAMPLE_SIZE = 1000
+FALLBACK_SAMPLE_COUNT = 100
+FALLBACK_SECONDS = 10
+# Sizes for the damaged-input cases: an ID3 body with no atoms, a short atom body, an atom
+# size past the end of the data, and an atom size smaller than its own 8-byte header.
+FOREIGN_BODY_SIZE = 60
+SHORT_BODY_SIZE = 8
+OVERSIZE_ATOM_SIZE = 500
+BELOW_HEADER_SIZE = 4
+M4A_FTYP = atom(b"ftyp", b"M4A ")
 
 
-def aac_track(avg_bitrate: int = 256_000, sizes: list[int] | None = None) -> bytes:
+def aac_track(avg_bitrate: int = DEFAULT_AAC_BITRATE, sizes: list[int] | None = None) -> bytes:
     """Build a sound trak with an mp4a entry for 2-channel 44.1 kHz audio."""
     return trak(b"soun", audio_entry(b"mp4a", 2, RATE_44K, esds(avg_bitrate)), sizes)
 
@@ -99,9 +111,9 @@ def test_alac_properties_come_from_the_alac_config() -> None:
 
 def test_bitrate_falls_back_to_sample_sizes_over_duration() -> None:
     """With no esds average bitrate, bitrate is the sample size total over the duration."""
-    sizes = [1000] * 100
-    info = read_mp4(m4a_file(mvhd(RATE_44K, RATE_44K * 10), aac_track(0, sizes)))
-    assert info.bitrate == sum(sizes) * 8 // 10
+    sizes = [FALLBACK_SAMPLE_SIZE] * FALLBACK_SAMPLE_COUNT
+    info = read_mp4(m4a_file(mvhd(RATE_44K, RATE_44K * FALLBACK_SECONDS), aac_track(0, sizes)))
+    assert info.bitrate == sum(sizes) * BITS_PER_BYTE // FALLBACK_SECONDS
 
 
 @pytest.mark.parametrize("entry_type", [b"drms", b"drmi", b"enca"])
@@ -142,10 +154,10 @@ def test_file_without_ilst_has_no_tags() -> None:
 @pytest.mark.parametrize(
     "data",
     [
-        b"ID3\x03" + bytes(60),
-        atom(b"ftyp", b"M4A ") + atom(b"mdat", bytes(8)),
-        atom(b"ftyp", b"M4A ") + struct.pack(">I", 500) + b"moov" + bytes(8),
-        atom(b"ftyp", b"M4A ") + struct.pack(">I", 4) + b"moov",
+        b"ID3\x03" + bytes(FOREIGN_BODY_SIZE),
+        M4A_FTYP + atom(b"mdat", bytes(SHORT_BODY_SIZE)),
+        M4A_FTYP + struct.pack(">I", OVERSIZE_ATOM_SIZE) + b"moov" + bytes(SHORT_BODY_SIZE),
+        M4A_FTYP + struct.pack(">I", BELOW_HEADER_SIZE) + b"moov",
     ],
 )
 def test_foreign_or_damaged_data_raises(data: bytes) -> None:
