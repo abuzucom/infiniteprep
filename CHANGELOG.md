@@ -5,6 +5,12 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] (2026-11-01)
+
+### Added
+
+- `adapters/metadata_io/id3v2.py` reads ID3v2.2, 2.3, and 2.4 tags and writes ID3v2.3. Unknown frames keep their bytes. No caller uses it yet. Added `tests/unit/test_id3v2_codec.py`.
+
 ## [0.12.1] (2026-10-31)
 
 ### Added
