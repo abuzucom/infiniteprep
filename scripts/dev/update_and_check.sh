@@ -44,7 +44,8 @@ fi
 if [ "$dry_run" -eq 1 ]; then
     [ "$no_pull" -eq 0 ] && echo "Would run: git pull --ff-only"
     [ "$checks_only" -eq 0 ] && echo "Would install: -e .[dev] and requirements-checkers.txt"
-    echo "Would run checks: ruff-check ruff-format pytest policy-tests prose-lint sync-check"
+    echo "Would run checks: ruff-check ruff-format pytest policy-tests prose-lint" \
+        "prose-advisory conflict-markers sync-check"
     [ "$no_launch" -eq 0 ] && echo "Would launch: infiniteprep"
     exit 0
 fi
