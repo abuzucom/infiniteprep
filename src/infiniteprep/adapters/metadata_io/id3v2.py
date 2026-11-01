@@ -33,12 +33,20 @@ V24_UNSYNC, V24_LENGTH_INDICATOR = 0x02, 0x01
 COMPRESSED_SIZE_BYTES: Final[int] = 4
 
 LATIN1, UTF16, UTF16BE, UTF8 = 0, 1, 2, 3
-CODECS: Final[dict[int, str]] = {LATIN1: "latin-1", UTF16: "utf-16", UTF16BE: "utf-16-be", UTF8: "utf-8"}
+CODECS: Final[dict[int, str]] = {
+    LATIN1: "latin-1",
+    UTF16: "utf-16",
+    UTF16BE: "utf-16-be",
+    UTF8: "utf-8",
+}
 UTF16_BOM_LE: Final[bytes] = b"\xff\xfe"
 V23_VALUE_SEPARATOR: Final[str] = "/"
 
 FRAME_ID_RE: Final[re.Pattern[bytes]] = re.compile(rb"[A-Z0-9]{3,4}")
-TDRC_RE: Final[re.Pattern[str]] = re.compile(r"(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2}):(\d{2}))?)?)?")
+# A v2.4 timestamp: yyyy, then optional -MM, -dd, and THH:mm parts.
+TDRC_RE: Final[re.Pattern[str]] = re.compile(
+    r"(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2}):(\d{2}))?)?)?"
+)
 
 V22_TO_V23: Final[dict[str, str]] = {
     "TT1": "TIT1", "TT2": "TIT2", "TT3": "TIT3", "TP1": "TPE1", "TP2": "TPE2",
