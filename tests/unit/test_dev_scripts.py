@@ -123,6 +123,27 @@ def test_copy_script_rejects_a_missing_folder(tmp_path: Path) -> None:
 
 
 @needs_bash
+def test_copy_script_treats_a_dash_named_folder_as_a_path(tmp_path: Path) -> None:
+    """A source folder named like a find option is copied from, never run as an option."""
+    repo = make_repo(tmp_path)
+    work = tmp_path / "work"
+    (work / "-delete").mkdir(parents=True)
+    (work / "-delete" / "track.mp3").write_bytes(b"mp3 bytes")
+    keep = work / "keep.txt"
+    keep.write_text("must survive", encoding="utf-8")
+    script = (repo / "scripts" / "dev" / "make_test_copies.sh").as_posix()
+    assert BASH is not None
+    result = subprocess.run(
+        [BASH, script, "-delete"], cwd=work, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert keep.read_text(encoding="utf-8") == "must survive"
+    assert (work / "-delete" / "track.mp3").exists()
+    (dest,) = (repo / "scratch" / "test-library").iterdir()
+    assert [path.name for path in dest.iterdir()] == ["track.mp3"]
+
+
+@needs_bash
 @pytest.mark.parametrize("per_format", ["0", "1001", "x"])
 def test_copy_script_rejects_a_count_outside_one_to_a_thousand(
     tmp_path: Path, per_format: str
