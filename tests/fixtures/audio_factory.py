@@ -1,19 +1,48 @@
-"""Synthetic audio fixture factory for deterministic WAV, MP3, FLAC, AIFF, and OGG tests."""
+"""Synthetic audio fixture factory for deterministic WAV, MP3, FLAC, AIFF, and OGG tests.
+
+soundfile writes the audio. Tags come from the spec-written byte builders in this package,
+not from the codec under test, so a codec bug cannot hide behind a fixture built by the
+same code.
+"""
 
 from __future__ import annotations
 
+import struct
 from pathlib import Path
 from typing import Final
 
 import numpy as np
 import soundfile as sf
-from mutagen.aiff import AIFF
-from mutagen.flac import FLAC
-from mutagen.id3 import APIC, ID3, PRIV, TALB, TBPM, TIT2, TIT3, TKEY, TPE1, TPE4, TPUB, TXXX
-from mutagen.mp3 import MP3
-from mutagen.wave import WAVE
+
+from tests.fixtures.audio_container_bytes import iff_chunk, riff_chunk
+from tests.fixtures.flac_bytes import LAST_BLOCK_FLAG, VORBIS_COMMENT, flac_block, vorbis_body
+from tests.fixtures.id3v2_bytes import tag_bytes, utf16, v23_frame
 
 DEFAULT_SAMPLE_RATE: Final[int] = 44100
+ID3V23_MAJOR: Final[int] = 3
+UTF16_ENCODING: Final[bytes] = b"\x01"
+UTF16_TERMINATOR: Final[bytes] = b"\x00\x00"
+FRONT_COVER_PICTURE_TYPE: Final[int] = 3
+TRAKTOR_PRIV_PAYLOAD: Final[bytes] = b"PRT4_BINARY_BEATGRID_AND_CUES_PAYLOAD"
+TRAKTOR_FLAC_PAYLOAD: Final[str] = "dHJha3RvcjRfYmluYXJ5X2N1ZV9ncmlkX3BheWxvYWQ="
+FIXTURE_VENDOR: Final[str] = "InfinitePrep test fixture"
+# Fixture tag keys and the ID3 text frame each one fills.
+ID3_TEXT_FRAMES: Final[tuple[tuple[str, str], ...]] = (
+    ("artist", "TPE1"),
+    ("title", "TIT2"),
+    ("mix_name", "TIT3"),
+    ("remixer", "TPE4"),
+    ("release_title", "TALB"),
+    ("label", "TPUB"),
+    ("bpm", "TBPM"),
+    ("key", "TKEY"),
+)
+# RIFF and IFF files hold the form size in bytes 4 to 8, after the 4-byte form ID.
+FORM_SIZE_SLICE: Final[slice] = slice(4, 8)
+FORM_HEADER_SIZE: Final[int] = 8
+FLAC_MAGIC_SIZE: Final[int] = 4
+FLAC_BLOCK_HEADER_SIZE: Final[int] = 4
+FLAC_BLOCK_TYPE_MASK: Final[int] = 0x7F
 
 
 def synthesize_rhythmic_chord_pcm(
@@ -73,12 +102,8 @@ def create_wav_fixture(
     )
     sf.write(str(file_path), pcm, sample_rate, subtype=subtype, format="WAV")
     if tags or include_traktor_frame:
-        wav_audio = WAVE(str(file_path))
-        if wav_audio.tags is None:
-            wav_audio.add_tags()
-        assert isinstance(wav_audio.tags, ID3)
-        _populate_id3_fixture_tags(wav_audio.tags, tags or {}, include_traktor_frame)
-        wav_audio.tags.save(str(file_path), v2_version=3)
+        tag = _build_id3_fixture_tag(tags or {}, include_traktor_frame)
+        _append_form_chunk(file_path, riff_chunk(b"id3 ", tag), "<I")
     return file_path
 
 
@@ -103,12 +128,11 @@ def create_flac_fixture(
     )
     sf.write(str(file_path), pcm, sample_rate, subtype=subtype, format="FLAC")
     if tags or include_traktor_comment:
-        flac_audio = FLAC(str(file_path))
-        for k, v in (tags or {}).items():
-            flac_audio[k.upper()] = [v]
+        entries = [f"{key.upper()}={value}" for key, value in (tags or {}).items()]
         if include_traktor_comment:
-            flac_audio["TRAKTOR4"] = ["dHJha3RvcjRfYmluYXJ5X2N1ZV9ncmlkX3BheWxvYWQ="]
-        flac_audio.save()
+            entries.append(f"TRAKTOR4={TRAKTOR_FLAC_PAYLOAD}")
+        comment = vorbis_body(FIXTURE_VENDOR, *entries)
+        file_path.write_bytes(_replace_flac_comment(file_path.read_bytes(), comment))
     return file_path
 
 
@@ -126,12 +150,8 @@ def create_aiff_fixture(
     pcm = synthesize_rhythmic_chord_pcm(duration_sec=duration_sec, sample_rate=sample_rate)
     sf.write(str(file_path), pcm, sample_rate, subtype=subtype, format="AIFF")
     if tags or include_traktor_frame:
-        aiff_audio = AIFF(str(file_path))
-        if aiff_audio.tags is None:
-            aiff_audio.add_tags()
-        assert isinstance(aiff_audio.tags, ID3)
-        _populate_id3_fixture_tags(aiff_audio.tags, tags or {}, include_traktor_frame)
-        aiff_audio.save(v2_version=3)
+        tag = _build_id3_fixture_tag(tags or {}, include_traktor_frame)
+        _append_form_chunk(file_path, iff_chunk(b"ID3 ", tag), ">I")
     return file_path
 
 
@@ -147,15 +167,10 @@ def create_mp3_fixture(
     frame_header = bytes([0xFF, 0xFB, 0x90, 0x64])
     frame_body = bytes(413)
     single_frame = frame_header + frame_body
-    file_path.write_bytes(single_frame * num_frames)
-
+    audio = single_frame * num_frames
     if tags or include_traktor_frame:
-        mp3_audio = MP3(str(file_path))
-        if mp3_audio.tags is None:
-            mp3_audio.add_tags()
-        assert isinstance(mp3_audio.tags, ID3)
-        _populate_id3_fixture_tags(mp3_audio.tags, tags or {}, include_traktor_frame)
-        mp3_audio.tags.save(str(file_path), v2_version=3)
+        audio = _build_id3_fixture_tag(tags or {}, include_traktor_frame) + audio
+    file_path.write_bytes(audio)
     return file_path
 
 
@@ -171,35 +186,51 @@ def create_ogg_fixture(
     return file_path
 
 
-def _populate_id3_fixture_tags(id3: ID3, tags: dict[str, str], include_traktor_frame: bool) -> None:
-    """Populate ID3 frames for test fixtures using UTF-16 (encoding=1)."""
-    if "artist" in tags:
-        id3.add(TPE1(encoding=1, text=[tags["artist"]]))
-    if "title" in tags:
-        id3.add(TIT2(encoding=1, text=[tags["title"]]))
-    if "mix_name" in tags:
-        id3.add(TIT3(encoding=1, text=[tags["mix_name"]]))
-    if "remixer" in tags:
-        id3.add(TPE4(encoding=1, text=[tags["remixer"]]))
-    if "release_title" in tags:
-        id3.add(TALB(encoding=1, text=[tags["release_title"]]))
-    if "label" in tags:
-        id3.add(TPUB(encoding=1, text=[tags["label"]]))
-    if "bpm" in tags:
-        id3.add(TBPM(encoding=1, text=[tags["bpm"]]))
-    if "key" in tags:
-        id3.add(TKEY(encoding=1, text=[tags["key"]]))
+def _build_id3_fixture_tag(tags: dict[str, str], include_traktor_frame: bool) -> bytes:
+    """Build an ID3v2.3 tag with UTF-16 text frames, TXXX, PRIV:TRAKTOR4, and APIC."""
+    frames = [
+        v23_frame(frame_id, UTF16_ENCODING + utf16(tags[key]))
+        for key, frame_id in ID3_TEXT_FRAMES
+        if key in tags
+    ]
     if "custom_tag" in tags:
-        id3.add(TXXX(encoding=1, desc="CUSTOM_DJ_NOTE", text=[tags["custom_tag"]]))
+        body = utf16("CUSTOM_DJ_NOTE") + UTF16_TERMINATOR + utf16(tags["custom_tag"])
+        frames.append(v23_frame("TXXX", UTF16_ENCODING + body))
     if include_traktor_frame:
-        id3.add(PRIV(owner="TRAKTOR4", data=b"PRT4_BINARY_BEATGRID_AND_CUES_PAYLOAD"))
+        frames.append(v23_frame("PRIV", b"TRAKTOR4\x00" + TRAKTOR_PRIV_PAYLOAD))
     if "artwork_bytes" in tags:
-        id3.add(
-            APIC(
-                encoding=1,
-                mime="image/jpeg",
-                type=3,
-                desc="Cover",
-                data=tags["artwork_bytes"].encode("latin1"),
-            )
-        )
+        picture = b"image/jpeg\x00" + bytes((FRONT_COVER_PICTURE_TYPE,))
+        picture += utf16("Cover") + UTF16_TERMINATOR + tags["artwork_bytes"].encode("latin1")
+        frames.append(v23_frame("APIC", UTF16_ENCODING + picture))
+    return tag_bytes(ID3V23_MAJOR, b"".join(frames))
+
+
+def _append_form_chunk(file_path: Path, chunk: bytes, size_format: str) -> None:
+    """Append chunk to a RIFF or IFF file and rewrite the form size in size_format order."""
+    data = bytearray(file_path.read_bytes()) + chunk
+    data[FORM_SIZE_SLICE] = struct.pack(size_format, len(data) - FORM_HEADER_SIZE)
+    file_path.write_bytes(bytes(data))
+
+
+def _replace_flac_comment(data: bytes, comment: bytes) -> bytes:
+    """Return FLAC data with every Vorbis comment block replaced by one comment block.
+
+    The new block goes right after STREAMINFO. Only the final block keeps the last flag.
+    """
+    offset = FLAC_MAGIC_SIZE
+    blocks: list[tuple[int, bytes]] = []
+    while True:
+        header = data[offset]
+        length = int.from_bytes(data[offset + 1 : offset + FLAC_BLOCK_HEADER_SIZE], "big")
+        body = data[offset + FLAC_BLOCK_HEADER_SIZE : offset + FLAC_BLOCK_HEADER_SIZE + length]
+        offset += FLAC_BLOCK_HEADER_SIZE + length
+        if header & FLAC_BLOCK_TYPE_MASK != VORBIS_COMMENT:
+            blocks.append((header & FLAC_BLOCK_TYPE_MASK, body))
+        if header & LAST_BLOCK_FLAG:
+            break
+    blocks.insert(1, (VORBIS_COMMENT, comment))
+    rendered = [
+        flac_block(block_type, body, last=index == len(blocks) - 1)
+        for index, (block_type, body) in enumerate(blocks)
+    ]
+    return data[:FLAC_MAGIC_SIZE] + b"".join(rendered) + data[offset:]

@@ -5,7 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.17.0] (2026-11-01)
+## [0.18.0] (2026-11-01)
+
+### Changed
+
+- `tests/fixtures/audio_factory.py` tags its WAV, AIFF, MP3, and FLAC fixtures with the spec-written byte builders in `tests/fixtures/` instead of mutagen. `tests/unit/test_security_review_remediation.py` and `tests/integration/test_milestone6_write_transcode_restore.py` read written tags with `id3_containers.py`, `id3v2.py`, and `flac_vorbis.py`. No test imports mutagen now. The adapter still uses mutagen until the adapter switch.
 
 ### Added
 
