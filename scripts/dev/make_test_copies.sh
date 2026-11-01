@@ -16,6 +16,9 @@ if [ -z "$source_dir" ] || [ ! -d "$source_dir" ]; then
     echo "Pass an existing music folder as the first argument."
     exit 2
 fi
+# An absolute path starts with '/', so find can never read a folder name such as -delete as
+# an option.
+source_dir="$(cd -- "$source_dir" && pwd)" || exit 2
 # The bounds match ValidateRange(1, 1000) in make_test_copies.ps1.
 case "$per_format" in
     '' | *[!0-9]*)
