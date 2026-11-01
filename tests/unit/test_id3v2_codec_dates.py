@@ -2,6 +2,14 @@
 
 from __future__ import annotations
 
+import sys
+import unittest
+from pathlib import Path
+
+SRC_DIR = Path(__file__).resolve().parents[2] / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
 from infiniteprep.adapters.metadata_io.id3v2 import (
     decode_text_values,
     parse_id3v2,
@@ -61,3 +69,13 @@ def test_zero_month_or_day_is_not_written() -> None:
     """Month 00 is outside 1 to 12, so no TDAT frame appears."""
     values = rendered_frames(v24_utf8_frame("TDRC", "2021-00-14"))
     assert values == {"TYER": ["2021"]}
+
+
+def load_tests(loader: unittest.TestLoader, tests: unittest.TestSuite, pattern: str | None) -> unittest.TestSuite:
+    """Load standalone test functions into the unittest suite."""
+    suite = unittest.TestSuite()
+    for name, func in list(globals().items()):
+        if name.startswith("test_") and callable(func) and name != "load_tests":
+            suite.addTest(unittest.FunctionTestCase(func))
+    return suite
+

@@ -40,6 +40,8 @@ CODECS: Final[dict[int, str]] = {
     UTF8: "utf-8",
 }
 UTF16_BOM_LE: Final[bytes] = b"\xff\xfe"
+UTF16_BOM_BE: Final[bytes] = b"\xfe\xff"
+MAX_DECOMPRESSED_FRAME_SIZE: Final[int] = 16 * 1024 * 1024
 V23_VALUE_SEPARATOR: Final[str] = "/"
 
 FRAME_ID_RE: Final[re.Pattern[bytes]] = re.compile(rb"[A-Z0-9]{3,4}")
@@ -236,12 +238,19 @@ def _decode_v24_body(fmt: int, raw: bytes) -> bytes | None:
     return _inflate(body) if fmt & V24_COMPRESSED else body
 
 
-def _inflate(body: bytes) -> bytes | None:
+def _inflate(body: bytes, max_length: int = MAX_DECOMPRESSED_FRAME_SIZE) -> bytes | None:
     """Decompress a zlib frame body, or return None when it is damaged."""
+    decompressor = zlib.decompressobj()
     try:
-        return zlib.decompress(body)
+        decompressed = decompressor.decompress(body, max_length + 1)
+        decompressed += decompressor.flush()
     except zlib.error:
         return None
+    if len(decompressed) > max_length or decompressor.unconsumed_tail:
+        raise Id3FormatError("Decompressed frame exceeds the maximum allowed size.")
+    if not decompressor.eof:
+        return None
+    return decompressed
 
 
 def _status_as_v23(status: int, major: int) -> int:
@@ -277,14 +286,37 @@ def _split_strings(raw: bytes, encoding: int) -> list[bytes]:
     return parts
 
 
-def _decode_string(raw: bytes, encoding: int) -> str:
-    """Decode one string. A UTF-16 string without a byte order mark reads as little endian."""
+def _detect_utf16_endianness(raw: bytes) -> str | None:
+    """Return 'utf-16-be' or 'utf-16-le' when raw starts with a BOM, or None."""
+    if raw.startswith(UTF16_BOM_BE):
+        return "utf-16-be"
+    if raw.startswith(UTF16_BOM_LE):
+        return "utf-16-le"
+    return None
+
+
+def _decode_string(raw: bytes, encoding: int, default_codec: str = "utf-16-le") -> str:
+    """Decode one string. A UTF-16 string without a byte order mark uses default_codec."""
     codec = CODECS.get(encoding)
     if codec is None:
         raise Id3FormatError(f"Text encoding byte {encoding} is not defined by ID3v2.")
-    if encoding == UTF16 and raw[:2] not in (UTF16_BOM_LE, b"\xfe\xff"):
-        codec = "utf-16-le"
+    if encoding == UTF16:
+        codec = "utf-16" if _detect_utf16_endianness(raw) else default_codec
     return raw.decode(codec, errors="replace")
+
+
+def _decode_strings(
+    parts: list[bytes], encoding: int, initial_codec: str = "utf-16-le"
+) -> list[str]:
+    """Decode string segments, preserving detected UTF-16 endianness across segments."""
+    codec = initial_codec
+    values: list[str] = []
+    for part in parts:
+        detected = _detect_utf16_endianness(part) if encoding == UTF16 else None
+        if detected:
+            codec = detected
+        values.append(_decode_string(part, encoding, default_codec=codec))
+    return values
 
 
 def _split_described(body: bytes) -> tuple[int, str, bytes]:
@@ -303,7 +335,7 @@ def decode_text_values(frame: Id3Frame) -> list[str]:
     if not frame.body:
         return []
     encoding = frame.body[0]
-    values = [_decode_string(part, encoding) for part in _split_strings(frame.body[1:], encoding)]
+    values = _decode_strings(_split_strings(frame.body[1:], encoding), encoding)
     while values and not values[-1]:
         values.pop()
     return values
@@ -312,7 +344,8 @@ def decode_text_values(frame: Id3Frame) -> list[str]:
 def decode_txxx(frame: Id3Frame) -> tuple[str, list[str]]:
     """Return the description and values of a TXXX frame."""
     encoding, description, rest = _split_described(frame.body)
-    values = [_decode_string(part, encoding) for part in _split_strings(rest, encoding)]
+    initial_codec = _detect_utf16_endianness(frame.body[1:]) or "utf-16-le"
+    values = _decode_strings(_split_strings(rest, encoding), encoding, initial_codec=initial_codec)
     while values and not values[-1]:
         values.pop()
     return description, values
@@ -447,6 +480,10 @@ def _to_v23_encoding(frame: Id3Frame) -> Id3Frame:
 
 def _split_language_frame(body: bytes) -> tuple[str, int, str, bytes]:
     """Split a COMM or USLT body into its language, encoding, description, and text bytes."""
+    if len(body) < 1 + LANGUAGE_BYTES:
+        raise Id3FormatError(
+            "Language frame body is truncated; expected encoding byte and 3-byte language."
+        )
     language = body[1 : 1 + LANGUAGE_BYTES].decode("latin-1")
     encoding, description, rest = _split_described(body[:1] + body[1 + LANGUAGE_BYTES :])
     return language, encoding, description, rest

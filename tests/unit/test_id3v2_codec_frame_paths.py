@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 import struct
+import sys
+import unittest
 import zlib
+from pathlib import Path
+
+SRC_DIR = Path(__file__).resolve().parents[2] / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 import pytest
 
@@ -19,6 +26,7 @@ from infiniteprep.adapters.metadata_io.id3v2 import (
 )
 
 UTF16_BOM_LE = b"\xff\xfe"
+V23_COMPRESSED = b"\x00\x80"
 V23_COMPRESSED_AND_GROUPED = b"\x00\xa0"
 V23_ENCRYPTED = b"\x00\x40"
 # 200 stored as a plain integer sets the top bit of the last size byte.
@@ -135,3 +143,30 @@ def test_undefined_text_encoding_byte_raises_format_error() -> None:
     """A text frame whose encoding byte is outside 0 to 3 raises Id3FormatError."""
     with pytest.raises(Id3FormatError):
         decode_text_values(Id3Frame("TIT2", b"\x07Title"))
+
+
+def test_v23_compressed_frame_exceeding_max_size_raises_format_error() -> None:
+    """A compressed frame whose decompressed size exceeds the maximum raises Id3FormatError."""
+    large_data = b"\x00" * (17 * 1024 * 1024)
+    compressed = zlib.compress(large_data)
+    raw = struct.pack(">I", len(large_data)) + compressed
+    with pytest.raises(Id3FormatError):
+        parse_id3v2(tag_bytes(3, v23_frame("TIT2", raw, V23_COMPRESSED)))
+
+
+def test_truncated_language_frame_raises_format_error() -> None:
+    """A COMM frame body shorter than 4 bytes raises Id3FormatError on re-encoding."""
+    tag = parse_id3v2(tag_bytes(4, v24_frame("COMM", b"\x03en")))
+    assert tag is not None
+    with pytest.raises(Id3FormatError):
+        render_id3v23(tag)
+
+
+def load_tests(loader: unittest.TestLoader, tests: unittest.TestSuite, pattern: str | None) -> unittest.TestSuite:
+    """Load standalone test functions into the unittest suite."""
+    suite = unittest.TestSuite()
+    for name, func in list(globals().items()):
+        if name.startswith("test_") and callable(func) and name != "load_tests":
+            suite.addTest(unittest.FunctionTestCase(func))
+    return suite
+

@@ -3,6 +3,13 @@
 from __future__ import annotations
 
 import struct
+import sys
+import unittest
+from pathlib import Path
+
+SRC_DIR = Path(__file__).resolve().parents[2] / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 import pytest
 
@@ -162,3 +169,52 @@ def test_replace_helpers_drop_old_frames_with_the_same_key() -> None:
     assert keys == ["TKEY", "TXXX:VINYLTRACK", "TXXX:STYLE"]
     assert decode_text_values(tag.frames[0]) == ["9A"]
     assert decode_txxx(tag.frames[2]) == ("STYLE", ["Minimal"])
+
+
+def test_v24_utf16be_multi_value_text_decodes_without_mojibake() -> None:
+    """Big-endian UTF-16 multi-value text preserves endianness across values."""
+    utf16be_bom = b"\xfe\xff"
+    val1 = "Artist A".encode("utf-16-be")
+    val2 = "Artist B".encode("utf-16-be")
+    body = b"\x01" + utf16be_bom + val1 + b"\x00\x00" + val2
+    tag = parse_id3v2(tag_bytes(4, v24_frame("TPE1", body)))
+    assert tag is not None
+    assert decode_text_values(tag.frames[0]) == ["Artist A", "Artist B"]
+
+
+def test_txxx_utf16be_decodes_secondary_values_with_matching_endianness() -> None:
+    """Big-endian UTF-16 TXXX frame preserves endianness from description to values."""
+    utf16be_bom = b"\xfe\xff"
+    desc = "CATALOG".encode("utf-16-be")
+    val1 = "CAT001".encode("utf-16-be")
+    val2 = "CAT002".encode("utf-16-be")
+    body = b"\x01" + utf16be_bom + desc + b"\x00\x00" + val1 + b"\x00\x00" + val2
+    tag = parse_id3v2(tag_bytes(4, v24_frame("TXXX", body)))
+    assert tag is not None
+    description, values = decode_txxx(tag.frames[0])
+    assert description == "CATALOG"
+    assert values == ["CAT001", "CAT002"]
+
+
+def test_render_joins_utf16be_multi_values_with_slash() -> None:
+    """Rendering v2.4 UTF-16BE multi-value text to v2.3 joins with a slash without mojibake."""
+    utf16be_bom = b"\xfe\xff"
+    val1 = "House".encode("utf-16-be")
+    val2 = "Techno".encode("utf-16-be")
+    body = b"\x01" + utf16be_bom + val1 + b"\x00\x00" + val2
+    source = parse_id3v2(tag_bytes(4, v24_frame("TCON", body)))
+    assert source is not None
+    reparsed = parse_id3v2(render_id3v23(source))
+    assert reparsed is not None
+    assert decode_text_values(reparsed.frames[0]) == ["House/Techno"]
+
+
+
+def load_tests(loader: unittest.TestLoader, tests: unittest.TestSuite, pattern: str | None) -> unittest.TestSuite:
+    """Load standalone test functions into the unittest suite."""
+    suite = unittest.TestSuite()
+    for name, func in list(globals().items()):
+        if name.startswith("test_") and callable(func) and name != "load_tests":
+            suite.addTest(unittest.FunctionTestCase(func))
+    return suite
+
