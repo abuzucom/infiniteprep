@@ -153,29 +153,40 @@ def _write_chunk_tag(data: bytes, tag: Id3Tag, container: _Container) -> bytes:
 
 def _parse_form(data: bytes, container: _Container) -> _FormLayout:
     """Walk the chunks of a RIFF or FORM file, raising AudioContainerError on damage."""
+    end = _form_end(data, container)
+    chunks: list[_Chunk] = []
+    offset = FORM_HEADER_SIZE
+    while offset + CHUNK_HEADER_SIZE <= end:
+        chunk = _read_chunk(data, offset, end, container)
+        chunks.append(chunk)
+        offset = chunk.end
+    return _FormLayout(tuple(chunks), data[offset:end], data[end:])
+
+
+def _form_end(data: bytes, container: _Container) -> int:
+    """Check the form header and return where its declared size ends, within the data."""
     magic_ok = data[: len(container.magic)] == container.magic
     form_type = data[FORM_TYPE_FIELD]
     if len(data) < FORM_HEADER_SIZE or not magic_ok or form_type not in container.form_types:
         raise AudioContainerError(f"Data is not a {container.name} file; check the file type.")
     declared = struct.unpack(container.size_format, data[FORM_SIZE_FIELD])[0]
-    end = min(CHUNK_HEADER_SIZE + declared, len(data))
-    chunks: list[_Chunk] = []
-    offset = FORM_HEADER_SIZE
-    while offset + CHUNK_HEADER_SIZE <= end:
-        chunk_id = data[offset : offset + CHUNK_ID_SIZE]
-        size_field = data[offset + CHUNK_ID_SIZE : offset + CHUNK_HEADER_SIZE]
-        size = struct.unpack(container.size_format, size_field)[0]
-        body_start = offset + CHUNK_HEADER_SIZE
-        if body_start + size > end:
-            chunk_name = chunk_id.decode("latin-1")
-            raise AudioContainerError(
-                f"The {chunk_name!r} chunk runs past the end; the {container.name} file is damaged."
-            )
-        # A final chunk may omit its pad byte, so the chunk end never passes the form end.
-        chunk_end = min(body_start + size + size % 2, end)
-        chunks.append(_Chunk(chunk_id, offset, chunk_end, data[body_start : body_start + size]))
-        offset = chunk_end
-    return _FormLayout(tuple(chunks), data[offset:end], data[end:])
+    return min(CHUNK_HEADER_SIZE + declared, len(data))
+
+
+def _read_chunk(data: bytes, offset: int, end: int, container: _Container) -> _Chunk:
+    """Read the chunk at offset, raising AudioContainerError when its body passes end."""
+    chunk_id = data[offset : offset + CHUNK_ID_SIZE]
+    size_field = data[offset + CHUNK_ID_SIZE : offset + CHUNK_HEADER_SIZE]
+    size = struct.unpack(container.size_format, size_field)[0]
+    body_start = offset + CHUNK_HEADER_SIZE
+    if body_start + size > end:
+        chunk_name = chunk_id.decode("latin-1")
+        raise AudioContainerError(
+            f"The {chunk_name!r} chunk runs past the end; the {container.name} file is damaged."
+        )
+    # A final chunk may omit its pad byte, so the chunk end never passes the form end.
+    chunk_end = min(body_start + size + size % 2, end)
+    return _Chunk(chunk_id, offset, chunk_end, data[body_start : body_start + size])
 
 
 def _build_chunk(chunk_id: bytes, body: bytes, container: _Container) -> bytes:
