@@ -16,27 +16,22 @@ from infiniteprep.adapters.metadata_io.id3v2 import (
     parse_id3v2,
     render_id3v23,
 )
+from tests.fixtures.id3v2_bytes import tag_bytes, v23_frame
 
 V23_COMPRESSED = b"\x00\x80"
 OWNER_PREFIX = b"owner\x00"
-
-
-def synchsafe(value: int) -> bytes:
-    """Encode value as a 4-byte synchsafe integer."""
-    return bytes((value >> shift) & 0x7F for shift in (21, 14, 7, 0))
 
 
 def compressed_priv_frame(inflated_size: int) -> bytes:
     """Build a compressed v2.3 PRIV frame whose body inflates to inflated_size bytes."""
     plain = OWNER_PREFIX + bytes(inflated_size - len(OWNER_PREFIX))
     raw = struct.pack(">I", len(plain)) + zlib.compress(plain)
-    return b"PRIV" + struct.pack(">I", len(raw)) + V23_COMPRESSED + raw
+    return v23_frame("PRIV", raw, V23_COMPRESSED)
 
 
 def v23_tag(frames: bytes) -> bytes:
     """Wrap frames in an ID3v2.3 header with 16 bytes of padding."""
-    body = frames + b"\x00" * 16
-    return b"ID3\x03\x00\x00" + synchsafe(len(body)) + body
+    return tag_bytes(3, frames)
 
 
 def test_frame_inflating_past_the_frame_limit_is_dropped() -> None:
