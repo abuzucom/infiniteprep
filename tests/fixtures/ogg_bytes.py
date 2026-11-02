@@ -26,6 +26,7 @@ def make_ogg_page(
     sequence_number: int,
     granule_position: int,
     packets: list[bytes],
+    *,
     header_type: int = 0,
     version: int = 0,
 ) -> bytes:
@@ -118,6 +119,7 @@ def make_opus_tags_header(
 
 
 def make_synthetic_vorbis_ogg(
+    *,
     channels: int = 2,
     sample_rate: int = 44100,
     nominal_bitrate: int = 160000,
@@ -141,6 +143,7 @@ def make_synthetic_vorbis_ogg(
 
 
 def make_synthetic_opus_ogg(
+    *,
     channels: int = 2,
     pre_skip: int = 312,
     input_rate: int = 48000,

@@ -228,7 +228,7 @@ def _calculate_bitrate(nominal_bitrate: int, duration: float, file_size: int) ->
     if nominal_bitrate > 0:
         return nominal_bitrate
     if duration > 0:
-        return int(round((file_size * 8) / duration))
+        return round((file_size * 8) / duration)
     return 0
 
 

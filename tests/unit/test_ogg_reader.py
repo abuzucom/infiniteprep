@@ -75,7 +75,7 @@ def test_read_valid_opus_stream() -> None:
     assert metadata.sample_rate == 48000
     assert metadata.duration == pytest.approx(2.0, abs=1e-4)
     # Opus has no nominal bitrate in OpusHead, so bitrate is file_size * 8 / duration
-    expected_bitrate = int(round((len(raw) * 8) / 2.0))
+    expected_bitrate = round((len(raw) * 8) / 2.0)
     assert metadata.bitrate == expected_bitrate
     assert metadata.comment.vendor == "TestOpusVendor"
     assert metadata.comment.fields == tuple(fields)
@@ -94,7 +94,7 @@ def test_vorbis_nominal_bitrate_zero_fallback() -> None:
     metadata = read_ogg(raw)
 
     assert metadata.duration == pytest.approx(2.0, abs=1e-4)
-    expected_bitrate = int(round((len(raw) * 8) / 2.0))
+    expected_bitrate = round((len(raw) * 8) / 2.0)
     assert metadata.bitrate == expected_bitrate
 
 
