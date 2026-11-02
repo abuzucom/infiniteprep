@@ -1,18 +1,23 @@
-"""Mutagen metadata reader and writer for MP3, FLAC, WAV, and AIFF (plus read-only M4A/OGG)."""
+"""Metadata reader and writer for MP3, FLAC, WAV, and AIFF, plus read-only M4A and OGG.
+
+Reads use the in-house codecs in this package. Writes use mutagen.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import logging
+import mmap
 import os
 import re
 import shutil
 import struct
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
-import mutagen
 from mutagen.aiff import AIFF
 from mutagen.flac import FLAC
 from mutagen.id3 import (
@@ -34,6 +39,28 @@ from mutagen.id3 import (
 from mutagen.mp3 import MP3
 from mutagen.wave import WAVE
 
+from infiniteprep.adapters.metadata_io.audio_properties import (
+    AudioProperties,
+    read_aiff_stream,
+    read_flac_stream,
+    read_mp3_properties,
+    read_wav_stream,
+)
+from infiniteprep.adapters.metadata_io.flac_vorbis import VorbisComment, parse_vorbis_comment
+from infiniteprep.adapters.metadata_io.id3_containers import read_mp3_tag
+from infiniteprep.adapters.metadata_io.id3v2 import (
+    LANGUAGE_FRAMES,
+    Id3FormatError,
+    Id3Frame,
+    Id3Tag,
+    decode_language_text,
+    decode_text_values,
+    decode_txxx,
+    frame_key,
+    parse_id3v2,
+)
+from infiniteprep.adapters.metadata_io.mp4_reader import read_mp4
+from infiniteprep.adapters.metadata_io.ogg_reader import read_ogg
 from infiniteprep.domain.enums import (
     WRITE_SUPPORTED_FORMATS,
     AudioFormat,
@@ -302,6 +329,208 @@ def synchronize_wav_list_info_chunk(file_path: Path, tags_to_write: dict[str, st
     file_path.write_bytes(b"RIFF" + struct.pack("<I", len(wave_payload)) + wave_payload)
 
 
+# Each codec raises a ValueError subclass on damage. Slicing a short buffer can raise
+# struct.error or IndexError, and opening or mapping the file can raise OSError.
+READ_ERRORS: Final[tuple[type[Exception], ...]] = (ValueError, struct.error, IndexError, OSError)
+PICTURE_FRAME: Final[str] = "APIC"
+MIME_TERMINATOR: Final[bytes] = b"\x00"
+
+
+@dataclass(frozen=True)
+class _ParsedAudio:
+    """Stream properties and tags read from one file."""
+
+    properties: AudioProperties
+    standard_tags: dict[str, str]
+    raw_custom_tags: dict[str, Any]
+
+
+def _parse_audio_file(file_path: Path, fmt: AudioFormat) -> _ParsedAudio:
+    """Read properties and tags with the in-house codecs, mapping the file read-only.
+
+    The map keeps large WAV and AIFF files on disk. Only headers and tag bytes are read.
+    """
+    if fmt == AudioFormat.OGG:
+        return _parse_ogg(file_path)
+    parser = MAPPED_PARSERS[fmt]
+    with (
+        file_path.open("rb") as handle,
+        mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as mapped,
+    ):
+        # mmap slices, indexes, and searches like bytes, which is all the codecs do.
+        return parser(mapped)
+
+
+def _parse_mp3(data: bytes) -> _ParsedAudio:
+    """Read MP3 timing from its frames and tags from the leading ID3v2 tag."""
+    standard, raw = _classify_id3_tag(read_mp3_tag(data))
+    return _ParsedAudio(read_mp3_properties(data), standard, raw)
+
+
+def _parse_wav(data: bytes) -> _ParsedAudio:
+    """Read WAV properties and the ID3v2 tag in its id3 chunk."""
+    stream = read_wav_stream(data)
+    tag = parse_id3v2(stream.tag_body) if stream.tag_body else None
+    standard, raw = _classify_id3_tag(tag)
+    return _ParsedAudio(stream.properties, standard, raw)
+
+
+def _parse_aiff(data: bytes) -> _ParsedAudio:
+    """Read AIFF properties and the ID3v2 tag in its ID3 chunk."""
+    stream = read_aiff_stream(data)
+    tag = parse_id3v2(stream.tag_body) if stream.tag_body else None
+    standard, raw = _classify_id3_tag(tag)
+    return _ParsedAudio(stream.properties, standard, raw)
+
+
+def _parse_flac(data: bytes) -> _ParsedAudio:
+    """Read FLAC properties from STREAMINFO and tags from its Vorbis comment."""
+    stream = read_flac_stream(data)
+    comment = parse_vorbis_comment(stream.tag_body) if stream.tag_body else None
+    standard, raw = _classify_vorbis_comment(comment)
+    return _ParsedAudio(stream.properties, standard, raw)
+
+
+def _parse_m4a(data: bytes) -> _ParsedAudio:
+    """Read M4A properties and keep every ilst item as a raw custom tag."""
+    info = read_mp4(data)
+    properties = AudioProperties(
+        info.duration, info.sample_rate, info.channels, info.bitrate, info.bit_depth
+    )
+    raw: dict[str, Any] = {tag.key: str(list(tag.values)) for tag in info.tags}
+    return _ParsedAudio(properties, {}, raw)
+
+
+def _parse_ogg(file_path: Path) -> _ParsedAudio:
+    """Read Ogg properties and keep every comment field as a raw custom tag.
+
+    read_ogg accepts bytes or a path only, so the file is read whole. Ogg files are lossy and
+    small next to WAV or AIFF.
+    """
+    info = read_ogg(file_path)
+    properties = AudioProperties(
+        info.duration, info.sample_rate, info.channels, info.bitrate or None, None
+    )
+    grouped = _group_vorbis_fields(info.comment)
+    return _ParsedAudio(properties, {}, {key: str(values) for key, values in grouped.items()})
+
+
+MAPPED_PARSERS: Final[dict[AudioFormat, Callable[[bytes], _ParsedAudio]]] = {
+    AudioFormat.MP3: _parse_mp3,
+    AudioFormat.WAV: _parse_wav,
+    AudioFormat.AIFF: _parse_aiff,
+    AudioFormat.FLAC: _parse_flac,
+    AudioFormat.M4A: _parse_m4a,
+}
+
+
+def _classify_id3_tag(tag: Id3Tag | None) -> tuple[dict[str, str], dict[str, Any]]:
+    """Sort ID3 frames into mapped standard fields and raw custom tags."""
+    standard: dict[str, str] = {}
+    raw: dict[str, Any] = {}
+    if tag is None:
+        return standard, raw
+    txxx_reverse = {desc.upper(): field.value for field, desc in ID3_TXXX_MAP.items()}
+    for frame in tag.frames:
+        try:
+            _classify_id3_frame(frame, txxx_reverse, standard, raw)
+        except Id3FormatError:
+            # A frame whose text cannot decode still appears, as a byte summary.
+            key, summary = _binary_frame_entry(frame)
+            raw[key] = summary
+    return standard, raw
+
+
+def _classify_id3_frame(
+    frame: Id3Frame,
+    txxx_reverse: dict[str, str],
+    standard: dict[str, str],
+    raw: dict[str, Any],
+) -> None:
+    """Place one ID3 frame in standard or raw. Empty mapped text frames are skipped."""
+    frame_id = frame.frame_id
+    if frame_id == "TXXX":
+        description, values = decode_txxx(frame)
+        first = values[0].strip() if values else ""
+        mapped = txxx_reverse.get(description.upper())
+        if mapped and first:
+            standard[mapped] = first
+        else:
+            raw[f"TXXX:{description}"] = first
+        return
+    if frame_id.startswith("T"):
+        values = decode_text_values(frame)
+        if frame_id not in ID3_FRAME_TO_FIELD:
+            raw[frame_id] = values
+        elif values and values[0].strip():
+            standard[ID3_FRAME_TO_FIELD[frame_id]] = values[0].strip()
+        return
+    if frame_id in LANGUAGE_FRAMES:
+        raw[frame_key(frame)] = decode_language_text(frame)
+        return
+    key, summary = _binary_frame_entry(frame)
+    raw[key] = summary
+
+
+def _binary_frame_entry(frame: Id3Frame) -> tuple[str, str]:
+    """Return a key and a summary with the length and SHA-256 of a frame body.
+
+    The digest lets a later read tell whether the frame changed without storing its bytes.
+    """
+    key = frame_key(frame)
+    label = key.replace(":", " ", 1)
+    if frame.frame_id == PICTURE_FRAME:
+        mime, description = _picture_fields(frame.body)
+        key, label = f"{PICTURE_FRAME}:{description}", f"{PICTURE_FRAME} {mime}"
+    digest = hashlib.sha256(frame.body).hexdigest()
+    return key, f"<{label}, {len(frame.body)} bytes, sha256 {digest}>"
+
+
+def _picture_fields(body: bytes) -> tuple[str, str]:
+    """Return the MIME type and description of an APIC body, or empty strings when damaged.
+
+    APIC holds an encoding byte, a Latin-1 MIME type with a terminator, and a picture type
+    byte, then a description in the frame encoding. The description and the rest split the
+    same way a TXXX body does, so decode_txxx reads it.
+    """
+    mime_end = body.find(MIME_TERMINATOR, 1)
+    if mime_end < 0:
+        return "", ""
+    mime = body[1:mime_end].decode("latin-1")
+    described = body[:1] + body[mime_end + 2 :]
+    try:
+        return mime, decode_txxx(Id3Frame(PICTURE_FRAME, described))[0]
+    except Id3FormatError:
+        return mime, ""
+
+
+def _group_vorbis_fields(comment: VorbisComment | None) -> dict[str, list[str]]:
+    """Group comment values by lowercased field name, keeping their order."""
+    grouped: dict[str, list[str]] = {}
+    if comment is None:
+        return grouped
+    for name, value in comment.fields:
+        grouped.setdefault(name.lower(), []).append(value)
+    return grouped
+
+
+def _classify_vorbis_comment(
+    comment: VorbisComment | None,
+) -> tuple[dict[str, str], dict[str, Any]]:
+    """Sort Vorbis comment fields into mapped standard fields and raw custom tags."""
+    standard: dict[str, str] = {}
+    raw: dict[str, Any] = {}
+    vorbis_reverse = {name.upper(): field.value for field, name in VORBIS_FIELD_MAP.items()}
+    for key, values in _group_vorbis_fields(comment).items():
+        mapped = vorbis_reverse.get(key.upper())
+        first = values[0].strip()
+        if mapped and first:
+            standard[mapped] = first
+        else:
+            raw[key] = values
+    return standard, raw
+
+
 class MutagenAdapter:
     """Reads and writes audio metadata without re-encoding audio streams."""
 
@@ -325,134 +554,35 @@ class MutagenAdapter:
                 warnings=[msg],
             )
 
-        audio, err_msg = self._safe_open_mutagen(file_path)
-        if audio is None:
-            fallback = "Unrecognized or damaged audio header; verify file integrity."
+        try:
+            parsed = _parse_audio_file(file_path, fmt)
+        except READ_ERRORS as exc:
             return TechnicalAndTagMetadata(
                 format=fmt,
                 duration=None,
                 sample_rate=None,
                 channels=None,
                 bitrate=None,
-                warnings=[err_msg or fallback],
+                warnings=[
+                    f"Damaged or unreadable audio container ({exc.__class__.__name__}: {exc}); "
+                    "check source file."
+                ],
             )
 
-        info = getattr(audio, "info", None)
-        bits_per_sample = int(getattr(info, "bits_per_sample", 0)) or None
-        sample_rate = int(getattr(info, "sample_rate", 0)) or None
-
-        standard_tags: dict[str, str] = {}
-        raw_custom_tags: dict[str, Any] = {}
-        self._populate_extracted_tags(audio, standard_tags, raw_custom_tags)
-        if bits_per_sample is not None:
-            raw_custom_tags["_bits_per_sample"] = bits_per_sample
-
+        props = parsed.properties
+        raw_custom_tags = parsed.raw_custom_tags
+        if props.bits_per_sample is not None:
+            raw_custom_tags["_bits_per_sample"] = props.bits_per_sample
         return TechnicalAndTagMetadata(
             format=fmt,
-            duration=float(getattr(info, "length", 0.0))
-            if info and hasattr(info, "length")
-            else None,
-            sample_rate=sample_rate,
-            channels=int(getattr(info, "channels", 0)) or None,
-            bitrate=int(getattr(info, "bitrate", 0)) or None,
-            standard_tags=standard_tags,
+            duration=props.duration,
+            sample_rate=props.sample_rate,
+            channels=props.channels,
+            bitrate=props.bitrate,
+            standard_tags=parsed.standard_tags,
             raw_custom_tags=raw_custom_tags,
-            warnings=evaluate_xdj_rx3_warnings(fmt, sample_rate, bits_per_sample),
+            warnings=evaluate_xdj_rx3_warnings(fmt, props.sample_rate, props.bits_per_sample),
         )
-
-    def _safe_open_mutagen(self, file_path: Path) -> tuple[Any | None, str | None]:
-        """Safely open an audio file with mutagen, returning (audio, error_message)."""
-        try:
-            audio = mutagen.File(str(file_path))
-        except Exception as exc:
-            return (
-                None,
-                f"Damaged or unreadable audio container ({exc.__class__.__name__}: {exc}); "
-                "check source file.",
-            )
-        if audio is None:
-            return None, "Unrecognized or damaged audio header; inspect or replace source file."
-        return audio, None
-
-    def _populate_extracted_tags(
-        self,
-        audio: Any,
-        standard_tags: dict[str, str],
-        raw_custom_tags: dict[str, Any],
-    ) -> None:
-        """Dispatch tag extraction based on underlying mutagen container type."""
-        tags_obj = getattr(audio, "tags", None)
-        if isinstance(audio, (MP3, WAVE, AIFF)) or isinstance(tags_obj, ID3):
-            self._extract_id3_tags(tags_obj, standard_tags, raw_custom_tags)
-            return
-        if isinstance(audio, FLAC):
-            self._extract_vorbis_tags(audio, standard_tags, raw_custom_tags)
-            return
-        if tags_obj is not None:
-            for key, val in dict(tags_obj).items():
-                raw_custom_tags[str(key)] = str(val)
-
-    def _extract_id3_tags(
-        self,
-        id3_tags: ID3 | None,
-        standard_tags: dict[str, str],
-        raw_custom_tags: dict[str, Any],
-    ) -> None:
-        """Extract standard and custom ID3 frames into normalized dictionaries."""
-        if not id3_tags:
-            return
-        txxx_reverse = {desc.upper(): field.value for field, desc in ID3_TXXX_MAP.items()}
-        for frame_key, frame in id3_tags.items():
-            self._classify_single_id3_frame(
-                frame_key, frame, txxx_reverse, standard_tags, raw_custom_tags
-            )
-
-    def _classify_single_id3_frame(
-        self,
-        frame_key: str,
-        frame: Any,
-        txxx_reverse: dict[str, str],
-        standard_tags: dict[str, str],
-        raw_custom_tags: dict[str, Any],
-    ) -> None:
-        """Classify a single ID3 frame into standard_tags or raw_custom_tags."""
-        base_id = frame_key.split(":", maxsplit=1)[0]
-        text_list = getattr(frame, "text", None)
-        first_text = str(text_list[0]).strip() if text_list else ""
-
-        if base_id in ID3_FRAME_TO_FIELD:
-            if first_text:
-                standard_tags[ID3_FRAME_TO_FIELD[base_id]] = first_text
-            return
-
-        if base_id == "TXXX":
-            desc = getattr(frame, "desc", "") or ""
-            mapped_field = txxx_reverse.get(desc.upper())
-            if mapped_field and first_text:
-                standard_tags[mapped_field] = first_text
-            else:
-                raw_custom_tags[f"TXXX:{desc}"] = first_text
-            return
-
-        raw_custom_tags[frame_key] = [str(x) for x in text_list] if text_list else repr(frame)
-
-    def _extract_vorbis_tags(
-        self,
-        flac_obj: FLAC,
-        standard_tags: dict[str, str],
-        raw_custom_tags: dict[str, Any],
-    ) -> None:
-        """Extract Vorbis comments from a FLAC file."""
-        if not flac_obj.tags:
-            return
-        vorbis_reverse = {v.upper(): k.value for k, v in VORBIS_FIELD_MAP.items()}
-        for key, values in flac_obj.tags.items():
-            upper_k = key.upper()
-            val_str = str(values[0]).strip() if values else ""
-            if upper_k in vorbis_reverse and val_str:
-                standard_tags[vorbis_reverse[upper_k]] = val_str
-            else:
-                raw_custom_tags[key] = list(values)
 
     def render_filename(
         self,

@@ -5,9 +5,24 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.22.0] (2026-11-02)
+## [0.23.0] (2026-11-02)
+
+### Changed
+
+- `MutagenAdapter.read_metadata` reads every format with the in-house codecs instead of mutagen. Its signature and return type stay the same. Writes still use mutagen.
+  - It maps the file read-only. A large WAV or AIFF then stays on disk while the reader takes its headers and tag chunk. The Ogg reader still loads the whole file.
+  - A non-text ID3 frame, such as `PRIV:TRAKTOR4` or a cover picture, now appears in `raw_custom_tags` as `<PRIV TRAKTOR4, N bytes, sha256 ...>`. It no longer appears as a mutagen object representation. Cover pictures keep the `APIC:<description>` key. COMM and USLT frames read as text.
+  - An MP3 without a Xing, Info, or VBRI header keeps constant-bitrate timing from its first frame.
+  - A v2.3 date reads from `TYER` alone. A `TDAT` day and month no longer join the year.
+  - An empty or unparseable file returns one "Damaged or unreadable audio container" warning, as before.
 
 ### Added
+
+- `adapters/metadata_io/audio_properties.py` reads duration, sample rate, channels, bitrate, and bit depth.
+  - It covers MPEG frame headers (MPEG-1, 2, and 2.5, layers 1 to 3, with Xing, Info, and VBRI), WAV `fmt ` and `data` chunks, AIFF and AIFC `COMM` chunks, and FLAC STREAMINFO.
+  - It walks only headers and never copies the audio.
+  - Added `tests/unit/test_audio_properties.py` and `tests/unit/test_in_house_metadata_read.py`.
+- `id3v2.decode_language_text` returns the text of a COMM or USLT frame. Added `tests/unit/test_id3v2_language_text.py`.
 
 - `adapters/metadata_io/ogg_reader.py` reads metadata, codec parameters, and Vorbis comments
   from Ogg Vorbis and Ogg Opus audio bytes. Damage raises `OggFormatError`.
