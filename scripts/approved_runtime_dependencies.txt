@@ -1,0 +1,14 @@
+# Runtime packages the source tree may import.
+#
+# The dependency allowlist guard reads this list and requires it to match the
+# runtime dependencies declared in pyproject.toml. A dependency added to
+# pyproject.toml without a matching entry here fails the build. Adding a
+# dependency needs active-human authorization under Rule 9 of AGENTS.md.
+#
+# One distribution name per line. Comments start with a hash sign.
+keyring
+numpy
+platformdirs
+PySide6
+scipy
+soundfile
