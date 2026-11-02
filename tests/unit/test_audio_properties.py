@@ -204,6 +204,20 @@ def test_aiff_properties_come_from_the_comm_chunk(form_type: bytes) -> None:
     assert stream.tag_body == tag
 
 
+# Exponent fields 0x401F (2 ** 32, one past 32 bits), 0x4FFF, and 0x7FFE (the largest finite).
+@pytest.mark.parametrize("exponent_field", [0x401F, 0x4FFF, 0x7FFE])
+def test_aiff_rate_beyond_32_bits_raises_instead_of_overflowing(exponent_field: int) -> None:
+    """A COMM rate whose exponent puts it past 32 bits raises AudioPropertiesError.
+
+    A float conversion of the largest exponents would raise OverflowError, which callers
+    that catch ValueError would miss.
+    """
+    comm = struct.pack(">hIh", 2, 1024, 16) + struct.pack(">HQ", exponent_field, 1 << 63)
+    data = b"FORM" + struct.pack(">I", 4 + 8 + len(comm)) + b"AIFF" + iff_chunk(b"COMM", comm)
+    with pytest.raises(AudioPropertiesError):
+        read_aiff_stream(data)
+
+
 def test_aiff_without_comm_raises() -> None:
     """An AIFF form with no COMM chunk raises AudioPropertiesError."""
     data = b"FORM" + struct.pack(">I", 4) + b"AIFF"

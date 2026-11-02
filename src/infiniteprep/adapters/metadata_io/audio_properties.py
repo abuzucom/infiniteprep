@@ -32,6 +32,8 @@ EXTENDED_EXPONENT_BIAS: Final[int] = 16383
 EXTENDED_MANTISSA_BITS: Final[int] = 63
 EXTENDED_EXPONENT_MASK: Final[int] = 0x7FFF
 EXTENDED_SIGN_BIT: Final[int] = 0x8000
+# A sample rate fits in 32 bits, so its binary exponent is at most 31.
+MAX_RATE_EXPONENT: Final[int] = 31
 # FLAC metadata: a 4-byte magic, then blocks of a 1-byte type and a 24-bit length.
 FLAC_MAGIC: Final[bytes] = b"fLaC"
 FLAC_BLOCK_HEADER_SIZE: Final[int] = 4
@@ -265,6 +267,10 @@ def _extended_to_int(raw: bytes) -> int:
     exponent = (exponent_field & EXTENDED_EXPONENT_MASK) - EXTENDED_EXPONENT_BIAS
     if mantissa == 0 or exponent_field & EXTENDED_EXPONENT_MASK == EXTENDED_EXPONENT_MASK:
         return 0
+    # The value is below 2 ** (exponent + 1), so a larger exponent cannot be a sample rate.
+    # The check also keeps math.ldexp from raising OverflowError on the largest exponents.
+    if exponent > MAX_RATE_EXPONENT:
+        raise AudioPropertiesError("The AIFF sample rate is out of range; the file is damaged.")
     value = math.ldexp(mantissa, exponent - EXTENDED_MANTISSA_BITS)
     return 0 if exponent_field & EXTENDED_SIGN_BIT else round(value)
 

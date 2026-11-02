@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import struct
 from collections.abc import Callable
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from tests.fixtures.audio_factory import (
     create_ogg_fixture,
     create_wav_fixture,
 )
+from tests.fixtures.audio_container_bytes import aiff_file, iff_chunk
 from tests.fixtures.id3v2_bytes import tag_bytes, utf16, v23_frame
 from tests.fixtures.mp4_bytes import audio_entry, data_atom, esds, item, m4a_file, mvhd, trak, udta
 
@@ -145,9 +147,17 @@ def test_ogg_reads_properties_and_keeps_the_xdj_warning(
     assert any("OGG" in warning for warning in meta.warnings)
 
 
+HUGE_RATE_COMM = struct.pack(">hIh", 2, 1024, 16) + struct.pack(">HQ", 0x7FFE, 1 << 63)
+
+
 @pytest.mark.parametrize(
     ("name", "content"),
-    [("empty.mp3", b""), ("noise.mp3", b"not audio" * 100), ("short.wav", b"RIFF\x04\x00")],
+    [
+        ("empty.mp3", b""),
+        ("noise.mp3", b"not audio" * 100),
+        ("short.wav", b"RIFF\x04\x00"),
+        ("huge-rate.aiff", aiff_file(iff_chunk(b"COMM", HUGE_RATE_COMM))),
+    ],
 )
 def test_empty_or_damaged_files_report_a_warning(
     adapter: MutagenAdapter, tmp_path: Path, name: str, content: bytes

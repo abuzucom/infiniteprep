@@ -14,7 +14,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A non-text ID3 frame, such as `PRIV:TRAKTOR4` or a cover picture, now appears in `raw_custom_tags` as `<PRIV TRAKTOR4, N bytes, sha256 ...>`. It no longer appears as a mutagen object representation. Cover pictures keep the `APIC:<description>` key. COMM and USLT frames read as text.
   - An MP3 without a Xing, Info, or VBRI header keeps constant-bitrate timing from its first frame.
   - A v2.3 date reads from `TYER` alone. A `TDAT` day and month no longer join the year.
-  - An empty or unparseable file returns one "Damaged or unreadable audio container" warning, as before.
+  - An empty or unparseable file returns one "Damaged or unreadable audio container" warning, as before. An AIFF sample rate past 32 bits counts as damage.
 
 ### Added
 
