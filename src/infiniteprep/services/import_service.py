@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import (
-    MutagenAdapter,
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
     TechnicalAndTagMetadata,
     compute_sha256,
 )
@@ -106,10 +106,12 @@ def discover_files_bounded(
 class ImportService:
     """Non-destructive file and folder import, inventory, and folder-group inference."""
 
-    def __init__(self, repository: Repository, tag_adapter: MutagenAdapter | None = None) -> None:
-        """Initialize ImportService with a Repository and MutagenAdapter."""
+    def __init__(
+        self, repository: Repository, tag_adapter: MetadataTagAdapter | None = None
+    ) -> None:
+        """Initialize ImportService with a Repository and MetadataTagAdapter."""
         self.repo = repository
-        self.tag_adapter = tag_adapter or MutagenAdapter()
+        self.tag_adapter = tag_adapter or MetadataTagAdapter()
 
     def import_paths(
         self,

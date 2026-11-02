@@ -7,7 +7,10 @@ from typing import Any
 
 import pytest
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
+    compute_sha256,
+)
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName, OperationStatus
@@ -23,7 +26,7 @@ CORRUPT_BYTES = b"half-written by a crash"
 def library(tmp_path: Path) -> tuple[Repository, WriteService, list[str], Path, str]:
     """Import two tagged WAVs and approve a new artist on each."""
     repo = Repository(DatabaseManager(":memory:"))
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     paths = [
         create_wav_fixture(
             tmp_path / "crate" / f"track_{index}.wav",

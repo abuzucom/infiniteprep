@@ -7,7 +7,10 @@ from typing import Any
 
 import pytest
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
+    compute_sha256,
+)
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName, OperationStatus
@@ -23,7 +26,7 @@ from tests.fixtures.audio_factory import create_wav_fixture
 def pending_write(tmp_path: Path) -> tuple[Repository, WriteService, FileWritePlan, Path, str]:
     """Import one tagged WAV, approve a new artist, and build its write plan."""
     repo = Repository(DatabaseManager(":memory:"))
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     source = create_wav_fixture(
         tmp_path / "crate" / "track.wav", duration_sec=1.0, tags={"artist": "Old", "title": "T"}
     )
