@@ -18,6 +18,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A YEAR write drops any old TYER, TDAT, and TIME frames before it writes the new date.
   - WAV writes still synchronize the RIFF LIST-INFO chunk.
   - FLAC writes keep every other Vorbis field and block. LABEL still also writes ORGANIZATION. A file without a Vorbis comment gets one whose vendor is `InfinitePrep` and the package version.
+  - Every tag write refuses a file over 1 GiB with an error that names the limit, and the file stays unchanged. The writers read the whole file, as the WAV LIST-INFO step already did under the same cap.
+- The package version in `pyproject.toml` and `infiniteprep/__init__.py` moves from 0.1.0 to 0.24.0, matching this file.
 - A v2.3 date reads as `YYYY-MM-DD` from TYER plus TDAT, with `THH:MM` from TIME when present, as mutagen read it. A full date then passes the write read-back check.
 - `docs/technical-decision-record.md` names the in-house codecs for tag reading and writing.
 - Added `tests/unit/test_in_house_metadata_write.py`.

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from infiniteprep import __version__
+from infiniteprep.adapters.metadata_io import mutagen_adapter as adapter_module
 from infiniteprep.adapters.metadata_io.flac_vorbis import get_field_values, read_flac_comment
 from infiniteprep.adapters.metadata_io.id3_containers import mp3_audio_offset
 from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
@@ -144,6 +145,32 @@ def test_new_flac_comment_names_infiniteprep_as_vendor(
     comment = read_flac_comment(path.read_bytes())
     assert comment is not None
     assert comment.vendor == f"InfinitePrep {__version__}"
+
+
+@pytest.mark.parametrize(
+    ("factory", "suffix"),
+    [
+        (create_mp3_fixture, ".mp3"),
+        (create_wav_fixture, ".wav"),
+        (create_aiff_fixture, ".aiff"),
+        (create_flac_fixture, ".flac"),
+    ],
+)
+def test_files_past_the_rewrite_limit_are_refused_unchanged(
+    adapter: MutagenAdapter,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    factory: Callable[..., Path],
+    suffix: str,
+) -> None:
+    """A file larger than the rewrite limit raises before any read, and its bytes stay."""
+    path = factory(tmp_path / f"large{suffix}")
+    original = path.read_bytes()
+    # A low limit stands in for the 1 GiB cap, so the test needs no 1 GiB file.
+    monkeypatch.setattr(adapter_module, "MAX_WAV_REWRITE_BYTES", len(original) - 1)
+    with pytest.raises(ValueError, match="tag write limit"):
+        adapter._write_tags_by_format(path, {FieldName.TITLE: "Too big"})
+    assert path.read_bytes() == original
 
 
 def test_no_source_module_imports_mutagen() -> None:
