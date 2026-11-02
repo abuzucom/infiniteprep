@@ -142,12 +142,25 @@ class AudioAnalyzer(Protocol):
 
 
 class TagWriter(Protocol):
-    """Contract for metadata inspection, write preview, and safe tag application."""
+    """Contract for format detection, metadata inspection, filename rendering, and safe writes."""
 
     supported_write_formats: frozenset[AudioFormat]
 
+    def detect_format(self, file_path: Path) -> AudioFormat:
+        """Detect the audio format of a file from its extension."""
+        ...
+
     def read_metadata(self, file_path: Path) -> TechnicalAndTagMetadata:
         """Read technical audio properties and all existing tags without modifying the file."""
+        ...
+
+    def render_filename(
+        self,
+        source_path: Path,
+        effective_fields: dict[str, str],
+        template: str = "{artist} - {title}",
+    ) -> str:
+        """Render a safe filename from template and effective fields, preserving extension."""
         ...
 
     def preview(
