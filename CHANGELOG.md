@@ -5,13 +5,20 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.19.0] (2026-11-02)
+## [0.20.0] (2026-11-02)
 
 ### Added
 
 - Spectrum waveform analysis streams bounded audio into low, mid, high, and overall peaks.
   Content-addressed compressed caches enforce a size cap. Overview sampling preserves peaks.
   Generated sine tests cover band separation, column counts, cache reuse, and eviction.
+
+### Fixed
+
+- Spectrum waveform arrays reject inconsistent dimensions or lengths.
+- Zero and undersized cache budgets skip archive writes. Cache updates reserve space before
+  publishing an archive. A failed eviction stops new writes. Regression tests cover these
+  budgets, file growth during hashing, and immutable overviews with a peak in the final sample.
 
 ## [0.18.0] (2026-11-01)
 

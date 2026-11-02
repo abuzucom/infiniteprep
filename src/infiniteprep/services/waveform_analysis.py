@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import logging
 import math
@@ -48,19 +49,23 @@ class SpectrumWaveform:
 
     def __post_init__(self) -> None:
         """Own immutable arrays independently of caller buffers."""
-        for name in FIELDS:
-            array = np.asarray(getattr(self, name), dtype=np.float32)
+        arrays = [np.asarray(getattr(self, name), dtype=np.float32) for name in FIELDS]
+        invalid_shapes = any(array.ndim != 1 or array.shape != arrays[-1].shape for array in arrays)
+        if invalid_shapes:
+            raise ValueError("Peaks must be one-dimensional arrays of the same length.")
+        for name, array in zip(FIELDS, arrays, strict=True):
             immutable = np.frombuffer(array.tobytes(), dtype=np.float32)
             object.__setattr__(self, name, immutable)
 
 
 def _cache_key(source: Path) -> str:
-    """Hash bounded content and all analysis settings."""
+    """Hash complete content on every call to detect same-size source changes."""
     digest = hashlib.sha256()
     bytes_seen = 0
     with source.open("rb") as stream:
         for block in iter(lambda: stream.read(HASH_BLOCK_BYTES), b""):
             bytes_seen += len(block)
+            # The source can grow after the public entry point checks its size.
             if bytes_seen > MAX_PREVIEW_FILE_BYTES:
                 raise ValueError("Audio exceeds 500 MiB. Supply a smaller track.")
             digest.update(block)
@@ -156,17 +161,25 @@ def _load_cache(path: Path) -> SpectrumWaveform | None:
         return None
 
 
-def _store_cache(directory: Path, entry: Path, waveform: SpectrumWaveform) -> None:
-    """Publish complete archives atomically without following a cache-file link."""
+def _store_cache(directory: Path, entry: Path, waveform: SpectrumWaveform, size_limit: int) -> None:
+    """Publish a fitting archive after reserving space within the cache budget."""
+    with io.BytesIO() as buffer:
+        np.savez_compressed(
+            buffer,
+            **{name: getattr(waveform, name) for name in FIELDS},
+            duration_sec=waveform.duration_sec,
+        )
+        payload = buffer.getvalue()
+    payload_size = len(payload)
+    if payload_size > size_limit:
+        return
+    _evict_cache(directory, size_limit - payload_size)
     directory.mkdir(parents=True, exist_ok=True)
+    # Keep both paths in the same directory for an atomic same-filesystem swap.
     temporary = directory / f"spectrum-{uuid.uuid4().hex}{uuid.uuid4().hex}.npz"
     try:
         with temporary.open("xb") as stream:
-            np.savez_compressed(
-                stream,
-                **{name: getattr(waveform, name) for name in FIELDS},
-                duration_sec=waveform.duration_sec,
-            )
+            stream.write(payload)
         os.replace(temporary, entry)
     finally:
         if temporary.exists():
@@ -175,6 +188,9 @@ def _store_cache(directory: Path, entry: Path, waveform: SpectrumWaveform) -> No
 
 def _evict_cache(directory: Path, size_limit: int) -> None:
     """Delete only analyzer-owned archives in oldest-write order."""
+    directory_exists = directory.exists()
+    if not directory_exists:
+        return
     entries = [
         path
         for path in directory.iterdir()
@@ -190,13 +206,34 @@ def _evict_cache(directory: Path, size_limit: int) -> None:
         total -= size
 
 
+def _update_cache(
+    directory: Path,
+    entry: Path,
+    waveform: SpectrumWaveform,
+    size_limit: int,
+    write_entry: bool,
+) -> None:
+    """Stop publishing archives if budget enforcement fails."""
+    try:
+        _evict_cache(directory, size_limit)
+        if write_entry and size_limit > 0:
+            _store_cache(directory, entry, waveform, size_limit)
+    except OSError:
+        logger.warning("Spectrum cache update failed. Check cache directory permissions.")
+
+
 def analyze_waveform(
     file_path: Path,
     cache_directory: Path | None = None,
     *,
     max_cache_bytes: int = DEFAULT_CACHE_BYTES,
 ) -> SpectrumWaveform:
-    """Analyze a track or reuse matching cached peaks. Cap decoded duration at 30 minutes."""
+    """Return causal band envelope peaks with at most 30 minutes of decoded audio.
+
+    The default user cache is shared across callers. A zero budget removes owned archives
+    and skips new writes. An archive larger than the budget is not stored. Cache failures
+    log warnings and preserve the analysis result. Source filesystem errors propagate.
+    """
     source = Path(file_path)
     if max_cache_bytes < 0:
         raise ValueError("Cache size must be nonnegative. Supply a valid byte limit.")
@@ -206,16 +243,10 @@ def analyze_waveform(
     key = _cache_key(source)
     entry = directory / f"spectrum-{key}.npz"
     waveform = _load_cache(entry)
+    cache_miss = waveform is None
     if waveform is None:
         waveform = _decode_waveform(source)
-        try:
-            _store_cache(directory, entry, waveform)
-        except OSError:
-            logger.warning("Spectrum cache write failed. Check cache directory permissions.")
-    try:
-        _evict_cache(directory, max_cache_bytes)
-    except OSError:
-        logger.warning("Spectrum cache eviction failed. Check cache directory permissions.")
+    _update_cache(directory, entry, waveform, max_cache_bytes, cache_miss)
     return waveform
 
 
