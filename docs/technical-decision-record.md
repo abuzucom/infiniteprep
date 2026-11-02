@@ -116,7 +116,7 @@ Before implementing live external integrations or selecting core libraries, this
   - **Python 3.12–3.14** (verified on host: `Python 3.14.6`)
   - **Desktop UI**: `PySide6` (Qt 6, LGPLv3) with `QtMultimedia` (`QMediaPlayer` + `QAudioOutput`) for native playback and seeking, and `QTableView`/`QAbstractTableModel` for high-density track management.
   - **Database**: `sqlite3` (built-in, WAL mode, JSON columns, strict foreign keys).
-  - **Tag Reading/Writing**: `mutagen` (LGPLv2+) supporting non-destructive **MP3** (`ID3v2.3`/`v2.4`), **FLAC** (`VorbisComments`), and **WAV** (`ID3v2` RIFF chunk via `mutagen.wave` + `LIST-INFO` preservation) reading/writing while preserving unknown/custom tags.
+  - **Tag Reading/Writing**: in-house codecs under `adapters/metadata_io/`, written from the format specifications. They read **MP3** (`ID3v2.2`/`v2.3`/`v2.4`), **WAV** and **AIFF** (`ID3v2` chunk, plus RIFF `LIST-INFO` for WAV), **FLAC** (`VorbisComments`), **M4A** (`ilst`), and **Ogg** Vorbis and Opus. They write MP3, WAV, AIFF, and FLAC, keeping unknown and custom tags. The codecs replaced `mutagen`, which is GPL-2.0-or-later and would have bound binary distribution to the GPL.
   - **Local Audio Analysis**: `numpy`, `scipy`, `soundfile` (supports FLAC/WAV/OGG/MP3 natively via `libsndfile` 1.1+ with MPG123).
   - **Credentials**: `keyring` (OS-native secret storage) with environment/memory fallback for headless CI.
   - **Packaging**: `PyInstaller` folder/bundle mode (preserves dynamic linking for LGPLv3 compliance across Windows `.exe`, macOS `.app`, and Linux binary bundle).
