@@ -202,8 +202,11 @@ def read_mp3_properties(data: bytes) -> AudioProperties:
     audio_start = mp3_audio_offset(data)
     frame_start, header = _find_first_frame(data, audio_start)
     audio_end = len(data)
-    if data[audio_end - ID3V1_SIZE : audio_end - ID3V1_SIZE + len(ID3V1_MAGIC)] == ID3V1_MAGIC:
-        audio_end -= ID3V1_SIZE
+    id3v1_start = audio_end - ID3V1_SIZE
+    # A file shorter than the tag has none. A negative start would slice from the wrong end.
+    magic_end = id3v1_start + len(ID3V1_MAGIC)
+    if id3v1_start >= frame_start and data[id3v1_start:magic_end] == ID3V1_MAGIC:
+        audio_end = id3v1_start
     vbr = _vbr_counts(data, frame_start, header)
     if vbr is not None and vbr[0]:
         frames, vbr_bytes = vbr

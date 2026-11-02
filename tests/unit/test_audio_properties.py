@@ -38,6 +38,11 @@ MPEG1_SAMPLES_PER_FRAME = 1152
 MPEG2_HEADER = b"\xff\xf3\x80\x64"
 MPEG2_FRAME_BYTES = 208
 MPEG2_BITRATE = 64_000
+# MPEG-2.5 Layer III, 8 kbps, 8 kHz, mono. Frames of this header are 72 bytes.
+MPEG25_MONO_HEADER = b"\xff\xe3\x18\xc4"
+MPEG25_FRAME_BYTES = 72
+MPEG25_BITRATE = 8_000
+ID3V1_BYTES = 128
 # Side information ends 32 bytes after an MPEG-1 stereo frame header.
 XING_OFFSET = 4 + 32
 VBRI_OFFSET = 4 + 32
@@ -123,6 +128,16 @@ def test_false_sync_before_the_audio_is_skipped() -> None:
     audio = mpeg_frames(MPEG1_STEREO_HEADER, MPEG1_FRAME_BYTES)
     props = read_mp3_properties(b"\x00\xff\xfb\x00\x00" + audio)
     assert props.bitrate == MPEG1_BITRATE
+
+
+def test_mp3_shorter_than_an_id3v1_tag_keeps_its_whole_length() -> None:
+    """A file under 128 bytes holds no ID3v1 tag, even when "TAG" appears inside a frame."""
+    frame = bytearray(MPEG25_MONO_HEADER + bytes(MPEG25_FRAME_BYTES - len(MPEG25_MONO_HEADER)))
+    # A negative slice start of 72 - 128 reads from byte 16 of a 72-byte file.
+    misread_at = 2 * MPEG25_FRAME_BYTES - ID3V1_BYTES
+    frame[misread_at : misread_at + len(b"TAG")] = b"TAG"
+    props = read_mp3_properties(bytes(frame))
+    assert props.duration == pytest.approx(MPEG25_FRAME_BYTES * BITS_PER_BYTE / MPEG25_BITRATE)
 
 
 @pytest.mark.parametrize("data", [b"", bytes(4096), b"not an mp3 file at all" * 50])
