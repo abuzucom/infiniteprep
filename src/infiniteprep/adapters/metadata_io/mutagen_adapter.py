@@ -948,7 +948,17 @@ class MutagenAdapter:
         return write_plan.destination_path
 
     def _write_tags_by_format(self, file_path: Path, tags_to_write: dict[str, str]) -> None:
-        """Write approved tags in-place for MP3, WAV, AIFF, or FLAC."""
+        """Write approved tags in-place for MP3, WAV, AIFF, or FLAC.
+
+        Each writer reads the whole file into memory, so files past the rewrite limit are
+        refused before any read.
+        """
+        size = file_path.stat().st_size
+        if size > MAX_WAV_REWRITE_BYTES:
+            raise ValueError(
+                f"'{file_path.name}' is {size} bytes, past the {MAX_WAV_REWRITE_BYTES}-byte tag "
+                "write limit; no tags were written. Split or re-encode the file, then retry."
+            )
         fmt = self.detect_format(file_path)
         if fmt == AudioFormat.MP3:
             self._write_mp3_tags(file_path, tags_to_write)
