@@ -12,7 +12,6 @@ from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapte
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
-    compute_sha256,
 )
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
@@ -24,6 +23,7 @@ from infiniteprep.domain.enums import (
     SourceType,
 )
 from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
+from infiniteprep.hashing import compute_sha256
 from infiniteprep.main import main, run_evaluation_sample
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.job_orchestrator import JobOrchestrator

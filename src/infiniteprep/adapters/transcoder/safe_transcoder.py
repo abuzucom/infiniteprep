@@ -17,13 +17,13 @@ from scipy.signal import resample_poly
 
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
-    compute_sha256,
     copy_to_new_verified_file,
     operation_backup_path,
 )
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, OperationStatus
 from infiniteprep.domain.models import ChangeRecord, FileAsset
+from infiniteprep.hashing import compute_sha256
 
 MAX_TRANSCODE_FILE_BYTES: Final[int] = 1_073_741_824  # 1 GiB
 MAX_TRANSCODE_DURATION_SEC: Final[float] = 7200.0  # 2 hours

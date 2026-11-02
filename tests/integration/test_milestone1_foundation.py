@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from infiniteprep.adapters.metadata_io.metadata_tag_adapter import compute_sha256
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
@@ -30,6 +29,7 @@ from infiniteprep.domain.models import (
     ReleaseDetails,
     SourceGroup,
 )
+from infiniteprep.hashing import compute_sha256
 from infiniteprep.services.import_service import ImportService
 from tests.fixtures.audio_factory import (
     create_aiff_fixture,

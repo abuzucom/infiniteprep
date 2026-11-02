@@ -14,7 +14,6 @@ import platformdirs
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
     SourceChangedDuringWriteError,
-    compute_sha256,
     copy_to_new_verified_file,
     operation_backup_path,
 )
@@ -22,6 +21,7 @@ from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import OperationStatus, ReviewStatus
 from infiniteprep.domain.models import ChangeRecord
 from infiniteprep.domain.ports import FileWritePlan
+from infiniteprep.hashing import compute_sha256
 
 logger = logging.getLogger(__name__)
 
