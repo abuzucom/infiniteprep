@@ -103,32 +103,16 @@ def test_multipage_comment_packet() -> None:
     fields = [("DESCRIPTION", "X" * 600)]
     id_pkt = make_vorbis_id_header(channels=2, sample_rate=44100, nominal_bitrate=128000)
     comment_pkt = make_vorbis_comment_header(vendor="SpanVendor", fields=fields)
-
-    p1 = make_ogg_page(
-        serial=100,
-        sequence_number=0,
-        granule_position=0,
-        packets=[id_pkt],
-        header_type=0x02,
-    )
     header_bytes = struct.pack("<4sBBqIIIB", OGG_MAGIC, 0, 0, 0, 100, 1, 0, 2)
-    p2 = header_bytes + bytes([255, 255]) + comment_pkt[:510]
-    p3 = make_ogg_page(
-        serial=100,
-        sequence_number=2,
-        granule_position=0,
-        packets=[comment_pkt[510:]],
-        header_type=0x01,
+    pages = (
+        make_ogg_page(100, 0, 0, [id_pkt], header_type=0x02)
+        + header_bytes
+        + bytes([255, 255])
+        + comment_pkt[:510]
+        + make_ogg_page(100, 2, 0, [comment_pkt[510:]], header_type=0x01)
+        + make_ogg_page(100, 3, 44100, [b"\x00" * 32], header_type=0x04)
     )
-    p4 = make_ogg_page(
-        serial=100,
-        sequence_number=3,
-        granule_position=44100,
-        packets=[b"\x00" * 32],
-        header_type=0x04,
-    )
-
-    metadata = read_ogg(p1 + p2 + p3 + p4)
+    metadata = read_ogg(pages)
     assert metadata.comment.vendor == "SpanVendor"
     assert metadata.comment.fields == tuple(fields)
 
@@ -137,40 +121,24 @@ def test_multiplexed_stream_ignores_other_serials() -> None:
     """Ignore interleaved pages belonging to secondary logical streams."""
     audio_serial = 101
     video_serial = 202
-
-    id_pkt = make_vorbis_id_header(channels=2, sample_rate=44100, nominal_bitrate=160000)
-    comment_pkt = make_vorbis_comment_header(vendor="MultiVendor")
-
-    p1 = make_ogg_page(
-        serial=audio_serial,
-        sequence_number=0,
-        granule_position=0,
-        packets=[id_pkt],
-        header_type=0x02,
+    pages = (
+        make_ogg_page(
+            audio_serial,
+            0,
+            0,
+            [make_vorbis_id_header(channels=2, sample_rate=44100, nominal_bitrate=160000)],
+            header_type=0x02,
+        )
+        + make_ogg_page(video_serial, 0, 0, [b"video_data"], header_type=0x02)
+        + make_ogg_page(
+            audio_serial,
+            1,
+            0,
+            [make_vorbis_comment_header(vendor="MultiVendor")],
+        )
+        + make_ogg_page(audio_serial, 2, 88200, [b"\x00" * 64], header_type=0x04)
     )
-    p_other = make_ogg_page(
-        serial=video_serial,
-        sequence_number=0,
-        granule_position=0,
-        packets=[b"video_data"],
-        header_type=0x02,
-    )
-    p2 = make_ogg_page(
-        serial=audio_serial,
-        sequence_number=1,
-        granule_position=0,
-        packets=[comment_pkt],
-    )
-    p3 = make_ogg_page(
-        serial=audio_serial,
-        sequence_number=2,
-        granule_position=88200,
-        packets=[b"\x00" * 64],
-        header_type=0x04,
-    )
-
-    metadata = read_ogg(p1 + p_other + p2 + p3)
-
+    metadata = read_ogg(pages)
     assert metadata.codec == "vorbis"
     assert metadata.comment.vendor == "MultiVendor"
     assert metadata.duration == pytest.approx(2.0, abs=1e-4)

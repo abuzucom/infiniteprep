@@ -12,6 +12,14 @@ OPUS_HEAD_MAGIC: Final[bytes] = b"OpusHead"
 OPUS_TAGS_MAGIC: Final[bytes] = b"OpusTags"
 
 
+def _compute_lacing(packets: list[bytes]) -> bytes:
+    """Compute Ogg lacing table bytes for a list of packets."""
+    table: list[int] = []
+    for pkt in packets:
+        table.extend([255] * (len(pkt) // 255) + [len(pkt) % 255])
+    return bytes(table)
+
+
 def make_ogg_page(
     serial: int,
     sequence_number: int,
@@ -21,16 +29,7 @@ def make_ogg_page(
     version: int = 0,
 ) -> bytes:
     """Construct one Ogg page from packets, computing the lacing table."""
-    lacing: list[int] = []
-    body_parts: list[bytes] = []
-    for pkt in packets:
-        body_parts.append(pkt)
-        remaining = len(pkt)
-        while remaining >= 255:
-            lacing.append(255)
-            remaining -= 255
-        lacing.append(remaining)
-
+    lacing = _compute_lacing(packets)
     header = struct.pack(
         "<4sBBqIIIB",
         OGG_MAGIC,
@@ -42,7 +41,7 @@ def make_ogg_page(
         0,  # CRC dummy
         len(lacing),
     )
-    return header + bytes(lacing) + b"".join(body_parts)
+    return header + lacing + b"".join(packets)
 
 
 def make_vorbis_id_header(
@@ -127,13 +126,17 @@ def make_synthetic_vorbis_ogg(
     serial: int = 12345,
 ) -> bytes:
     """Construct complete synthetic Ogg Vorbis bytes."""
-    id_pkt = make_vorbis_id_header(channels, sample_rate, nominal_bitrate)
-    comment_pkt = make_vorbis_comment_header(vendor, fields)
-    page_bos = make_ogg_page(serial, 0, 0, [id_pkt], header_type=0x02)
-    page_tags = make_ogg_page(serial, 1, 0, [comment_pkt])
-    dummy_audio = b"\x00\x01\x02\x03" * 64
-    page_eos = make_ogg_page(serial, 2, granule, [dummy_audio], header_type=0x04)
-    return page_bos + page_tags + page_eos
+    return (
+        make_ogg_page(
+            serial,
+            0,
+            0,
+            [make_vorbis_id_header(channels, sample_rate, nominal_bitrate)],
+            header_type=0x02,
+        )
+        + make_ogg_page(serial, 1, 0, [make_vorbis_comment_header(vendor, fields)])
+        + make_ogg_page(serial, 2, granule, [b"\x00\x01\x02\x03" * 64], header_type=0x04)
+    )
 
 
 def make_synthetic_opus_ogg(
@@ -146,10 +149,14 @@ def make_synthetic_opus_ogg(
     serial: int = 67890,
 ) -> bytes:
     """Construct complete synthetic Ogg Opus bytes."""
-    id_pkt = make_opus_head_header(channels, pre_skip, input_rate)
-    tags_pkt = make_opus_tags_header(vendor, fields)
-    page_bos = make_ogg_page(serial, 0, 0, [id_pkt], header_type=0x02)
-    page_tags = make_ogg_page(serial, 1, 0, [tags_pkt])
-    dummy_audio = b"\xfa\xfb\xfc\xfd" * 64
-    page_eos = make_ogg_page(serial, 2, granule, [dummy_audio], header_type=0x04)
-    return page_bos + page_tags + page_eos
+    return (
+        make_ogg_page(
+            serial,
+            0,
+            0,
+            [make_opus_head_header(channels, pre_skip, input_rate)],
+            header_type=0x02,
+        )
+        + make_ogg_page(serial, 1, 0, [make_opus_tags_header(vendor, fields)])
+        + make_ogg_page(serial, 2, granule, [b"\xfa\xfb\xfc\xfd" * 64], header_type=0x04)
+    )

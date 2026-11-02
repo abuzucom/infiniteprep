@@ -77,11 +77,10 @@ def _parse_page(
     if seg_offset + num_segs > len(data):
         raise OggFormatError("Truncated Ogg segment table.")
     lacing = list(data[seg_offset:seg_offset + num_segs])
-    body_start = seg_offset + num_segs
-    body_end = body_start + sum(lacing)
+    body_end = seg_offset + num_segs + sum(lacing)
     if body_end > len(data):
         raise OggFormatError("Truncated Ogg page body.")
-    return flags, granule, serial, lacing, data[body_start:body_end], body_end
+    return flags, granule, serial, lacing, data[seg_offset + num_segs:body_end], body_end
 
 
 def _extract_page_packets(
