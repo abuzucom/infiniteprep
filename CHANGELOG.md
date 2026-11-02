@@ -5,26 +5,28 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.24.0] (2026-11-02)
+## [0.25.0] (2026-11-02)
 
 ### Removed
 
-- The app no longer depends on mutagen. `pyproject.toml`, `requirements-lock.txt`, and the `infiniteprep.spec` hidden imports drop it. Mutagen is GPL-2.0-or-later. A bundled build no longer carries its terms. A new test fails when any module under `src/` imports mutagen.
+- The app no longer depends on mutagen. `pyproject.toml`, `requirements-lock.txt`, and the `infiniteprep.spec` hidden imports drop it. Mutagen is GPL-2.0-or-later. A bundled build no longer carries its terms.
 
 ### Changed
 
-- `MutagenAdapter` writes MP3, WAV, AIFF, and FLAC tags with the in-house codecs. The class name, module name, and public methods stay the same.
+- `MetadataTagAdapter` writes MP3, WAV, AIFF, and FLAC tags with the in-house codecs. The public methods stay the same.
   - An ID3 write keeps every frame outside the written fields, PRIV:TRAKTOR4 included. The tag renders as ID3v2.3 with UTF-16 text, as before. Every byte after an MP3 tag stays the same.
   - A YEAR write drops any old TYER, TDAT, and TIME frames before it writes the new date.
   - WAV writes still synchronize the RIFF LIST-INFO chunk.
   - FLAC writes keep every other Vorbis field and block. LABEL still also writes ORGANIZATION. A file without a Vorbis comment gets one whose vendor is `InfinitePrep` and the package version.
   - Every tag write refuses a file over 1 GiB with an error that names the limit, and the file stays unchanged. The writers read the whole file, as the WAV LIST-INFO step already did under the same cap.
-- The package version in `pyproject.toml` and `infiniteprep/__init__.py` moves from 0.1.0 to 0.24.0, matching this file.
+- `MutagenAdapter` is now `MetadataTagAdapter`. The module moved to `adapters/metadata_io/metadata_tag_adapter.py`. The old class name and the old module path are gone. No shim keeps the old names working.
+- The package version in `pyproject.toml` and `infiniteprep/__init__.py` moves from 0.1.0 to 0.25.0, matching this file.
 - A v2.3 date reads as `YYYY-MM-DD` from TYER plus TDAT, with `THH:MM` from TIME when present, as mutagen read it. A full date then passes the write read-back check.
-- `docs/technical-decision-record.md` names the in-house codecs for tag reading and writing.
+- `docs/technical-decision-record.md` names the in-house codecs for tag reading and writing. It also records that the runtime dependencies carry no copyleft library.
 - Added `tests/unit/test_in_house_metadata_write.py`.
+- A test fails when any module under `src/` imports a package outside the standard library, the first-party package, and the declared runtime dependencies. The check reads the dependency list from `pyproject.toml`. Added `tests/unit/test_dependency_allowlist.py`.
 
-- `MutagenAdapter.read_metadata` reads every format with the in-house codecs instead of mutagen. Its signature and return type stay the same.
+- `MetadataTagAdapter.read_metadata` reads every format with the in-house codecs instead of mutagen. Its signature and return type stay the same.
   - It maps the file read-only. A large WAV or AIFF then stays on disk while the reader takes its headers and tag chunk. The Ogg reader still loads the whole file.
   - A non-text ID3 frame, such as `PRIV:TRAKTOR4` or a cover picture, now appears in `raw_custom_tags` as `<PRIV TRAKTOR4, N bytes, sha256 ...>`. It no longer appears as a mutagen object representation. Cover pictures keep the `APIC:<description>` key. COMM and USLT frames read as text.
   - An MP3 without a Xing, Info, or VBRI header keeps constant-bitrate timing from its first frame.
