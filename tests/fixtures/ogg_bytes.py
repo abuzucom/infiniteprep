@@ -16,7 +16,8 @@ def _compute_lacing(packets: list[bytes]) -> bytes:
     """Compute Ogg lacing table bytes for a list of packets."""
     table: list[int] = []
     for pkt in packets:
-        table.extend([255] * (len(pkt) // 255) + [len(pkt) % 255])
+        table.extend([255] * (len(pkt) // 255))
+        table.append(len(pkt) % 255)
     return bytes(table)
 
 
@@ -70,11 +71,11 @@ def make_vorbis_comment_payload(
 ) -> bytes:
     """Construct a Vorbis comment payload without magic."""
     entries = fields or []
-    vendor_bytes = vendor.encode("utf-8")
+    vendor_bytes = vendor.encode()
     parts = [struct.pack("<I", len(vendor_bytes)), vendor_bytes]
     parts.append(struct.pack("<I", len(entries)))
     for name, value in entries:
-        raw_field = f"{name}={value}".encode("utf-8")
+        raw_field = f"{name}={value}".encode()
         parts.append(struct.pack("<I", len(raw_field)))
         parts.append(raw_field)
     return b"".join(parts)

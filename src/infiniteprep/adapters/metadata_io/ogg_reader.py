@@ -72,14 +72,15 @@ def _parse_page(
     data: bytes, offset: int
 ) -> tuple[int, int, int, list[int], bytes, int]:
     """Parse one Ogg page at offset into header info, lacing, body, and next offset."""
-    flags, granule, serial, num_segs, seg_offset = _read_page_header(data, offset)
+    hdr = _read_page_header(data, offset)
+    seg_offset, num_segs = hdr[4], hdr[3]
     if seg_offset + num_segs > len(data):
         raise OggFormatError("Truncated Ogg segment table.")
     lacing = list(data[seg_offset:seg_offset + num_segs])
     body_end = seg_offset + num_segs + sum(lacing)
     if body_end > len(data):
         raise OggFormatError("Truncated Ogg page body.")
-    return flags, granule, serial, lacing, data[seg_offset + num_segs:body_end], body_end
+    return hdr[0], hdr[1], hdr[2], lacing, data[seg_offset + num_segs:body_end], body_end
 
 
 def _extract_page_packets(
@@ -247,7 +248,7 @@ def _parse_codec_info(packet: bytes) -> tuple[str, int, int, int, int]:
 
 def read_ogg(source: bytes | Path | str) -> OggMetadata:
     """Read metadata, codec parameters, and comments from Ogg Vorbis or Opus data."""
-    raw = Path(source).read_bytes() if isinstance(source, (str, Path)) else source
+    raw = Path(source).read_bytes() if isinstance(source, str | Path) else source
     if not isinstance(raw, bytes):
         raise TypeError("Ogg source must be bytes, Path, or str.")
     serial, packets = _assemble_stream_headers(raw)
