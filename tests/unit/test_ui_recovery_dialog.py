@@ -8,7 +8,10 @@ from typing import Any
 import pytest
 from PySide6.QtWidgets import QMessageBox
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
+    compute_sha256,
+)
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName, OperationStatus
@@ -26,7 +29,7 @@ def interrupted(
 ) -> tuple[Repository, WriteService, Path, str]:
     """Import one tagged WAV and stop a real write after it corrupts the file."""
     repo = Repository(DatabaseManager(":memory:"))
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     source = create_wav_fixture(
         tmp_path / "crate" / "track.wav", duration_sec=1.0, tags={"artist": "Old", "title": "T"}
     )

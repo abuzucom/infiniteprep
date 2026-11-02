@@ -1,4 +1,4 @@
-"""Behavioral tests for MutagenAdapter tag writes on the in-house codecs, using real files."""
+"""Behavioral tests for MetadataTagAdapter tag writes on the in-house codecs, using real files."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 
 from infiniteprep import __version__
-from infiniteprep.adapters.metadata_io import mutagen_adapter as adapter_module
+from infiniteprep.adapters.metadata_io import metadata_tag_adapter as adapter_module
 from infiniteprep.adapters.metadata_io.flac_vorbis import get_field_values, read_flac_comment
 from infiniteprep.adapters.metadata_io.id3_containers import mp3_audio_offset
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.domain.enums import FieldName
 from tests.fixtures.audio_factory import (
     TRAKTOR_FLAC_PAYLOAD,
@@ -40,9 +40,9 @@ RIFF_HEADER_WIDTH = RIFF_FIELD_WIDTH * 2
 
 
 @pytest.fixture
-def adapter() -> MutagenAdapter:
+def adapter() -> MetadataTagAdapter:
     """Return a fresh adapter."""
-    return MutagenAdapter()
+    return MetadataTagAdapter()
 
 
 @pytest.mark.parametrize(
@@ -54,7 +54,7 @@ def adapter() -> MutagenAdapter:
     ],
 )
 def test_id3_writes_read_back_and_keep_the_traktor_frame(
-    adapter: MutagenAdapter, tmp_path: Path, factory: Callable[..., Path], suffix: str
+    adapter: MetadataTagAdapter, tmp_path: Path, factory: Callable[..., Path], suffix: str
 ) -> None:
     """MP3, WAV, and AIFF writes read back every field and keep PRIV:TRAKTOR4 and custom TXXX."""
     path = factory(
@@ -71,7 +71,7 @@ def test_id3_writes_read_back_and_keep_the_traktor_frame(
 
 
 def test_mp3_write_leaves_the_audio_frames_unchanged(
-    adapter: MutagenAdapter, tmp_path: Path
+    adapter: MetadataTagAdapter, tmp_path: Path
 ) -> None:
     """Every byte after the ID3v2 tag stays the same after a write."""
     path = create_mp3_fixture(tmp_path / "track.mp3", tags={"title": "Old"})
@@ -82,7 +82,7 @@ def test_mp3_write_leaves_the_audio_frames_unchanged(
     assert written[mp3_audio_offset(written) :] == audio
 
 
-def test_wav_write_still_adds_list_info(adapter: MutagenAdapter, tmp_path: Path) -> None:
+def test_wav_write_still_adds_list_info(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
     """A WAV write keeps the RIFF LIST-INFO chunk that standalone players read."""
     path = create_wav_fixture(tmp_path / "track.wav")
     adapter._write_tags_by_format(path, {FieldName.TITLE: "Shades of Jae"})
@@ -95,7 +95,7 @@ def test_wav_write_still_adds_list_info(adapter: MutagenAdapter, tmp_path: Path)
 
 
 def test_full_date_round_trips_through_tyer_tdat_and_time(
-    adapter: MutagenAdapter, tmp_path: Path
+    adapter: MetadataTagAdapter, tmp_path: Path
 ) -> None:
     """A YEAR with month, day, and time writes as TYER, TDAT, and TIME and reads back whole."""
     path = create_mp3_fixture(tmp_path / "dated.mp3")
@@ -117,7 +117,7 @@ def test_full_date_round_trips_through_tyer_tdat_and_time(
     ],
 )
 def test_v23_date_frames_rejoin_on_read(
-    adapter: MutagenAdapter, tmp_path: Path, frames: tuple[tuple[str, str], ...], expected: str
+    adapter: MetadataTagAdapter, tmp_path: Path, frames: tuple[tuple[str, str], ...], expected: str
 ) -> None:
     """TYER joins a valid TDAT, and TIME only after a date. Malformed parts are ignored."""
     body = b"".join(v23_frame(fid, b"\x01" + utf16(val)) for fid, val in frames)
@@ -128,7 +128,9 @@ def test_v23_date_frames_rejoin_on_read(
     assert adapter.read_metadata(path).standard_tags[FieldName.YEAR] == expected
 
 
-def test_flac_write_sets_label_and_organization(adapter: MutagenAdapter, tmp_path: Path) -> None:
+def test_flac_write_sets_label_and_organization(
+    adapter: MetadataTagAdapter, tmp_path: Path
+) -> None:
     """FLAC writes LABEL and ORGANIZATION together and keeps the TRAKTOR4 field."""
     path = create_flac_fixture(tmp_path / "track.flac", include_traktor_comment=True)
     adapter._write_tags_by_format(path, {FieldName.LABEL: "KDJ", FieldName.TITLE: "Shades"})
@@ -141,7 +143,7 @@ def test_flac_write_sets_label_and_organization(adapter: MutagenAdapter, tmp_pat
 
 
 def test_new_flac_comment_names_infiniteprep_as_vendor(
-    adapter: MutagenAdapter, tmp_path: Path
+    adapter: MetadataTagAdapter, tmp_path: Path
 ) -> None:
     """A FLAC file with no Vorbis comment gets one whose vendor is InfinitePrep and its version."""
     path = tmp_path / "bare.flac"
@@ -162,7 +164,7 @@ def test_new_flac_comment_names_infiniteprep_as_vendor(
     ],
 )
 def test_files_past_the_rewrite_limit_are_refused_unchanged(
-    adapter: MutagenAdapter,
+    adapter: MetadataTagAdapter,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     factory: Callable[..., Path],

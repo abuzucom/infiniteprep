@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QApplication
 from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
 from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapter
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
-from infiniteprep.adapters.metadata_io.mutagen_adapter import compute_sha256
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import compute_sha256
 from infiniteprep.adapters.transcoder.safe_transcoder import SafeTranscoderAdapter
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import SettingsManager

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from PySide6.QtWidgets import QFileDialog
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.services import playlist_exporter as exporter_module
@@ -22,7 +22,7 @@ from tests.fixtures.audio_factory import create_wav_fixture
 def import_tracks(tmp_path: Path, count: int) -> tuple[Repository, ImportService, list[str]]:
     """Import the given number of short WAVs into an in-memory library."""
     repo = Repository(DatabaseManager(":memory:"))
-    importer = ImportService(repo, MutagenAdapter())
+    importer = ImportService(repo, MetadataTagAdapter())
     paths = [
         create_wav_fixture(tmp_path / "crate" / f"track_{index}.wav", duration_sec=1.0)
         for index in range(count)

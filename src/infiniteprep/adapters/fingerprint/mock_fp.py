@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import compute_sha256
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import compute_sha256
 from infiniteprep.domain.enums import EntityType
 from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
 from infiniteprep.domain.ports import FingerprintMatchItem, FingerprintResult

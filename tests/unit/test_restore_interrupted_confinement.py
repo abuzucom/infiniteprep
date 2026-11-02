@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName, OperationStatus
@@ -27,7 +27,7 @@ def test_restore_interrupted_refuses_a_path_outside_the_library(
 ) -> None:
     """A tampered journal path outside the library root raises, and no file changes."""
     repo = Repository(DatabaseManager(":memory:"))
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     source = create_wav_fixture(
         tmp_path / "crate" / "track.wav", duration_sec=1.0, tags={"artist": "Old", "title": "T"}
     )

@@ -24,10 +24,10 @@ from infiniteprep.adapters.fingerprint import fpcalc_bootstrap as fpcalc_module
 from infiniteprep.adapters.fingerprint.chromaprint_acoustid import ChromaprintAcoustIDAdapter
 from infiniteprep.adapters.fingerprint.fpcalc_bootstrap import FpcalcBootstrapService
 from infiniteprep.adapters.llm.ollama_bootstrap import OllamaBootstrapService
-from infiniteprep.adapters.metadata_io import mutagen_adapter as mutagen_adapter_module
+from infiniteprep.adapters.metadata_io import metadata_tag_adapter as metadata_tag_adapter_module
 from infiniteprep.adapters.metadata_io.id3_containers import read_mp3_tag
 from infiniteprep.adapters.metadata_io.id3v2 import decode_txxx, frame_key
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName
@@ -164,7 +164,7 @@ def test_zip_entry_read_stays_within_binary_cap(
     ],
 )
 def test_render_filename_ignores_format_syntax(template: str) -> None:
-    rendered = MutagenAdapter().render_filename(
+    rendered = MetadataTagAdapter().render_filename(
         Path("track.mp3"),
         {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
         template,
@@ -175,7 +175,7 @@ def test_render_filename_ignores_format_syntax(template: str) -> None:
 
 
 def test_render_filename_substitutes_known_tokens() -> None:
-    rendered = MutagenAdapter().render_filename(
+    rendered = MetadataTagAdapter().render_filename(
         Path("track.mp3"),
         {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
         "{artist} - {title}",
@@ -184,7 +184,7 @@ def test_render_filename_substitutes_known_tokens() -> None:
 
 
 def test_render_filename_unknown_token_uses_default_layout() -> None:
-    rendered = MutagenAdapter().render_filename(
+    rendered = MetadataTagAdapter().render_filename(
         Path("track.mp3"),
         {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
         "{unknown_token}",
@@ -328,8 +328,8 @@ def test_install_fpcalc_accepts_caller_digest_that_matches_pin(
 
 
 def test_render_filename_logs_template_fallback(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.WARNING, logger=mutagen_adapter_module.__name__):
-        rendered = MutagenAdapter().render_filename(
+    with caplog.at_level(logging.WARNING, logger=metadata_tag_adapter_module.__name__):
+        rendered = MetadataTagAdapter().render_filename(
             Path("track.mp3"),
             {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
             "{artis} - {title}",
@@ -339,8 +339,8 @@ def test_render_filename_logs_template_fallback(caplog: pytest.LogCaptureFixture
 
 
 def test_render_filename_valid_template_logs_nothing(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.WARNING, logger=mutagen_adapter_module.__name__):
-        MutagenAdapter().render_filename(
+    with caplog.at_level(logging.WARNING, logger=metadata_tag_adapter_module.__name__):
+        MetadataTagAdapter().render_filename(
             Path("track.mp3"),
             {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
             "{artist} - {title}",
@@ -425,7 +425,7 @@ def test_acoustid_http_read_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_repeated_mp3_writes_keep_one_txxx_frame(tmp_path: Path) -> None:
     mp3_path = create_mp3_fixture(tmp_path / "track.mp3")
-    adapter = MutagenAdapter()
+    adapter = MetadataTagAdapter()
     adapter._write_mp3_tags(mp3_path, {FieldName.CATALOG_NUMBER: "TRIUK014"})
     adapter._write_mp3_tags(mp3_path, {FieldName.CATALOG_NUMBER: "TRIUK015"})
     tag = read_mp3_tag(mp3_path.read_bytes())
@@ -439,8 +439,8 @@ def test_repeated_mp3_writes_keep_one_txxx_frame(tmp_path: Path) -> None:
 
 
 def test_render_filename_keeps_escaped_braces(caplog: pytest.LogCaptureFixture) -> None:
-    with caplog.at_level(logging.WARNING, logger=mutagen_adapter_module.__name__):
-        rendered = MutagenAdapter().render_filename(
+    with caplog.at_level(logging.WARNING, logger=metadata_tag_adapter_module.__name__):
+        rendered = MetadataTagAdapter().render_filename(
             Path("track.mp3"),
             {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
             "{artist} - {title} [{{label}}]",
@@ -451,7 +451,7 @@ def test_render_filename_keeps_escaped_braces(caplog: pytest.LogCaptureFixture) 
 
 @pytest.mark.parametrize("template", ["{artist} {", "{artist} }", "{{artist}", "{}"])
 def test_render_filename_unbalanced_braces_use_default(template: str) -> None:
-    rendered = MutagenAdapter().render_filename(
+    rendered = MetadataTagAdapter().render_filename(
         Path("track.mp3"),
         {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
         template,

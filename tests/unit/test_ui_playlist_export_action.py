@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.services.import_service import ImportService
@@ -24,7 +24,7 @@ from tests.fixtures.qt_dialogs import DialogRecorder
 def crate(tmp_path: Path) -> tuple[Repository, ImportService, list[str]]:
     """Import one tagged WAV and one untagged WAV into an in-memory library."""
     repo = Repository(DatabaseManager(":memory:"))
-    importer = ImportService(repo, MutagenAdapter())
+    importer = ImportService(repo, MetadataTagAdapter())
     tagged = create_wav_fixture(
         tmp_path / "crate" / "xpander.wav",
         duration_sec=1.0,

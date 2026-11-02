@@ -11,8 +11,8 @@ from pathlib import Path
 
 import platformdirs
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import (
-    MutagenAdapter,
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
     SourceChangedDuringWriteError,
     compute_sha256,
     copy_to_new_verified_file,
@@ -40,13 +40,13 @@ class WriteService:
     def __init__(
         self,
         repository: Repository,
-        tag_adapter: MutagenAdapter | None = None,
+        tag_adapter: MetadataTagAdapter | None = None,
         backup_dir: Path | None = None,
         allowed_library_root: Path | None = None,
     ) -> None:
-        """Initialize WriteService with Repository, MutagenAdapter, and backup directory."""
+        """Initialize WriteService with Repository, MetadataTagAdapter, and backup directory."""
         self.repo = repository
-        self.tag_adapter = tag_adapter or MutagenAdapter()
+        self.tag_adapter = tag_adapter or MetadataTagAdapter()
         if backup_dir is None:
             base = Path(platformdirs.user_data_dir("InfinitePrep", "InfinitePrep"))
             backup_dir = base / "backups"

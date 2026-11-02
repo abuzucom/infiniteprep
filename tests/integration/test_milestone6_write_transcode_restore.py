@@ -10,7 +10,10 @@ import soundfile as sf
 from infiniteprep.adapters.metadata_io.flac_vorbis import get_field_values, read_flac_comment
 from infiniteprep.adapters.metadata_io.id3_containers import read_wav_tag
 from infiniteprep.adapters.metadata_io.id3v2 import frame_key
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
+    compute_sha256,
+)
 from infiniteprep.adapters.transcoder.safe_transcoder import (
     SafeTranscoderAdapter,
     TranscodeMode,
@@ -47,7 +50,7 @@ def test_write_service_applies_tags_renames_preserves_traktor_and_restores(
     """Verify WriteService writes MP3/FLAC/WAV/AIFF, preserves PRIV:TRAKTOR4, and restores."""
     db = DatabaseManager(":memory:")
     repo = Repository(db)
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     importer = ImportService(repo, tag_adapter)
     review_svc = ReviewService(repo)
     backup_dir = tmp_path / "backups"
@@ -131,7 +134,7 @@ def test_write_service_blocks_external_modification_and_filename_collision(
     """Verify WriteService preflight blocks external file tampering and rename collisions."""
     db = DatabaseManager(":memory:")
     repo = Repository(db)
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     importer = ImportService(repo, tag_adapter)
     review_svc = ReviewService(repo)
     write_svc = WriteService(repo, tag_adapter, backup_dir=tmp_path / "backups")
@@ -163,7 +166,7 @@ def test_safe_transcoder_and_m3u8_playlist_exporter(tmp_path: Path) -> None:
     """Verify SafeTranscoderAdapter converts 96kHz/32f to 48kHz/24-bit and exports M3U8."""
     db = DatabaseManager(":memory:")
     repo = Repository(db)
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     importer = ImportService(repo, tag_adapter)
     review_svc = ReviewService(repo)
 
@@ -238,7 +241,7 @@ def test_milestone6_ui_dialogs_smoke(qtbot, tmp_path: Path) -> None:
     """Verify WritePlanDialog, JournalDialog, and SettingsDialog instantiate cleanly in Qt."""
     db = DatabaseManager(":memory:")
     repo = Repository(db)
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     write_svc = WriteService(repo, tag_adapter, backup_dir=tmp_path / "backups")
     settings_mgr = SettingsManager(tmp_path / "settings.json")
     creds = CredentialStore(use_memory_backend=True)

@@ -1,4 +1,4 @@
-"""Behavioral tests for MutagenAdapter.read_metadata on the in-house codecs, using real files."""
+"""Behavioral tests for MetadataTagAdapter.read_metadata on the in-house codecs."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import (
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     EXTENSION_TO_FORMAT,
     MAPPED_PARSERS,
-    MutagenAdapter,
+    MetadataTagAdapter,
 )
 from infiniteprep.domain.enums import AudioFormat
 from tests.fixtures.audio_container_bytes import aiff_file, iff_chunk
@@ -46,13 +46,13 @@ ARTWORK = "\xff\xd8 fake jpeg bytes"
 
 
 @pytest.fixture
-def adapter() -> MutagenAdapter:
+def adapter() -> MetadataTagAdapter:
     """Return a fresh adapter."""
-    return MutagenAdapter()
+    return MetadataTagAdapter()
 
 
-def test_mp3_tags_timing_and_traktor_frame_read_without_mutagen(
-    adapter: MutagenAdapter, tmp_path: Path
+def test_mp3_tags_timing_and_traktor_frame_read_from_in_house_codecs(
+    adapter: MetadataTagAdapter, tmp_path: Path
 ) -> None:
     """An MP3 reads its mapped fields, CBR timing, and a PRIV:TRAKTOR4 summary with a digest."""
     path = create_mp3_fixture(tmp_path / "track.mp3", tags=TAGS, include_traktor_frame=True)
@@ -71,7 +71,7 @@ def test_mp3_tags_timing_and_traktor_frame_read_without_mutagen(
 
 
 def test_mp3_comment_and_custom_frames_keep_readable_keys(
-    adapter: MutagenAdapter, tmp_path: Path
+    adapter: MetadataTagAdapter, tmp_path: Path
 ) -> None:
     """COMM decodes its text under COMM:<description>:<language>, and unknown TXXX stays raw."""
     comment = v23_frame("COMM", b"\x01eng" + utf16("") + b"\x00\x00" + utf16("Opener"))
@@ -86,7 +86,9 @@ def test_mp3_comment_and_custom_frames_keep_readable_keys(
     assert meta.standard_tags == {}
 
 
-def test_mp3_picture_summary_names_its_mime_type(adapter: MutagenAdapter, tmp_path: Path) -> None:
+def test_mp3_picture_summary_names_its_mime_type(
+    adapter: MetadataTagAdapter, tmp_path: Path
+) -> None:
     """A cover frame appears under APIC:<description> with its MIME type and byte length."""
     path = create_mp3_fixture(tmp_path / "cover.mp3", tags={"artwork_bytes": ARTWORK})
     summary = adapter.read_metadata(path).raw_custom_tags["APIC:Cover"]
@@ -99,7 +101,7 @@ def test_mp3_picture_summary_names_its_mime_type(adapter: MutagenAdapter, tmp_pa
     [(create_wav_fixture, AudioFormat.WAV), (create_aiff_fixture, AudioFormat.AIFF)],
 )
 def test_pcm_containers_read_properties_and_id3_chunk(
-    adapter: MutagenAdapter, tmp_path: Path, factory: Callable[..., Path], fmt: AudioFormat
+    adapter: MetadataTagAdapter, tmp_path: Path, factory: Callable[..., Path], fmt: AudioFormat
 ) -> None:
     """WAV and AIFF read rate, channels, depth, duration, and the tags in their ID3 chunk."""
     suffix = ".wav" if fmt == AudioFormat.WAV else ".aiff"
@@ -113,7 +115,9 @@ def test_pcm_containers_read_properties_and_id3_chunk(
     assert meta.raw_custom_tags["PRIV:TRAKTOR4"].startswith("<PRIV TRAKTOR4, ")
 
 
-def test_flac_reads_streaminfo_and_vorbis_comment(adapter: MutagenAdapter, tmp_path: Path) -> None:
+def test_flac_reads_streaminfo_and_vorbis_comment(
+    adapter: MetadataTagAdapter, tmp_path: Path
+) -> None:
     """FLAC reads its STREAMINFO and maps Vorbis fields. Unmapped fields stay raw, lowercased."""
     path = create_flac_fixture(tmp_path / "track.flac", tags=TAGS, include_traktor_comment=True)
     meta = adapter.read_metadata(path)
@@ -126,7 +130,9 @@ def test_flac_reads_streaminfo_and_vorbis_comment(adapter: MutagenAdapter, tmp_p
     assert meta.raw_custom_tags["traktor4"] == [TRAKTOR_FLAC_PAYLOAD]
 
 
-def test_m4a_reads_properties_and_keeps_items_raw(adapter: MutagenAdapter, tmp_path: Path) -> None:
+def test_m4a_reads_properties_and_keeps_items_raw(
+    adapter: MetadataTagAdapter, tmp_path: Path
+) -> None:
     """M4A stays read-only: properties come from moov and every ilst item stays raw."""
     track = trak(b"soun", audio_entry(b"mp4a", 2, RATE_44K, esds(256_000)))
     tags = udta(item(b"\xa9nam", data_atom(1, b"Rain")))
@@ -140,7 +146,7 @@ def test_m4a_reads_properties_and_keeps_items_raw(adapter: MutagenAdapter, tmp_p
 
 
 def test_ogg_reads_properties_and_keeps_the_xdj_warning(
-    adapter: MutagenAdapter, tmp_path: Path
+    adapter: MetadataTagAdapter, tmp_path: Path
 ) -> None:
     """Ogg Vorbis reads its stream properties and still warns that the XDJ-RX3 cannot play it."""
     path = create_ogg_fixture(tmp_path / "track.ogg")
@@ -154,7 +160,7 @@ def test_ogg_reads_properties_and_keeps_the_xdj_warning(
 HUGE_RATE_COMM = struct.pack(">hIh", 2, 1024, 16) + struct.pack(">HQ", 0x7FFE, 1 << 63)
 
 
-def test_every_detectable_format_has_a_reader(adapter: MutagenAdapter, tmp_path: Path) -> None:
+def test_every_detectable_format_has_a_reader(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
     """Each extension detect_format maps reaches a parser, so no lookup can raise KeyError."""
     for extension in EXTENSION_TO_FORMAT:
         path = tmp_path / f"empty{extension}"
@@ -177,7 +183,7 @@ def test_every_detectable_format_has_a_reader(adapter: MutagenAdapter, tmp_path:
     ],
 )
 def test_empty_or_damaged_files_report_a_warning(
-    adapter: MutagenAdapter, tmp_path: Path, name: str, content: bytes
+    adapter: MetadataTagAdapter, tmp_path: Path, name: str, content: bytes
 ) -> None:
     """A file that does not parse returns no properties and one damage warning."""
     path = tmp_path / name

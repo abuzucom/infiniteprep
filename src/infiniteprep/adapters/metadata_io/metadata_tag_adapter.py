@@ -1,7 +1,6 @@
 """Metadata reader and writer for MP3, FLAC, WAV, and AIFF, plus read-only M4A and OGG.
 
-Reads and writes use the in-house codecs in this package. The class and module keep the
-MutagenAdapter name, because callers import them by that name.
+Reads and writes use the in-house codecs in this package.
 """
 
 from __future__ import annotations
@@ -483,7 +482,7 @@ def _classify_id3_tag(tag: Id3Tag | None) -> tuple[dict[str, str], dict[str, Any
 
 
 def _join_v23_date(tag: Id3Tag, standard: dict[str, str], raw: dict[str, Any]) -> None:
-    """Rebuild YEAR as YYYY-MM-DD and THH:MM from TYER, TDAT, and TIME, as mutagen did.
+    """Rebuild YEAR as YYYY-MM-DD and THH:MM from TYER, TDAT, and TIME.
 
     The v2.3 writer splits a full date across these frames. Rejoining them lets a written
     date read back whole. A TDRC frame, as in v2.4 tags, already holds the full date.
@@ -599,7 +598,7 @@ def _classify_vorbis_comment(
     return standard, raw
 
 
-class MutagenAdapter:
+class MetadataTagAdapter:
     """Reads and writes audio metadata without re-encoding audio streams."""
 
     supported_write_formats: frozenset[AudioFormat] = WRITE_SUPPORTED_FORMATS
