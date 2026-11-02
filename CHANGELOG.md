@@ -28,6 +28,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `scripts/approved_runtime_dependencies.txt` lists the runtime packages the source tree may import. A test requires that list to match the runtime dependencies in `pyproject.toml`. A dependency added to `pyproject.toml` alone fails the build.
 - The `TagWriter` port declares `detect_format` and `render_filename` now. `ImportService` calls `detect_format`, and the adapter offers both.
 - `compute_sha256` moved to `src/infiniteprep/hashing.py`. A file hash helper no longer sits in the tag adapter module. Every importer now reads it from the new home.
+- `docs/technical-decision-record.md` uses ASCII hyphens in its ranges now. The file carries no non-ASCII character.
 
 - `MetadataTagAdapter.read_metadata` reads every format with the in-house codecs instead of mutagen. Its signature and return type stay the same.
   - It maps the file read-only. A large WAV or AIFF then stays on disk while the reader takes its headers and tag chunk. The Ogg reader still loads the whole file.
