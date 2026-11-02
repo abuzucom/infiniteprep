@@ -16,9 +16,13 @@ from infiniteprep.services.playlist_exporter import PLAYLIST_FILE_MODE, Playlist
 from tests.fixtures.audio_factory import create_wav_fixture
 
 WORLD_READABLE_MODE = 0o644
+POSIX_MODE_BITS = os.name == "posix"
 
 
-@pytest.mark.skipif(not hasattr(os, "fchmod"), reason="The platform has no fchmod.")
+@pytest.mark.skipif(
+    not hasattr(os, "fchmod") or not POSIX_MODE_BITS,
+    reason="The platform does not carry POSIX file mode bits.",
+)
 def test_overwritten_playlist_loses_group_and_other_bits(tmp_path: Path) -> None:
     """An existing world-readable playlist ends with mode 0o600 after the export."""
     repo = Repository(DatabaseManager(":memory:"))
