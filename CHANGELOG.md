@@ -5,15 +5,37 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.19.0] (2026-11-01)
+## [0.22.0] (2026-11-02)
+
+### Added
+
+- `adapters/metadata_io/ogg_reader.py` reads metadata, codec parameters, and Vorbis comments
+  from Ogg Vorbis and Ogg Opus audio bytes. Damage raises `OggFormatError`.
+  No caller uses the module yet. Added `tests/unit/test_ogg_reader.py` and
+  `tests/fixtures/ogg_bytes.py`.
+
+- Spectrum waveform analysis streams bounded audio into low, mid, high, and overall peaks.
+  Content-addressed compressed caches enforce a size cap. Overview sampling preserves peaks.
+  Generated sine tests cover band separation, column counts, cache reuse, and eviction.
+
+### Fixed
+
+- Ogg parsing reports an invalid capture pattern before a truncated-header error for non-Ogg data.
+  Ogg source formatting matches the pinned Ruff formatter.
+- Spectrum waveform arrays reject inconsistent dimensions or lengths.
+- Zero and undersized cache budgets skip archive writes. Cache updates reserve space before
+  publishing an archive. A failed eviction stops new writes. Regression tests cover these
+  budgets, file growth during hashing, and immutable overviews with a peak in the final sample.
+- Cache warnings report the exception type and OS error code without exposing source paths.
+  Cache updates perform one eviction pass. Temporary archives use a shorter basename.
+
+## [0.18.0] (2026-11-01)
 
 ### Changed
 
 - `tests/fixtures/audio_factory.py` tags its WAV, AIFF, MP3, and FLAC fixtures with the spec-written byte builders in `tests/fixtures/` instead of mutagen. `tests/unit/test_security_review_remediation.py` and `tests/integration/test_milestone6_write_transcode_restore.py` read written tags with `id3_containers.py`, `id3v2.py`, and `flac_vorbis.py`. No test imports mutagen now. The adapter still uses mutagen until the adapter switch.
 
 ### Added
-
-- `adapters/metadata_io/ogg_reader.py` reads metadata, codec parameters, and Vorbis comments from Ogg Vorbis and Ogg Opus audio bytes. Damage raises `OggFormatError`. No caller uses the module yet. Added `tests/unit/test_ogg_reader.py` and `tests/fixtures/ogg_bytes.py`.
 
 - `adapters/metadata_io/mp4_reader.py` reads iTunes-style tags and audio properties from MP4 and M4A bytes. It decodes text, number pairs, integers, freeform `----` items, and cover art sizes. Duration comes from `mvhd`. Channels, sample rate, and bitrate come from the first sound track, including ALAC above 65,535 Hz. A FairPlay or common-encryption sample entry sets `encrypted`. The module never writes, and no caller uses it yet. Added `tests/unit/test_mp4_reader.py` and `tests/fixtures/mp4_bytes.py`.
 

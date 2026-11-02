@@ -44,14 +44,14 @@ class OggMetadata:
         return self.comment
 
 
-def _read_page_header(
-    data: bytes, offset: int
-) -> tuple[int, int, int, int, int]:
+def _read_page_header(data: bytes, offset: int) -> tuple[int, int, int, int, int]:
     """Read essential header fields and offset past the 27-byte header."""
+    capture = data[offset : offset + len(OGG_MAGIC)]
+    invalid_magic = len(capture) == len(OGG_MAGIC) and capture != OGG_MAGIC
+    if invalid_magic:
+        raise OggFormatError("Expected OggS capture pattern.")
     if offset + HEADER_SIZE > len(data):
         raise OggFormatError("Truncated Ogg page header.")
-    if data[offset:offset + 4] != OGG_MAGIC:
-        raise OggFormatError("Expected OggS capture pattern.")
     version = data[offset + 4]
     if version != 0:
         raise OggFormatError(f"Unsupported Ogg version {version}; expected 0.")
@@ -68,19 +68,17 @@ def _read_page_header(
     )
 
 
-def _parse_page(
-    data: bytes, offset: int
-) -> tuple[int, int, int, list[int], bytes, int]:
+def _parse_page(data: bytes, offset: int) -> tuple[int, int, int, list[int], bytes, int]:
     """Parse one Ogg page at offset into header info, lacing, body, and next offset."""
     hdr = _read_page_header(data, offset)
     seg_offset, num_segs = hdr[4], hdr[3]
     if seg_offset + num_segs > len(data):
         raise OggFormatError("Truncated Ogg segment table.")
-    lacing = list(data[seg_offset:seg_offset + num_segs])
+    lacing = list(data[seg_offset : seg_offset + num_segs])
     body_end = seg_offset + num_segs + sum(lacing)
     if body_end > len(data):
         raise OggFormatError("Truncated Ogg page body.")
-    return hdr[0], hdr[1], hdr[2], lacing, data[seg_offset + num_segs:body_end], body_end
+    return hdr[0], hdr[1], hdr[2], lacing, data[seg_offset + num_segs : body_end], body_end
 
 
 def _extract_page_packets(
@@ -92,7 +90,7 @@ def _extract_page_packets(
     """Consume lacing entries and body slices, appending completed packets."""
     body_pos = 0
     for seg_len in lacing:
-        pending.append(body[body_pos:body_pos + seg_len])
+        pending.append(body[body_pos : body_pos + seg_len])
         body_pos += seg_len
         current_size = sum(len(chunk) for chunk in pending)
         if current_size > MAX_PACKET_SIZE:
@@ -147,7 +145,7 @@ def _check_page_for_granule(data: bytes, pos: int, target_serial: int) -> int | 
     seg_end = pos + HEADER_SIZE + num_segs
     if seg_end > len(data):
         return None
-    body_size = sum(data[pos + HEADER_SIZE:seg_end])
+    body_size = sum(data[pos + HEADER_SIZE : seg_end])
     if seg_end + body_size > len(data):
         return None
     granule = struct.unpack_from("<q", data, pos + 6)[0]
@@ -204,16 +202,14 @@ def _parse_comment_packet(codec: str, packet: bytes) -> VorbisComment:
     if not packet.startswith(magic):
         name = "Vorbis comment" if codec == "vorbis" else "OpusTags"
         raise OggFormatError(f"Invalid {name} packet magic.")
-    body = packet[len(magic):]
+    body = packet[len(magic) :]
     try:
         return parse_vorbis_comment(body)
     except ValueError as exc:
         raise OggFormatError(f"Damaged Vorbis comment data: {exc}") from exc
 
 
-def _calculate_duration(
-    codec: str, granule: int, sample_rate: int, pre_skip: int
-) -> float:
+def _calculate_duration(codec: str, granule: int, sample_rate: int, pre_skip: int) -> float:
     """Calculate stream duration in seconds from final granule position."""
     if codec == "vorbis":
         return granule / sample_rate
