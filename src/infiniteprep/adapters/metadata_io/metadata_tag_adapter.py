@@ -65,8 +65,8 @@ from infiniteprep.domain.enums import (
 )
 from infiniteprep.domain.models import ApprovedField, ChangeRecord, FileAsset
 from infiniteprep.domain.ports import FileWritePlan, TechnicalAndTagMetadata
+from infiniteprep.hashing import compute_sha256
 
-HASH_CHUNK_BYTES: Final[int] = 65536
 XDJ_RX3_MAX_SAMPLE_RATE_HZ: Final[int] = 48000
 XDJ_RX3_MAX_BIT_DEPTH: Final[int] = 24
 FLAC_VENDOR: Final[str] = f"InfinitePrep {__version__}"
@@ -224,15 +224,6 @@ def copy_to_new_verified_file(source: Path, destination: Path, expected_hash: st
         raise OSError(
             f"Backup verification failed for {destination}; check disk space and permissions."
         )
-
-
-def compute_sha256(file_path: Path) -> str:
-    """Compute SHA-256 hex digest of an entire file."""
-    hasher = hashlib.sha256()
-    with file_path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(HASH_CHUNK_BYTES), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
 
 
 def sanitize_filename_component(value: str) -> str:

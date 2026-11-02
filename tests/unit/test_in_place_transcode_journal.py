@@ -8,7 +8,6 @@ import soundfile as sf
 
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
-    compute_sha256,
 )
 from infiniteprep.adapters.transcoder.safe_transcoder import (
     SafeTranscoderAdapter,
@@ -18,6 +17,7 @@ from infiniteprep.adapters.transcoder.safe_transcoder import (
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import OperationStatus
+from infiniteprep.hashing import compute_sha256
 from infiniteprep.services.import_service import ImportService
 from tests.fixtures.audio_factory import create_wav_fixture
 

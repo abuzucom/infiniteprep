@@ -12,7 +12,6 @@ from infiniteprep.adapters.metadata_io.id3_containers import read_wav_tag
 from infiniteprep.adapters.metadata_io.id3v2 import frame_key
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
-    compute_sha256,
 )
 from infiniteprep.adapters.transcoder.safe_transcoder import (
     SafeTranscoderAdapter,
@@ -29,6 +28,7 @@ from infiniteprep.domain.enums import (
     ReviewStatus,
     SourceType,
 )
+from infiniteprep.hashing import compute_sha256
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.playlist_exporter import PlaylistExporter
 from infiniteprep.services.review_service import ReviewService

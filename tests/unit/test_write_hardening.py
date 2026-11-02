@@ -11,13 +11,13 @@ import pytest
 from infiniteprep.adapters.metadata_io import metadata_tag_adapter as adapter_module
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
-    compute_sha256,
     copy_to_new_verified_file,
     operation_backup_path,
 )
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName
+from infiniteprep.hashing import compute_sha256
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService

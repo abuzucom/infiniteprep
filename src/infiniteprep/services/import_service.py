@@ -11,7 +11,6 @@ from typing import Any, Final
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
     TechnicalAndTagMetadata,
-    compute_sha256,
 )
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
@@ -22,6 +21,7 @@ from infiniteprep.domain.enums import (
     TaskStatus,
 )
 from infiniteprep.domain.models import FileAsset, SourceGroup
+from infiniteprep.hashing import compute_sha256
 
 MULTITRACK_DURATION_THRESHOLD_SEC: Final[float] = 1200.0
 MAX_DIRECTORY_DEPTH: Final[int] = 32
