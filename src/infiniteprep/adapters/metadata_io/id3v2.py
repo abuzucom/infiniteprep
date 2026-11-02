@@ -376,6 +376,15 @@ def decode_txxx(frame: Id3Frame) -> tuple[str, list[str]]:
     return description, values
 
 
+def decode_language_text(frame: Id3Frame) -> list[str]:
+    """Return the text values of a COMM or USLT frame, after its language and description."""
+    _, encoding, _, rest = _split_language_frame(frame.body)
+    values = _decode_strings(_split_strings(rest, encoding), encoding)
+    while values and not values[-1]:
+        values.pop()
+    return values
+
+
 def frame_key(frame: Id3Frame) -> str:
     """Return the key that tells this frame apart from others with the same identifier."""
     frame_id = frame.frame_id
