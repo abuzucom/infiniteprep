@@ -29,6 +29,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The `TagWriter` port declares `detect_format` and `render_filename` now. `ImportService` calls `detect_format`, and the adapter offers both.
 - `compute_sha256` moved to `src/infiniteprep/hashing.py`. A file hash helper no longer sits in the tag adapter module. Every importer now reads it from the new home.
 - `docs/technical-decision-record.md` uses ASCII hyphens in its ranges now. The file carries no non-ASCII character.
+- The bash tests skip when the runner's bash cannot run a script by its path. WSL bash reports every Windows path as missing. Those tests no longer fail on such a runner.
+- The playlist mode test skips on a platform that does not carry POSIX file mode bits. Windows `chmod` only toggles the read-only attribute.
 
 - `MetadataTagAdapter.read_metadata` reads every format with the in-house codecs instead of mutagen. Its signature and return type stay the same.
   - It maps the file read-only. A large WAV or AIFF then stays on disk while the reader takes its headers and tag chunk. The Ogg reader still loads the whole file.
