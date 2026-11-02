@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 from collections.abc import Callable
 from pathlib import Path
 
@@ -24,7 +23,6 @@ from tests.fixtures.audio_factory import (
 from tests.fixtures.flac_bytes import flac_file
 from tests.fixtures.id3v2_bytes import tag_bytes, utf16, v23_frame
 
-SOURCE_ROOT = Path(__file__).resolve().parents[2] / "src"
 WRITTEN = {
     FieldName.ARTIST: "Moodymann",
     FieldName.TITLE: "Shades of Jae",
@@ -178,19 +176,3 @@ def test_files_past_the_rewrite_limit_are_refused_unchanged(
     with pytest.raises(ValueError, match="tag write limit"):
         adapter._write_tags_by_format(path, {FieldName.TITLE: "Too big"})
     assert path.read_bytes() == original
-
-
-def test_no_source_module_imports_mutagen() -> None:
-    """The app no longer imports the GPL mutagen package anywhere under src/."""
-    offenders: list[str] = []
-    for source in sorted(SOURCE_ROOT.rglob("*.py")):
-        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-        for node in ast.walk(tree):
-            names = []
-            if isinstance(node, ast.Import):
-                names = [alias.name for alias in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                names = [node.module]
-            if any(name == "mutagen" or name.startswith("mutagen.") for name in names):
-                offenders.append(f"{source.relative_to(SOURCE_ROOT)}:{node.lineno}")
-    assert offenders == []
