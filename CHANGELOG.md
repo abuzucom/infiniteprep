@@ -24,7 +24,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A v2.3 date reads as `YYYY-MM-DD` from TYER plus TDAT, with `THH:MM` from TIME when present, as mutagen read it. A full date then passes the write read-back check.
 - `docs/technical-decision-record.md` names the in-house codecs for tag reading and writing. It also records that the runtime dependencies carry no copyleft library.
 - Added `tests/unit/test_in_house_metadata_write.py`.
-- A test fails when any module under `src/` imports a package outside the standard library, the first-party package, and the declared runtime dependencies. The check reads the dependency list from `pyproject.toml`. Added `tests/unit/test_dependency_allowlist.py`.
+- A test fails when any module under `src/` imports a package outside the standard library, the first-party package, and the approved runtime dependencies. The check reads the approved list from `scripts/approved_runtime_dependencies.txt`. Added `tests/unit/test_dependency_allowlist.py`.
+- `scripts/approved_runtime_dependencies.txt` lists the runtime packages the source tree may import. A test requires that list to match the runtime dependencies in `pyproject.toml`. A dependency added to `pyproject.toml` alone fails the build.
 
 - `MetadataTagAdapter.read_metadata` reads every format with the in-house codecs instead of mutagen. Its signature and return type stay the same.
   - It maps the file read-only. A large WAV or AIFF then stays on disk while the reader takes its headers and tag chunk. The Ogg reader still loads the whole file.
