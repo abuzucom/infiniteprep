@@ -50,13 +50,17 @@ UTF16_BOM_BE: Final[bytes] = b"\xfe\xff"
 V23_VALUE_SEPARATOR: Final[str] = "/"
 
 FRAME_ID_RE: Final[re.Pattern[bytes]] = re.compile(rb"[A-Z0-9]{3,4}")
-# A whole v2.4 timestamp: yyyy[-MM[-dd[THH[:mm[:ss]][Z or UTC offset]]]]. The offset only
-# follows a time. Each part has a fixed width, so the optional groups cannot backtrack.
+# A whole v2.4 timestamp: yyyy[-MM[-dd[THH[:mm[:ss[.fraction]]][Z or UTC offset]]]]. The
+# offset only follows a time. The fraction starts with a dot and holds digits only, and every
+# other part has a fixed width, so the optional groups cannot backtrack.
 TDRC_RE: Final[re.Pattern[str]] = re.compile(
-    r"(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2})(?::(\d{2})(?::(\d{2}))?)?"
+    r"(\d{4})(?:-(\d{2})(?:-(\d{2})(?:T(\d{2})(?::(\d{2})(?::(\d{2})(?:\.\d+)?)?)?"
     r"(?:Z|[+-]\d{2}(?::?\d{2})?)?)?)?)?"
 )
 DATE_FRAMES: Final[frozenset[str]] = frozenset({"TDRC", "TDOR"})
+# A UTC leap second reads as second 60. datetime.time stops at 59, so the check uses 59.
+LEAP_SECOND: Final[int] = 60
+LAST_REGULAR_SECOND: Final[int] = 59
 
 V22_TO_V23: Final[dict[str, str]] = {
     "TT1": "TIT1", "TT2": "TIT2", "TT3": "TIT3", "TP1": "TPE1", "TP2": "TPE2",
@@ -486,11 +490,17 @@ def _tdat_value(year: str, month: str | None, day: str | None) -> str | None:
 
 
 def _time_value(hour: str | None, minute: str | None, second: str | None) -> str | None:
-    """Return the HHMM TIME value, or None unless the parts form a valid time of day."""
+    """Return the HHMM TIME value, or None unless the parts form a valid time of day.
+
+    Second 60 counts as valid, because a UTC leap second carries it. TIME has no seconds field.
+    """
     if hour is None or minute is None:
         return None
+    seconds = int(second or 0)
+    if seconds == LEAP_SECOND:
+        seconds = LAST_REGULAR_SECOND
     try:
-        datetime.time(int(hour), int(minute), int(second or 0))
+        datetime.time(int(hour), int(minute), seconds)
     except ValueError:
         return None
     return f"{hour}{minute}"
@@ -499,7 +509,8 @@ def _time_value(hour: str | None, minute: str | None, second: str | None) -> str
 def _convert_date(frame: Id3Frame) -> list[Id3Frame]:
     """Turn a v2.4 timestamp frame into v2.3 year, date, and time frames with valid parts only.
 
-    TIME keeps the written hour and minutes. A Z or offset suffix does not shift them.
+    TIME keeps the written hour and minutes. A Z or offset suffix does not shift them. TIME
+    needs a valid TDAT, because a time without its calendar date means nothing.
     """
     values = decode_text_values(frame)
     match = TDRC_RE.fullmatch(values[0].strip()) if values else None
@@ -510,8 +521,9 @@ def _convert_date(frame: Id3Frame) -> list[Id3Frame]:
         return [build_text_frame("TORY", year)]
     result = [build_text_frame("TYER", year)]
     tdat = _tdat_value(year, month, day)
-    if tdat is not None:
-        result.append(build_text_frame("TDAT", tdat))
+    if tdat is None:
+        return result
+    result.append(build_text_frame("TDAT", tdat))
     time_of_day = _time_value(hour, minute, second)
     if time_of_day is not None:
         result.append(build_text_frame("TIME", time_of_day))

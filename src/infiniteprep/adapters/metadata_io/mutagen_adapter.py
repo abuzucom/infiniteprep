@@ -348,8 +348,12 @@ ID3_WRITE_FRAMES: Final[tuple[tuple[str, str], ...]] = (
 )
 V23_DATE_FRAMES: Final[tuple[str, ...]] = ("TYER", "TDAT", "TIME")
 DATE_FRAME_IDS: Final[frozenset[str]] = frozenset({*V23_DATE_FRAMES, "TDRC"})
-# TYER holds YYYY, TDAT holds DDMM, and TIME holds HHMM.
-YEAR_DIGITS, TDAT_DIGITS, TIME_DIGITS = 4, 4, 4
+# TYER holds YYYY, TDAT holds DDMM, and TIME holds HHMM. Each two-digit field ends at
+# PAIR_SPLIT, so the length checks and the slices share one width.
+PAIR_SPLIT: Final[int] = 2
+YEAR_DIGITS: Final[int] = 4
+TDAT_DIGITS: Final[int] = PAIR_SPLIT * 2
+TIME_DIGITS: Final[int] = PAIR_SPLIT * 2
 MIME_TERMINATOR: Final[bytes] = b"\x00"
 
 
@@ -496,11 +500,11 @@ def _join_v23_date(tag: Id3Tag, standard: dict[str, str], raw: dict[str, Any]) -
     day_month = (texts.get("TDAT") or [""])[0].strip()
     if len(day_month) != TDAT_DIGITS or not day_month.isdigit():
         return
-    joined = f"{year}-{day_month[2:]}-{day_month[:2]}"
+    joined = f"{year}-{day_month[PAIR_SPLIT:]}-{day_month[:PAIR_SPLIT]}"
     raw.pop("TDAT", None)
     clock = (texts.get("TIME") or [""])[0].strip()
     if len(clock) == TIME_DIGITS and clock.isdigit():
-        joined += f"T{clock[:2]}:{clock[2:]}"
+        joined += f"T{clock[:PAIR_SPLIT]}:{clock[PAIR_SPLIT:]}"
         raw.pop("TIME", None)
     standard[FieldName.YEAR.value] = joined
 

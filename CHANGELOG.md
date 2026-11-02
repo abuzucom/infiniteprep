@@ -51,6 +51,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Ogg parsing reports an invalid capture pattern before a truncated-header error for non-Ogg data.
   Ogg source formatting matches the pinned Ruff formatter.
+- The ID3v2.3 render of a v2.4 timestamp handles three more cases.
+  - Second 60, a UTC leap second, keeps TIME.
+  - A fractional part after the seconds parses. TIME holds no seconds. The fraction drops.
+  - A date that does not exist writes TYER alone. TIME no longer appears without its TDAT.
+  - A Z or UTC offset still keeps the written wall-clock TIME.
+  - Added `tests/unit/test_id3v2_codec_review_dates.py`.
+- The v2.3 date rejoin names its field widths. The length checks and slices share the widths.
 - Spectrum waveform arrays reject inconsistent dimensions or lengths.
 - Zero and undersized cache budgets skip archive writes. Cache updates reserve space before
   publishing an archive. A failed eviction stops new writes. Regression tests cover these

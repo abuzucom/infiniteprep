@@ -33,6 +33,10 @@ WRITTEN = {
     FieldName.CATALOG_NUMBER: "KDJ-24",
 }
 FULL_DATE = "2020-05-01T12:30"
+ID3V23_MAJOR = 3
+# A RIFF chunk header is a 4-byte ID, then a 4-byte size.
+RIFF_FIELD_WIDTH = 4
+RIFF_HEADER_WIDTH = RIFF_FIELD_WIDTH * 2
 
 
 @pytest.fixture
@@ -85,7 +89,7 @@ def test_wav_write_still_adds_list_info(adapter: MutagenAdapter, tmp_path: Path)
     data = path.read_bytes()
     # A LIST chunk is "LIST", a 4-byte size, then the "INFO" list type.
     info_at = data.index(b"INFO")
-    assert data[info_at - 8 : info_at - 4] == b"LIST"
+    assert data[info_at - RIFF_HEADER_WIDTH : info_at - RIFF_FIELD_WIDTH] == b"LIST"
     assert b"INAM" in data[info_at:]
     assert b"Shades of Jae\x00" in data[info_at:]
 
@@ -116,7 +120,8 @@ def test_v23_date_frames_rejoin_on_read(
     adapter: MutagenAdapter, tmp_path: Path, frames: tuple[tuple[str, str], ...], expected: str
 ) -> None:
     """TYER joins a valid TDAT, and TIME only after a date. Malformed parts are ignored."""
-    tag = tag_bytes(3, b"".join(v23_frame(fid, b"\x01" + utf16(val)) for fid, val in frames))
+    body = b"".join(v23_frame(fid, b"\x01" + utf16(val)) for fid, val in frames)
+    tag = tag_bytes(ID3V23_MAJOR, body)
     audio = create_mp3_fixture(tmp_path / "frames.mp3").read_bytes()
     path = tmp_path / "v23.mp3"
     path.write_bytes(tag + audio)
