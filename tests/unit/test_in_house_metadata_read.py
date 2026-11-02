@@ -9,7 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
+from infiniteprep.adapters.metadata_io.mutagen_adapter import (
+    EXTENSION_TO_FORMAT,
+    MAPPED_PARSERS,
+    MutagenAdapter,
+)
 from infiniteprep.domain.enums import AudioFormat
 from tests.fixtures.audio_container_bytes import aiff_file, iff_chunk
 from tests.fixtures.audio_factory import (
@@ -150,6 +154,17 @@ def test_ogg_reads_properties_and_keeps_the_xdj_warning(
 HUGE_RATE_COMM = struct.pack(">hIh", 2, 1024, 16) + struct.pack(">HQ", 0x7FFE, 1 << 63)
 
 
+def test_every_detectable_format_has_a_reader(adapter: MutagenAdapter, tmp_path: Path) -> None:
+    """Each extension detect_format maps reaches a parser, so no lookup can raise KeyError."""
+    for extension in EXTENSION_TO_FORMAT:
+        path = tmp_path / f"empty{extension}"
+        path.write_bytes(b"")
+        meta = adapter.read_metadata(path)
+        assert meta.format == EXTENSION_TO_FORMAT[extension]
+        assert meta.warnings[0].startswith("Damaged or unreadable audio container")
+    assert set(EXTENSION_TO_FORMAT.values()) == {*MAPPED_PARSERS, AudioFormat.OGG}
+
+
 @pytest.mark.parametrize(
     ("name", "content"),
     [
@@ -157,6 +172,8 @@ HUGE_RATE_COMM = struct.pack(">hIh", 2, 1024, 16) + struct.pack(">HQ", 0x7FFE, 1
         ("noise.mp3", b"not audio" * 100),
         ("short.wav", b"RIFF\x04\x00"),
         ("huge-rate.aiff", aiff_file(iff_chunk(b"COMM", HUGE_RATE_COMM))),
+        ("broken.ogg", b"OggS" + bytes(10)),
+        ("broken.m4a", b"\x00\x00\x00\x08ftyp" + bytes(16)),
     ],
 )
 def test_empty_or_damaged_files_report_a_warning(
