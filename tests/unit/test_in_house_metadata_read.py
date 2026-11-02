@@ -11,6 +11,7 @@ import pytest
 
 from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
 from infiniteprep.domain.enums import AudioFormat
+from tests.fixtures.audio_container_bytes import aiff_file, iff_chunk
 from tests.fixtures.audio_factory import (
     TRAKTOR_FLAC_PAYLOAD,
     TRAKTOR_PRIV_PAYLOAD,
@@ -20,7 +21,6 @@ from tests.fixtures.audio_factory import (
     create_ogg_fixture,
     create_wav_fixture,
 )
-from tests.fixtures.audio_container_bytes import aiff_file, iff_chunk
 from tests.fixtures.id3v2_bytes import tag_bytes, utf16, v23_frame
 from tests.fixtures.mp4_bytes import audio_entry, data_atom, esds, item, m4a_file, mvhd, trak, udta
 
