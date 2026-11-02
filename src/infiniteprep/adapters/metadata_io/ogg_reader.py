@@ -200,14 +200,11 @@ def _parse_opus_head(packet: bytes) -> tuple[int, int, int]:
 
 def _parse_comment_packet(codec: str, packet: bytes) -> VorbisComment:
     """Parse the comment packet payload using parse_vorbis_comment."""
-    if codec == "vorbis":
-        if not packet.startswith(VORBIS_COMMENT_MAGIC):
-            raise OggFormatError("Invalid Vorbis comment packet magic.")
-        body = packet[len(VORBIS_COMMENT_MAGIC):]
-    else:
-        if not packet.startswith(OPUS_TAGS_MAGIC):
-            raise OggFormatError("Invalid OpusTags packet magic.")
-        body = packet[len(OPUS_TAGS_MAGIC):]
+    magic = VORBIS_COMMENT_MAGIC if codec == "vorbis" else OPUS_TAGS_MAGIC
+    if not packet.startswith(magic):
+        name = "Vorbis comment" if codec == "vorbis" else "OpusTags"
+        raise OggFormatError(f"Invalid {name} packet magic.")
+    body = packet[len(magic):]
     try:
         return parse_vorbis_comment(body)
     except ValueError as exc:
