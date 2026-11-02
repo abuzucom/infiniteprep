@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Final
 
 from infiniteprep.adapters.metadata_io.flac_vorbis import (
-    FlacFormatError,
     VorbisComment,
     parse_vorbis_comment,
 )
@@ -210,7 +209,7 @@ def _parse_comment_packet(codec: str, packet: bytes) -> VorbisComment:
         body = packet[len(OPUS_TAGS_MAGIC):]
     try:
         return parse_vorbis_comment(body)
-    except (FlacFormatError, ValueError) as exc:
+    except ValueError as exc:
         raise OggFormatError(f"Damaged Vorbis comment data: {exc}") from exc
 
 
