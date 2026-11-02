@@ -26,6 +26,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Added `tests/unit/test_in_house_metadata_write.py`.
 - A test fails when any module under `src/` imports a package outside the standard library, the first-party package, and the approved runtime dependencies. The check reads the approved list from `scripts/approved_runtime_dependencies.txt`. Added `tests/unit/test_dependency_allowlist.py`.
 - `scripts/approved_runtime_dependencies.txt` lists the runtime packages the source tree may import. A test requires that list to match the runtime dependencies in `pyproject.toml`. A dependency added to `pyproject.toml` alone fails the build.
+- The `TagWriter` port declares `detect_format` and `render_filename` now. `ImportService` calls `detect_format`, and the adapter offers both.
 
 - `MetadataTagAdapter.read_metadata` reads every format with the in-house codecs instead of mutagen. Its signature and return type stay the same.
   - It maps the file read-only. A large WAV or AIFF then stays on disk while the reader takes its headers and tag chunk. The Ogg reader still loads the whole file.
