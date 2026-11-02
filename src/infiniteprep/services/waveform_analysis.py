@@ -30,6 +30,7 @@ COLUMNS_PER_SECOND = 150
 FILTER_ORDER = 4
 LOW_CUTOFF_HZ = 200
 HIGH_CUTOFF_HZ = 3000
+MIN_SAMPLE_RATE_HZ = HIGH_CUTOFF_HZ * 2
 DEFAULT_CACHE_BYTES = 256 * 1024 * 1024
 HASH_BLOCK_BYTES = 1024 * 1024
 FIELDS = ("low", "mid", "high", "overall")
@@ -101,7 +102,7 @@ def _filter_bank(sample_rate: int, channels: int) -> list[tuple[np.ndarray, np.n
 def _decode_waveform(source: Path) -> SpectrumWaveform:
     """Decode capped blocks while retaining filter state across boundaries."""
     with sf.SoundFile(source) as audio:
-        if audio.samplerate <= HIGH_CUTOFF_HZ * 2:
+        if audio.samplerate <= MIN_SAMPLE_RATE_HZ:
             raise ValueError("Sample rate must exceed 6000 Hz. Resample the track first.")
         frame_count = min(audio.frames, int(audio.samplerate * MAX_PREVIEW_DURATION_SEC))
         duration = frame_count / audio.samplerate
@@ -172,11 +173,12 @@ def _store_cache(directory: Path, entry: Path, waveform: SpectrumWaveform, size_
         payload = buffer.getvalue()
     payload_size = len(payload)
     if payload_size > size_limit:
+        _evict_cache(directory, size_limit)
         return
     _evict_cache(directory, size_limit - payload_size)
     directory.mkdir(parents=True, exist_ok=True)
     # Keep both paths in the same directory for an atomic same-filesystem swap.
-    temporary = directory / f"spectrum-{uuid.uuid4().hex}{uuid.uuid4().hex}.npz"
+    temporary = directory / f"spectrum-tmp-{uuid.uuid4().hex}.npz"
     try:
         with temporary.open("xb") as stream:
             stream.write(payload)
@@ -215,11 +217,16 @@ def _update_cache(
 ) -> None:
     """Stop publishing archives if budget enforcement fails."""
     try:
-        _evict_cache(directory, size_limit)
         if write_entry and size_limit > 0:
             _store_cache(directory, entry, waveform, size_limit)
-    except OSError:
-        logger.warning("Spectrum cache update failed. Check cache directory permissions.")
+        else:
+            _evict_cache(directory, size_limit)
+    except OSError as error:
+        logger.warning(
+            "Spectrum cache update failed (%s, errno=%s). Check cache directory permissions.",
+            type(error).__name__,
+            error.errno,
+        )
 
 
 def analyze_waveform(

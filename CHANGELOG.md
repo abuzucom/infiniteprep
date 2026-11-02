@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.20.0] (2026-11-02)
+## [0.21.0] (2026-11-02)
 
 ### Added
 
@@ -19,6 +19,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Zero and undersized cache budgets skip archive writes. Cache updates reserve space before
   publishing an archive. A failed eviction stops new writes. Regression tests cover these
   budgets, file growth during hashing, and immutable overviews with a peak in the final sample.
+- Cache warnings report the exception type and OS error code without exposing source paths.
+  Cache updates perform one eviction pass. Temporary archives use a shorter basename.
 
 ## [0.18.0] (2026-11-01)
 
