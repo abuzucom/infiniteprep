@@ -20,7 +20,6 @@ a = Analysis(
         "PySide6.QtMultimedia",
         "scipy.signal",
         "soundfile",
-        "mutagen",
         "keyring",
     ],
     hookspath=[],

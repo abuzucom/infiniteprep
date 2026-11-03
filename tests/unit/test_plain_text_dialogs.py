@@ -9,7 +9,7 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMessageBox
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.services.import_service import ImportService
@@ -47,7 +47,7 @@ def test_export_success_dialog_keeps_markup_in_the_destination_literal(
     """A destination name holding HTML tags reaches the dialog as literal plain text."""
     repo = Repository(DatabaseManager(":memory:"))
     track = create_wav_fixture(tmp_path / "crate" / "track.wav", duration_sec=1.0)
-    report = ImportService(repo, MutagenAdapter()).import_paths([track])
+    report = ImportService(repo, MetadataTagAdapter()).import_paths([track])
     destination = tmp_path / "out" / MARKUP_NAME
 
     export_playlist_with_feedback(

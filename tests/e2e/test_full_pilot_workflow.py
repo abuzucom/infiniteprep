@@ -10,7 +10,9 @@ import pytest
 from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
 from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapter
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
+)
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
@@ -21,6 +23,7 @@ from infiniteprep.domain.enums import (
     SourceType,
 )
 from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
+from infiniteprep.hashing import compute_sha256
 from infiniteprep.main import main, run_evaluation_sample
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.job_orchestrator import JobOrchestrator
@@ -80,7 +83,7 @@ def test_full_end_to_end_core_loop_and_edge_case_scenarios(tmp_path: Path) -> No
     """Verify full core loop (Import -> Propose -> Approve -> Preview -> Apply -> Restore)."""
     db = DatabaseManager(tmp_path / "e2e.sqlite3")
     repo = Repository(db)
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     importer = ImportService(repo, tag_adapter)
     orchestrator = JobOrchestrator(
         repository=repo,

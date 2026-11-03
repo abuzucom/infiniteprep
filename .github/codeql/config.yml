@@ -1,0 +1,25 @@
+---
+# CodeQL configuration for the GitHub default setup of code scanning.
+#
+# GitHub applies this file when the github-codeql-config-file repository
+# property names this path. The file merges with the configuration that the
+# default setup generates. See docs/code-scanning.md for the rollout steps.
+
+name: InfinitePrep CodeQL configuration
+
+queries:
+  # The extended suite adds the lower severity and lower precision security
+  # queries to the queries the default setup already runs.
+  - uses: security-extended
+
+paths:
+  # Every directory that holds code CodeQL analyzes. The list stays explicit
+  # so that a new source directory cannot enter or leave the analysis without
+  # a matching change to this file.
+  - .github
+  - ci
+  - hooks
+  - scripts
+  - src
+  - tests
+  - tools

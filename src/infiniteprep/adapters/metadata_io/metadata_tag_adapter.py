@@ -1,6 +1,6 @@
 """Metadata reader and writer for MP3, FLAC, WAV, and AIFF, plus read-only M4A and OGG.
 
-Reads use the in-house codecs in this package. Writes use mutagen.
+Reads and writes use the in-house codecs in this package.
 """
 
 from __future__ import annotations
@@ -18,27 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
-from mutagen.aiff import AIFF
-from mutagen.flac import FLAC
-from mutagen.id3 import (
-    ID3,
-    TALB,
-    TBPM,
-    TCON,
-    TDRC,
-    TIT2,
-    TIT3,
-    TKEY,
-    TPE1,
-    TPE4,
-    TPOS,
-    TPUB,
-    TRCK,
-    TXXX,
-)
-from mutagen.mp3 import MP3
-from mutagen.wave import WAVE
-
+from infiniteprep import __version__
 from infiniteprep.adapters.metadata_io.audio_properties import (
     AudioProperties,
     read_aiff_stream,
@@ -46,8 +26,21 @@ from infiniteprep.adapters.metadata_io.audio_properties import (
     read_mp3_properties,
     read_wav_stream,
 )
-from infiniteprep.adapters.metadata_io.flac_vorbis import VorbisComment, parse_vorbis_comment
-from infiniteprep.adapters.metadata_io.id3_containers import read_mp3_tag
+from infiniteprep.adapters.metadata_io.flac_vorbis import (
+    VorbisComment,
+    parse_vorbis_comment,
+    read_flac_comment,
+    replace_field,
+    write_flac_comment,
+)
+from infiniteprep.adapters.metadata_io.id3_containers import (
+    read_aiff_tag,
+    read_mp3_tag,
+    read_wav_tag,
+    write_aiff_tag,
+    write_mp3_tag,
+    write_wav_tag,
+)
 from infiniteprep.adapters.metadata_io.id3v2 import (
     LANGUAGE_FRAMES,
     Id3FormatError,
@@ -58,6 +51,9 @@ from infiniteprep.adapters.metadata_io.id3v2 import (
     decode_txxx,
     frame_key,
     parse_id3v2,
+    remove_frames,
+    replace_text_frame,
+    replace_txxx,
 )
 from infiniteprep.adapters.metadata_io.mp4_reader import read_mp4
 from infiniteprep.adapters.metadata_io.ogg_reader import read_ogg
@@ -69,12 +65,11 @@ from infiniteprep.domain.enums import (
 )
 from infiniteprep.domain.models import ApprovedField, ChangeRecord, FileAsset
 from infiniteprep.domain.ports import FileWritePlan, TechnicalAndTagMetadata
+from infiniteprep.hashing import compute_sha256
 
-HASH_CHUNK_BYTES: Final[int] = 65536
 XDJ_RX3_MAX_SAMPLE_RATE_HZ: Final[int] = 48000
 XDJ_RX3_MAX_BIT_DEPTH: Final[int] = 24
-ID3_UTF16_ENCODING: Final[int] = 1
-ID3_V23_VERSION: Final[int] = 3
+FLAC_VENDOR: Final[str] = f"InfinitePrep {__version__}"
 
 ILLEGAL_FILENAME_CHARS_RE: Final[re.Pattern[str]] = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 WHITESPACE_COLLAPSE_RE: Final[re.Pattern[str]] = re.compile(r"\s+")
@@ -231,15 +226,6 @@ def copy_to_new_verified_file(source: Path, destination: Path, expected_hash: st
         )
 
 
-def compute_sha256(file_path: Path) -> str:
-    """Compute SHA-256 hex digest of an entire file."""
-    hasher = hashlib.sha256()
-    with file_path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(HASH_CHUNK_BYTES), b""):
-            hasher.update(chunk)
-    return hasher.hexdigest()
-
-
 def sanitize_filename_component(value: str) -> str:
     """Remove characters illegal on Windows, macOS, or Linux filesystems."""
     cleaned = ILLEGAL_FILENAME_CHARS_RE.sub("_", value)
@@ -333,6 +319,31 @@ def synchronize_wav_list_info_chunk(file_path: Path, tags_to_write: dict[str, st
 # struct.error or IndexError, and opening or mapping the file can raise OSError.
 READ_ERRORS: Final[tuple[type[Exception], ...]] = (ValueError, struct.error, IndexError, OSError)
 PICTURE_FRAME: Final[str] = "APIC"
+FLAC_ORGANIZATION_FIELD: Final[str] = "ORGANIZATION"
+# Field order and frame IDs for the mapped ID3 text fields. YEAR writes as v2.4 TDRC, which the
+# v2.3 renderer splits into TYER, TDAT, and TIME.
+ID3_WRITE_FRAMES: Final[tuple[tuple[str, str], ...]] = (
+    (FieldName.ARTIST, "TPE1"),
+    (FieldName.TITLE, "TIT2"),
+    (FieldName.MIX_NAME, "TIT3"),
+    (FieldName.REMIXER, "TPE4"),
+    (FieldName.RELEASE_TITLE, "TALB"),
+    (FieldName.LABEL, "TPUB"),
+    (FieldName.TRACK_NUMBER, "TRCK"),
+    (FieldName.DISC_NUMBER, "TPOS"),
+    (FieldName.GENRE, "TCON"),
+    (FieldName.BPM, "TBPM"),
+    (FieldName.KEY, "TKEY"),
+    (FieldName.YEAR, "TDRC"),
+)
+V23_DATE_FRAMES: Final[tuple[str, ...]] = ("TYER", "TDAT", "TIME")
+DATE_FRAME_IDS: Final[frozenset[str]] = frozenset({*V23_DATE_FRAMES, "TDRC"})
+# TYER holds YYYY, TDAT holds DDMM, and TIME holds HHMM. Each two-digit field ends at
+# PAIR_SPLIT, so the length checks and the slices share one width.
+PAIR_SPLIT: Final[int] = 2
+YEAR_DIGITS: Final[int] = 4
+TDAT_DIGITS: Final[int] = PAIR_SPLIT * 2
+TIME_DIGITS: Final[int] = PAIR_SPLIT * 2
 MIME_TERMINATOR: Final[bytes] = b"\x00"
 
 
@@ -424,6 +435,25 @@ MAPPED_PARSERS: Final[dict[AudioFormat, Callable[[bytes], _ParsedAudio]]] = {
 }
 
 
+def _apply_id3_fields(tag: Id3Tag | None, tags_to_write: dict[str, str]) -> Id3Tag:
+    """Replace the mapped text and TXXX frames. Every other frame, PRIV:TRAKTOR4 included, stays.
+
+    A YEAR write also drops TYER, TDAT, and TIME. The v2.3 renderer keeps those frames when
+    present, so an old date would otherwise win over the new TDRC.
+    """
+    updated = tag or Id3Tag()
+    if FieldName.YEAR in tags_to_write:
+        for frame_id in V23_DATE_FRAMES:
+            updated = remove_frames(updated, frame_id)
+    for field_key, frame_id in ID3_WRITE_FRAMES:
+        if field_key in tags_to_write:
+            updated = replace_text_frame(updated, frame_id, tags_to_write[field_key])
+    for field_key, description in ID3_TXXX_MAP.items():
+        if field_key in tags_to_write:
+            updated = replace_txxx(updated, description, tags_to_write[field_key])
+    return updated
+
+
 def _classify_id3_tag(tag: Id3Tag | None) -> tuple[dict[str, str], dict[str, Any]]:
     """Sort ID3 frames into mapped standard fields and raw custom tags."""
     standard: dict[str, str] = {}
@@ -438,7 +468,35 @@ def _classify_id3_tag(tag: Id3Tag | None) -> tuple[dict[str, str], dict[str, Any
             # A frame whose text cannot decode still appears, as a byte summary.
             key, summary = _binary_frame_entry(frame)
             raw[key] = summary
+    _join_v23_date(tag, standard, raw)
     return standard, raw
+
+
+def _join_v23_date(tag: Id3Tag, standard: dict[str, str], raw: dict[str, Any]) -> None:
+    """Rebuild YEAR as YYYY-MM-DD and THH:MM from TYER, TDAT, and TIME.
+
+    The v2.3 writer splits a full date across these frames. Rejoining them lets a written
+    date read back whole. A TDRC frame, as in v2.4 tags, already holds the full date.
+    """
+    date_frames = [frame for frame in tag.frames if frame.frame_id in DATE_FRAME_IDS]
+    try:
+        texts = {frame.frame_id: decode_text_values(frame) for frame in date_frames}
+    except Id3FormatError:
+        # A date frame that cannot decode leaves YEAR as the per-frame pass set it.
+        return
+    year = (texts.get("TYER") or [""])[0].strip()
+    if "TDRC" in texts or len(year) != YEAR_DIGITS or not year.isdigit():
+        return
+    day_month = (texts.get("TDAT") or [""])[0].strip()
+    if len(day_month) != TDAT_DIGITS or not day_month.isdigit():
+        return
+    joined = f"{year}-{day_month[PAIR_SPLIT:]}-{day_month[:PAIR_SPLIT]}"
+    raw.pop("TDAT", None)
+    clock = (texts.get("TIME") or [""])[0].strip()
+    if len(clock) == TIME_DIGITS and clock.isdigit():
+        joined += f"T{clock[:PAIR_SPLIT]}:{clock[PAIR_SPLIT:]}"
+        raw.pop("TIME", None)
+    standard[FieldName.YEAR.value] = joined
 
 
 def _classify_id3_frame(
@@ -531,7 +589,7 @@ def _classify_vorbis_comment(
     return standard, raw
 
 
-class MutagenAdapter:
+class MetadataTagAdapter:
     """Reads and writes audio metadata without re-encoding audio streams."""
 
     supported_write_formats: frozenset[AudioFormat] = WRITE_SUPPORTED_FORMATS
@@ -884,7 +942,17 @@ class MutagenAdapter:
         return write_plan.destination_path
 
     def _write_tags_by_format(self, file_path: Path, tags_to_write: dict[str, str]) -> None:
-        """Write approved tags in-place for MP3, WAV, AIFF, or FLAC."""
+        """Write approved tags in-place for MP3, WAV, AIFF, or FLAC.
+
+        Each writer reads the whole file into memory, so files past the rewrite limit are
+        refused before any read.
+        """
+        size = file_path.stat().st_size
+        if size > MAX_WAV_REWRITE_BYTES:
+            raise ValueError(
+                f"'{file_path.name}' is {size} bytes, past the {MAX_WAV_REWRITE_BYTES}-byte tag "
+                "write limit; no tags were written. Split or re-encode the file, then retry."
+            )
         fmt = self.detect_format(file_path)
         if fmt == AudioFormat.MP3:
             self._write_mp3_tags(file_path, tags_to_write)
@@ -900,75 +968,33 @@ class MutagenAdapter:
             return
         raise ValueError(f"Unsupported write format {fmt}; use MP3, FLAC, WAV, or AIFF.")
 
-    def _apply_id3_frames(self, id3: ID3, tags_to_write: dict[str, str]) -> None:
-        """Apply standard ID3v2.3 UTF-16 frames while preserving PRIV:TRAKTOR4 and custom frames."""
-        frame_builders: list[tuple[str, str, Any]] = [
-            (FieldName.ARTIST, "TPE1", TPE1),
-            (FieldName.TITLE, "TIT2", TIT2),
-            (FieldName.MIX_NAME, "TIT3", TIT3),
-            (FieldName.REMIXER, "TPE4", TPE4),
-            (FieldName.RELEASE_TITLE, "TALB", TALB),
-            (FieldName.LABEL, "TPUB", TPUB),
-            (FieldName.TRACK_NUMBER, "TRCK", TRCK),
-            (FieldName.DISC_NUMBER, "TPOS", TPOS),
-            (FieldName.GENRE, "TCON", TCON),
-            (FieldName.BPM, "TBPM", TBPM),
-            (FieldName.KEY, "TKEY", TKEY),
-            (FieldName.YEAR, "TDRC", TDRC),
-        ]
-        for field_key, frame_id, frame_cls in frame_builders:
-            if field_key in tags_to_write:
-                id3.delall(frame_id)
-                id3.add(frame_cls(encoding=ID3_UTF16_ENCODING, text=[tags_to_write[field_key]]))
-
-        for field_enum, txxx_desc in ID3_TXXX_MAP.items():
-            if field_enum in tags_to_write:
-                id3.delall(f"TXXX:{txxx_desc}")
-                id3.add(
-                    TXXX(
-                        encoding=ID3_UTF16_ENCODING,
-                        desc=txxx_desc,
-                        text=[tags_to_write[field_enum]],
-                    )
-                )
-
     def _write_mp3_tags(self, file_path: Path, tags_to_write: dict[str, str]) -> None:
-        """Write ID3v2.3 UTF-16 tags to an MP3 file."""
-        audio = MP3(str(file_path))
-        if audio.tags is None:
-            audio.add_tags()
-        assert isinstance(audio.tags, ID3)
-        self._apply_id3_frames(audio.tags, tags_to_write)
-        audio.tags.save(str(file_path), v2_version=ID3_V23_VERSION)
+        """Write ID3v2.3 UTF-16 tags to an MP3 file. Every byte after the tag stays the same."""
+        data = file_path.read_bytes()
+        tag = _apply_id3_fields(read_mp3_tag(data), tags_to_write)
+        file_path.write_bytes(write_mp3_tag(data, tag))
 
     def _write_wav_tags(self, file_path: Path, tags_to_write: dict[str, str]) -> None:
-        """Write ID3v2.3 UTF-16 chunk and synchronize RIFF LIST-INFO chunk on a WAV file."""
-        audio = WAVE(str(file_path))
-        if audio.tags is None:
-            audio.add_tags()
-        assert isinstance(audio.tags, ID3)
-        self._apply_id3_frames(audio.tags, tags_to_write)
-        audio.tags.save(str(file_path), v2_version=ID3_V23_VERSION)
+        """Write the ID3v2.3 UTF-16 chunk of a WAV file, then synchronize its LIST-INFO chunk."""
+        data = file_path.read_bytes()
+        tag = _apply_id3_fields(read_wav_tag(data), tags_to_write)
+        file_path.write_bytes(write_wav_tag(data, tag))
         synchronize_wav_list_info_chunk(file_path, tags_to_write)
 
     def _write_aiff_tags(self, file_path: Path, tags_to_write: dict[str, str]) -> None:
-        """Write ID3v2.3 UTF-16 chunk to an AIFF file."""
-        audio = AIFF(str(file_path))
-        if audio.tags is None:
-            audio.add_tags()
-        assert isinstance(audio.tags, ID3)
-        self._apply_id3_frames(audio.tags, tags_to_write)
-        audio.save(v2_version=ID3_V23_VERSION)
+        """Write the ID3v2.3 UTF-16 chunk of an AIFF file."""
+        data = file_path.read_bytes()
+        tag = _apply_id3_fields(read_aiff_tag(data), tags_to_write)
+        file_path.write_bytes(write_aiff_tag(data, tag))
 
     def _write_flac_tags(self, file_path: Path, tags_to_write: dict[str, str]) -> None:
         """Write Vorbis comments to a FLAC file, writing both LABEL and ORGANIZATION for label."""
-        audio = FLAC(str(file_path))
-        if audio.tags is None:
-            audio.add_tags()
-        for field_key, val in tags_to_write.items():
+        data = file_path.read_bytes()
+        comment = read_flac_comment(data) or VorbisComment(vendor=FLAC_VENDOR)
+        for field_key, value in tags_to_write.items():
             vorbis_key = VORBIS_FIELD_MAP.get(field_key)
             if vorbis_key:
-                audio[vorbis_key] = [val]
+                comment = replace_field(comment, vorbis_key, [value])
             if field_key == FieldName.LABEL:
-                audio["ORGANIZATION"] = [val]
-        audio.save()
+                comment = replace_field(comment, FLAC_ORGANIZATION_FIELD, [value])
+        file_path.write_bytes(write_flac_comment(data, comment))

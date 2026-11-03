@@ -8,16 +8,16 @@ from typing import Any
 
 import pytest
 
-from infiniteprep.adapters.metadata_io import mutagen_adapter as adapter_module
-from infiniteprep.adapters.metadata_io.mutagen_adapter import (
-    MutagenAdapter,
-    compute_sha256,
+from infiniteprep.adapters.metadata_io import metadata_tag_adapter as adapter_module
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
     copy_to_new_verified_file,
     operation_backup_path,
 )
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName
+from infiniteprep.hashing import compute_sha256
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
@@ -30,7 +30,7 @@ MISMATCHED_SHA256 = "0" * 64
 def library(tmp_path: Path) -> tuple[WriteService, str, Path, str]:
     """Import one tagged WAV and approve a new artist on it."""
     repo = Repository(DatabaseManager(":memory:"))
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     source = create_wav_fixture(
         tmp_path / "crate" / "track.wav", duration_sec=1.0, tags={"artist": "Old", "title": "T"}
     )

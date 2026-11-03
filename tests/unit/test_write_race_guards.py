@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import (
-    MutagenAdapter,
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
     operation_backup_path,
 )
 from infiniteprep.db.connection import DatabaseManager
@@ -26,7 +26,7 @@ def test_an_outside_edit_during_the_write_is_kept(
 ) -> None:
     """A source change before the swap stops the write, and no rollback replaces the edit."""
     repo = Repository(DatabaseManager(":memory:"))
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     source = create_wav_fixture(
         tmp_path / "crate" / "track.wav", duration_sec=1.0, tags={"artist": "Old", "title": "T"}
     )

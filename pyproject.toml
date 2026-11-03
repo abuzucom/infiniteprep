@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "infiniteprep"
-version = "0.1.0"
+version = "0.28.0"
 description = "Cross-platform DJ music metadata identification, analysis, review, and tag management application"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -13,7 +13,6 @@ authors = [
     { name = "ABUZUCOM LLC" }
 ]
 dependencies = [
-    "mutagen==1.48.1",
     "numpy==2.5.4",
     "scipy==1.18.1",
     "soundfile==0.14.0",

@@ -8,8 +8,10 @@ from typing import Any
 
 import pytest
 
-from infiniteprep.adapters.metadata_io import mutagen_adapter as adapter_module
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
+from infiniteprep.adapters.metadata_io import metadata_tag_adapter as adapter_module
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
+)
 from infiniteprep.adapters.transcoder.safe_transcoder import (
     SafeTranscoderAdapter,
     TranscodeMode,
@@ -18,6 +20,7 @@ from infiniteprep.adapters.transcoder.safe_transcoder import (
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName
+from infiniteprep.hashing import compute_sha256
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
@@ -28,7 +31,7 @@ from tests.fixtures.audio_factory import create_flac_fixture, create_wav_fixture
 def library(tmp_path: Path) -> tuple[Repository, WriteService, str, Path, str]:
     """Import one tagged WAV and approve a new artist on it."""
     repo = Repository(DatabaseManager(":memory:"))
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     source = create_wav_fixture(
         tmp_path / "crate" / "track.wav", duration_sec=1.0, tags={"artist": "Old", "title": "T"}
     )
@@ -90,7 +93,7 @@ def test_a_copy_that_fails_verification_is_not_swapped_in(
 def test_a_flac_write_reads_back_through_the_copy(tmp_path: Path) -> None:
     """A FLAC write passes Vorbis read-back verification and lands on the original path."""
     repo = Repository(DatabaseManager(":memory:"))
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     source = create_flac_fixture(tmp_path / "crate" / "track.flac", duration_sec=1.0)
     asset = ImportService(repo, tag_adapter).import_paths([source]).imported_files[0]
     ReviewService(repo).set_manual_field_value(asset.id, FieldName.LABEL.value, "Bedrock")
@@ -134,7 +137,7 @@ def test_in_place_transcode_backup_names_its_operation(tmp_path: Path) -> None:
     source = create_wav_fixture(
         tmp_path / "crate" / "96k.wav", duration_sec=1.0, sample_rate=96000, subtype="FLOAT"
     )
-    asset = ImportService(repo, MutagenAdapter()).import_paths([source]).imported_files[0]
+    asset = ImportService(repo, MetadataTagAdapter()).import_paths([source]).imported_files[0]
     transcoder = SafeTranscoderAdapter(repo, backup_dir=tmp_path / "backups")
 
     result = transcoder.transcode_file(

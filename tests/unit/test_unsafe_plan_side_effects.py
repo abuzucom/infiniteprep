@@ -6,10 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
+)
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName
+from infiniteprep.hashing import compute_sha256
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
@@ -19,7 +22,7 @@ from tests.fixtures.audio_factory import create_wav_fixture
 def test_unsafe_plan_leaves_no_backup_and_an_unchanged_source(tmp_path: Path) -> None:
     """A plan that fails preflight creates no backup file and keeps the source bytes."""
     repo = Repository(DatabaseManager(":memory:"))
-    tag_adapter = MutagenAdapter()
+    tag_adapter = MetadataTagAdapter()
     source = create_wav_fixture(
         tmp_path / "crate" / "track.wav", duration_sec=1.0, tags={"artist": "Old", "title": "T"}
     )

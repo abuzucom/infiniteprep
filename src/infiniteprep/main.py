@@ -14,13 +14,13 @@ from PySide6.QtWidgets import QApplication
 from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
 from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapter
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
-from infiniteprep.adapters.metadata_io.mutagen_adapter import compute_sha256
 from infiniteprep.adapters.transcoder.safe_transcoder import SafeTranscoderAdapter
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import SettingsManager
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName, SourceType
+from infiniteprep.hashing import compute_sha256
 from infiniteprep.services.import_service import ImportService, discover_files_bounded
 from infiniteprep.services.job_orchestrator import JobOrchestrator
 from infiniteprep.services.playlist_exporter import PlaylistExporter

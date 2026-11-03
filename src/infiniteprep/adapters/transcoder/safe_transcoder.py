@@ -15,15 +15,15 @@ import platformdirs
 import soundfile as sf
 from scipy.signal import resample_poly
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import (
-    MutagenAdapter,
-    compute_sha256,
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
     copy_to_new_verified_file,
     operation_backup_path,
 )
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, OperationStatus
 from infiniteprep.domain.models import ChangeRecord, FileAsset
+from infiniteprep.hashing import compute_sha256
 
 MAX_TRANSCODE_FILE_BYTES: Final[int] = 1_073_741_824  # 1 GiB
 MAX_TRANSCODE_DURATION_SEC: Final[float] = 7200.0  # 2 hours
@@ -79,13 +79,13 @@ class SafeTranscoderAdapter:
     def __init__(
         self,
         repository: Repository,
-        tag_adapter: MutagenAdapter | None = None,
+        tag_adapter: MetadataTagAdapter | None = None,
         backup_dir: Path | None = None,
         allowed_export_root: Path | None = None,
     ) -> None:
-        """Initialize SafeTranscoderAdapter with Repository, MutagenAdapter, and backup_dir."""
+        """Initialize SafeTranscoderAdapter with Repository, MetadataTagAdapter, and backup_dir."""
         self.repo = repository
-        self.tag_adapter = tag_adapter or MutagenAdapter()
+        self.tag_adapter = tag_adapter or MetadataTagAdapter()
         if backup_dir is None:
             base = Path(platformdirs.user_data_dir("InfinitePrep", "InfinitePrep"))
             backup_dir = base / "backups"

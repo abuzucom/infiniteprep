@@ -6,7 +6,9 @@ from pathlib import Path
 
 import soundfile as sf
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter, compute_sha256
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
+)
 from infiniteprep.adapters.transcoder.safe_transcoder import (
     SafeTranscoderAdapter,
     TranscodeMode,
@@ -15,6 +17,7 @@ from infiniteprep.adapters.transcoder.safe_transcoder import (
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import OperationStatus
+from infiniteprep.hashing import compute_sha256
 from infiniteprep.services.import_service import ImportService
 from tests.fixtures.audio_factory import create_wav_fixture
 
@@ -34,7 +37,7 @@ def test_in_place_transcode_replaces_the_file_and_completes_its_journal_record(
         tmp_path / "crate" / "96k.wav", duration_sec=1.0, sample_rate=96000, subtype="FLOAT"
     )
     original_hash = compute_sha256(source)
-    asset = ImportService(repo, MutagenAdapter()).import_paths([source]).imported_files[0]
+    asset = ImportService(repo, MetadataTagAdapter()).import_paths([source]).imported_files[0]
     transcoder = SafeTranscoderAdapter(repo, backup_dir=tmp_path / "backups")
 
     result = transcoder.transcode_file(

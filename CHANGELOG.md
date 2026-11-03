@@ -5,23 +5,65 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.24.0] (2026-11-02)
+## [0.28.0] (2026-11-03)
 
 ### Added
 
 - UI theme adapter supporting Material Design themes via `qt-material` and fallback to native styling.
 - Theme selector in `MainWindow` toolbar and `SettingsDialog`.
 - Runtime theme persistence in `AppSettings`.
+- `.github/codeql/config.yml` configures the code scanning analysis of the GitHub default setup.
+  - The `security-extended` query suite adds the lower severity and lower precision security queries to the queries the default setup already runs.
+  - The `paths` list names every directory that holds analyzed code.
+- `tests/test_codeql_configuration.py` checks the CodeQL configuration against the repository.
+  - The test reads the tracked files, because the tracked tree is the tree that CodeQL analyzes.
+  - The test fails when a directory holds Python source and the `paths` list omits it.
+  - The test fails when the configuration drops the extended query suite.
+  - The test fails when the `paths` list holds a glob or a parent directory segment.
+  - The test fails when an advanced CodeQL workflow appears beside the default setup.
+  - The test fails when the document drops the remote property value or names a file that does not exist.
+- `docs/code-scanning.md` records the CodeQL setup, the repository property that applies the configuration, the verification steps, and the open options.
+  - The `make lint` target checks the new document for prose violations.
 
-## [0.23.0] (2026-11-02)
+### Fixed
+
+- The `github-codeql-config-file` repository property must name a remote address.
+  - A local path makes the configuration file mandatory on every analyzed ref.
+  - The analysis of a pull request branch that predates the file fails with a missing configuration file.
+  - The remote address reads the file from the `main` branch. Every ref analyzes successfully.
+  - The property value is `remote=abuzucom/infiniteprep@main:.github/codeql/config.yml`.
+
+## [0.25.0] (2026-11-02)
+
+### Removed
+
+- The app no longer depends on mutagen. `pyproject.toml`, `requirements-lock.txt`, and the `infiniteprep.spec` hidden imports drop it. Mutagen is GPL-2.0-or-later. A bundled build no longer carries its terms.
 
 ### Changed
 
-- `MutagenAdapter.read_metadata` reads every format with the in-house codecs instead of mutagen. Its signature and return type stay the same. Writes still use mutagen.
+- `MetadataTagAdapter` writes MP3, WAV, AIFF, and FLAC tags with the in-house codecs. The public methods stay the same.
+  - An ID3 write keeps every frame outside the written fields, PRIV:TRAKTOR4 included. The tag renders as ID3v2.3 with UTF-16 text, as before. Every byte after an MP3 tag stays the same.
+  - A YEAR write drops any old TYER, TDAT, and TIME frames before it writes the new date.
+  - WAV writes still synchronize the RIFF LIST-INFO chunk.
+  - FLAC writes keep every other Vorbis field and block. LABEL still also writes ORGANIZATION. A file without a Vorbis comment gets one whose vendor is `InfinitePrep` and the package version.
+  - Every tag write refuses a file over 1 GiB with an error that names the limit, and the file stays unchanged. The writers read the whole file, as the WAV LIST-INFO step already did under the same cap.
+- `MutagenAdapter` is now `MetadataTagAdapter`. The module moved to `adapters/metadata_io/metadata_tag_adapter.py`. The old class name and the old module path are gone. No shim keeps the old names working.
+- The package version in `pyproject.toml` and `infiniteprep/__init__.py` moves from 0.1.0 to 0.25.0, matching this file.
+- A v2.3 date reads as `YYYY-MM-DD` from TYER plus TDAT, with `THH:MM` from TIME when present, as mutagen read it. A full date then passes the write read-back check.
+- `docs/technical-decision-record.md` names the in-house codecs for tag reading and writing. It also records that the runtime dependencies carry no copyleft library.
+- Added `tests/unit/test_in_house_metadata_write.py`.
+- A test fails when any module under `src/` imports a package outside the standard library, the first-party package, and the approved runtime dependencies. The check reads the approved list from `scripts/approved_runtime_dependencies.txt`. Added `tests/unit/test_dependency_allowlist.py`.
+- `scripts/approved_runtime_dependencies.txt` lists the runtime packages the source tree may import. A test requires that list to match the runtime dependencies in `pyproject.toml`. A dependency added to `pyproject.toml` alone fails the build.
+- The `TagWriter` port declares `detect_format` and `render_filename` now. `ImportService` calls `detect_format`, and the adapter offers both.
+- `compute_sha256` moved to `src/infiniteprep/hashing.py`. A file hash helper no longer sits in the tag adapter module. Every importer now reads it from the new home.
+- `docs/technical-decision-record.md` uses ASCII hyphens in its ranges now. The file carries no non-ASCII character.
+- The bash tests skip when the runner's bash cannot run a script by its path. WSL bash reports every Windows path as missing. Those tests no longer fail on such a runner.
+- The playlist mode test skips on a platform that does not carry POSIX file mode bits. Windows `chmod` only toggles the read-only attribute.
+
+- `MetadataTagAdapter.read_metadata` reads every format with the in-house codecs instead of mutagen. Its signature and return type stay the same.
   - It maps the file read-only. A large WAV or AIFF then stays on disk while the reader takes its headers and tag chunk. The Ogg reader still loads the whole file.
   - A non-text ID3 frame, such as `PRIV:TRAKTOR4` or a cover picture, now appears in `raw_custom_tags` as `<PRIV TRAKTOR4, N bytes, sha256 ...>`. It no longer appears as a mutagen object representation. Cover pictures keep the `APIC:<description>` key. COMM and USLT frames read as text.
   - An MP3 without a Xing, Info, or VBRI header keeps constant-bitrate timing from its first frame.
-  - A v2.3 date reads from `TYER` alone. A `TDAT` day and month no longer join the year.
   - An empty or unparseable file returns one "Damaged or unreadable audio container" warning, as before. An AIFF sample rate past 32 bits counts as damage.
 
 ### Added
@@ -45,6 +87,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Ogg parsing reports an invalid capture pattern before a truncated-header error for non-Ogg data.
   Ogg source formatting matches the pinned Ruff formatter.
+- The ID3v2.3 render of a v2.4 timestamp handles three more cases.
+  - Second 60, a UTC leap second, keeps TIME.
+  - A fractional part after the seconds parses. TIME holds no seconds. The fraction drops.
+  - A date that does not exist writes TYER alone. TIME no longer appears without its TDAT.
+  - A Z or UTC offset still keeps the written wall-clock TIME.
+  - Added `tests/unit/test_id3v2_codec_review_dates.py`.
+- The v2.3 date rejoin names its field widths. The length checks and slices share the widths.
 - Spectrum waveform arrays reject inconsistent dimensions or lengths.
 - Zero and undersized cache budgets skip archive writes. Cache updates reserve space before
   publishing an archive. A failed eviction stops new writes. Regression tests cover these

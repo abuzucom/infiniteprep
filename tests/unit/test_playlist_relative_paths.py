@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import AppSettings, SettingsManager
 from infiniteprep.db.connection import DatabaseManager
@@ -23,7 +23,7 @@ def import_tracks(paths: list[Path]) -> tuple[Repository, list[str]]:
     """Create each WAV and import it into an in-memory library, keeping the order."""
     repo = Repository(DatabaseManager(":memory:"))
     created = [create_wav_fixture(path, duration_sec=1.0) for path in paths]
-    report = ImportService(repo, MutagenAdapter()).import_paths(created)
+    report = ImportService(repo, MetadataTagAdapter()).import_paths(created)
     by_path = {Path(asset.current_path).resolve(): asset.id for asset in report.imported_files}
     return repo, [by_path[path.resolve()] for path in created]
 

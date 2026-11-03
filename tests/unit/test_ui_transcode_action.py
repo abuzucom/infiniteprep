@@ -9,7 +9,7 @@ import pytest
 import soundfile as sf
 from PySide6.QtWidgets import QMessageBox
 
-from infiniteprep.adapters.metadata_io.mutagen_adapter import MutagenAdapter
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.adapters.transcoder.safe_transcoder import (
     SafeTranscoderAdapter,
     TranscodeMode,
@@ -34,7 +34,7 @@ def library(tmp_path: Path) -> tuple[Repository, ImportService, list[str]]:
     The returned IDs list the 96 kHz file first and the removed file second.
     """
     repo = Repository(DatabaseManager(":memory:"))
-    importer = ImportService(repo, MutagenAdapter())
+    importer = ImportService(repo, MetadataTagAdapter())
     highres = create_wav_fixture(
         tmp_path / "crate" / "96k.wav",
         duration_sec=1.0,

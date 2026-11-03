@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -15,7 +16,29 @@ PWSH = shutil.which("pwsh")
 GIT = shutil.which("git")
 GUARD_EXIT = 2
 
-needs_bash = pytest.mark.skipif(BASH is None, reason="bash is not installed on this runner")
+
+def bash_can_run_scripts() -> bool:
+    """Return whether the runner's bash can run a script by its path.
+
+    Git Bash on Windows runs a forward-slash Windows path. WSL bash needs a
+    POSIX path and reports every Windows path as missing. The scripts under
+    test run from a temporary directory, so the probe runs from one too.
+    """
+    if BASH is None:
+        return False
+    with tempfile.TemporaryDirectory() as probe_dir:
+        probe = Path(probe_dir) / "probe.sh"
+        probe.write_text("exit 0\n", encoding="utf-8")
+        result = subprocess.run(
+            [BASH, probe.as_posix()], capture_output=True, text=True, check=False
+        )
+    return result.returncode == 0
+
+
+needs_bash = pytest.mark.skipif(
+    not bash_can_run_scripts(),
+    reason="bash cannot run a script by its path on this runner",
+)
 needs_pwsh = pytest.mark.skipif(PWSH is None, reason="pwsh is not installed on this runner")
 
 

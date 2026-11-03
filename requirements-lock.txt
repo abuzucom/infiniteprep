@@ -1,4 +1,4 @@
-# Pinned direct and transitive dependency lockfile for InfinitePrep v0.1.0
+# Pinned direct and transitive dependency lockfile for InfinitePrep v0.24.0
 # Update together with pyproject.toml.
 altgraph==0.17.5
 cffi==2.1.1
@@ -14,7 +14,6 @@ keyring==25.7.0
 macholib==1.16.4 ; sys_platform == "darwin"
 MarkupSafe==3.0.2
 more-itertools==11.2.1
-mutagen==1.48.1
 numpy==2.5.4
 packaging==26.3
 pefile==2024.8.26 ; sys_platform == "win32"
