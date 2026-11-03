@@ -35,6 +35,7 @@ from infiniteprep.ui.journal_dialog import JournalDialog
 from infiniteprep.ui.main_window import MainWindow
 from infiniteprep.ui.recovery_dialog import RecoveryDialog
 from infiniteprep.ui.settings_dialog import SettingsDialog
+from infiniteprep.ui.theme import apply_application_theme
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 
 
@@ -87,6 +88,8 @@ def launch_desktop_app() -> int:
     transcoder = SafeTranscoderAdapter(repo, backup_dir=app_dir / "backups")
     exporter = PlaylistExporter(repo)
     qt_app = QApplication.instance() or QApplication(sys.argv)
+    saved_theme = SettingsManager().load().theme
+    apply_application_theme(qt_app, saved_theme)
 
     def handle_analyze_batch(file_ids: list[str]) -> None:
         orchestrator.process_files(file_ids)

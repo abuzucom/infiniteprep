@@ -5,6 +5,14 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0] (2026-11-02)
+
+### Added
+
+- UI theme adapter supporting Material Design themes via `qt-material` and fallback to native styling.
+- Theme selector in `MainWindow` toolbar and `SettingsDialog`.
+- Runtime theme persistence in `AppSettings`.
+
 ## [0.23.0] (2026-11-02)
 
 ### Changed
