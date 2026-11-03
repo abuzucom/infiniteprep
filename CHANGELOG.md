@@ -5,6 +5,22 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.0] (2026-11-03)
+
+### Added
+
+- `.github/codeql/config.yml` configures the code scanning analysis of the GitHub default setup.
+  - The `security-extended` query suite adds the lower severity and lower precision security queries to the queries the default setup already runs.
+  - The `paths` list names every directory that holds analyzed code.
+- `tests/test_codeql_configuration.py` checks the CodeQL configuration against the repository.
+  - The test reads the tracked files, because the tracked tree is the tree that CodeQL analyzes.
+  - The test fails when a directory holds Python source and the `paths` list omits it.
+  - The test fails when the configuration drops the extended query suite.
+  - The test fails when the `paths` list holds a glob or a parent directory segment.
+  - The test fails when an advanced CodeQL workflow appears beside the default setup.
+- `docs/code-scanning.md` records the CodeQL setup, the repository property that applies the configuration, the verification steps, and the open options.
+  - The `make lint` target checks the new document for prose violations.
+
 ## [0.25.0] (2026-11-02)
 
 ### Removed
