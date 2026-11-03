@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.26.0] (2026-11-03)
+## [0.27.0] (2026-11-03)
 
 ### Added
 
@@ -18,8 +18,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The test fails when the configuration drops the extended query suite.
   - The test fails when the `paths` list holds a glob or a parent directory segment.
   - The test fails when an advanced CodeQL workflow appears beside the default setup.
+  - The test fails when the document drops the remote property value or names a file that does not exist.
 - `docs/code-scanning.md` records the CodeQL setup, the repository property that applies the configuration, the verification steps, and the open options.
   - The `make lint` target checks the new document for prose violations.
+
+### Fixed
+
+- The `github-codeql-config-file` repository property must name a remote address.
+  - A local path makes the configuration file mandatory on every analyzed ref.
+  - The analysis of a pull request branch that predates the file fails with a missing configuration file.
+  - The remote address reads the file from the `main` branch. Every ref analyzes successfully.
+  - The property value is `remote=abuzucom/infiniteprep@main:.github/codeql/config.yml`.
 
 ## [0.25.0] (2026-11-02)
 

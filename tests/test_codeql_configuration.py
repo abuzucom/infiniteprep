@@ -12,8 +12,12 @@ from scripts.trusted_git import run_git
 
 ROOT: Final[Path] = Path(__file__).resolve().parent.parent
 CONFIG: Final[Path] = ROOT / ".github" / "codeql" / "config.yml"
+DOCUMENT: Final[Path] = ROOT / "docs" / "code-scanning.md"
 ADVANCED_WORKFLOW: Final[Path] = ROOT / ".github" / "workflows" / "codeql.yml"
 EXTENDED_SUITE: Final[str] = "security-extended"
+# The property value must name a remote address. A local path breaks every
+# analysis of a ref that predates the configuration file.
+PROPERTY_VALUE: Final[str] = "remote=abuzucom/infiniteprep@main:.github/codeql/config.yml"
 GIT_TIMEOUT_SECONDS: Final[int] = 60
 
 
@@ -112,6 +116,17 @@ class CodeQLConfigurationTest(unittest.TestCase):
             ADVANCED_WORKFLOW.exists(),
             "an advanced CodeQL workflow competes with the default setup",
         )
+
+    def test_document_records_the_remote_property_value(self) -> None:
+        self.assertIn(
+            PROPERTY_VALUE,
+            DOCUMENT.read_text(encoding="utf-8"),
+            "the document must name the property value that the repository needs",
+        )
+
+    def test_documented_property_value_names_an_existing_file(self) -> None:
+        path = PROPERTY_VALUE.rsplit(":", 1)[-1]
+        self.assertTrue((ROOT / path).is_file(), path)
 
 
 if __name__ == "__main__":
