@@ -30,7 +30,9 @@ The test fails when the `paths` list holds a glob or a parent directory segment.
 GitHub reads the configuration file when the `github-codeql-config-file` repository property names the path.
 The property holds no value today.
 A property value of `.github/codeql/config.yml` applies the configuration.
-The property change alters hosted repository state.
+The repository policy denies the agent every state-changing API request.
+No GitHub CLI command sets a custom repository property.
+The active human sets the property through the repository settings or the REST API.
 
 The `github-codeql-extra-queries` property offers the same query suite change without a file.
 The configuration file carries more than the query suite. The file stays the single source.
@@ -40,6 +42,8 @@ The configuration file carries more than the query suite. The file stays the sin
 GitHub applies the configuration when the analysis next runs.
 A pull request analysis reads the configuration from the commit that it analyzes.
 A default branch analysis reads the configuration from the default branch.
+A default branch scan before the merge cannot find the file.
+Set the property after the merge lands.
 
 Confirm the change after the merge and the next scan.
 
