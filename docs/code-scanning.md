@@ -28,11 +28,17 @@ The test fails when the `paths` list holds a glob or a parent directory segment.
 ## Repository property
 
 GitHub reads the configuration file when the `github-codeql-config-file` repository property names the path.
-The property holds no value today.
-A property value of `.github/codeql/config.yml` applies the configuration.
+The property value is `remote=abuzucom/infiniteprep@main:.github/codeql/config.yml`.
 The repository policy denies the agent every state-changing API request.
 No GitHub CLI command sets a custom repository property.
 The active human sets the property through the repository settings or the REST API.
+
+The value names a remote address rather than a local path.
+The remote form reads the file from the `main` branch through the API.
+A local path reads the file from the checkout of the analyzed ref.
+A local path therefore fails every analysis of a ref that predates the file.
+That failure stops the analysis and reports a missing configuration file.
+The remote form keeps the analysis working for every ref, including a pull request branch and a fork.
 
 The `github-codeql-extra-queries` property offers the same query suite change without a file.
 The configuration file carries more than the query suite. The file stays the single source.
@@ -40,10 +46,9 @@ The configuration file carries more than the query suite. The file stays the sin
 ## Verification
 
 GitHub applies the configuration when the analysis next runs.
-A pull request analysis reads the configuration from the commit that it analyzes.
-A default branch analysis reads the configuration from the default branch.
-A default branch scan before the merge cannot find the file.
-Set the property after the merge lands.
+A pull request analysis reads the configuration from the `main` branch of the repository.
+A default branch analysis reads the configuration from the `main` branch.
+The configuration reaches a scan only after the file merges into `main`.
 
 Confirm the change after the merge and the next scan.
 
