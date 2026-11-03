@@ -11,7 +11,10 @@ if _SRC not in sys.path:
 
 from unittest.mock import MagicMock, patch
 
-from PySide6.QtWidgets import QApplication
+try:
+    from PySide6.QtWidgets import QApplication
+except ImportError:
+    QApplication = None
 
 from infiniteprep.config.settings import AppSettings, SettingsManager
 from infiniteprep.ui.theme import (
@@ -50,14 +53,14 @@ def test_resolve_theme_system_detection() -> None:
 
 def test_apply_application_theme_native_clears_stylesheet() -> None:
     """Verify applying the native theme clears any custom stylesheet on QApplication."""
-    app = MagicMock(spec=QApplication)
+    app = MagicMock(spec=QApplication) if QApplication is not None else MagicMock()
     apply_application_theme(app, "native")
     app.setStyleSheet.assert_called_once_with("")
 
 
 def test_apply_application_theme_qt_material_fallback() -> None:
     """Verify apply_application_theme falls back gracefully when qt-material is missing."""
-    app = MagicMock(spec=QApplication)
+    app = MagicMock(spec=QApplication) if QApplication is not None else MagicMock()
     with patch("infiniteprep.ui.theme._has_qt_material", return_value=False):
         apply_application_theme(app, DEFAULT_DARK_THEME)
     app.setStyleSheet.assert_called_once_with("")

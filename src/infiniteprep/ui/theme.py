@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 from typing import Final
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QApplication
+try:
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QGuiApplication
+    from PySide6.QtWidgets import QApplication
+except ImportError:
+    Qt = None
+    QGuiApplication = None
+    QApplication = None
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +36,8 @@ def get_available_themes() -> list[str]:
 
 def _is_system_in_dark_mode() -> bool:
     """Return True if host operating system reports dark mode color scheme."""
+    if QGuiApplication is None or Qt is None:
+        return True
     app = QGuiApplication.instance()
     if app is None:
         return True
@@ -41,12 +49,7 @@ def _is_system_in_dark_mode() -> bool:
 
 def _has_qt_material() -> bool:
     """Return True if qt_material library is installed and importable."""
-    try:
-        import qt_material  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
+    return importlib.util.find_spec("qt_material") is not None
 
 
 def resolve_theme(theme_choice: str | None = None) -> str:
@@ -62,12 +65,14 @@ def apply_application_theme(app: QApplication, theme_name: str) -> None:
     """Apply chosen theme to target QApplication with fallback to native styling."""
     resolved = resolve_theme(theme_name)
     if resolved == NATIVE_THEME or not _has_qt_material():
-        app.setStyleSheet("")
+        if app is not None and hasattr(app, "setStyleSheet"):
+            app.setStyleSheet("")
         return
     try:
         import qt_material
 
         qt_material.apply_stylesheet(app, theme=resolved)
-    except Exception as exc:  # noqa: BLE001
+    except (RuntimeError, AttributeError, TypeError, ValueError, OSError) as exc:
         logger.warning("Failed to apply qt-material theme '%s': %s", resolved, exc)
-        app.setStyleSheet("")
+        if app is not None and hasattr(app, "setStyleSheet"):
+            app.setStyleSheet("")
