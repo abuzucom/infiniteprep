@@ -67,6 +67,18 @@ Both reviews run after the `ci` workflow completes. A human approval remains req
 
 ---
 
+## Code Scanning
+
+GitHub runs the code scanning analysis through the default setup of CodeQL.
+The analysis covers the Python sources and the workflow files.
+
+`.github/codeql/config.yml` adds the extended security query suite and names every analyzed directory.
+`tests/test_codeql_configuration.py` checks that configuration against the repository.
+
+See [`docs/code-scanning.md`](docs/code-scanning.md) for the configuration, the repository property that applies it, and the open options.
+
+---
+
 ## Agent Policy
 
 `AGENTS.md` holds the agent policy adopted from `abuzucom/agents`. The

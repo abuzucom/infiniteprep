@@ -5,7 +5,7 @@
 PYTHON ?= python3
 
 PROSE_FILES = AGENTS.md README.md CHANGELOG.md \
-	docs/project-orientation.md docs/template-drift.md \
+	docs/code-scanning.md docs/project-orientation.md docs/template-drift.md \
 	plan/HANDOFF.md.example SECURITY.md CONTRIBUTING.md
 
 sync:
