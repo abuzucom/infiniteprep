@@ -36,7 +36,7 @@ TRUSTED_SCAN_COMMAND = (
 )
 CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 SETUP_PYTHON_ACTION = (
-    "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065"
+    "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"
 )
 TRUSTED_ENVIRONMENT = {
     "PR_BASE_REPOSITORY": "${{ github.event.pull_request.base.repo.full_name }}",
