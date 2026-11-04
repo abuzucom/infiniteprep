@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.27.0] (2026-11-03)
+## [0.28.0] (2026-11-03)
 
 ### Added
 
@@ -20,6 +20,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The test fails when an advanced CodeQL workflow appears beside the default setup.
   - The test fails when the document drops the remote property value or names a file that does not exist.
 - `docs/code-scanning.md` records the CodeQL setup, the repository property that applies the configuration, the verification steps, and the open options.
+  - The `make lint` target checks the new document for prose violations.
+- `.github/dependabot.yml` configures the Dependabot version updates.
+  - The `pip` ecosystem covers `pyproject.toml`, `requirements-lock.txt`, and `requirements-checkers.txt`.
+  - The `github-actions` ecosystem covers the action pins in the workflow files.
+  - The patch updates and the minor updates form one group each. A major update arrives on its own.
+  - The commit message prefix gives every proposal a subject in the repository format.
+- `tests/test_dependabot_configuration.py` checks the Dependabot configuration against the repository.
+  - The test fails when an ecosystem or a schedule disappears.
+  - The test fails when a group collects a major update.
+  - The test fails when the commit message prefix leaves the repository subject format.
+  - The test fails when the branch name prefix leaves the `dependabot` prefix that the bot exemption recognizes.
+- `docs/dependabot.md` records the proposal workflow, the red checks, and the review steps.
   - The `make lint` target checks the new document for prose violations.
 
 ### Fixed
