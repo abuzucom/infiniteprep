@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.30.0] (2026-11-04)
+## [0.30.1] (2026-11-04)
 
 ### Changed
 
@@ -16,7 +16,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `github/codeql-action/upload-sarif` moves to `9b325408`. The new pin names v4.39.1.
   - `actions/setup-python` moves to `6d4fd22b`. The new pin names v7.1.0. The old pins named v5.6.0 and v7.0.0. Dependabot created that update but the proposal limit held it back.
   - The reusable security review workflow moves to `308e9643`. The new pin names foucault 3.6.1. The reusable workflow keeps the same inputs and the same permissions. The adapter files under `ci/` are byte-identical at both commits.
-  - `scripts/check_compliance_tree.py` names the new checkout pin in the trusted workflow schema.
+  - The privileged workflow retains the base-trusted checkout and setup-python pins.
+    `scripts/check_compliance_tree.py` retains the matching trusted schema.
   - `tests/test_security_scan_workflows.py` approves the new commits for the two scan actions.
   - `tests/test_review_wiring.py` pins the new reusable workflow commit. The adapter digests stay the same.
   - `tests/test_gate_pr_integrity_timeline.py` names the new `actions/github-script` pin.
@@ -38,6 +39,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Immutable Compliance retains checkout v4.4.0 and setup-python v5.6.0.
+  The base-branch checker requires these exact pins for privileged execution.
+  Regression tests verify the trusted pins and rejection of untrusted upgrades.
 - `docs/dependabot.md` records how the Dependabot proposals behave.
   - Dependabot updates a reusable workflow reference when the referenced workflow file changes.
     The earlier text said that the reference cannot move because no newer tag exists.
