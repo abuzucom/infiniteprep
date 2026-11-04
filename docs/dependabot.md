@@ -12,11 +12,16 @@ Two ecosystems run on a weekly schedule.
 - The `pip` ecosystem covers `pyproject.toml`, `requirements-lock.txt`, and `requirements-checkers.txt`.
 - The `github-actions` ecosystem covers the action pins in `.github/workflows/`.
 
-The reusable review workflows stay outside the reach of the `github-actions`
-ecosystem. The `abuzucom/foucault` repository publishes no tag newer than
-`v3.3.14`, and the `abuzucom/euler` repository publishes no tag at all. Both
-repositories sit behind the pinned commits that the workflows use. Dependabot
-proposes a newer tag only. Neither reference can move.
+The `github-actions` ecosystem also covers the two reusable review workflows.
+Dependabot updates a reusable workflow reference when the referenced workflow
+file changes. The `abuzucom/foucault` repository changed its security review
+workflow. A proposal moves that reference to a newer commit. The
+`abuzucom/euler` repository left its quality review workflow unchanged. That
+reference has no proposal.
+
+A proposal that moves a reusable workflow reference changes the `uses:` line
+only. The `audit_ref:` input beside it keeps the old commit. A reviewer sets
+both to the same commit, because the workflow comment asks for that.
 
 ## The groups
 
@@ -30,16 +35,22 @@ ecosystem. A reviewer sees the major bump on its own.
 ## Why a proposal arrives red
 
 The repository policy requires a person to approve every dependency change.
-Three checks turn a proposal red on purpose.
+Two checks turn a proposal red on purpose.
 
-- `agents-compliance.yml` runs `check_changelog.py --base --head`. The head version must exceed the base version. The proposal needs a changelog entry.
 - `tests/test_security_scan_workflows.py` holds the approved commits for `actions/dependency-review-action`, `github/codeql-action/upload-sarif`, and `microsoft/security-devops-action`. A proposal that bumps one of those actions requires an update to the approved commit record.
 - `tests/test_review_wiring.py` holds the pinned commits for the two reusable review workflows and the SHA-256 digests of the adapter files under `ci/`. A proposal that bumps one of those workflows requires an adapter re-sync from the upstream repository and an update to the digests.
 
-`scripts/check_gate_pr_integrity.py` adds a fourth condition. A pull request
+Both tests run inside the `ci`, `sync-check`, and `agents-compliance` suites.
+A proposal that fails one of those tests fails every job that runs that suite.
+
+`scripts/check_gate_pr_integrity.py` adds a third condition. A pull request
 that touches `.github/workflows/` or `requirements-checkers.txt` needs the
 `gate-change-approved` label. An active human applies the label after the
 latest push. No agent applies that label.
+
+A proposal needs no changelog entry. The version advance check in
+`sync-check.yml` skips the dependabot bot. The combined pull request needs the
+entry, because its author is a person.
 
 ## The review
 
@@ -59,7 +70,17 @@ Dependabot names its branches `dependabot/ecosystem/group`. The bot exemption
 in `scripts/trusted_bot_identities.py` recognizes that prefix and no other.
 The configuration keeps the default prefix so the exemption holds.
 
-## Limits
+## The version comments
+
+A pin carries a version comment beside it, such as `# v4.2.2`. Dependabot
+updates the commit SHA only. The comment keeps the old version after a
+proposal moves the SHA.
+
+A reviewer sets the comment to the version that the new SHA names. The comment
+is the only record of the version beside the SHA. A stale comment misleads the
+next reviewer.
+
+## The limits
 
 `open-pull-requests-limit` caps the open proposals at five per ecosystem.
 Dependabot raises no further proposals until a proposal merges or closes.

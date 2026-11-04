@@ -5,6 +5,19 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.0] (2026-11-04)
+
+### Fixed
+
+- `docs/dependabot.md` records how the Dependabot proposals behave.
+  - Dependabot updates a reusable workflow reference when the referenced workflow file changes.
+    The earlier text said that the reference cannot move because no newer tag exists.
+  - The `abuzucom/euler` repository left its quality review workflow unchanged. That reference has no proposal.
+  - A proposal that moves a reusable workflow reference changes the `uses:` line only.
+    The `audit_ref:` input beside it keeps the old commit.
+  - A proposal needs no changelog entry. The version advance check skips the dependabot bot.
+  - A proposal that changes a commit SHA leaves the version comment beside it stale.
+
 ## [0.28.0] (2026-11-03)
 
 ### Added
