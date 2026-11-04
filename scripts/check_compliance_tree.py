@@ -34,9 +34,9 @@ TRUSTED_SCAN_COMMAND = (
     '--base "$PR_BASE_SHA" --branch "$PR_HEAD_BRANCH" '
     '--pr-author "$PR_AUTHOR"'
 )
-CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+CHECKOUT_ACTION = "actions/checkout@11d5960a326750d5838078e36cf38b85af677262"
 SETUP_PYTHON_ACTION = (
-    "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"
+    "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065"
 )
 TRUSTED_ENVIRONMENT = {
     "PR_BASE_REPOSITORY": "${{ github.event.pull_request.base.repo.full_name }}",
