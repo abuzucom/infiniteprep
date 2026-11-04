@@ -141,6 +141,7 @@ class AppSettings:
     transcode_mode: str = "sibling_export"
     transcode_preset: str = "XDJ_LOSSLESS_AUTO"
     playlist_relative_paths: bool = True
+    theme: str = "dark_teal.xml"
 
 
 class SettingsManager:

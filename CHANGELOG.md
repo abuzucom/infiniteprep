@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.30.1] (2026-11-04)
+## [0.30.2] (2026-11-04)
 
 ### Changed
 
@@ -39,6 +39,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Both theme selectors use the shared default for settings without a theme field.
+- Theme loading and theme tests follow the import placement rules.
+- Theme selector regression tests exercise legacy settings in both windows.
 - Immutable Compliance retains checkout v4.4.0 and setup-python v5.6.0.
   The base-branch checker requires these exact pins for privileged execution.
   Regression tests verify the trusted pins and rejection of untrusted upgrades.
@@ -56,6 +59,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- UI theme adapter supporting Material Design themes via `qt-material` and fallback to native styling.
+- Theme selector in `MainWindow` toolbar and `SettingsDialog`.
+- Runtime theme persistence in `AppSettings`.
 - `.github/codeql/config.yml` configures the code scanning analysis of the GitHub default setup.
   - The `security-extended` query suite adds the lower severity and lower precision security queries to the queries the default setup already runs.
   - The `paths` list names every directory that holds analyzed code.

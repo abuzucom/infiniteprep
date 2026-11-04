@@ -8,6 +8,7 @@ from typing import Final
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QFileDialog,
     QHBoxLayout,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from infiniteprep.config.settings import SettingsManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
     FieldName,
@@ -35,6 +37,7 @@ from infiniteprep.domain.models import FileAsset
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.detail_panel import DetailPanel
+from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
 
 TABLE_COLUMNS: Final[tuple[str, ...]] = (
     "Filename",
@@ -100,6 +103,7 @@ class MainWindow(QMainWindow):
         self.search_input = QLineEdit(self)
         self.status_filter_combo = QComboBox(self)
         self.key_notation_combo = QComboBox(self)
+        self.theme_combo = QComboBox(self)
         self.file_table = QTableWidget(0, len(TABLE_COLUMNS), self)
         self.detail_panel = DetailPanel(
             repository=self.repo,
@@ -157,6 +161,16 @@ class MainWindow(QMainWindow):
         self.key_notation_combo.setCurrentText(self.current_key_notation.value)
         self.key_notation_combo.currentTextChanged.connect(self._on_key_notation_changed)
         toolbar.addWidget(self.key_notation_combo)
+
+        toolbar.addSeparator()
+        toolbar.addWidget(QLabel(" Theme: ", self))
+        for theme_name in get_available_themes():
+            self.theme_combo.addItem(theme_name)
+        self.theme_combo.addItem("system")
+        current_theme = getattr(SettingsManager().load(), "theme", DEFAULT_DARK_THEME)
+        self.theme_combo.setCurrentText(current_theme)
+        self.theme_combo.currentTextChanged.connect(self._on_theme_changed)
+        toolbar.addWidget(self.theme_combo)
 
     def _setup_central_widget(self) -> None:
         """Build filter bar, file table, and vertical/horizontal splitter with DetailPanel."""
@@ -320,6 +334,16 @@ class MainWindow(QMainWindow):
                 break
         self.detail_panel.set_key_notation(self.current_key_notation)
         self.refresh_file_table()
+
+    def _on_theme_changed(self, text: str) -> None:
+        """Update and persist application UI theme."""
+        settings_mgr = SettingsManager()
+        settings = settings_mgr.load()
+        settings.theme = text
+        settings_mgr.save(settings)
+        app = QApplication.instance()
+        if app is not None:
+            apply_application_theme(app, text)
 
     def _prompt_import_folder(self) -> None:
         """Open directory picker dialog and run non-destructive import."""

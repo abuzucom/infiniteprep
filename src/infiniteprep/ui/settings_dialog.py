@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Final
 
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -20,6 +21,7 @@ from infiniteprep.adapters.llm.ollama_openai import RECOMMENDED_MODELS
 from infiniteprep.adapters.transcoder.safe_transcoder import TranscodeMode, TranscodePreset
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import AppSettings, SettingsManager
+from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
 
 SETTINGS_DIALOG_WIDTH: Final[int] = 620
 SETTINGS_DIALOG_HEIGHT: Final[int] = 460
@@ -51,6 +53,7 @@ class SettingsDialog(QDialog):
         self.transcode_mode_combo = QComboBox(self)
         self.transcode_preset_combo = QComboBox(self)
         self.playlist_relative_checkbox = QCheckBox("Write paths relative to the playlist", self)
+        self.theme_combo = QComboBox(self)
         self.save_btn = QPushButton("Save Settings", self)
         self.cancel_btn = QPushButton("Cancel", self)
 
@@ -89,6 +92,13 @@ class SettingsDialog(QDialog):
         self.playlist_relative_checkbox.setChecked(self.current_settings.playlist_relative_paths)
         form.addRow("Playlist Export:", self.playlist_relative_checkbox)
 
+        for theme_name in get_available_themes():
+            self.theme_combo.addItem(theme_name)
+        self.theme_combo.addItem("system")
+        current_theme = getattr(self.current_settings, "theme", DEFAULT_DARK_THEME)
+        self.theme_combo.setCurrentText(current_theme)
+        form.addRow("UI Theme:", self.theme_combo)
+
         root.addLayout(form)
         buttons = QHBoxLayout()
         buttons.addStretch()
@@ -112,5 +122,9 @@ class SettingsDialog(QDialog):
         self.current_settings.transcode_mode = self.transcode_mode_combo.currentText()
         self.current_settings.transcode_preset = self.transcode_preset_combo.currentText()
         self.current_settings.playlist_relative_paths = self.playlist_relative_checkbox.isChecked()
+        self.current_settings.theme = self.theme_combo.currentText()
         self.settings_mgr.save(self.current_settings)
+        app = QApplication.instance()
+        if app is not None:
+            apply_application_theme(app, self.current_settings.theme)
         self.accept()
