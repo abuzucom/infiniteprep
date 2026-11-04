@@ -11,7 +11,7 @@ CI_WORKFLOW = WORKFLOWS / "ci.yml"
 SECURITY_CALLER = WORKFLOWS / "security-review-pr.yml"
 QUALITY_CALLER = WORKFLOWS / "quality-review-pr.yml"
 
-FOUCAULT_COMMIT = "fbb09487cdbbe85ca64b2e8c46605c3120b62c54"
+FOUCAULT_COMMIT = "308e964350f2ca2571d27832172dd47f5c4ee47d"
 EULER_COMMIT = "1a3f67cba9d6ed7f45af4822f9ca27dd14db6a46"
 FOUCAULT_USES = (
     "abuzucom/foucault/.github/workflows/security-review.yml@" + FOUCAULT_COMMIT

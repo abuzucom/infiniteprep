@@ -72,7 +72,7 @@ The configuration keeps the default prefix so the exemption holds.
 
 ## The version comments
 
-A pin carries a version comment beside it, such as `# v4.2.2`. Dependabot
+A pin carries a version comment beside it, such as `# v7.0.1`. Dependabot
 updates the commit SHA only. The comment keeps the old version after a
 proposal moves the SHA.
 
@@ -80,11 +80,19 @@ A reviewer sets the comment to the version that the new SHA names. The comment
 is the only record of the version beside the SHA. A stale comment misleads the
 next reviewer.
 
+`scripts/check_action_versions.py` resolves every pin to the upstream release
+that its commit names. A comment that names another release fails the check.
+The `ci` workflow runs that check on every pull request and push.
+
 ## The limits
 
-`open-pull-requests-limit` caps the open proposals at five per ecosystem.
+`open-pull-requests-limit` caps the open proposals at ten per ecosystem.
 Dependabot raises no further proposals until a proposal merges or closes.
 Closing the proposals after each review keeps the limit clear for the next week.
+
+The first run of the version updates created six proposals for the action
+pins. A limit of five held the sixth back. The repository holds more distinct
+action references than that. The limit now sits above the count.
 
 The `ignore` key excludes a dependency permanently. The repository relies on
 that key when a package must stay at one version.

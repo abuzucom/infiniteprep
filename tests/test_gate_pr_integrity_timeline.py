@@ -167,7 +167,7 @@ class WorkflowWiringTest(unittest.TestCase):
         self.assertNotIn("pr-head/scripts", self.text)
 
     def test_timeline_is_read_with_pinned_script_action(self) -> None:
-        self.assertIn("actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b", self.text)
+        self.assertIn("actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3", self.text)
         self.assertIn("listEventsForTimeline", self.text)
         self.assertIn("listSuitesForRef", self.text)
         self.assertIn("--timeline-json", self.text)
