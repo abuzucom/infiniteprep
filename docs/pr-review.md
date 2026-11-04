@@ -13,7 +13,7 @@ euler.
 
 | Reviewer | Release | Commit |
 |---|---|---|
-| foucault | 3.5.0 | `fbb09487cdbbe85ca64b2e8c46605c3120b62c54` |
+| foucault | 3.6.1 | `308e964350f2ca2571d27832172dd47f5c4ee47d` |
 | euler | 0.6.5 | `1a3f67cba9d6ed7f45af4822f9ca27dd14db6a46` |
 
 Each caller pins the reusable workflow `uses:` reference and the policy ref
