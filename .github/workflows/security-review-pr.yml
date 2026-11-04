@@ -37,7 +37,7 @@ jobs:
     steps:
       - name: Resolve pull request from workflow run head
         id: resolve
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
         with:
           script: |
             const workflowRun = context.payload.workflow_run;
@@ -194,10 +194,10 @@ jobs:
   review:
     needs: resolve-pr
     if: needs.resolve-pr.result == 'success' && needs.resolve-pr.outputs.same_repository == 'true' && needs.resolve-pr.outputs.already_reviewed != 'true'
-    # Foucault 3.5.0. Keep the uses: pin and audit_ref on the same commit.
-    uses: abuzucom/foucault/.github/workflows/security-review.yml@fbb09487cdbbe85ca64b2e8c46605c3120b62c54
+    # Foucault 3.6.1. Keep the uses: pin and audit_ref on the same commit.
+    uses: abuzucom/foucault/.github/workflows/security-review.yml@308e964350f2ca2571d27832172dd47f5c4ee47d
     with:
-      audit_ref: "fbb09487cdbbe85ca64b2e8c46605c3120b62c54"
+      audit_ref: "308e964350f2ca2571d27832172dd47f5c4ee47d"
       model_call_command: "python3 ci/call_model.py"
       pr_comment: true
       fail_on_block: true
@@ -213,10 +213,10 @@ jobs:
   fork-review:
     needs: resolve-pr
     if: needs.resolve-pr.result == 'success' && needs.resolve-pr.outputs.same_repository == 'false' && needs.resolve-pr.outputs.fork_review_approved == 'true' && needs.resolve-pr.outputs.compliance_passed == 'true' && needs.resolve-pr.outputs.already_reviewed != 'true'
-    # Foucault 3.5.0. Keep the uses: pin and audit_ref on the same commit.
-    uses: abuzucom/foucault/.github/workflows/security-review.yml@fbb09487cdbbe85ca64b2e8c46605c3120b62c54
+    # Foucault 3.6.1. Keep the uses: pin and audit_ref on the same commit.
+    uses: abuzucom/foucault/.github/workflows/security-review.yml@308e964350f2ca2571d27832172dd47f5c4ee47d
     with:
-      audit_ref: "fbb09487cdbbe85ca64b2e8c46605c3120b62c54"
+      audit_ref: "308e964350f2ca2571d27832172dd47f5c4ee47d"
       model_call_command: "python3 ci/call_model.py"
       pr_comment: true
       fail_on_block: true

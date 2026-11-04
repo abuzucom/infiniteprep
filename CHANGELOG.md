@@ -5,7 +5,22 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.29.0] (2026-11-04)
+## [0.30.0] (2026-11-04)
+
+### Changed
+
+- The workflow action pins move to the versions that Dependabot proposed.
+  - `actions/checkout` moves to `3d3c42e5`. The new pin names v7.0.1. The old pin named v4.4.0 and carried a stale `# v4.2.2` comment.
+  - `actions/dependency-review-action` moves to `a1d282b3`. The new pin names v5.0.0.
+  - `actions/github-script` moves to `3a2844b7`. The new pin names v9.0.0.
+  - `github/codeql-action/upload-sarif` moves to `9b325408`. The new pin names v4.39.1.
+  - The reusable security review workflow moves to `308e9643`. The new pin names foucault 3.6.1. The reusable workflow keeps the same inputs and the same permissions. The adapter files under `ci/` are byte-identical at both commits.
+  - `scripts/check_compliance_tree.py` names the new checkout pin in the trusted workflow schema.
+  - `tests/test_security_scan_workflows.py` approves the new commits for the two scan actions.
+  - `tests/test_review_wiring.py` pins the new reusable workflow commit. The adapter digests stay the same.
+  - `tests/test_gate_pr_integrity_timeline.py` names the new `actions/github-script` pin.
+  - `docs/pr-review.md` records the new foucault release and commit.
+- `platformdirs` moves to 4.14.2 in `pyproject.toml` and `requirements-lock.txt`. That proposal merged on its own and left no changelog entry.
 
 ### Fixed
 
@@ -17,6 +32,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     The `audit_ref:` input beside it keeps the old commit.
   - A proposal needs no changelog entry. The version advance check skips the dependabot bot.
   - A proposal that changes a commit SHA leaves the version comment beside it stale.
+  - The example version comment now names a version that the repository uses.
 
 ## [0.28.0] (2026-11-03)
 

@@ -72,7 +72,7 @@ The configuration keeps the default prefix so the exemption holds.
 
 ## The version comments
 
-A pin carries a version comment beside it, such as `# v4.2.2`. Dependabot
+A pin carries a version comment beside it, such as `# v7.0.1`. Dependabot
 updates the commit SHA only. The comment keeps the old version after a
 proposal moves the SHA.
 
