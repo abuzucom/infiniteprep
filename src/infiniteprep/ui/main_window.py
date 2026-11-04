@@ -37,7 +37,7 @@ from infiniteprep.domain.models import FileAsset
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.detail_panel import DetailPanel
-from infiniteprep.ui.theme import apply_application_theme, get_available_themes
+from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
 
 TABLE_COLUMNS: Final[tuple[str, ...]] = (
     "Filename",
@@ -167,7 +167,7 @@ class MainWindow(QMainWindow):
         for theme_name in get_available_themes():
             self.theme_combo.addItem(theme_name)
         self.theme_combo.addItem("system")
-        current_theme = getattr(SettingsManager().load(), "theme", "dark_teal.xml")
+        current_theme = getattr(SettingsManager().load(), "theme", DEFAULT_DARK_THEME)
         self.theme_combo.setCurrentText(current_theme)
         self.theme_combo.currentTextChanged.connect(self._on_theme_changed)
         toolbar.addWidget(self.theme_combo)

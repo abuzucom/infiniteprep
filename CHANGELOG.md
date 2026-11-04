@@ -5,6 +5,14 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.1] (2026-11-04)
+
+### Fixed
+
+- Both theme selectors use the shared default for settings without a theme field.
+- Theme loading and theme tests follow the import placement rules.
+- Theme selector regression tests exercise legacy settings in both windows.
+
 ## [0.28.0] (2026-11-03)
 
 ### Added

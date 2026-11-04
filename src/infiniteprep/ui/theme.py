@@ -69,7 +69,7 @@ def apply_application_theme(app: QApplication, theme_name: str) -> None:
             app.setStyleSheet("")
         return
     try:
-        import qt_material
+        qt_material = importlib.import_module("qt_material")
 
         qt_material.apply_stylesheet(app, theme=resolved)
     except (RuntimeError, AttributeError, TypeError, ValueError, OSError) as exc:

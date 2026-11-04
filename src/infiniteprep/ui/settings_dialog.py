@@ -21,7 +21,7 @@ from infiniteprep.adapters.llm.ollama_openai import RECOMMENDED_MODELS
 from infiniteprep.adapters.transcoder.safe_transcoder import TranscodeMode, TranscodePreset
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import AppSettings, SettingsManager
-from infiniteprep.ui.theme import apply_application_theme, get_available_themes
+from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
 
 SETTINGS_DIALOG_WIDTH: Final[int] = 620
 SETTINGS_DIALOG_HEIGHT: Final[int] = 460
@@ -95,7 +95,7 @@ class SettingsDialog(QDialog):
         for theme_name in get_available_themes():
             self.theme_combo.addItem(theme_name)
         self.theme_combo.addItem("system")
-        current_theme = getattr(self.current_settings, "theme", "dark_teal.xml")
+        current_theme = getattr(self.current_settings, "theme", DEFAULT_DARK_THEME)
         self.theme_combo.setCurrentText(current_theme)
         form.addRow("UI Theme:", self.theme_combo)
 
