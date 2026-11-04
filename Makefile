@@ -5,8 +5,8 @@
 PYTHON ?= python3
 
 PROSE_FILES = AGENTS.md README.md CHANGELOG.md \
-	docs/code-scanning.md docs/project-orientation.md docs/template-drift.md \
-	plan/HANDOFF.md.example SECURITY.md CONTRIBUTING.md
+	docs/code-scanning.md docs/dependabot.md docs/project-orientation.md \
+	docs/template-drift.md plan/HANDOFF.md.example SECURITY.md CONTRIBUTING.md
 
 sync:
 	$(PYTHON) scripts/sync.py

@@ -1,0 +1,59 @@
+---
+# Dependabot version updates for the pinned dependencies.
+#
+# Dependabot proposes the bump. A reviewer turns the proposal into a
+# compliant pull request, updates the approval records, and closes the
+# proposal. See docs/dependabot.md for the workflow.
+
+version: 2
+
+updates:
+  # The Python packages live in pyproject.toml, requirements-lock.txt, and
+  # requirements-checkers.txt. The lockfile and the checker requirements carry
+  # the same packages at the versions that the checks install.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      prefix-development: "ci"
+    groups:
+      python-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+      python-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+
+  # The workflow actions are pinned to full commit SHAs. Dependabot updates the
+  # SHA and the version comment beside it.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+    groups:
+      workflow-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+      workflow-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"

@@ -79,6 +79,18 @@ See [`docs/code-scanning.md`](docs/code-scanning.md) for the configuration, the 
 
 ---
 
+## Dependency Updates
+
+Dependabot proposes the version bumps for the Python packages and the workflow actions.
+A reviewer turns each proposal into a compliant pull request and closes the proposal.
+
+`.github/dependabot.yml` holds the configuration.
+`tests/test_dependabot_configuration.py` checks that configuration against the repository.
+
+See [`docs/dependabot.md`](docs/dependabot.md) for the grouping, the red checks, and the review steps.
+
+---
+
 ## Agent Policy
 
 `AGENTS.md` holds the agent policy adopted from `abuzucom/agents`. The
