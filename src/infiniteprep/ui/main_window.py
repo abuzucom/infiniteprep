@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QByteArray, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -128,6 +130,7 @@ class MainWindow(QMainWindow):
 
         self._setup_toolbar()
         self._setup_central_widget()
+        self._restore_table_layouts()
         self.refresh_file_table()
 
     def _setup_toolbar(self) -> None:
@@ -226,6 +229,53 @@ class MainWindow(QMainWindow):
         splitter.setSizes([SPLITTER_TOP_HEIGHT, SPLITTER_BOTTOM_HEIGHT])
         root_layout.addWidget(splitter)
         self.setCentralWidget(central)
+
+    def _restore_table_layouts(self) -> None:
+        """Restore saved file and detail column layouts when column counts match."""
+        settings = SettingsManager().load()
+        headers = (
+            (
+                self.file_table.horizontalHeader(),
+                settings.file_table_layout,
+                settings.file_table_column_count,
+            ),
+            (
+                self.detail_panel.fields_table.horizontalHeader(),
+                settings.detail_table_layout,
+                settings.detail_table_column_count,
+            ),
+        )
+        for header, encoded_state, saved_column_count in headers:
+            if saved_column_count == header.count() and encoded_state:
+                self._restore_header_state(header, encoded_state)
+            header.sectionResized.connect(self._save_table_layouts)
+
+    @staticmethod
+    def _restore_header_state(header: QHeaderView, encoded_state: str) -> None:
+        """Restore one header from a validated base64-encoded Qt state."""
+        if not isinstance(encoded_state, str):
+            return
+        try:
+            state = base64.b64decode(encoded_state, validate=True)
+        except (binascii.Error, ValueError):
+            return
+        header.restoreState(QByteArray(state))
+
+    def _save_table_layouts(self, *_args: int) -> None:
+        """Persist file and detail header states after a user resizes a column."""
+        settings_manager = SettingsManager()
+        settings = settings_manager.load()
+        file_header = self.file_table.horizontalHeader()
+        detail_header = self.detail_panel.fields_table.horizontalHeader()
+        settings.file_table_layout = base64.b64encode(bytes(file_header.saveState())).decode(
+            "ascii"
+        )
+        settings.file_table_column_count = file_header.count()
+        settings.detail_table_layout = base64.b64encode(bytes(detail_header.saveState())).decode(
+            "ascii"
+        )
+        settings.detail_table_column_count = detail_header.count()
+        settings_manager.save(settings)
 
     def refresh_file_table(self) -> None:
         """Reload all FileAssets from Repository and populate the filtered table."""

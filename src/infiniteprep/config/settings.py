@@ -142,6 +142,10 @@ class AppSettings:
     transcode_preset: str = "XDJ_LOSSLESS_AUTO"
     playlist_relative_paths: bool = True
     theme: str = "dark_teal.xml"
+    file_table_layout: str = ""
+    file_table_column_count: int = 0
+    detail_table_layout: str = ""
+    detail_table_column_count: int = 0
 
 
 class SettingsManager:
