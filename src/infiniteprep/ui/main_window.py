@@ -59,6 +59,19 @@ STATUS_FILTER_STRETCH: Final[int] = 1
 SPLITTER_TOP_HEIGHT: Final[int] = 380
 SPLITTER_BOTTOM_HEIGHT: Final[int] = 420
 PLAYLIST_SUFFIX: Final[str] = ".m3u8"
+SECONDS_PER_MINUTE: Final[int] = 60
+SECONDS_PER_HOUR: Final[int] = 3600
+
+
+def format_duration(seconds: float) -> str:
+    """Format a track duration as M:SS or H:MM:SS, truncating fractions."""
+    whole_seconds = int(max(0.0, float(seconds)))
+    hours, remainder = divmod(whole_seconds, SECONDS_PER_HOUR)
+    minutes, seconds_part = divmod(remainder, SECONDS_PER_MINUTE)
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds_part:02d}"
+    total_minutes = whole_seconds // SECONDS_PER_MINUTE
+    return f"{total_minutes}:{seconds_part:02d}"
 
 
 class MainWindow(QMainWindow):
@@ -201,7 +214,9 @@ class MainWindow(QMainWindow):
         root_layout.addLayout(filter_bar)
 
         self.file_table.setHorizontalHeaderLabels(list(TABLE_COLUMNS))
-        self.file_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        file_header = self.file_table.horizontalHeader()
+        file_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        file_header.setStretchLastSection(True)
         self.file_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.file_table.itemSelectionChanged.connect(self._on_table_selection_changed)
 
@@ -269,7 +284,7 @@ class MainWindow(QMainWindow):
         return [
             Path(asset.current_path).name,
             str(asset.format).upper(),
-            f"{asset.duration:.1f}s" if asset.duration is not None else "-",
+            format_duration(asset.duration) if asset.duration is not None else "-",
             self._summary_pair(std, approved, top_by_field, FieldName.ARTIST.value),
             self._summary_pair(std, approved, top_by_field, FieldName.TITLE.value),
             self._effective_val(std, approved, top_by_field, FieldName.MIX_NAME.value),

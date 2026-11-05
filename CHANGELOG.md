@@ -5,6 +5,15 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.31.0] (2026-11-05)
+
+### Changed
+
+- Track duration cells now show whole-second `M:SS` or `H:MM:SS` values.
+- Player clocks now show milliseconds and include hours for long tracks.
+- File, detail, journal, write-plan, and recovery tables now support manual
+  column resizing with the final column stretched.
+
 ## [0.30.2] (2026-11-04)
 
 ### Changed

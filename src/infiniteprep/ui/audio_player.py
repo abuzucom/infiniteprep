@@ -79,9 +79,15 @@ def compute_cue_jump_positions(duration_sec: float) -> dict[str, float]:
 
 
 def format_clock(seconds: float) -> str:
-    """Format a time in seconds as MM:SS.d."""
-    minutes, rest = divmod(max(0.0, float(seconds)), SECONDS_PER_MINUTE)
-    return f"{int(minutes):02d}:{rest:04.1f}"
+    """Format a player time as M:SS.mmm or H:MM:SS.mmm."""
+    total_milliseconds = int(max(0.0, float(seconds)) * MS_PER_SECOND + 0.5)
+    total_seconds, milliseconds = divmod(total_milliseconds, int(MS_PER_SECOND))
+    hours, remainder = divmod(total_seconds, int(SECONDS_PER_MINUTE * SECONDS_PER_MINUTE))
+    minutes, seconds_part = divmod(remainder, int(SECONDS_PER_MINUTE))
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds_part:02d}.{milliseconds:03d}"
+    total_minutes = total_seconds // int(SECONDS_PER_MINUTE)
+    return f"{total_minutes}:{seconds_part:02d}.{milliseconds:03d}"
 
 
 def _stream_block_peaks(file_path: Path, max_frames: int) -> list[float]:

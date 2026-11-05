@@ -108,7 +108,8 @@ class DetailPanel(QWidget):
             ]
         )
         header = self.fields_table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setStretchLastSection(True)
         root.addWidget(self.fields_table, stretch=FIELDS_TABLE_STRETCH)
 
         cand_box = QGroupBox("Candidate Releases & Analysis Evidence", self)
