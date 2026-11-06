@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.33.1] (2026-11-06)
+## [0.34.0] (2026-11-06)
 
 ### Removed
 
@@ -23,10 +23,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A CI workflow read every pinned native wheel for Windows, macOS, and Linux, plus the pinned fpcalc archives.
   - No GPL or AGPL code ships in the parts InfinitePrep uses. The GCC runtime libraries carry the GCC runtime exception.
   - The PySide6 wheels carry GPL-3-only Qt modules and GPL-3 Qt tools. The app imports no such module and runs no such tool.
+- Folder import runs on a worker thread (D78b1).
+  - A modal progress dialog shows the current file, its number, and a Cancel button. Playback keeps running.
+  - The scan runs first. Every file then imports in one database transaction, with a savepoint per file.
+  - A file that fails with a file or database error stays out, and the rest of the batch commits.
+  - Cancel finishes the current file, then rolls back the whole batch. A crash also leaves nothing from the batch.
+  - A report dialog shows the result, a count per category, and expandable per-file lists. Copy puts the report on the clipboard as plain text.
+  - Closing the window during an import asks whether to wait for the commit or cancel. Either choice closes the window once the batch ends.
+- `Repository.batch()` holds every write on one thread in a single transaction. `RepositoryBatch.savepoint()` scopes a rollback to one item.
+- `ImportService.import_paths` takes optional `progress` and `should_cancel` callbacks. `ImportBatchReport` adds `failed_files`, `scanned_count`, and `outcome`.
+- Added `tests/unit/test_import_batch_transaction.py` and `tests/unit/test_ui_folder_import.py`.
 
 ### Changed
 
-- The package version moves to 0.33.1.
+- The package version moves to 0.34.0.
+- Without callbacks, `ImportService.import_paths` also imports in one transaction. A file that raises a file or database error now appears in `failed_files` and no longer stops the call.
 - Item 4 of the decision record no longer claims that no runtime dependency carries a copyleft license. PySide6, Qt, and libsndfile carry LGPL licenses.
 - A new item 5 in the decision record records that user installs come only from the packaged bundles, never from a pip install.
 

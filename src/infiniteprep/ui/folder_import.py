@@ -1,0 +1,237 @@
+"""Background folder import: worker thread, modal progress dialog, and end-of-batch report."""
+
+from __future__ import annotations
+
+import logging
+import threading
+from pathlib import Path
+from typing import Final
+
+from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QLabel,
+    QProgressDialog,
+    QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
+from infiniteprep.services.import_service import (
+    ImportBatchReport,
+    ImportOutcome,
+    ImportService,
+)
+
+logger = logging.getLogger(__name__)
+
+REPORT_DIALOG_WIDTH: Final[int] = 720
+REPORT_DIALOG_HEIGHT: Final[int] = 480
+CANCELLING_TEXT: Final[str] = "Cancelling after the current file. Nothing will be imported."
+
+
+def _report_sections(report: ImportBatchReport) -> list[tuple[str, list[str]]]:
+    """Return each report category with one line per file."""
+    duplicates = [
+        f"{asset.current_path} (same content as {', '.join(p.current_path for p in prior)})"
+        for asset, prior in report.possible_duplicates
+    ]
+    return [
+        ("Imported", [asset.current_path for asset in report.imported_files]),
+        ("Already imported", list(report.previously_imported_paths)),
+        ("Unsupported", list(report.unsupported_files)),
+        ("Damaged", [f"{path}: {reason}" for path, reason in report.damaged_files]),
+        ("Possible duplicates", duplicates),
+        ("Failed", [f"{path}: {reason}" for path, reason in report.failed_files]),
+    ]
+
+
+def _report_headline(report: ImportBatchReport) -> str:
+    """Return the one-line result of the batch."""
+    if report.outcome is ImportOutcome.CANCELLED:
+        return "Cancelled. No file was imported."
+    return f"Import finished. Scanned {report.scanned_count} files."
+
+
+def format_import_report(report: ImportBatchReport) -> str:
+    """Render the report as plain text: the result, a count per category, then each file."""
+    sections = _report_sections(report)
+    lines = [_report_headline(report), ""]
+    lines.extend(f"{title}: {len(entries)}" for title, entries in sections)
+    for title, entries in sections:
+        if entries:
+            lines.extend(["", f"{title}:"])
+            lines.extend(f"  {entry}" for entry in entries)
+    return "\n".join(lines)
+
+
+class ImportReportDialog(QDialog):
+    """Show the batch result, a count per category, and expandable per-file lists."""
+
+    def __init__(self, report: ImportBatchReport, parent: QWidget | None = None) -> None:
+        """Build the dialog from a finished ImportBatchReport."""
+        super().__init__(parent)
+        self.setWindowTitle("Import Report")
+        self.resize(REPORT_DIALOG_WIDTH, REPORT_DIALOG_HEIGHT)
+        self.report_text = format_import_report(report)
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel(_report_headline(report), self))
+        self.sections_tree = QTreeWidget(self)
+        self.sections_tree.setHeaderHidden(True)
+        for title, entries in _report_sections(report):
+            section = QTreeWidgetItem([f"{title}: {len(entries)}"])
+            section.addChildren([QTreeWidgetItem([entry]) for entry in entries])
+            self.sections_tree.addTopLevelItem(section)
+        layout.addWidget(self.sections_tree)
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
+        self.copy_button = QPushButton("Copy", self)
+        buttons.addButton(self.copy_button, QDialogButtonBox.ButtonRole.ActionRole)
+        self.copy_button.clicked.connect(self._copy_report)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _copy_report(self) -> None:
+        """Put the plain-text report on the clipboard."""
+        QApplication.clipboard().setText(self.report_text)
+
+
+class ImportWorker(QObject):
+    """Run one ImportService batch on a worker thread and report through signals."""
+
+    progress = Signal(int, int, str)
+    finished = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, import_service: ImportService, paths: list[Path]) -> None:
+        """Hold the service and paths. run() does the work on the worker thread."""
+        super().__init__()
+        self.import_service = import_service
+        self.paths = paths
+        self._cancel_requested = threading.Event()
+
+    def request_cancel(self) -> None:
+        """Ask the batch to stop before its next file and roll back."""
+        self._cancel_requested.set()
+
+    @Slot()
+    def run(self) -> None:
+        """Import the paths, then emit finished with the report or failed with the error."""
+        try:
+            report = self.import_service.import_paths(
+                list(self.paths),
+                progress=self.progress.emit,
+                should_cancel=self._cancel_requested.is_set,
+            )
+        # Any exception here would otherwise end the thread silently. The batch has
+        # already rolled back, so the UI reports the error and stays usable.
+        except Exception as exc:
+            logger.exception("Folder import failed and rolled back.")
+            self.failed.emit(f"{type(exc).__name__}: {exc}")
+        else:
+            self.finished.emit(report)
+        finally:
+            # The worker thread's SQLite connection closes with the thread.
+            self.import_service.repo.db.close()
+
+
+class FolderImportController(QObject):
+    """Start one background import at a time and show its modal progress dialog.
+
+    completed carries the ImportBatchReport, or None when the batch failed.
+    """
+
+    completed = Signal(object)
+
+    def __init__(self, import_service: ImportService, parent: QWidget) -> None:
+        """Keep the service and the window that owns the progress dialog."""
+        super().__init__(parent)
+        self.import_service = import_service
+        self.parent_widget = parent
+        self._thread: QThread | None = None
+        self._worker: ImportWorker | None = None
+        self._dialog: QProgressDialog | None = None
+        self.last_error = ""
+
+    def is_running(self) -> bool:
+        """Return True while a batch is in progress."""
+        return self._thread is not None
+
+    def start(self, paths: list[Path]) -> bool:
+        """Start a batch for paths. Return False when another batch is still running."""
+        if self.is_running():
+            return False
+        self._worker = ImportWorker(self.import_service, paths)
+        self._thread = QThread(self)
+        self._worker.moveToThread(self._thread)
+        self._dialog = self._build_progress_dialog()
+        self._thread.started.connect(self._worker.run)
+        self._worker.progress.connect(self._on_progress)
+        self._worker.finished.connect(self._on_finished)
+        self._worker.failed.connect(self._on_failed)
+        self._thread.start()
+        self._dialog.show()
+        return True
+
+    def request_cancel(self) -> None:
+        """Ask the running batch to stop after the current file and roll back."""
+        if self._worker is not None:
+            self._worker.request_cancel()
+        if self._dialog is not None:
+            self._dialog.setLabelText(CANCELLING_TEXT)
+
+    def _build_progress_dialog(self) -> QProgressDialog:
+        """Create the window-modal progress dialog with a Cancel button."""
+        dialog = QProgressDialog("Scanning folder...", "Cancel", 0, 0, self.parent_widget)
+        dialog.setWindowTitle("Importing")
+        dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        dialog.setMinimumDuration(0)
+        dialog.setAutoClose(False)
+        dialog.setAutoReset(False)
+        dialog.canceled.connect(self.request_cancel)
+        return dialog
+
+    @Slot(int, int, str)
+    def _on_progress(self, done: int, total: int, path: str) -> None:
+        """Show the current file and its number in the batch."""
+        if self._dialog is None or self._dialog.wasCanceled():
+            return
+        self._dialog.setMaximum(total)
+        self._dialog.setValue(done - 1)
+        self._dialog.setLabelText(f"Importing {done} of {total}:\n{path}")
+
+    @Slot(object)
+    def _on_finished(self, report: ImportBatchReport) -> None:
+        """Join the worker thread and hand the report on."""
+        self._finish()
+        self.completed.emit(report)
+
+    @Slot(str)
+    def _on_failed(self, message: str) -> None:
+        """Join the worker thread and report the failure."""
+        self.last_error = message
+        self._finish()
+        self.completed.emit(None)
+
+    def _finish(self) -> None:
+        """Stop the worker thread, wait for it, and close the progress dialog.
+
+        The references clear first. Closing a QProgressDialog emits canceled, and
+        request_cancel then finds no batch to cancel.
+        """
+        thread, worker, dialog = self._thread, self._worker, self._dialog
+        self._thread = None
+        self._worker = None
+        self._dialog = None
+        if thread is not None:
+            thread.quit()
+            thread.wait()
+            thread.deleteLater()
+        if worker is not None:
+            worker.deleteLater()
+        if dialog is not None:
+            dialog.close()
+            dialog.deleteLater()

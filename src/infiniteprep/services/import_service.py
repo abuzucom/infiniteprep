@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import sqlite3
 import uuid
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final
 
@@ -12,7 +15,7 @@ from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
     TechnicalAndTagMetadata,
 )
-from infiniteprep.db.repositories import Repository
+from infiniteprep.db.repositories import Repository, RepositoryBatch
 from infiniteprep.domain.enums import (
     AudioFormat,
     GroupingBasis,
@@ -27,6 +30,22 @@ MULTITRACK_DURATION_THRESHOLD_SEC: Final[float] = 1200.0
 MAX_DIRECTORY_DEPTH: Final[int] = 32
 MAX_DISCOVERED_FILES: Final[int] = 10_000
 MAX_IMPORT_FILE_BYTES: Final[int] = 2_147_483_648  # 2 GiB per file
+# A file that fails with one of these skips alone. Any other error rolls back the batch.
+PER_FILE_ERRORS: Final[tuple[type[Exception], ...]] = (OSError, sqlite3.Error)
+
+ProgressCallback = Callable[[int, int, str], None]
+CancelCheck = Callable[[], bool]
+
+
+class ImportOutcome(StrEnum):
+    """Whether an import batch committed or rolled back."""
+
+    COMMITTED = "committed"
+    CANCELLED = "cancelled"
+
+
+class ImportCancelledError(Exception):
+    """Raised inside a batch to roll it back after a cancel request."""
 
 
 @dataclass
@@ -39,6 +58,26 @@ class ImportBatchReport:
     possible_duplicates: list[tuple[FileAsset, list[FileAsset]]] = field(default_factory=list)
     unsupported_files: list[str] = field(default_factory=list)
     damaged_files: list[tuple[str, str]] = field(default_factory=list)
+    failed_files: list[tuple[str, str]] = field(default_factory=list)
+    scanned_count: int = 0
+    outcome: ImportOutcome = ImportOutcome.COMMITTED
+
+    def mark_rolled_back(self) -> None:
+        """Record a cancelled batch. Nothing it imported stays in the database."""
+        self.outcome = ImportOutcome.CANCELLED
+        self.imported_files.clear()
+        self.damaged_files.clear()
+        self.possible_duplicates.clear()
+
+
+@dataclass
+class _ImportRun:
+    """State shared by every file of one import batch."""
+
+    batch_id: str
+    source_type: SourceType
+    report: ImportBatchReport
+    batch: RepositoryBatch
 
 
 def _scan_single_directory_children(
@@ -117,13 +156,50 @@ class ImportService:
         self,
         paths: list[Path | str],
         source_type: SourceType = SourceType.UNKNOWN,
+        *,
+        progress: ProgressCallback | None = None,
+        should_cancel: CancelCheck | None = None,
     ) -> ImportBatchReport:
-        """Import files and folders non-destructively and return an ImportBatchReport."""
-        batch_id = str(uuid.uuid4())
-        report = ImportBatchReport(batch_id=batch_id)
-        for file_path in discover_files_bounded(paths):
-            self._import_single_file(file_path, batch_id, source_type, report)
+        """Import files and folders non-destructively and return an ImportBatchReport.
+
+        The scan runs first. Every file then imports inside one transaction, with a
+        savepoint per file. progress receives (file number, total, path) before each
+        file. A true should_cancel stops before the next file and rolls back the batch.
+        """
+        report = ImportBatchReport(batch_id=str(uuid.uuid4()))
+        discovered = discover_files_bounded(paths)
+        report.scanned_count = len(discovered)
+        try:
+            with self.repo.batch() as batch:
+                run = _ImportRun(report.batch_id, source_type, report, batch)
+                self._import_discovered(discovered, run, progress, should_cancel)
+        except ImportCancelledError:
+            report.mark_rolled_back()
         return report
+
+    def _import_discovered(
+        self,
+        discovered: list[Path],
+        run: _ImportRun,
+        progress: ProgressCallback | None,
+        should_cancel: CancelCheck | None,
+    ) -> None:
+        """Import each discovered file in order, checking for a cancel request first."""
+        total = len(discovered)
+        for index, file_path in enumerate(discovered):
+            if should_cancel is not None and should_cancel():
+                raise ImportCancelledError
+            if progress is not None:
+                progress(index + 1, total, str(file_path))
+            self._import_in_savepoint(file_path, run)
+
+    def _import_in_savepoint(self, file_path: Path, run: _ImportRun) -> None:
+        """Import one file. A file or database error rolls back that file only."""
+        try:
+            with run.batch.savepoint():
+                self._import_single_file(file_path, run.batch_id, run.source_type, run.report)
+        except PER_FILE_ERRORS as exc:
+            run.report.failed_files.append((str(file_path), f"{type(exc).__name__}: {exc}"))
 
     def _import_single_file(
         self,
