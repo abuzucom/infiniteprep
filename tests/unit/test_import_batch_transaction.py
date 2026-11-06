@@ -134,9 +134,12 @@ def test_an_unexpected_error_rolls_back_and_propagates(
 
 def test_a_second_batch_on_the_same_thread_is_refused(repository: Repository) -> None:
     """Nested batches on one thread raise instead of silently joining the outer batch."""
-    with repository.batch(), pytest.raises(RuntimeError, match="already open"):
-        with repository.batch():
-            pass
+    with (
+        repository.batch(),
+        pytest.raises(RuntimeError, match="already open"),
+        repository.batch(),
+    ):
+        pass
 
 
 def test_writes_outside_a_batch_still_commit_at_once(

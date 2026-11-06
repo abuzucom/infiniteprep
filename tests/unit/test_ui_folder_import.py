@@ -121,18 +121,17 @@ def test_import_leaves_the_loaded_track_in_place(
 
 
 @pytest.mark.parametrize(
-    ("choice", "expected_outcome", "expected_rows"),
+    "close_case",
     [("cancel", ImportOutcome.CANCELLED, 0), ("wait", ImportOutcome.COMMITTED, TRACK_COUNT)],
 )
 def test_closing_during_import_waits_or_cancels(
     qtbot: Any,
     window_parts: Any,
     monkeypatch: pytest.MonkeyPatch,
-    choice: str,
-    expected_outcome: ImportOutcome,
-    expected_rows: int,
+    close_case: tuple[str, ImportOutcome, int],
 ) -> None:
     """Close asks to wait or cancel. Either way the window closes once the batch ends."""
+    choice, expected_outcome, expected_rows = close_case
     window, repository, gate, folder = window_parts
     monkeypatch.setattr(window, "ask_close_during_import", lambda: choice)
     window.show()
