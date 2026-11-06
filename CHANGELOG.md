@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.33.0] (2026-11-06)
+## [0.33.1] (2026-11-06)
 
 ### Removed
 
@@ -18,10 +18,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `tests/unit/test_essentia_removal.py` covers the removal and the load of an older settings file.
+- A new `NOTICE` file lists each third-party component the app ships or downloads, with its license.
+- Section 2.7 of `docs/technical-decision-record.md` records the 2026-11-06 copyleft scan.
+  - A CI workflow read every pinned native wheel for Windows, macOS, and Linux, plus the pinned fpcalc archives.
+  - No GPL or AGPL code ships in the parts InfinitePrep uses. The GCC runtime libraries carry the GCC runtime exception.
+  - The PySide6 wheels carry GPL-3-only Qt modules and GPL-3 Qt tools. The app imports no such module and runs no such tool.
 
 ### Changed
 
-- The package version moves to 0.33.0.
+- The package version moves to 0.33.1.
+- Item 4 of the decision record no longer claims that no runtime dependency carries a copyleft license. PySide6, Qt, and libsndfile carry LGPL licenses.
+- A new item 5 in the decision record records that user installs come only from the packaged bundles, never from a pip install.
 
 ## [0.32.0] (2026-11-05)
 
