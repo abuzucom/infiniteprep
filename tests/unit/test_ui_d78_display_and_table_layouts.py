@@ -40,6 +40,7 @@ def test_format_duration_uses_whole_seconds(seconds: float, expected: str) -> No
     [
         (8 * 60 + 37.25, "8:37.250"),
         (59 * 60 + 59.999, "59:59.999"),
+        (59 * 60 + 59.9995, "59:59.999"),
         (60 * 60 + 125.25, "1:02:05.250"),
     ],
 )

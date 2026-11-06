@@ -40,6 +40,7 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
+from infiniteprep.ui.time_format import split_time_seconds
 
 TABLE_COLUMNS: Final[tuple[str, ...]] = (
     "Filename",
@@ -61,19 +62,15 @@ STATUS_FILTER_STRETCH: Final[int] = 1
 SPLITTER_TOP_HEIGHT: Final[int] = 380
 SPLITTER_BOTTOM_HEIGHT: Final[int] = 420
 PLAYLIST_SUFFIX: Final[str] = ".m3u8"
-SECONDS_PER_MINUTE: Final[int] = 60
-SECONDS_PER_HOUR: Final[int] = 3600
 
 
 def format_duration(seconds: float) -> str:
     """Format a track duration as M:SS or H:MM:SS, truncating fractions."""
     whole_seconds = int(max(0.0, float(seconds)))
-    hours, remainder = divmod(whole_seconds, SECONDS_PER_HOUR)
-    minutes, seconds_part = divmod(remainder, SECONDS_PER_MINUTE)
+    hours, minutes, seconds_part = split_time_seconds(whole_seconds)
     if hours:
         return f"{hours}:{minutes:02d}:{seconds_part:02d}"
-    total_minutes = whole_seconds // SECONDS_PER_MINUTE
-    return f"{total_minutes}:{seconds_part:02d}"
+    return f"{minutes}:{seconds_part:02d}"
 
 
 class MainWindow(QMainWindow):

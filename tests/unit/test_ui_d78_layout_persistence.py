@@ -50,8 +50,16 @@ def test_file_and_detail_column_widths_persist_between_windows(
     assert second_window.file_table.horizontalHeader().sectionSize(0) == 217
     assert second_window.detail_panel.fields_table.horizontalHeader().sectionSize(0) == 143
 
+    saved_layout = settings_manager.settings.file_table_layout
+    settings_manager.settings.file_table_layout = ""
+    settings_manager.settings.file_table_column_count = 0
+    baseline_window = MainWindow(repository, ImportService(repository), review_service)
+    qtbot.addWidget(baseline_window)
+    default_width = baseline_window.file_table.horizontalHeader().sectionSize(0)
+
+    settings_manager.settings.file_table_layout = saved_layout
     settings_manager.settings.file_table_column_count = 1
     third_window = MainWindow(repository, ImportService(repository), review_service)
     qtbot.addWidget(third_window)
 
-    assert third_window.file_table.horizontalHeader().sectionSize(0) != 217
+    assert third_window.file_table.horizontalHeader().sectionSize(0) == default_width
