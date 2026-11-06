@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
@@ -26,7 +26,12 @@ from infiniteprep.services.import_service import (
 )
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui import main_window as main_window_module
-from infiniteprep.ui.folder_import import ImportReportDialog, format_import_report
+from infiniteprep.ui.folder_import import (
+    STUCK_EXIT_CODE,
+    FolderImportController,
+    ImportReportDialog,
+    format_import_report,
+)
 from infiniteprep.ui.main_window import MainWindow
 from tests.fixtures.audio_factory import create_wav_fixture
 
@@ -35,6 +40,7 @@ GATE_TIMEOUT_SEC = 10.0
 SIGNAL_TIMEOUT_MS = 10_000
 TIMER_INTERVAL_MS = 10
 RESPONSIVE_WAIT_MS = 200
+STUCK_TEST_TIMEOUT_MS = 100
 
 
 class MemorySettingsManager:
@@ -274,6 +280,62 @@ def test_progress_and_report_labels_show_plain_text(qtbot: Any, window_parts: An
     dialog = ImportReportDialog(done.args[0])
     qtbot.addWidget(dialog)
     assert dialog.headline_label.textFormat() == Qt.TextFormat.PlainText
+
+
+@pytest.fixture
+def stuck_parts(
+    qtbot: Any, tmp_path: Path
+) -> tuple[FolderImportController, threading.Event, Path, list[int]]:
+    """Build a controller with a short time limit whose exit call only records the code."""
+    repository = Repository(DatabaseManager(tmp_path / "stuck.sqlite3"))
+    gate = threading.Event()
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    exit_codes: list[int] = []
+    controller = FolderImportController(
+        ImportService(repository, GatedTagAdapter(gate)),
+        parent,
+        stuck_timeout_ms=STUCK_TEST_TIMEOUT_MS,
+        exit_process=exit_codes.append,
+    )
+    folder = tmp_path / "crate"
+    create_wav_fixture(folder / "track.wav", duration_sec=0.5)
+    return controller, gate, folder, exit_codes
+
+
+def test_a_stuck_file_offers_quit_now(qtbot: Any, stuck_parts: Any) -> None:
+    """A file past the time limit raises the stuck prompt, and Quit Now ends the process."""
+    controller, gate, folder, exit_codes = stuck_parts
+
+    with qtbot.waitSignal(controller.completed, timeout=SIGNAL_TIMEOUT_MS):
+        controller.start([folder])
+        qtbot.waitUntil(lambda: controller.stuck_box is not None, timeout=SIGNAL_TIMEOUT_MS)
+        assert controller.quit_now_button is not None
+        controller.quit_now_button.click()
+        assert exit_codes == [STUCK_EXIT_CODE]
+        gate.set()
+
+    assert controller.stuck_box is None
+
+
+def test_keep_waiting_restarts_the_time_limit(qtbot: Any, stuck_parts: Any) -> None:
+    """Keep Waiting closes the prompt, and the prompt returns after another full limit."""
+    controller, gate, folder, exit_codes = stuck_parts
+
+    with qtbot.waitSignal(controller.completed, timeout=SIGNAL_TIMEOUT_MS):
+        controller.start([folder])
+        qtbot.waitUntil(lambda: controller.stuck_box is not None, timeout=SIGNAL_TIMEOUT_MS)
+        box = controller.stuck_box
+        keep_waiting = next(
+            button for button in box.buttons() if button is not controller.quit_now_button
+        )
+        keep_waiting.click()
+        assert controller.stuck_box is None
+        qtbot.waitUntil(lambda: controller.stuck_box is not None, timeout=SIGNAL_TIMEOUT_MS)
+        gate.set()
+
+    assert exit_codes == []
+    assert controller.stuck_box is None
 
 
 def test_report_text_lists_counts_and_failed_files() -> None:

@@ -34,6 +34,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The progress label and the report headline show file names as plain text. A name that looks like HTML never renders as rich text.
   - A failed import shows a fixed message with no exception text.
   - A Wait or Cancel choice holds for the rest of the import. Later close requests wait without a new prompt.
+  - One file or the scan running past 2 minutes raises an Import Not Responding prompt. Quit Now ends InfinitePrep at once and keeps nothing from the batch. Keep Waiting restarts the limit.
 - `Repository.batch()` holds every write on one thread in a single transaction. `RepositoryBatch.savepoint()` scopes a rollback to one item.
   - An item whose savepoint cannot roll back raises `BatchIntegrityError`, and the whole batch rolls back. No partial item reaches the commit.
   - A failed batch rollback logs a warning and keeps the original error. SQLite discards the uncommitted batch when the connection closes.

@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
+    QAbstractButton,
     QApplication,
     QDialog,
     QDialogButtonBox,
     QLabel,
+    QMessageBox,
     QProgressDialog,
     QPushButton,
     QTreeWidget,
@@ -32,6 +36,14 @@ logger = logging.getLogger(__name__)
 REPORT_DIALOG_WIDTH: Final[int] = 720
 REPORT_DIALOG_HEIGHT: Final[int] = 480
 CANCELLING_TEXT: Final[str] = "Cancelling after the current file. Nothing will be imported."
+# One file (or the scan) running longer than this counts as stuck (D244).
+STUCK_FILE_TIMEOUT_MS: Final[int] = 120_000
+STUCK_EXIT_CODE: Final[int] = 1
+STUCK_TEXT: Final[str] = (
+    "One file has taken more than 2 minutes and the import is not responding. "
+    "Quit Now ends InfinitePrep at once and keeps nothing from this import. "
+    "Keep Waiting lets the import continue."
+)
 
 
 def _report_sections(report: ImportBatchReport) -> list[tuple[str, list[str]]]:
@@ -162,8 +174,19 @@ class FolderImportController(QObject):
 
     completed = Signal(object)
 
-    def __init__(self, import_service: ImportService, parent: QWidget) -> None:
-        """Keep the service and the window that owns the progress dialog."""
+    def __init__(
+        self,
+        import_service: ImportService,
+        parent: QWidget,
+        *,
+        stuck_timeout_ms: int = STUCK_FILE_TIMEOUT_MS,
+        exit_process: Callable[[int], object] = os._exit,
+    ) -> None:
+        """Keep the service and the window that owns the progress dialog.
+
+        A file that runs past stuck_timeout_ms raises the stuck prompt. Quit Now calls
+        exit_process, which ends the process at once. SQLite discards the open batch.
+        """
         super().__init__(parent)
         self.import_service = import_service
         self.parent_widget = parent
@@ -171,7 +194,14 @@ class FolderImportController(QObject):
         self._worker: ImportWorker | None = None
         self._dialog: QProgressDialog | None = None
         self.progress_label: QLabel | None = None
+        self.stuck_box: QMessageBox | None = None
+        self.quit_now_button: QAbstractButton | None = None
         self.last_error = ""
+        self._exit_process = exit_process
+        self._stuck_timer = QTimer(self)
+        self._stuck_timer.setSingleShot(True)
+        self._stuck_timer.setInterval(stuck_timeout_ms)
+        self._stuck_timer.timeout.connect(self._on_file_stuck)
 
     def is_running(self) -> bool:
         """Return True while a batch is in progress."""
@@ -191,6 +221,7 @@ class FolderImportController(QObject):
         self._worker.failed.connect(self._on_failed)
         self._thread.start()
         self._dialog.show()
+        self._stuck_timer.start()
         return True
 
     def request_cancel(self) -> None:
@@ -216,12 +247,51 @@ class FolderImportController(QObject):
 
     @Slot(int, int, str)
     def _on_progress(self, done: int, total: int, path: str) -> None:
-        """Show the current file and its number in the batch."""
+        """Show the current file and its number in the batch, and restart the stuck timer."""
+        self._stuck_timer.start()
         if self._dialog is None or self._dialog.wasCanceled():
             return
         self._dialog.setMaximum(total)
         self._dialog.setValue(done - 1)
         self._dialog.setLabelText(f"Importing {done} of {total}:\n{path}")
+
+    @Slot()
+    def _on_file_stuck(self) -> None:
+        """Offer Quit Now or Keep Waiting after one file runs past the time limit."""
+        if not self.is_running() or self.stuck_box is not None:
+            return
+        box = QMessageBox(
+            QMessageBox.Icon.Warning,
+            "Import Not Responding",
+            STUCK_TEXT,
+            QMessageBox.StandardButton.NoButton,
+            self.parent_widget,
+        )
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        self.quit_now_button = box.addButton("Quit Now", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton("Keep Waiting", QMessageBox.ButtonRole.RejectRole)
+        box.buttonClicked.connect(self._on_stuck_choice)
+        self.stuck_box = box
+        box.open()
+
+    @Slot(QAbstractButton)
+    def _on_stuck_choice(self, button: QAbstractButton) -> None:
+        """End the process at once, or wait another full time limit."""
+        quit_now = button is self.quit_now_button
+        self._close_stuck_box()
+        if quit_now:
+            logger.warning("Import stuck past the time limit. Quit Now ends the process.")
+            self._exit_process(STUCK_EXIT_CODE)
+            return
+        if self.is_running():
+            self._stuck_timer.start()
+
+    def _close_stuck_box(self) -> None:
+        """Close the stuck prompt if it is open."""
+        box, self.stuck_box = self.stuck_box, None
+        if box is not None:
+            box.close()
+            box.deleteLater()
 
     @Slot(object)
     def _on_finished(self, report: ImportBatchReport) -> None:
@@ -242,6 +312,8 @@ class FolderImportController(QObject):
         The references clear first. Closing a QProgressDialog emits canceled, and
         request_cancel then finds no batch to cancel.
         """
+        self._stuck_timer.stop()
+        self._close_stuck_box()
         thread, worker, dialog = self._thread, self._worker, self._dialog
         self._thread = None
         self._worker = None
