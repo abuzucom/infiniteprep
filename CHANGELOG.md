@@ -5,6 +5,24 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.33.0] (2026-11-06)
+
+### Removed
+
+- InfinitePrep drops the optional `EssentiaCliAnalyzer` subprocess adapter. Essentia carries the AGPL-3.0 license. The app runs no Essentia binary, including a user-installed one. `LocalDspAnalyzer` stays the only analyzer.
+  - This release deletes `adapters/analyzers/essentia_ext.py` and its test.
+  - `AppSettings` drops `prefer_essentia_cli` and `essentia_cli_path`. An older settings file with those fields still loads. The next save omits both fields.
+  - Code that imports `EssentiaCliAnalyzer` or reads the two settings fields now fails. This change breaks compatibility.
+- The README and `docs/technical-decision-record.md` no longer list the Essentia adapter.
+
+### Added
+
+- `tests/unit/test_essentia_removal.py` covers the removal and the load of an older settings file.
+
+### Changed
+
+- The package version moves to 0.33.0.
+
 ## [0.32.0] (2026-11-05)
 
 ### Changed
