@@ -135,8 +135,6 @@ class AppSettings:
     enable_llm_arbitration: bool = False
     ollama_base_url: str = "http://127.0.0.1:11434/v1"
     ollama_model: str = "qwen2.5:3b"
-    prefer_essentia_cli: bool = False
-    essentia_cli_path: str = ""
     fpcalc_custom_path: str = ""
     transcode_mode: str = "sibling_export"
     transcode_preset: str = "XDJ_LOSSLESS_AUTO"

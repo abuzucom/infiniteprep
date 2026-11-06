@@ -51,7 +51,6 @@ These modules exist under `src/infiniteprep/` with tests. The desktop launcher a
 - Chromaprint (`fpcalc`) and AcoustID fingerprinting, with the consent-gated, SHA-256 verified `FpcalcBootstrapService` for Windows and macOS.
 - MusicBrainz (`ws/2`) and Discogs adapters with rate limits of 1 request per second and 60 requests per minute, plus a SQLite TTL response cache.
 - Closed-world LLM arbitration through Ollama or an OpenAI-compatible endpoint. `ClosedWorldValidator` limits the model to the supplied candidates. `OllamaBootstrapService` requires explicit consent.
-- `EssentiaCliAnalyzer`, a subprocess wrapper for the Essentia command-line extractor.
 - `ArtworkService` normalizes cover art to a baseline JPEG of at most 800 by 800 pixels.
 
 ---
@@ -202,8 +201,6 @@ reads the source folder.
   the consent-gated `FpcalcBootstrapService`.
 - Ollama for local LLM arbitration. Install it from the Ollama site and pull
   `qwen2.5:3b`. The default endpoint is `http://127.0.0.1:11434/v1`.
-- The Essentia `essentia_streaming_extractor_music` binary for the optional
-  `EssentiaCliAnalyzer`.
 
 ### 5. Launch the desktop application
 
