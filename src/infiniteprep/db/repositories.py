@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 from collections.abc import Iterator
@@ -37,6 +38,13 @@ from infiniteprep.domain.models import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
+class BatchIntegrityError(RuntimeError):
+    """A failed item could not roll back to its savepoint, so the whole batch must roll back."""
+
+
 class RepositoryBatch:
     """An open batch transaction. Each savepoint scope succeeds or rolls back on its own."""
 
@@ -46,15 +54,29 @@ class RepositoryBatch:
 
     @contextmanager
     def savepoint(self) -> Iterator[None]:
-        """Keep the writes inside the scope, or roll back to the scope start on any error."""
+        """Keep the writes inside the scope, or roll back to the scope start on an error.
+
+        A savepoint that cannot roll back raises BatchIntegrityError, so no partial item
+        survives into the batch commit.
+        """
         self._conn.execute("SAVEPOINT batch_item")
         try:
             yield
-        except BaseException:
-            self._conn.execute("ROLLBACK TO batch_item")
-            self._conn.execute("RELEASE batch_item")
+        except Exception as item_error:
+            self._undo_savepoint(item_error)
             raise
         self._conn.execute("RELEASE batch_item")
+
+    def _undo_savepoint(self, item_error: Exception) -> None:
+        """Roll back to the savepoint and release it, or raise BatchIntegrityError."""
+        try:
+            self._conn.execute("ROLLBACK TO batch_item")
+            self._conn.execute("RELEASE batch_item")
+        except sqlite3.Error as rollback_error:
+            raise BatchIntegrityError(
+                "An item failed and could not roll back on its own "
+                f"({type(item_error).__name__}: {item_error}). The whole batch rolls back."
+            ) from rollback_error
 
 
 class Repository:
@@ -83,12 +105,25 @@ class Repository:
         try:
             yield RepositoryBatch(conn)
         except BaseException:
-            conn.rollback()
+            self._rollback_batch(conn)
             raise
         else:
             conn.commit()
         finally:
             self._batch_state.active = False
+
+    @staticmethod
+    def _rollback_batch(conn: sqlite3.Connection) -> None:
+        """Roll back an open batch. A failed rollback logs and leaves the original error."""
+        try:
+            conn.rollback()
+        except sqlite3.Error as exc:
+            # SQLite discards an uncommitted transaction when its connection closes.
+            logger.warning(
+                "Batch rollback failed (%s); the uncommitted batch ends when the "
+                "connection closes.",
+                exc,
+            )
 
     def _commit(self, conn: sqlite3.Connection) -> None:
         """Commit a write at once, unless a batch on this thread owns the transaction."""

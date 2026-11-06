@@ -165,6 +165,8 @@ class ImportService:
         The scan runs first. Every file then imports inside one transaction, with a
         savepoint per file. progress receives (file number, total, path) before each
         file. A true should_cancel stops before the next file and rolls back the batch.
+        A file or database error skips its file alone. Any other error, including one
+        raised by progress or should_cancel, rolls back the batch and propagates.
         """
         report = ImportBatchReport(batch_id=str(uuid.uuid4()))
         discovered = discover_files_bounded(paths)

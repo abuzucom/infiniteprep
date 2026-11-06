@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from infiniteprep.db.connection import DatabaseManager
-from infiniteprep.db.repositories import Repository
+from infiniteprep.db.repositories import BatchIntegrityError, Repository
+from infiniteprep.domain.enums import GroupingBasis, SourceType
+from infiniteprep.domain.models import SourceGroup
 from infiniteprep.services.import_service import ImportOutcome, ImportService
 from tests.fixtures.audio_factory import create_wav_fixture
 
@@ -140,6 +142,29 @@ def test_a_second_batch_on_the_same_thread_is_refused(repository: Repository) ->
         repository.batch(),
     ):
         pass
+
+
+def test_a_savepoint_that_cannot_roll_back_aborts_the_batch(repository: Repository) -> None:
+    """When an item's rollback fails, the whole batch rolls back and no partial item stays."""
+    group = SourceGroup(
+        id="group-1",
+        user_label="Crate",
+        grouping_basis=GroupingBasis.FOLDER_HYPOTHESIS,
+        original_folder="/music/crate",
+        source_type=SourceType.UNKNOWN,
+        notes="",
+    )
+    with (
+        pytest.raises(BatchIntegrityError, match="could not roll back"),
+        repository.batch() as batch,
+        batch.savepoint(),
+    ):
+        repository.upsert_source_group(group)
+        # Releasing the savepoint early makes the later ROLLBACK TO fail.
+        repository.db.connect().execute("RELEASE batch_item")
+        raise OSError("item failed")
+
+    assert repository.list_source_groups() == []
 
 
 def test_writes_outside_a_batch_still_commit_at_once(

@@ -31,6 +31,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A report dialog shows the result, a count per category, and expandable per-file lists. Copy puts the report on the clipboard as plain text.
   - Closing the window during an import asks whether to wait for the commit or cancel. Either choice closes the window once the batch ends.
 - `Repository.batch()` holds every write on one thread in a single transaction. `RepositoryBatch.savepoint()` scopes a rollback to one item.
+  - An item whose savepoint cannot roll back raises `BatchIntegrityError`, and the whole batch rolls back. No partial item reaches the commit.
+  - A failed batch rollback logs a warning and keeps the original error. SQLite discards the uncommitted batch when the connection closes.
 - `ImportService.import_paths` takes optional `progress` and `should_cancel` callbacks. `ImportBatchReport` adds `failed_files`, `scanned_count`, and `outcome`.
 - Added `tests/unit/test_import_batch_transaction.py` and `tests/unit/test_ui_folder_import.py`.
 
