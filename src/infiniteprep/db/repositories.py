@@ -37,7 +37,6 @@ from infiniteprep.domain.models import (
     utc_now_iso,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
