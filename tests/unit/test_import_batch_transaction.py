@@ -131,9 +131,7 @@ def test_a_file_that_fails_is_skipped_and_the_rest_commit(
     )
 
 
-def test_any_error_in_one_file_skips_only_that_file(
-    repository: Repository, tmp_path: Path
-) -> None:
+def test_any_error_in_one_file_skips_only_that_file(repository: Repository, tmp_path: Path) -> None:
     """An error type the reader does not expect still skips one file, not the whole batch."""
     tracks = make_tracks(tmp_path / "crate")
     service = ImportService(repository, FailingTagAdapter(tracks[1].name))
