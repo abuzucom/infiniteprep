@@ -50,27 +50,32 @@ class RepositoryBatch:
     def __init__(self, conn: sqlite3.Connection) -> None:
         """Wrap the connection that holds the batch transaction."""
         self._conn = conn
+        self._savepoint_count = 0
 
     @contextmanager
-    def savepoint(self) -> Iterator[None]:
+    def savepoint(self) -> Iterator[str]:
         """Keep the writes inside the scope, or roll back to the scope start on an error.
 
-        A savepoint that cannot roll back raises BatchIntegrityError, so no partial item
-        survives into the batch commit.
+        Yields the savepoint name. Each scope gets its own name, so no other savepoint can
+        collide with it. A savepoint that cannot roll back raises BatchIntegrityError, so
+        no partial item survives into the batch commit.
         """
-        self._conn.execute("SAVEPOINT batch_item")
+        self._savepoint_count += 1
+        # The name comes only from this counter, never from outside input.
+        name = f"batch_item_{self._savepoint_count}"
+        self._conn.execute(f"SAVEPOINT {name}")
         try:
-            yield
+            yield name
         except Exception as item_error:
-            self._undo_savepoint(item_error)
+            self._undo_savepoint(name, item_error)
             raise
-        self._conn.execute("RELEASE batch_item")
+        self._conn.execute(f"RELEASE {name}")
 
-    def _undo_savepoint(self, item_error: Exception) -> None:
-        """Roll back to the savepoint and release it, or raise BatchIntegrityError."""
+    def _undo_savepoint(self, name: str, item_error: Exception) -> None:
+        """Roll back to the named savepoint and release it, or raise BatchIntegrityError."""
         try:
-            self._conn.execute("ROLLBACK TO batch_item")
-            self._conn.execute("RELEASE batch_item")
+            self._conn.execute(f"ROLLBACK TO {name}")
+            self._conn.execute(f"RELEASE {name}")
         except sqlite3.Error as rollback_error:
             raise BatchIntegrityError(
                 "An item failed and could not roll back on its own "

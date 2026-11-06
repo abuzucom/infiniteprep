@@ -202,6 +202,47 @@ def test_a_failed_import_after_wait_still_closes(
     assert "OperationalError: disk I/O error" in window.import_controller.last_error
 
 
+def test_failed_import_message_holds_no_error_text(
+    qtbot: Any, window_parts: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The failure message is fixed text. The exception text never reaches the window."""
+    window, repository, gate, folder = window_parts
+    monkeypatch.setattr(repository, "batch", lambda: FailingBatch(gate))
+
+    with qtbot.waitSignal(window.import_controller.completed, timeout=SIGNAL_TIMEOUT_MS):
+        window.start_folder_import(folder)
+        gate.set()
+
+    box = window.import_failure_box
+    assert box is not None
+    assert box.text() == main_window_module.IMPORT_FAILURE_TEXT
+    assert "disk I/O" not in box.text()
+
+
+def test_a_second_close_during_the_same_import_asks_nothing(
+    qtbot: Any, window_parts: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After Wait is chosen, closing again waits quietly instead of asking again."""
+    window, _repository, gate, folder = window_parts
+    prompts: list[int] = []
+
+    def answer_wait() -> str:
+        prompts.append(1)
+        return "wait"
+
+    monkeypatch.setattr(window, "ask_close_during_import", answer_wait)
+    window.show()
+
+    with qtbot.waitSignal(window.import_controller.completed, timeout=SIGNAL_TIMEOUT_MS):
+        window.start_folder_import(folder)
+        window.close()
+        window.close()
+        gate.set()
+
+    qtbot.waitUntil(lambda: not window.isVisible(), timeout=SIGNAL_TIMEOUT_MS)
+    assert prompts == [1]
+
+
 def test_staying_open_keeps_the_import_running(
     qtbot: Any, window_parts: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:

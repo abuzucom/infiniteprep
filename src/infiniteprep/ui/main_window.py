@@ -68,6 +68,9 @@ PLAYLIST_SUFFIX: Final[str] = ".m3u8"
 CLOSE_WAIT: Final[str] = "wait"
 CLOSE_CANCEL: Final[str] = "cancel"
 CLOSE_STAY: Final[str] = "stay"
+IMPORT_FAILURE_TEXT: Final[str] = (
+    "The import stopped and nothing was imported. Check the folder and try again."
+)
 
 
 def format_duration(seconds: float) -> str:
@@ -133,6 +136,7 @@ class MainWindow(QMainWindow):
         self.import_controller = FolderImportController(self.import_service, self)
         self.import_controller.completed.connect(self._on_import_completed)
         self._close_after_import = False
+        self.import_failure_box: QMessageBox | None = None
 
         self._setup_toolbar()
         self._setup_central_widget()
@@ -433,24 +437,21 @@ class MainWindow(QMainWindow):
             self.close()
             return
         if report is None:
-            self._show_import_failure(self.import_controller.last_error)
+            self._show_import_failure()
             return
         ImportReportDialog(report, self).open()
 
-    def _show_import_failure(self, error_text: str) -> None:
-        """Warn that the import rolled back. The error can name a file, so it stays plain text."""
+    def _show_import_failure(self) -> None:
+        """Warn that the import rolled back. The message holds no exception text."""
         box = QMessageBox(
             QMessageBox.Icon.Warning,
             "Import Failed",
-            "",
+            IMPORT_FAILURE_TEXT,
             QMessageBox.StandardButton.Ok,
             self,
         )
         box.setTextFormat(Qt.TextFormat.PlainText)
-        box.setText(
-            f"The import stopped and nothing was imported ({error_text}). "
-            "Check the folder and try again."
-        )
+        self.import_failure_box = box
         box.open()
 
     def ask_close_during_import(self) -> str:
@@ -478,11 +479,17 @@ class MainWindow(QMainWindow):
         return CLOSE_STAY
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        """Close at once, or ask first while an import runs (D241)."""
+        """Close at once, or ask first while an import runs (D241).
+
+        Once Wait or Cancel is chosen, later close requests during the same import wait
+        for it without asking again.
+        """
         if not self.import_controller.is_running():
             super().closeEvent(event)
             return
         event.ignore()
+        if self._close_after_import:
+            return
         choice = self.ask_close_during_import()
         if choice == CLOSE_STAY:
             return

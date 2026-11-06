@@ -229,14 +229,25 @@ def test_a_savepoint_that_cannot_roll_back_aborts_the_batch(repository: Reposito
     with (
         pytest.raises(BatchIntegrityError, match="could not roll back"),
         repository.batch() as batch,
-        batch.savepoint(),
+        batch.savepoint() as savepoint_name,
     ):
         repository.upsert_source_group(group)
         # Releasing the savepoint early makes the later ROLLBACK TO fail.
-        repository.db.connect().execute("RELEASE batch_item")
+        repository.db.connect().execute(f"RELEASE {savepoint_name}")
         raise OSError("item failed")
 
     assert repository.list_source_groups() == []
+
+
+def test_each_savepoint_scope_gets_its_own_name(repository: Repository) -> None:
+    """Savepoint names never repeat within a batch, so no scope can collide with another."""
+    names: list[str] = []
+    with repository.batch() as batch:
+        for _ in range(TRACK_COUNT):
+            with batch.savepoint() as savepoint_name:
+                names.append(savepoint_name)
+
+    assert len(set(names)) == TRACK_COUNT
 
 
 def test_writes_outside_a_batch_still_commit_at_once(
