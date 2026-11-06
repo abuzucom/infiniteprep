@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import threading
 from dataclasses import replace
 from pathlib import Path
@@ -62,6 +63,22 @@ class GatedTagAdapter(MetadataTagAdapter):
         """Wait for the gate, then read the file as usual."""
         self.gate.wait(timeout=GATE_TIMEOUT_SEC)
         return super().read_metadata(file_path)
+
+
+class FailingBatch:
+    """Stand in for a batch whose transaction cannot start, once the test opens the gate."""
+
+    def __init__(self, gate: threading.Event) -> None:
+        self.gate = gate
+
+    def __enter__(self) -> None:
+        """Wait for the gate, then fail as a broken database would."""
+        self.gate.wait(timeout=GATE_TIMEOUT_SEC)
+        raise sqlite3.OperationalError("disk I/O error")
+
+    def __exit__(self, *exc_info: object) -> bool:
+        """Never suppress an exception."""
+        return False
 
 
 @pytest.fixture
@@ -145,6 +162,44 @@ def test_closing_during_import_waits_or_cancels(
     qtbot.waitUntil(lambda: not window.isVisible(), timeout=SIGNAL_TIMEOUT_MS)
     assert done.args[0].outcome is expected_outcome
     assert len(repository.list_files()) == expected_rows
+
+
+def test_worker_leaves_the_ui_connection_open_for_the_next_import(
+    qtbot: Any, window_parts: Any, tmp_path: Path
+) -> None:
+    """The worker closes only its own connection. The UI connection and a second import work."""
+    window, repository, gate, folder = window_parts
+    ui_connection = repository.db.connect()
+    second_folder = tmp_path / "second"
+    create_wav_fixture(second_folder / "extra.wav", duration_sec=3.0)
+    gate.set()
+
+    for batch_folder in (folder, second_folder):
+        with qtbot.waitSignal(window.import_controller.completed, timeout=SIGNAL_TIMEOUT_MS):
+            window.start_folder_import(batch_folder)
+
+    assert repository.db.connect() is ui_connection
+    assert ui_connection.execute("SELECT 1").fetchone()[0] == 1
+    assert len(repository.list_files()) == TRACK_COUNT + 1
+
+
+def test_a_failed_import_after_wait_still_closes(
+    qtbot: Any, window_parts: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Choosing Wait closes the window even when the batch fails instead of committing."""
+    window, repository, gate, folder = window_parts
+    monkeypatch.setattr(window, "ask_close_during_import", lambda: "wait")
+    monkeypatch.setattr(repository, "batch", lambda: FailingBatch(gate))
+    window.show()
+
+    with qtbot.waitSignal(window.import_controller.completed, timeout=SIGNAL_TIMEOUT_MS) as done:
+        window.start_folder_import(folder)
+        window.close()
+        gate.set()
+
+    qtbot.waitUntil(lambda: not window.isVisible(), timeout=SIGNAL_TIMEOUT_MS)
+    assert done.args[0] is None
+    assert "OperationalError: disk I/O error" in window.import_controller.last_error
 
 
 def test_staying_open_keeps_the_import_running(

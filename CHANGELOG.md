@@ -26,7 +26,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Folder import runs on a worker thread (D78b1).
   - A modal progress dialog shows the current file, its number, and a Cancel button. Playback keeps running.
   - The scan runs first. Every file then imports in one database transaction, with a savepoint per file.
-  - A file that fails with a file or database error stays out, and the rest of the batch commits.
+  - A file that fails with any error stays out and appears in the report, and the rest of the batch commits. An untrusted file can make a parser raise any error type. The log keeps the traceback.
+  - The worker closes its own database connection before it reports. The window never waits on that close. The window's own connection stays open.
   - Cancel finishes the current file, then rolls back the whole batch. A crash also leaves nothing from the batch.
   - A report dialog shows the result, a count per category, and expandable per-file lists. Copy puts the report on the clipboard as plain text.
   - Closing the window during an import asks whether to wait for the commit or cancel. Either choice closes the window once the batch ends.
@@ -34,13 +35,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `Repository.batch()` holds every write on one thread in a single transaction. `RepositoryBatch.savepoint()` scopes a rollback to one item.
   - An item whose savepoint cannot roll back raises `BatchIntegrityError`, and the whole batch rolls back. No partial item reaches the commit.
   - A failed batch rollback logs a warning and keeps the original error. SQLite discards the uncommitted batch when the connection closes.
+  - A batch refuses to start on a connection with an uncommitted transaction. It never absorbs or discards other work.
 - `ImportService.import_paths` takes optional `progress` and `should_cancel` callbacks. `ImportBatchReport` adds `failed_files`, `scanned_count`, and `outcome`.
 - Added `tests/unit/test_import_batch_transaction.py` and `tests/unit/test_ui_folder_import.py`.
 
 ### Changed
 
 - The package version moves to 0.34.0.
-- Without callbacks, `ImportService.import_paths` also imports in one transaction. A file that raises a file or database error now appears in `failed_files` and no longer stops the call.
+- Without callbacks, `ImportService.import_paths` also imports in one transaction. A file that raises any error now appears in `failed_files` and no longer stops the call.
 - Item 4 of the decision record no longer claims that no runtime dependency carries a copyleft license. PySide6, Qt, and libsndfile carry LGPL licenses.
 - A new item 5 in the decision record records that user installs come only from the packaged bundles, never from a pip install.
 

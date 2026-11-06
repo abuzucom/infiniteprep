@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import sqlite3
+import logging
 import uuid
 from collections import deque
 from collections.abc import Callable
@@ -15,7 +15,7 @@ from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
     TechnicalAndTagMetadata,
 )
-from infiniteprep.db.repositories import Repository, RepositoryBatch
+from infiniteprep.db.repositories import BatchIntegrityError, Repository, RepositoryBatch
 from infiniteprep.domain.enums import (
     AudioFormat,
     GroupingBasis,
@@ -30,8 +30,8 @@ MULTITRACK_DURATION_THRESHOLD_SEC: Final[float] = 1200.0
 MAX_DIRECTORY_DEPTH: Final[int] = 32
 MAX_DISCOVERED_FILES: Final[int] = 10_000
 MAX_IMPORT_FILE_BYTES: Final[int] = 2_147_483_648  # 2 GiB per file
-# A file that fails with one of these skips alone. Any other error rolls back the batch.
-PER_FILE_ERRORS: Final[tuple[type[Exception], ...]] = (OSError, sqlite3.Error)
+
+logger = logging.getLogger(__name__)
 
 ProgressCallback = Callable[[int, int, str], None]
 CancelCheck = Callable[[], bool]
@@ -165,8 +165,9 @@ class ImportService:
         The scan runs first. Every file then imports inside one transaction, with a
         savepoint per file. progress receives (file number, total, path) before each
         file. A true should_cancel stops before the next file and rolls back the batch.
-        A file or database error skips its file alone. Any other error, including one
-        raised by progress or should_cancel, rolls back the batch and propagates.
+        Any error while importing one file skips that file alone and lands in
+        failed_files. An error raised by progress or should_cancel, or a savepoint that
+        cannot roll back, rolls back the whole batch and propagates.
         """
         report = ImportBatchReport(batch_id=str(uuid.uuid4()))
         discovered = discover_files_bounded(paths)
@@ -196,11 +197,16 @@ class ImportService:
             self._import_in_savepoint(file_path, run)
 
     def _import_in_savepoint(self, file_path: Path, run: _ImportRun) -> None:
-        """Import one file. A file or database error rolls back that file only."""
+        """Import one file. Any error rolls back that file only and records it as failed."""
         try:
             with run.batch.savepoint():
                 self._import_single_file(file_path, run.batch_id, run.source_type, run.report)
-        except PER_FILE_ERRORS as exc:
+        except BatchIntegrityError:
+            raise
+        # A parser reading an untrusted file can raise any error type. One bad file must
+        # not roll back the rest of the batch. The traceback goes to the log.
+        except Exception as exc:
+            logger.warning("Import skipped one file after %s.", type(exc).__name__, exc_info=True)
             run.report.failed_files.append((str(file_path), f"{type(exc).__name__}: {exc}"))
 
     def _import_single_file(

@@ -127,7 +127,13 @@ class ImportWorker(QObject):
 
     @Slot()
     def run(self) -> None:
-        """Import the paths, then emit finished with the report or failed with the error."""
+        """Import the paths, then emit finished with the report or failed with the error.
+
+        The worker closes its own SQLite connection before either signal, so the UI
+        thread's join after the signal waits on nothing.
+        """
+        report: ImportBatchReport | None = None
+        error_text = ""
         try:
             report = self.import_service.import_paths(
                 list(self.paths),
@@ -138,12 +144,14 @@ class ImportWorker(QObject):
         # already rolled back, so the UI reports the error and stays usable.
         except Exception as exc:
             logger.exception("Folder import failed and rolled back.")
-            self.failed.emit(f"{type(exc).__name__}: {exc}")
+            error_text = f"{type(exc).__name__}: {exc}"
+        finally:
+            # DatabaseManager keeps one connection per thread. This closes the worker's.
+            self.import_service.repo.db.close()
+        if report is None:
+            self.failed.emit(error_text)
         else:
             self.finished.emit(report)
-        finally:
-            # The worker thread's SQLite connection closes with the thread.
-            self.import_service.repo.db.close()
 
 
 class FolderImportController(QObject):

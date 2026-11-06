@@ -7,6 +7,10 @@ from pathlib import Path
 
 import pytest
 
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MetadataTagAdapter,
+    TechnicalAndTagMetadata,
+)
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import BatchIntegrityError, Repository
 from infiniteprep.domain.enums import GroupingBasis, SourceType
@@ -16,6 +20,20 @@ from tests.fixtures.audio_factory import create_wav_fixture
 
 TRACK_COUNT = 3
 SHORT_DURATION_SEC = 0.5
+
+
+class FailingTagAdapter(MetadataTagAdapter):
+    """Raise an error outside the reader's damaged-file list for one chosen file."""
+
+    def __init__(self, failing_name: str) -> None:
+        super().__init__()
+        self.failing_name = failing_name
+
+    def read_metadata(self, file_path: Path) -> TechnicalAndTagMetadata:
+        """Fail on the chosen file, as an unexpected parser error would."""
+        if file_path.name == self.failing_name:
+            raise ZeroDivisionError("division by zero")
+        return super().read_metadata(file_path)
 
 
 def make_tracks(folder: Path, count: int = TRACK_COUNT) -> list[Path]:
@@ -111,6 +129,46 @@ def test_a_file_that_fails_is_skipped_and_the_rest_commit(
     assert sorted(asset.current_path for asset in repository.list_files()) == sorted(
         str(track.resolve()) for track in (tracks[0], tracks[2])
     )
+
+
+def test_any_error_in_one_file_skips_only_that_file(
+    repository: Repository, tmp_path: Path
+) -> None:
+    """An error type the reader does not expect still skips one file, not the whole batch."""
+    tracks = make_tracks(tmp_path / "crate")
+    service = ImportService(repository, FailingTagAdapter(tracks[1].name))
+
+    report = service.import_paths([tmp_path / "crate"])
+
+    assert report.outcome is ImportOutcome.COMMITTED
+    assert report.failed_files == [
+        (str(tracks[1].resolve()), "ZeroDivisionError: division by zero")
+    ]
+    assert len(repository.list_files()) == TRACK_COUNT - 1
+
+
+def test_each_thread_gets_its_own_connection(repository: Repository) -> None:
+    """A worker thread's connection is a different object from the calling thread's."""
+    main_connection = repository.db.connect()
+    worker_connections: list[object] = []
+    worker = threading.Thread(target=lambda: worker_connections.append(repository.db.connect()))
+    worker.start()
+    worker.join()
+
+    assert worker_connections
+    assert worker_connections[0] is not main_connection
+    assert repository.db.connect() is main_connection
+
+
+def test_a_batch_refuses_an_open_transaction(repository: Repository) -> None:
+    """A batch never absorbs or discards uncommitted work already on the connection."""
+    connection = repository.db.connect()
+    connection.execute("BEGIN")
+    try:
+        with pytest.raises(RuntimeError, match="uncommitted transaction"), repository.batch():
+            pass
+    finally:
+        connection.rollback()
 
 
 def test_an_unexpected_error_rolls_back_and_propagates(

@@ -99,6 +99,13 @@ class Repository:
                 "opening another."
             )
         conn = self.db.connect()
+        # Every write outside a batch commits at once, so an open transaction here means
+        # uncommitted work from elsewhere. The batch refuses to absorb or discard it.
+        if conn.in_transaction:
+            raise RuntimeError(
+                "This thread's connection has an uncommitted transaction; commit or roll "
+                "it back before opening a batch."
+            )
         conn.execute("BEGIN")
         self._batch_state.active = True
         try:
