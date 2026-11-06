@@ -106,6 +106,27 @@ Before implementing live external integrations or selecting core libraries, this
 
 ---
 
+### 2.7 Third-Party License Scan (2026-11-06)
+
+A CI workflow downloaded every pinned wheel with native code for Windows x86-64, macOS arm64, and Linux x86-64, plus the pinned fpcalc archives. It listed each bundled library and read each license file. No downloaded binary ran.
+
+| Component | License | Use |
+|---|---|---|
+| Qt 6, PySide6, shiboken6 6.12.0 | LGPL-3.0-only (or GPL) | UI and playback. Only QtCore, QtGui, QtWidgets, QtMultimedia. |
+| FFmpeg 9.0.1 in Qt Multimedia | LGPL-2.1-or-later | Playback decoding |
+| libsndfile, LAME, mpg123 in `soundfile` | LGPL | Decoding for analysis |
+| FLAC, Ogg, Vorbis, Opus in `soundfile` | BSD-3-Clause | Decoding for analysis |
+| OpenBLAS, LAPACK in NumPy and SciPy | BSD-3-Clause, BSD-3-Clause-Open-MPI | Numerics |
+| libgfortran, libgcc in NumPy and SciPy | GPL-3.0-or-later WITH GCC-exception-3.1 | Runtime support. The exception permits bundling. |
+| libquadmath in NumPy and SciPy (Linux, macOS) | LGPL-2.1-or-later | Runtime support |
+| fpcalc 1.5.1 | LGPL-2.1-or-later | Separate download after consent. Its static FFmpeg 4.4.1 build sets no `--enable-gpl`, `--enable-version3`, `--enable-nonfree`, or `--enable-lib*` flag. Both archives match the pinned SHA-256 digests. |
+| PyInstaller 6.22.3 | GPL-2.0-or-later WITH Bootloader-exception | Build only |
+| cffi, cryptography, MarkupSafe, Jinja2, qt-material, keyring, platformdirs | Permissive | Runtime and transitive |
+
+`NOTICE` lists the same components for distribution.
+
+---
+
 ## 3. Application Stack & Target OS Summary
 
 - **Target Operating Systems**:
@@ -128,4 +149,5 @@ Before implementing live external integrations or selecting core libraries, this
 1. **AcoustID Commercial Key**: Before commercial sale/distribution of InfinitePrep, obtain a commercial API plan from AcoustID (free API key is sufficient for development and non-commercial pilot).
 2. **Essentia AGPLv3 vs. Built-in BSD Analyzer**: Resolved. `LocalDspAnalyzer` (BSD-compatible) is the only analyzer. The Essentia subprocess adapter is removed (D223).
 3. **Beatport Partner Application**: Submit a formal partner API application to Beatport if official Beatport store BPM/key/genre enrichment is desired post-MVP.
-4. **Runtime Dependency License Clearance**: The runtime dependencies in `pyproject.toml` carry no copyleft license. Tag reading and writing use the in-house codecs under `adapters/metadata_io/`, so no GPL-2.0-or-later tag library enters the bundle. A test in `tests/unit/test_dependency_allowlist.py` fails when any module under `src/` imports a package outside the standard library, the first-party package, and the declared runtime dependencies.
+4. **Runtime Dependency License Clearance**: No runtime dependency carries a strong copyleft license (GPL or AGPL) for the parts InfinitePrep uses. PySide6, Qt, and the libsndfile inside `soundfile` carry LGPL licenses, and the packaged layout keeps them dynamically linked and replaceable. Section 2.7 lists each component. Tag reading and writing use the in-house codecs under `adapters/metadata_io/`, so no GPL-2.0-or-later tag library enters the bundle. A test in `tests/unit/test_dependency_allowlist.py` fails when any module under `src/` imports a package outside the standard library, the first-party package, and the declared runtime dependencies. No CI check enforces license policy. Every dependency proposal states its license for human review (D210).
+5. **PySide6 wheels carry GPL-3 parts**: The `PySide6_Addons` wheel ships Qt modules available only under GPL-3 (Charts, Data Visualization, Graphs, Virtual Keyboard, Quick 3D, Quick 3D Physics, Lottie Animation, Quick Timeline, Network Authorization, HTTP Server). The `PySide6_Essentials` and `PySide6_Addons` wheels ship Qt tools under GPL-3 with Qt GPL exception 1.0 (designer, linguist, assistant, lupdate, lrelease, uic, rcc, svgtoqml, the qml tools, qsb, balsam, balsamui). InfinitePrep imports only QtCore, QtGui, QtWidgets, and QtMultimedia. User installs therefore come only from the packaged bundles, never from a pip install (D228). The release builds plan a bundle check that rejects any Qt tool and any GPL-3-only Qt library (D231).

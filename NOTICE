@@ -1,0 +1,44 @@
+InfinitePrep
+Copyright (c) 2026, ABUZUCOM LLC
+
+InfinitePrep is licensed under the BSD 3-Clause License. See LICENSE.
+
+The application depends on the third-party components below. Each keeps
+its own license. The license texts ship inside each component's package.
+A copyleft scan on 2026-11-06 confirmed these licenses for the pinned
+versions in requirements-lock.txt.
+
+Desktop UI and playback
+- Qt 6 and PySide6 6.12.0 (QtCore, QtGui, QtWidgets, QtMultimedia):
+  LGPL-3.0-only. InfinitePrep links Qt dynamically, and the packaged
+  folder layout keeps every Qt library replaceable.
+- FFmpeg 9.0.1, inside Qt Multimedia: LGPL-2.1-or-later.
+- shiboken6 6.12.0: LGPL-3.0-only.
+
+Audio decoding and analysis
+- soundfile 0.14.0: BSD-3-Clause.
+- libsndfile, inside soundfile: LGPL-2.1-or-later.
+- LAME and mpg123, inside soundfile: LGPL.
+- FLAC, Ogg, Vorbis, and Opus libraries, inside soundfile: BSD-3-Clause.
+- NumPy 2.5.4 and SciPy 1.18.1: BSD-3-Clause.
+- OpenBLAS, inside NumPy and SciPy: BSD-3-Clause.
+- LAPACK, inside NumPy and SciPy: BSD-3-Clause-Open-MPI.
+- GCC runtime libraries (libgfortran, libgcc), inside NumPy and SciPy:
+  GPL-3.0-or-later WITH GCC-exception-3.1.
+- libquadmath, inside NumPy and SciPy on Linux and macOS:
+  LGPL-2.1-or-later.
+
+Other runtime dependencies
+- keyring 25.7.0 and platformdirs 4.14.2: MIT.
+- qt-material 2.14: BSD-2-Clause.
+- Jinja2 3.1.6 and MarkupSafe 3.0.2: BSD-3-Clause.
+
+Optional separate download
+- fpcalc 1.5.1 (Chromaprint): LGPL-2.1-or-later, statically linked with
+  an FFmpeg 4.4.1 build configured without GPL or nonfree components.
+  InfinitePrep downloads it only after user consent and runs it as a
+  separate program.
+
+Build tools (not shipped)
+- PyInstaller: GPL-2.0-or-later WITH Bootloader-exception. The exception
+  covers the bootloader inside the packaged application.
