@@ -23,16 +23,17 @@ SHORT_DURATION_SEC = 0.5
 
 
 class FailingTagAdapter(MetadataTagAdapter):
-    """Raise an error outside the reader's damaged-file list for one chosen file."""
+    """Raise a chosen exception for one chosen file, as an unexpected parser error would."""
 
-    def __init__(self, failing_name: str) -> None:
+    def __init__(self, failing_name: str, error: BaseException | None = None) -> None:
         super().__init__()
         self.failing_name = failing_name
+        self.error = error or ZeroDivisionError("division by zero")
 
     def read_metadata(self, file_path: Path) -> TechnicalAndTagMetadata:
-        """Fail on the chosen file, as an unexpected parser error would."""
+        """Raise the chosen exception on the chosen file, and read every other file."""
         if file_path.name == self.failing_name:
-            raise ZeroDivisionError("division by zero")
+            raise self.error
         return super().read_metadata(file_path)
 
 
@@ -143,6 +144,21 @@ def test_any_error_in_one_file_skips_only_that_file(repository: Repository, tmp_
         (str(tracks[1].resolve()), "ZeroDivisionError: division by zero")
     ]
     assert len(repository.list_files()) == TRACK_COUNT - 1
+
+
+@pytest.mark.parametrize("interrupt", [KeyboardInterrupt(), SystemExit(1)])
+def test_an_interrupt_in_one_file_rolls_back_the_whole_batch(
+    repository: Repository, tmp_path: Path, interrupt: BaseException
+) -> None:
+    """KeyboardInterrupt and SystemExit are not Exception. They escape the per-file handler."""
+    tracks = make_tracks(tmp_path / "crate")
+    service = ImportService(repository, FailingTagAdapter(tracks[1].name, interrupt))
+
+    with pytest.raises(type(interrupt)):
+        service.import_paths([tmp_path / "crate"])
+
+    assert repository.list_files() == []
+    assert repository.list_source_groups() == []
 
 
 def test_each_thread_gets_its_own_connection(repository: Repository) -> None:
