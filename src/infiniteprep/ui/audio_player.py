@@ -20,6 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from infiniteprep.ui.time_format import split_time_seconds
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_ENVELOPE_BINS: Final[int] = 120
@@ -79,9 +81,13 @@ def compute_cue_jump_positions(duration_sec: float) -> dict[str, float]:
 
 
 def format_clock(seconds: float) -> str:
-    """Format a time in seconds as MM:SS.d."""
-    minutes, rest = divmod(max(0.0, float(seconds)), SECONDS_PER_MINUTE)
-    return f"{int(minutes):02d}:{rest:04.1f}"
+    """Format a player time as M:SS.mmm or H:MM:SS.mmm."""
+    total_milliseconds = int(max(0.0, float(seconds)) * MS_PER_SECOND)
+    total_seconds, milliseconds = divmod(total_milliseconds, int(MS_PER_SECOND))
+    hours, minutes, seconds_part = split_time_seconds(total_seconds)
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds_part:02d}.{milliseconds:03d}"
+    return f"{minutes}:{seconds_part:02d}.{milliseconds:03d}"
 
 
 def _stream_block_peaks(file_path: Path, max_frames: int) -> list[float]:

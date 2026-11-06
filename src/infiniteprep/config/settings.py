@@ -142,6 +142,10 @@ class AppSettings:
     transcode_preset: str = "XDJ_LOSSLESS_AUTO"
     playlist_relative_paths: bool = True
     theme: str = "dark_teal.xml"
+    file_table_layout: str = ""  # Base64-encoded QHeaderView state.
+    file_table_column_count: int = 0  # Column count when the layout was saved.
+    detail_table_layout: str = ""  # Base64-encoded QHeaderView state.
+    detail_table_column_count: int = 0  # Column count when the layout was saved.
 
 
 class SettingsManager:

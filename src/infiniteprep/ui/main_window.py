@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QByteArray, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -38,6 +40,7 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
+from infiniteprep.ui.time_format import split_time_seconds
 
 TABLE_COLUMNS: Final[tuple[str, ...]] = (
     "Filename",
@@ -59,6 +62,15 @@ STATUS_FILTER_STRETCH: Final[int] = 1
 SPLITTER_TOP_HEIGHT: Final[int] = 380
 SPLITTER_BOTTOM_HEIGHT: Final[int] = 420
 PLAYLIST_SUFFIX: Final[str] = ".m3u8"
+
+
+def format_duration(seconds: float) -> str:
+    """Format a track duration as M:SS or H:MM:SS, truncating fractions."""
+    whole_seconds = int(max(0.0, float(seconds)))
+    hours, minutes, seconds_part = split_time_seconds(whole_seconds)
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds_part:02d}"
+    return f"{minutes}:{seconds_part:02d}"
 
 
 class MainWindow(QMainWindow):
@@ -115,6 +127,7 @@ class MainWindow(QMainWindow):
 
         self._setup_toolbar()
         self._setup_central_widget()
+        self._restore_table_layouts()
         self.refresh_file_table()
 
     def _setup_toolbar(self) -> None:
@@ -201,7 +214,9 @@ class MainWindow(QMainWindow):
         root_layout.addLayout(filter_bar)
 
         self.file_table.setHorizontalHeaderLabels(list(TABLE_COLUMNS))
-        self.file_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        file_header = self.file_table.horizontalHeader()
+        file_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        file_header.setStretchLastSection(True)
         self.file_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.file_table.itemSelectionChanged.connect(self._on_table_selection_changed)
 
@@ -211,6 +226,53 @@ class MainWindow(QMainWindow):
         splitter.setSizes([SPLITTER_TOP_HEIGHT, SPLITTER_BOTTOM_HEIGHT])
         root_layout.addWidget(splitter)
         self.setCentralWidget(central)
+
+    def _restore_table_layouts(self) -> None:
+        """Restore saved file and detail column layouts when column counts match."""
+        settings = SettingsManager().load()
+        headers = (
+            (
+                self.file_table.horizontalHeader(),
+                settings.file_table_layout,
+                settings.file_table_column_count,
+            ),
+            (
+                self.detail_panel.fields_table.horizontalHeader(),
+                settings.detail_table_layout,
+                settings.detail_table_column_count,
+            ),
+        )
+        for header, encoded_state, saved_column_count in headers:
+            if saved_column_count == header.count() and encoded_state:
+                self._restore_header_state(header, encoded_state)
+            header.sectionResized.connect(self._save_table_layouts)
+
+    @staticmethod
+    def _restore_header_state(header: QHeaderView, encoded_state: str) -> None:
+        """Restore one header from a validated base64-encoded Qt state."""
+        if not isinstance(encoded_state, str):
+            return
+        try:
+            state = base64.b64decode(encoded_state, validate=True)
+        except (binascii.Error, ValueError):
+            return
+        header.restoreState(QByteArray(state))
+
+    def _save_table_layouts(self, *_args: int) -> None:
+        """Persist file and detail header states after a user resizes a column."""
+        settings_manager = SettingsManager()
+        settings = settings_manager.load()
+        file_header = self.file_table.horizontalHeader()
+        detail_header = self.detail_panel.fields_table.horizontalHeader()
+        settings.file_table_layout = base64.b64encode(bytes(file_header.saveState())).decode(
+            "ascii"
+        )
+        settings.file_table_column_count = file_header.count()
+        settings.detail_table_layout = base64.b64encode(bytes(detail_header.saveState())).decode(
+            "ascii"
+        )
+        settings.detail_table_column_count = detail_header.count()
+        settings_manager.save(settings)
 
     def refresh_file_table(self) -> None:
         """Reload all FileAssets from Repository and populate the filtered table."""
@@ -269,7 +331,7 @@ class MainWindow(QMainWindow):
         return [
             Path(asset.current_path).name,
             str(asset.format).upper(),
-            f"{asset.duration:.1f}s" if asset.duration is not None else "-",
+            format_duration(asset.duration) if asset.duration is not None else "-",
             self._summary_pair(std, approved, top_by_field, FieldName.ARTIST.value),
             self._summary_pair(std, approved, top_by_field, FieldName.TITLE.value),
             self._effective_val(std, approved, top_by_field, FieldName.MIX_NAME.value),

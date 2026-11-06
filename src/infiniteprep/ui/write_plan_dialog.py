@@ -77,7 +77,9 @@ class WritePlanDialog(QDialog):
                 "Safety Status",
             ]
         )
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setStretchLastSection(True)
         root.addWidget(self.table, stretch=1)
 
         bottom = QHBoxLayout()
