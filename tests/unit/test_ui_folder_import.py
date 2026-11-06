@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication
 
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
@@ -162,6 +162,22 @@ def test_staying_open_keeps_the_import_running(
 
     assert window.isVisible()
     assert len(repository.list_files()) == TRACK_COUNT
+
+
+def test_progress_and_report_labels_show_plain_text(qtbot: Any, window_parts: Any) -> None:
+    """Labels that can show file names never interpret them as rich text."""
+    window, _repository, gate, folder = window_parts
+
+    with qtbot.waitSignal(window.import_controller.completed, timeout=SIGNAL_TIMEOUT_MS) as done:
+        window.start_folder_import(folder)
+        progress_label = window.import_controller.progress_label
+        assert progress_label is not None
+        assert progress_label.textFormat() == Qt.TextFormat.PlainText
+        gate.set()
+
+    dialog = ImportReportDialog(done.args[0])
+    qtbot.addWidget(dialog)
+    assert dialog.headline_label.textFormat() == Qt.TextFormat.PlainText
 
 
 def test_report_text_lists_counts_and_failed_files() -> None:

@@ -433,14 +433,25 @@ class MainWindow(QMainWindow):
             self.close()
             return
         if report is None:
-            QMessageBox.warning(
-                self,
-                "Import Failed",
-                "The import stopped and nothing was imported "
-                f"({self.import_controller.last_error}). Check the folder and try again.",
-            )
+            self._show_import_failure(self.import_controller.last_error)
             return
         ImportReportDialog(report, self).open()
+
+    def _show_import_failure(self, error_text: str) -> None:
+        """Warn that the import rolled back. The error can name a file, so it stays plain text."""
+        box = QMessageBox(
+            QMessageBox.Icon.Warning,
+            "Import Failed",
+            "",
+            QMessageBox.StandardButton.Ok,
+            self,
+        )
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        box.setText(
+            f"The import stopped and nothing was imported ({error_text}). "
+            "Check the folder and try again."
+        )
+        box.open()
 
     def ask_close_during_import(self) -> str:
         """Ask whether to wait for the running import or cancel it.

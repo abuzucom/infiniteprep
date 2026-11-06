@@ -50,6 +50,13 @@ def _report_sections(report: ImportBatchReport) -> list[tuple[str, list[str]]]:
     ]
 
 
+def make_plain_label(text: str, parent: QWidget | None = None) -> QLabel:
+    """Return a label that shows text literally. File names never render as rich text."""
+    label = QLabel(text, parent)
+    label.setTextFormat(Qt.TextFormat.PlainText)
+    return label
+
+
 def _report_headline(report: ImportBatchReport) -> str:
     """Return the one-line result of the batch."""
     if report.outcome is ImportOutcome.CANCELLED:
@@ -79,7 +86,8 @@ class ImportReportDialog(QDialog):
         self.resize(REPORT_DIALOG_WIDTH, REPORT_DIALOG_HEIGHT)
         self.report_text = format_import_report(report)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel(_report_headline(report), self))
+        self.headline_label = make_plain_label(_report_headline(report), self)
+        layout.addWidget(self.headline_label)
         self.sections_tree = QTreeWidget(self)
         self.sections_tree.setHeaderHidden(True)
         for title, entries in _report_sections(report):
@@ -154,6 +162,7 @@ class FolderImportController(QObject):
         self._thread: QThread | None = None
         self._worker: ImportWorker | None = None
         self._dialog: QProgressDialog | None = None
+        self.progress_label: QLabel | None = None
         self.last_error = ""
 
     def is_running(self) -> bool:
@@ -186,6 +195,9 @@ class FolderImportController(QObject):
     def _build_progress_dialog(self) -> QProgressDialog:
         """Create the window-modal progress dialog with a Cancel button."""
         dialog = QProgressDialog("Scanning folder...", "Cancel", 0, 0, self.parent_widget)
+        # The label shows file paths, so it stays plain text.
+        self.progress_label = make_plain_label("Scanning folder...", dialog)
+        dialog.setLabel(self.progress_label)
         dialog.setWindowTitle("Importing")
         dialog.setWindowModality(Qt.WindowModality.WindowModal)
         dialog.setMinimumDuration(0)
