@@ -20,6 +20,8 @@ from infiniteprep.user_agent import PROJECT_URL, USER_AGENT
 
 STUB_BODY = b"{}"
 REQUEST_URL = "https://example.invalid/api"
+# A placeholder. The stubbed urlopen never sends it anywhere.
+STUB_CREDENTIAL = "placeholder-value"
 
 
 class _StubResponse:
@@ -60,7 +62,8 @@ def _musicbrainz_get() -> Any:
 
 
 def _discogs_get() -> Any:
-    return DiscogsAdapter(_repository(), user_token="test-token").http_get_json(REQUEST_URL, {})
+    adapter = DiscogsAdapter(_repository(), user_token=STUB_CREDENTIAL)
+    return adapter.http_get_json(REQUEST_URL, {})
 
 
 def _acoustid_get() -> Any:
@@ -74,7 +77,7 @@ def _fpcalc_download(tmp_path: Path) -> Any:
 
 def test_user_agent_names_version_and_repository() -> None:
     """The User-Agent carries the app version and the real repository URL, and no email."""
-    assert USER_AGENT == f"InfinitePrep/{__version__} (+{PROJECT_URL})"
+    assert f"InfinitePrep/{__version__} (+{PROJECT_URL})" == USER_AGENT
     assert PROJECT_URL == "https://github.com/abuzucom/infiniteprep"
     assert "@" not in USER_AGENT
 
