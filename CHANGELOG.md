@@ -5,6 +5,15 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.3] (2026-11-07)
+
+### Added
+
+- Add a GitHub Pages landing page in `docs/index.html`.
+- Describe the current desktop workflow and the project's planned direction.
+- Add noindex metadata and robots.txt preferences for AI training crawlers.
+- Set `infiniteprep.dev` as the GitHub Pages custom domain.
+
 ## [0.32.0] (2026-11-05)
 
 ### Changed
