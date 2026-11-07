@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import unicodedata
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
@@ -44,6 +45,13 @@ COL_OTHER_VALUE: Final[int] = 1
 # Longer values show cut short in the cell. The tooltip holds the full text.
 OTHER_TAG_DISPLAY_LIMIT: Final[int] = 200
 TRUNCATION_MARK: Final[str] = "..."
+# Code points that attach to the character before them. A truncation cut never lands
+# before one of these, so a visible character never splits.
+MARK_CATEGORIES: Final[frozenset[str]] = frozenset({"Mn", "Mc", "Me"})
+ZERO_WIDTH_JOINER: Final[str] = "‍"
+VARIATION_SELECTORS: Final[tuple[int, int]] = (0xFE00, 0xFE0F)
+VARIATION_SELECTORS_SUPPLEMENT: Final[tuple[int, int]] = (0xE0100, 0xE01EF)
+EMOJI_SKIN_TONE_MODIFIERS: Final[tuple[int, int]] = (0x1F3FB, 0x1F3FF)
 # The app adds keys with this prefix itself, for example _bits_per_sample (D245).
 INTERNAL_TAG_PREFIX: Final[str] = "_"
 LIST_VALUE_SEPARATOR: Final[str] = "; "
@@ -78,11 +86,40 @@ def format_other_tag_value(value: object) -> str:
     return _format_scalar_tag_value(value)
 
 
+def _extends_previous_character(char: str) -> bool:
+    """Return True when char joins the character before it into one visible grapheme."""
+    code_point = ord(char)
+    return (
+        unicodedata.category(char) in MARK_CATEGORIES
+        or char == ZERO_WIDTH_JOINER
+        or VARIATION_SELECTORS[0] <= code_point <= VARIATION_SELECTORS[1]
+        or VARIATION_SELECTORS_SUPPLEMENT[0] <= code_point <= VARIATION_SELECTORS_SUPPLEMENT[1]
+        or EMOJI_SKIN_TONE_MODIFIERS[0] <= code_point <= EMOJI_SKIN_TONE_MODIFIERS[1]
+    )
+
+
+def _grapheme_safe_cut(text: str, cut: int) -> int:
+    """Move cut back until it falls between two visible graphemes.
+
+    A cut before a combining mark, a joiner, a variation selector, or a skin tone
+    modifier, or right after a joiner, would split one visible character.
+    """
+    while cut > 0 and (
+        _extends_previous_character(text[cut]) or text[cut - 1] == ZERO_WIDTH_JOINER
+    ):
+        cut -= 1
+    return cut
+
+
 def truncate_for_cell(text: str) -> str:
-    """Return text cut to OTHER_TAG_DISPLAY_LIMIT characters, marked when cut."""
+    """Return text cut to at most OTHER_TAG_DISPLAY_LIMIT characters, marked when cut.
+
+    The cut never splits a visible character.
+    """
     if len(text) <= OTHER_TAG_DISPLAY_LIMIT:
         return text
-    return text[: OTHER_TAG_DISPLAY_LIMIT - len(TRUNCATION_MARK)] + TRUNCATION_MARK
+    cut = _grapheme_safe_cut(text, OTHER_TAG_DISPLAY_LIMIT - len(TRUNCATION_MARK))
+    return text[:cut] + TRUNCATION_MARK
 
 
 def other_tag_rows(raw_custom_tags: Mapping[str, object]) -> list[tuple[str, str]]:
