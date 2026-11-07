@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Final
@@ -29,6 +30,7 @@ from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
 from infiniteprep.smoke_check import run_smoke_check
 from infiniteprep.startup_storage import open_storage
+from infiniteprep.storage_paths import appimage_launch_from_environment
 from infiniteprep.ui.action_handlers import (
     export_playlist_with_feedback,
     run_transcode_with_confirmation,
@@ -98,6 +100,7 @@ def launch_desktop_app() -> int:
         frozen=bool(getattr(sys, "frozen", False)),
         confirm_fallback=confirm_storage_fallback,
         show_error=show_storage_error,
+        appimage=appimage_launch_from_environment(os.environ),
     )
     if isinstance(opened, int):
         return opened
