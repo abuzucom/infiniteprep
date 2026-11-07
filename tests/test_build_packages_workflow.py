@@ -11,7 +11,7 @@ import yaml
 
 WORKFLOW_PATH = Path(__file__).resolve().parent.parent / ".github/workflows/build-packages.yml"
 FULL_SHA_REFERENCE = re.compile(r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$")
-PINNED_IMAGES = ["windows-2025", "macos-14", "ubuntu-22.04"]
+PINNED_IMAGES = ["windows-2025", "macos-15", "ubuntu-22.04"]
 RETENTION_DAYS = 3
 
 

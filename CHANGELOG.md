@@ -5,7 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.38.0] (2026-11-07)
+## [0.38.1] (2026-11-07)
+
+### Fixed
+
+- The manual `build-packages` workflow builds on the pinned `macos-15` image. GitHub no longer supports `macos-14`. GitHub cancelled the macOS job on that image before it started.
 
 ### Added
 
@@ -34,7 +38,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `test_storage_defaults.py`
   - `test_storage_prompt.py`
 - A manual `build-packages` workflow builds the PyInstaller bundle on each target OS (D83a0).
-  - The jobs run on pinned `windows-2025`, `macos-14`, and `ubuntu-22.04` images with Python 3.12. The Linux baseline is glibc 2.35.
+  - The jobs run on pinned `windows-2025`, `macos-15`, and `ubuntu-22.04` images with Python 3.12. The Linux baseline is glibc 2.35.
   - Each job runs `pip check` after the install. Drift between `requirements-lock.txt` and `pyproject.toml` fails the build.
   - Each job runs the built app's smoke check and fails when the written version does not match.
   - Each job uploads its bundle with `actions/upload-artifact` v7.0.2, pinned by commit. GitHub deletes each upload after 3 days.
