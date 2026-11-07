@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import tempfile
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -29,7 +30,7 @@ APP_NAME: Final[str] = "InfinitePrep"
 APP_AUTHOR: Final[str] = "InfinitePrep"
 PORTABLE_MARKER_NAME: Final[str] = "portable.mode"
 PORTABLE_DATA_DIR_NAME: Final[str] = "Data"
-WRITE_PROBE_NAME: Final[str] = ".write-probe"
+WRITE_PROBE_PREFIX: Final[str] = ".write-probe-"
 FALLBACK_LIST_NAME: Final[str] = "storage_fallback.json"
 BACKUP_DIR_NAME: Final[str] = "backups"
 BIN_DIR_NAME: Final[str] = "bin"
@@ -93,12 +94,15 @@ def _portable_locations(portable_dir: Path) -> StorageLocations:
 
 
 def _is_writable_folder(folder: Path) -> bool:
-    """Create folder if needed and prove it accepts a new file."""
-    probe = folder / WRITE_PROBE_NAME
+    """Create folder if needed and prove it accepts a new file.
+
+    The probe gets a unique temporary name and deletes itself, so it never touches a
+    file already in the folder.
+    """
     try:
         folder.mkdir(parents=True, exist_ok=True)
-        probe.write_bytes(b"")
-        probe.unlink()
+        with tempfile.NamedTemporaryFile(dir=folder, prefix=WRITE_PROBE_PREFIX):
+            pass
     except OSError as error:
         logger.info("Portable Data folder is not writable: %s", error.strerror)
         return False

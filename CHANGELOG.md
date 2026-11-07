@@ -14,9 +14,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Only a packaged build looks for the file. A run from source always uses the per-user folders.
   - A portable copy starts with its own empty library. It never reads or copies the per-user one.
   - When the app cannot write to `Data`, a prompt offers `Use my user profile` or `Quit`, with a `Remember` checkbox. A remembered choice clears itself once the app can write to `Data` again.
+  - The write check uses a uniquely named temporary file that deletes itself. It never touches a file already in `Data`.
 - `src/infiniteprep/storage_paths.py` chooses every storage folder once at startup. Settings, backups, the fpcalc tool, and the waveform cache take the default folder from it.
-- Three new test files cover portable mode:
+- Four new test files cover portable mode:
   - `test_storage_paths.py`
+  - `test_storage_probe.py`
   - `test_storage_defaults.py`
   - `test_storage_prompt.py`
 - A manual `build-packages` workflow builds the PyInstaller bundle on each target OS (D83a0).
