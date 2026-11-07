@@ -20,6 +20,7 @@ FALLBACK_TEXT_TEMPLATE: Final[str] = (
 USE_PER_USER_LABEL: Final[str] = "Use my user profile"
 QUIT_LABEL: Final[str] = "Quit"
 REMEMBER_LABEL: Final[str] = "Remember this for this folder"
+STORAGE_ERROR_TITLE: Final[str] = "InfinitePrep Cannot Start"
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,19 @@ def build_fallback_prompt(folder: Path) -> FallbackPrompt:
     remember = QCheckBox(REMEMBER_LABEL, box)
     box.setCheckBox(remember)
     return FallbackPrompt(box, use_button, remember)
+
+
+def build_storage_error_box(message: str) -> QMessageBox:
+    """Return the startup storage error box. Its text is plain, since it can hold a path."""
+    box = QMessageBox(QMessageBox.Icon.Critical, STORAGE_ERROR_TITLE, "")
+    box.setTextFormat(Qt.TextFormat.PlainText)
+    box.setText(message)
+    return box
+
+
+def show_storage_error(message: str) -> None:
+    """Show why storage could not open, and wait until it is closed."""
+    build_storage_error_box(message).exec()
 
 
 def confirm_storage_fallback(folder: Path) -> FallbackAnswer:
