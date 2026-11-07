@@ -19,6 +19,8 @@ from typing import Final
 
 import platformdirs
 
+from infiniteprep.user_agent import USER_AGENT
+
 FPCALC_VERSION: Final[str] = "1.5.1"
 MAX_FPCALC_BINARY_BYTES: Final[int] = 33_554_432  # 32 MiB cap for extracted binary
 SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"[0-9A-Fa-f]{64}")
@@ -250,6 +252,6 @@ class FpcalcBootstrapService:
         """Download archive bytes over HTTPS."""
         if not url.startswith("https://"):
             raise ValueError(f"Bootstrap download URL must use https:// scheme: {url}")
-        req = urllib.request.Request(url, headers={"User-Agent": "InfinitePrep/0.1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=30) as resp:
             return bytes(resp.read(MAX_FPCALC_BINARY_BYTES))

@@ -14,6 +14,7 @@ from typing import Any, Final
 from infiniteprep.adapters.fingerprint.fpcalc_bootstrap import FpcalcBootstrapService
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.ports import FingerprintMatchItem, FingerprintResult
+from infiniteprep.user_agent import USER_AGENT
 
 ACOUSTID_API_URL: Final[str] = "https://api.acoustid.org/v2/lookup"
 CACHE_TTL_SEC: Final[int] = 86400
@@ -157,7 +158,7 @@ class ChromaprintAcoustIDAdapter:
         encoded = urllib.parse.urlencode(params)
         req = urllib.request.Request(
             f"{url}?{encoded}",
-            headers={"User-Agent": "InfinitePrep/0.1.0 (https://infiniteprep.local)"},
+            headers={"User-Agent": USER_AGENT},
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             raw_bytes = resp.read(MAX_API_RESPONSE_BYTES + 1)

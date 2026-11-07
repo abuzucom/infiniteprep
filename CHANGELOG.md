@@ -5,6 +5,32 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.0] (2026-11-07)
+
+### Added
+
+- The detail panel lists every `FieldName`. Track number, disc number, style, and the AcoustID, MusicBrainz, and Discogs IDs join the earlier twelve fields.
+- A read-only Other Tags table under the fields table lists each raw custom tag from the file (D242).
+  - Rows sort by key, ignoring case.
+  - Keys that start with an underscore belong to the app and stay hidden (D245).
+  - Binary values show the byte count and SHA-256. Values over 200 characters show cut short, with the full text in a tooltip. The cut never splits a visible character such as an accented letter or a joined emoji.
+  - The tooltip shows the tag text literally. A value that looks like HTML, such as an `img` tag, never renders as markup or loads anything.
+- `src/infiniteprep/user_agent.py` defines one `USER_AGENT` from the app version and `https://github.com/abuzucom/infiniteprep` (D221). It carries no email address.
+- `src/infiniteprep/qt_logging.py` adds `qt.multimedia.ffmpeg*=false` to `QT_LOGGING_RULES` before `QApplication` starts. Rules already set stay in place.
+- Six new test files cover the changes:
+  - `test_ui_detail_panel_refresh.py`
+  - `test_qt_logging_rules.py`
+  - `test_user_agent.py`
+  - `test_ui_detail_panel_audio_identity.py`
+  - `test_ui_detail_panel_truncation.py`
+  - `test_ui_detail_panel_tooltip.py`
+
+### Changed
+
+- A key notation change, an accepted proposal, a saved edit, or a lock toggle refreshes the detail tables only. The preview player keeps its track, position, and play state. Only a different file ID loads new audio. A new stored path under the same file ID keeps the loaded track (D246).
+- MusicBrainz, Discogs, AcoustID, and the fpcalc download send the shared `USER_AGENT`. `MB_USER_AGENT` and `DISCOGS_USER_AGENT` keep the same names and now hold that value.
+- The FFmpeg backend of Qt Multimedia no longer writes decoder messages to the console.
+
 ## [0.34.0] (2026-11-06)
 
 ### Removed
