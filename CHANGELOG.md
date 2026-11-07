@@ -16,14 +16,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Binary values show the byte count and SHA-256. Values over 200 characters show cut short, with the full text in a tooltip.
 - `src/infiniteprep/user_agent.py` defines one `USER_AGENT` from the app version and `https://github.com/abuzucom/infiniteprep` (D221). It carries no email address.
 - `src/infiniteprep/qt_logging.py` adds `qt.multimedia.ffmpeg*=false` to `QT_LOGGING_RULES` before `QApplication` starts. Rules already set stay in place.
-- Three new test files cover the changes:
+- Four new test files cover the changes:
   - `test_ui_detail_panel_refresh.py`
   - `test_qt_logging_rules.py`
   - `test_user_agent.py`
+  - `test_ui_detail_panel_audio_identity.py`
 
 ### Changed
 
-- A key notation change, an accepted proposal, a saved edit, or a lock toggle refreshes the detail tables only. The preview player keeps its track, position, and play state. Only a different file loads new audio.
+- A key notation change, an accepted proposal, a saved edit, or a lock toggle refreshes the detail tables only. The preview player keeps its track, position, and play state. Only a different file ID loads new audio. A new stored path under the same file ID keeps the loaded track (D246).
 - MusicBrainz, Discogs, AcoustID, and the fpcalc download send the shared `USER_AGENT`. `MB_USER_AGENT` and `DISCOGS_USER_AGENT` keep the same names and now hold that value.
 - The FFmpeg backend of Qt Multimedia no longer writes decoder messages to the console.
 

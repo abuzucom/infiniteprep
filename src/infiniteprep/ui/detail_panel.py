@@ -116,8 +116,8 @@ class DetailPanel(QWidget):
         self.review_service = review_service
         self.on_change_callback = on_change_callback
         self.current_file_id: str | None = None
-        # The file ID and path in the player. A refresh of the same file keeps playback.
-        self._loaded_audio: tuple[str, str] | None = None
+        # The file ID in the player. A refresh of the same file ID keeps playback (D246).
+        self._loaded_audio_id: str | None = None
         self.key_notation: KeyDisplayNotation = KeyDisplayNotation.CAMELOT
 
         self.header_label = QLabel("Select a track to inspect metadata and proposals.", self)
@@ -192,15 +192,15 @@ class DetailPanel(QWidget):
         self._populate_candidates_list(file_id)
 
     def _load_audio_if_changed(self, asset: FileAsset) -> None:
-        """Load the asset into the player only when a different file is selected.
+        """Load the asset into the player only when a different file ID is selected.
 
         Notation changes and field actions refresh the same file. Reloading would stop
-        playback and reset the position.
+        playback and reset the position. A new stored path under the same ID also keeps
+        the loaded track (D246).
         """
-        audio_identity = (asset.id, asset.current_path)
-        if audio_identity == self._loaded_audio:
+        if asset.id == self._loaded_audio_id:
             return
-        self._loaded_audio = audio_identity
+        self._loaded_audio_id = asset.id
         self.audio_player.load_file(Path(asset.current_path), fallback_duration_sec=asset.duration)
 
     def _populate_other_tags(self, asset: FileAsset) -> None:
