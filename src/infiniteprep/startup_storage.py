@@ -12,7 +12,12 @@ from typing import Final
 from infiniteprep import storage_paths
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
-from infiniteprep.storage_paths import ConfirmFallback, StorageLocations, resolve_locations
+from infiniteprep.storage_paths import (
+    AppImageLaunch,
+    ConfirmFallback,
+    StorageLocations,
+    resolve_locations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +52,7 @@ def open_storage(
     frozen: bool,
     confirm_fallback: ConfirmFallback,
     show_error: ShowError,
+    appimage: AppImageLaunch | None = None,
 ) -> OpenedStorage | int:
     """Choose the folders, open the database, and set the process-wide locations.
 
@@ -55,7 +61,9 @@ def open_storage(
     locations are set only after the database opens, so a failed start leaves them unset.
     """
     try:
-        locations = resolve_locations(executable, frozen=frozen, confirm_fallback=confirm_fallback)
+        locations = resolve_locations(
+            executable, frozen=frozen, confirm_fallback=confirm_fallback, appimage=appimage
+        )
         if locations is None:
             return QUIT_EXIT_CODE
         locations.data_dir.mkdir(parents=True, exist_ok=True)

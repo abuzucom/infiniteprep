@@ -5,13 +5,21 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.38.1] (2026-11-07)
+## [0.39.0] (2026-11-07)
 
 ### Fixed
 
 - The manual `build-packages` workflow builds on the pinned `macos-15` image. GitHub no longer supports `macos-14`. GitHub cancelled the macOS job on that image before it started.
 
 ### Added
+
+- A Linux AppImage keeps its database and settings in an `InfinitePrep-Data` folder beside the `.AppImage` file (D83a2a).
+  - The folder name stays the same across versions. A newer AppImage in the same place opens the same library.
+  - Caches and recovery backups stay in the per-user folders, as on Windows.
+  - When the app cannot write to that folder, the `Use my user profile` or `Quit` prompt appears, with `Remember`.
+  - The app trusts the AppImage location only when its own executable runs from the AppImage mount. A copy started from inside another AppImage keeps its own storage.
+  - A Linux tar.gz copy uses the `portable.mode` file like the Windows ZIP. It needs no code change.
+- New test file: `test_storage_appimage.py`.
 
 - Windows packages from the manual `build-packages` workflow (D83a1b).
   - `InfinitePrep-<version>-windows-x64-portable.zip` holds the bundle with `portable.mode`, LICENSE, and NOTICE.
