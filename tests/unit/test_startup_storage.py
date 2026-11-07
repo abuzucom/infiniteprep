@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -111,6 +112,8 @@ def test_error_box_shows_plain_text(qtbot: Any) -> None:
     box = build_storage_error_box(message)
     qtbot.addWidget(box)
 
-    assert box.windowTitle() == STORAGE_ERROR_TITLE
+    # QMessageBox ignores window titles on macOS by design, following Apple's guidelines.
+    if sys.platform != "darwin":
+        assert box.windowTitle() == STORAGE_ERROR_TITLE
     assert box.text() == message
     assert box.textFormat().name == "PlainText"

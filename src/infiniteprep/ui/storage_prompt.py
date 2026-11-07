@@ -41,8 +41,6 @@ class FallbackPrompt:
 def build_fallback_prompt(folder: Path) -> FallbackPrompt:
     """Return the prompt. Its text is plain, never rich text, since it shows a folder path."""
     box = QMessageBox(QMessageBox.Icon.Warning, FALLBACK_TITLE, "")
-    # On macOS the constructor leaves the title unset, so it is set again here.
-    box.setWindowTitle(FALLBACK_TITLE)
     box.setTextFormat(Qt.TextFormat.PlainText)
     box.setText(FALLBACK_TEXT_TEMPLATE.format(folder=folder))
     use_button = box.addButton(USE_PER_USER_LABEL, QMessageBox.ButtonRole.AcceptRole)
@@ -56,8 +54,6 @@ def build_fallback_prompt(folder: Path) -> FallbackPrompt:
 def build_storage_error_box(message: str) -> QMessageBox:
     """Return the startup storage error box. Its text is plain, since it can hold a path."""
     box = QMessageBox(QMessageBox.Icon.Critical, STORAGE_ERROR_TITLE, "")
-    # On macOS the constructor leaves the title unset, so it is set again here.
-    box.setWindowTitle(STORAGE_ERROR_TITLE)
     box.setTextFormat(Qt.TextFormat.PlainText)
     box.setText(message)
     return box
