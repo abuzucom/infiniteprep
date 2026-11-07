@@ -124,7 +124,7 @@ class InstallerScriptTest(unittest.TestCase):
 
     def test_data_and_keys_go_only_when_checked(self) -> None:
         """The data root and the saved keys are removed only inside their checked branches."""
-        data_branch = "${If} $DeleteData == ${BST_CHECKED}\n    RMDir /r \"${DATA_ROOT}\""
+        data_branch = '${If} $DeleteData == ${BST_CHECKED}\n    RMDir /r "${DATA_ROOT}"'
         keys_branch = "${If} $DeleteKeys == ${BST_CHECKED}\n    ExecWait"
         self.assertIn(data_branch, self.script)
         self.assertIn(keys_branch, self.script)
@@ -135,7 +135,7 @@ class InstallerScriptTest(unittest.TestCase):
         """RMDir /r runs only on a folder named InfinitePrep that holds the app."""
         guard = self.script[self.script.index("Function un.onInit") :]
         guard = guard[: guard.index("FunctionEnd")]
-        self.assertIn("${GetFileName} \"$INSTDIR\" $0", guard)
+        self.assertIn('${GetFileName} "$INSTDIR" $0', guard)
         self.assertIn('IfFileExists "$INSTDIR\\${APP_EXE}"', guard)
         self.assertIn("Abort", guard)
 
