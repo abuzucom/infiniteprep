@@ -9,6 +9,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Replace magic numbers in the trusted GitHub CLI wrapper with named constants.
 - Synchronize gate and policy templates with `abuzucom/agents` commit `adc93ec`.
 - The manual `build-packages` workflow builds on the pinned `macos-15` image. GitHub no longer supports `macos-14`. GitHub cancelled the macOS job on that image before it started.
 

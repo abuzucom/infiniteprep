@@ -66,6 +66,12 @@ REPOSITORY_COMMANDS = frozenset(("pr", "issue", "run"))
 REPOSITORY_NAME = re.compile(r"\A[A-Za-z0-9](?:[A-Za-z0-9._-]{0,98}[A-Za-z0-9])?\Z")
 BRANCH_NAME = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9._/-]{0,199}\Z")
 GLOBAL_VALUE_OPTIONS = frozenset(("-R", "--repo", "--hostname"))
+HTTPS_PORT = 443
+SSH_PORT = 22
+REPOSITORY_PATH_COMPONENTS = 2
+COMMAND_PREFIX_LENGTH = 2
+SHORT_REPO_OPTION = "-R"
+SHORT_OPTION_PREFIX_LENGTH = len(SHORT_REPO_OPTION)
 # gh caches under $TMPDIR/gh-cli-cache. A shared temp root lets the first
 # account or sandbox own that folder and deny every later caller, so each
 # call gets a private directory. Go reads TMPDIR on POSIX and TMP, then
@@ -178,11 +184,11 @@ def parse_repository_target(url: str) -> str:
             raise ValueError("repository remote SSH URL must use git user")
         if parsed.password is not None:
             raise ValueError("repository remote URL cannot contain a password")
-        if parsed.port not in (None, 443 if parsed.scheme == "https" else 22):
+        if parsed.port not in (None, HTTPS_PORT if parsed.scheme == "https" else SSH_PORT):
             raise ValueError("repository remote uses an invalid port")
         path = parsed.path.lstrip("/")
     parts = path.strip("/").split("/")
-    if len(parts) != 2:
+    if len(parts) != REPOSITORY_PATH_COMPONENTS:
         raise ValueError("repository remote path must be owner/repo")
     owner, repo = parts
     if not REPOSITORY_NAME.fullmatch(owner) or not REPOSITORY_NAME.fullmatch(repo):
@@ -224,9 +230,11 @@ def _has_repository_option(arguments: list[str]) -> bool:
     delimiter = arguments.index("--") if "--" in arguments else len(arguments)
     option_tokens = arguments[:delimiter]
     for index, argument in enumerate(option_tokens):
-        if argument in ("-R", "--repo") and index + 1 < len(option_tokens):
+        if argument in (SHORT_REPO_OPTION, "--repo") and index + 1 < len(option_tokens):
             return True
-        if argument.startswith("--repo=") or (argument.startswith("-R") and len(argument) > 2):
+        if argument.startswith("--repo=") or (
+            argument.startswith(SHORT_REPO_OPTION) and len(argument) > SHORT_OPTION_PREFIX_LENGTH
+        ):
             return True
     return False
 
@@ -249,7 +257,7 @@ def with_repository_context(repository: Path, arguments: list[str]) -> list[str]
     delimiter = arguments.index("--") if "--" in arguments else len(arguments)
     option_tokens = arguments[:delimiter]
     context = [*option_tokens, "--repo", target, *arguments[delimiter:]]
-    command = option_tokens[position:position + 2]
+    command = option_tokens[position:position + COMMAND_PREFIX_LENGTH]
     has_head = any(argument == "--head" or argument.startswith("--head=")
                    for argument in option_tokens)
     if command == ["pr", "create"] and not has_head:
