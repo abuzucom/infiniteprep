@@ -17,9 +17,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from infiniteprep import storage_paths
 from infiniteprep.adapters.llm.ollama_openai import RECOMMENDED_MODELS
 from infiniteprep.adapters.transcoder.safe_transcoder import TranscodeMode, TranscodePreset
-from infiniteprep import storage_paths
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import AppSettings, SettingsManager
 from infiniteprep.data_cleanup import CleanupChoice, data_folders
