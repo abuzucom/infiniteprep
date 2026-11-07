@@ -15,9 +15,10 @@ from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
 from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
 from infiniteprep.domain.ports import MetadataSearchQuery
+from infiniteprep.user_agent import USER_AGENT
 
 DISCOGS_BASE_URL: Final[str] = "https://api.discogs.com"
-DISCOGS_USER_AGENT: Final[str] = "InfinitePrep/0.1.0 +https://github.com/infiniteprep/infiniteprep"
+DISCOGS_USER_AGENT: Final[str] = USER_AGENT
 DISCOGS_TTL_SEC: Final[int] = 21600  # 6 hours per Discogs API caching rules
 MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
 # Discogs release IDs are positive integers. The ID becomes a URL path segment

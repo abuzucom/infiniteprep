@@ -12,6 +12,7 @@ from keyring.errors import KeyringError, PasswordDeleteError
 logger = logging.getLogger(__name__)
 
 SERVICE_NAME: Final[str] = "InfinitePrep"
+FORGET_FAILED_EXIT_CODE: Final[int] = 1
 ENV_VAR_MAP: Final[dict[str, str]] = {
     "acoustid_api_key": "INFINITEPREP_ACOUSTID_API_KEY",
     "discogs_token": "INFINITEPREP_DISCOGS_TOKEN",
@@ -93,3 +94,20 @@ class CredentialStore:
     def clear_memory(self) -> None:
         """Explicitly clear any secrets held in the in-memory test backend."""
         self._memory.clear()
+
+
+def forget_all_credentials(store: CredentialStore | None = None) -> int:
+    """Delete every key InfinitePrep saves in the OS keyring.
+
+    The Windows uninstaller runs this when its saved-keys box is checked (D266). A key
+    that was never saved is not an error. Returns 0, or FORGET_FAILED_EXIT_CODE when the
+    keyring rejects a delete.
+    """
+    target = store or CredentialStore()
+    try:
+        for key_name in ENV_VAR_MAP:
+            target.delete_secret(key_name)
+    except CredentialStoreError:
+        logger.exception("Saved keys could not be removed from the OS keyring.")
+        return FORGET_FAILED_EXIT_CODE
+    return 0

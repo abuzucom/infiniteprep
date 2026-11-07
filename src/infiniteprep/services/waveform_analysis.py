@@ -15,10 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import platformdirs
 import soundfile as sf
 from scipy.signal import butter, sosfilt
 
+from infiniteprep import storage_paths
 from infiniteprep.ui.audio_player import (
     MAX_PREVIEW_DURATION_SEC,
     MAX_PREVIEW_FILE_BYTES,
@@ -246,7 +246,7 @@ def analyze_waveform(
         raise ValueError("Cache size must be nonnegative. Supply a valid byte limit.")
     if source.stat().st_size > MAX_PREVIEW_FILE_BYTES:
         raise ValueError("Audio exceeds 500 MiB. Supply a smaller track.")
-    directory = Path(cache_directory or platformdirs.user_cache_dir("InfinitePrep"))
+    directory = Path(cache_directory or storage_paths.current().cache_dir)
     key = _cache_key(source)
     entry = directory / f"spectrum-{key}.npz"
     waveform = _load_cache(entry)

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import hashlib
+import html
+import unicodedata
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
 
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -31,23 +35,30 @@ from infiniteprep.domain.models import ApprovedField, FieldProposal, FileAsset
 from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
 from infiniteprep.ui.audio_player import AudioPreviewWidget
 
-DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = (
-    FieldName.ARTIST,
-    FieldName.TITLE,
-    FieldName.MIX_NAME,
-    FieldName.REMIXER,
-    FieldName.RELEASE_TITLE,
-    FieldName.LABEL,
-    FieldName.CATALOG_NUMBER,
-    FieldName.VINYL_POSITION,
-    FieldName.YEAR,
-    FieldName.GENRE,
-    FieldName.BPM,
-    FieldName.KEY,
-)
+DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = tuple(FieldName)
 FIELDS_TABLE_COLUMN_COUNT: Final[int] = 6
 FIELDS_TABLE_STRETCH: Final[int] = 3
+OTHER_TAGS_STRETCH: Final[int] = 1
 CANDIDATE_BOX_STRETCH: Final[int] = 1
+OTHER_TAGS_COLUMN_COUNT: Final[int] = 2
+COL_OTHER_KEY: Final[int] = 0
+COL_OTHER_VALUE: Final[int] = 1
+# Longer values show cut short in the cell. The tooltip holds the full text.
+OTHER_TAG_DISPLAY_LIMIT: Final[int] = 200
+TRUNCATION_MARK: Final[str] = "..."
+# Code points that attach to the character before them. A truncation cut never lands
+# before one of these, so a visible character never splits.
+MARK_CATEGORIES: Final[frozenset[str]] = frozenset({"Mn", "Mc", "Me"})
+ZERO_WIDTH_JOINER: Final[str] = chr(0x200D)
+VARIATION_SELECTORS: Final[tuple[int, int]] = (0xFE00, 0xFE0F)
+VARIATION_SELECTORS_SUPPLEMENT: Final[tuple[int, int]] = (0xE0100, 0xE01EF)
+EMOJI_SKIN_TONE_MODIFIERS: Final[tuple[int, int]] = (0x1F3FB, 0x1F3FF)
+# The app adds keys with this prefix itself, for example _bits_per_sample (D245).
+INTERNAL_TAG_PREFIX: Final[str] = "_"
+LIST_VALUE_SEPARATOR: Final[str] = "; "
+# The paragraph keeps line breaks and spaces as the tag holds them.
+TOOLTIP_PARAGRAPH_OPEN: Final[str] = "<p style='white-space:pre-wrap'>"
+TOOLTIP_PARAGRAPH_CLOSE: Final[str] = "</p>"
 COL_FIELD_NAME: Final[int] = 0
 COL_EXISTING_TAG: Final[int] = 1
 COL_TOP_PROPOSAL: Final[int] = 2
@@ -55,6 +66,83 @@ COL_PROPOSAL_SOURCE: Final[int] = 3
 COL_APPROVED_EDIT: Final[int] = 4
 COL_ACTIONS: Final[int] = 5
 ACTION_ROW_MARGIN_PX: Final[int] = 2
+
+
+def _format_scalar_tag_value(value: object) -> str:
+    """Return bytes as their size and SHA-256, and any other value as its text.
+
+    The summary matches the one the tag reader stores for binary frames.
+    """
+    if isinstance(value, bytes | bytearray):
+        digest = hashlib.sha256(value).hexdigest()
+        return f"<{len(value)} bytes, sha256 {digest}>"
+    return str(value)
+
+
+def format_other_tag_value(value: object) -> str:
+    """Return the full display text of one raw custom tag value.
+
+    A list joins its items with a separator. Only one level unpacks, so nesting never
+    recurses.
+    """
+    if isinstance(value, list | tuple):
+        return LIST_VALUE_SEPARATOR.join(_format_scalar_tag_value(item) for item in value)
+    return _format_scalar_tag_value(value)
+
+
+def _extends_previous_character(char: str) -> bool:
+    """Return True when char joins the character before it into one visible grapheme."""
+    code_point = ord(char)
+    return (
+        unicodedata.category(char) in MARK_CATEGORIES
+        or char == ZERO_WIDTH_JOINER
+        or VARIATION_SELECTORS[0] <= code_point <= VARIATION_SELECTORS[1]
+        or VARIATION_SELECTORS_SUPPLEMENT[0] <= code_point <= VARIATION_SELECTORS_SUPPLEMENT[1]
+        or EMOJI_SKIN_TONE_MODIFIERS[0] <= code_point <= EMOJI_SKIN_TONE_MODIFIERS[1]
+    )
+
+
+def _grapheme_safe_cut(text: str, cut: int) -> int:
+    """Move cut back until it falls between two visible graphemes.
+
+    A cut before a combining mark, a joiner, a variation selector, or a skin tone
+    modifier, or right after a joiner, would split one visible character.
+    """
+    while cut > 0 and (
+        _extends_previous_character(text[cut]) or text[cut - 1] == ZERO_WIDTH_JOINER
+    ):
+        cut -= 1
+    return cut
+
+
+def truncate_for_cell(text: str) -> str:
+    """Return text cut to at most OTHER_TAG_DISPLAY_LIMIT characters, marked when cut.
+
+    The cut never splits a visible character.
+    """
+    if len(text) <= OTHER_TAG_DISPLAY_LIMIT:
+        return text
+    cut = _grapheme_safe_cut(text, OTHER_TAG_DISPLAY_LIMIT - len(TRUNCATION_MARK))
+    return text[:cut] + TRUNCATION_MARK
+
+
+def plain_text_tooltip(text: str) -> str:
+    """Return a tooltip that shows text literally.
+
+    Qt renders a tooltip as rich text when it looks like HTML, and no plain-text
+    tooltip mode exists. Escaping the text inside a fixed paragraph keeps a tag value
+    such as <img src=...> from loading or formatting anything.
+    """
+    return f"{TOOLTIP_PARAGRAPH_OPEN}{html.escape(text, quote=True)}{TOOLTIP_PARAGRAPH_CLOSE}"
+
+
+def other_tag_rows(raw_custom_tags: Mapping[str, object]) -> list[tuple[str, str]]:
+    """Return (key, full value text) rows sorted by key, without internal keys."""
+    return [
+        (key, format_other_tag_value(raw_custom_tags[key]))
+        for key in sorted(raw_custom_tags, key=str.casefold)
+        if not key.startswith(INTERNAL_TAG_PREFIX)
+    ]
 
 
 class DetailPanel(QWidget):
@@ -79,6 +167,8 @@ class DetailPanel(QWidget):
         self.review_service = review_service
         self.on_change_callback = on_change_callback
         self.current_file_id: str | None = None
+        # The file ID in the player. A refresh of the same file ID keeps playback (D246).
+        self._loaded_audio_id: str | None = None
         self.key_notation: KeyDisplayNotation = KeyDisplayNotation.CAMELOT
 
         self.header_label = QLabel("Select a track to inspect metadata and proposals.", self)
@@ -86,6 +176,7 @@ class DetailPanel(QWidget):
         self.warnings_label.setStyleSheet("color: #d97706; font-weight: bold;")
         self.audio_player = AudioPreviewWidget(self, enable_multimedia_backend=enable_audio_backend)
         self.fields_table = QTableWidget(0, FIELDS_TABLE_COLUMN_COUNT, self)
+        self.other_tags_table = QTableWidget(0, OTHER_TAGS_COLUMN_COUNT, self)
         self.candidates_list = QListWidget(self)
 
         self._build_layout()
@@ -112,6 +203,17 @@ class DetailPanel(QWidget):
         header.setStretchLastSection(True)
         root.addWidget(self.fields_table, stretch=FIELDS_TABLE_STRETCH)
 
+        other_box = QGroupBox("Other Tags", self)
+        other_layout = QVBoxLayout(other_box)
+        self.other_tags_table.setHorizontalHeaderLabels(["Key", "Value"])
+        self.other_tags_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.other_tags_table.verticalHeader().setVisible(False)
+        other_header = self.other_tags_table.horizontalHeader()
+        other_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        other_header.setStretchLastSection(True)
+        other_layout.addWidget(self.other_tags_table)
+        root.addWidget(other_box, stretch=OTHER_TAGS_STRETCH)
+
         cand_box = QGroupBox("Candidate Releases & Analysis Evidence", self)
         cand_layout = QVBoxLayout(cand_box)
         cand_layout.addWidget(self.candidates_list)
@@ -135,9 +237,34 @@ class DetailPanel(QWidget):
             f"Write Supported: {asset.is_write_supported}"
         )
         self._populate_warnings(asset)
-        self.audio_player.load_file(Path(asset.current_path), fallback_duration_sec=asset.duration)
+        self._load_audio_if_changed(asset)
         self._populate_fields_table(asset)
+        self._populate_other_tags(asset)
         self._populate_candidates_list(file_id)
+
+    def _load_audio_if_changed(self, asset: FileAsset) -> None:
+        """Load the asset into the player only when a different file ID is selected.
+
+        Notation changes and field actions refresh the same file. Reloading would stop
+        playback and reset the position. A new stored path under the same ID also keeps
+        the loaded track (D246).
+        """
+        if asset.id == self._loaded_audio_id:
+            return
+        self._loaded_audio_id = asset.id
+        self.audio_player.load_file(Path(asset.current_path), fallback_duration_sec=asset.duration)
+
+    def _populate_other_tags(self, asset: FileAsset) -> None:
+        """Fill the read-only Other Tags table from the file's raw custom tags."""
+        raw_custom_tags = asset.original_tags.get("raw_custom_tags") or {}
+        rows = other_tag_rows(raw_custom_tags)
+        self.other_tags_table.setRowCount(len(rows))
+        for row_idx, (key, full_text) in enumerate(rows):
+            key_item = QTableWidgetItem(key)
+            value_item = QTableWidgetItem(truncate_for_cell(full_text))
+            value_item.setToolTip(plain_text_tooltip(full_text))
+            self.other_tags_table.setItem(row_idx, COL_OTHER_KEY, key_item)
+            self.other_tags_table.setItem(row_idx, COL_OTHER_VALUE, value_item)
 
     def _populate_warnings(self, asset: FileAsset) -> None:
         """Render XDJ-RX3 hardware warnings, pitch drift alerts, and rip diagnostics."""

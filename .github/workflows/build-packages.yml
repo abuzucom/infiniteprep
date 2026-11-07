@@ -1,0 +1,200 @@
+---
+name: build-packages
+
+# Builds the PyInstaller bundle on each target OS and runs the built app's
+# smoke check. Runs only when started by hand (D248). A later D83a change adds
+# the release tag trigger. Each run keeps its bundles for 3 days (D255).
+
+"on":
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    name: bundle (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # Pinned images (D251). Ubuntu 22.04 sets the glibc 2.35 baseline (D252).
+        os: [windows-2025, macos-15, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - name: Install Linux Qt headless system libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libegl1 \
+            libgl1 \
+            libglib2.0-0 \
+            libdbus-1-3 \
+            libxkbcommon0 \
+            libxkbcommon-x11-0 \
+            libxcb-cursor0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxcb-xinerama0 \
+            libxcb-xfixes0 \
+            libfontconfig1 \
+            libpulse0 \
+            libsndfile1
+
+      - name: Install locked dependencies and package
+        run: |
+          python -m pip install -r requirements-lock.txt
+          python -m pip install --no-deps -e .
+
+      # The lock file and pyproject.toml can drift apart. pip check fails when an
+      # installed package, the app included, misses or conflicts with a requirement.
+      - name: Check installed requirements
+        run: python -m pip check
+
+      - name: Build bundle
+        run: pyinstaller --noconfirm infiniteprep.spec
+
+      # The built app loads its libraries and Qt offscreen, then writes its
+      # version. A missing library or plugin fails here.
+      - name: Smoke-check built app
+        shell: bash
+        run: |
+          app="dist/InfinitePrep/InfinitePrep"
+          if [ "$RUNNER_OS" = "Windows" ]; then app="$app.exe"; fi
+          result="$RUNNER_TEMP/smoke-version.txt"
+          "$app" --smoke-check "$result"
+          expected="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          actual="$(cat "$result")"
+          if [ "$actual" != "$expected" ]; then
+            echo "Smoke check wrote '$actual', expected '$expected'."
+            exit 1
+          fi
+          echo "Smoke check passed for version $actual."
+
+      # The LGPL notices must ship with every bundle and package (D270).
+      - name: Add license notices to bundle
+        shell: bash
+        run: cp LICENSE NOTICE dist/InfinitePrep/
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: InfinitePrep-${{ matrix.os }}
+          path: dist/InfinitePrep
+          retention-days: 3
+          if-no-files-found: error
+
+      # The portable ZIP carries portable.mode, so its copy keeps its library
+      # in a Data folder beside the exe (D83a1a).
+      - name: Build Windows portable ZIP
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (python -c 'import infiniteprep; print(infiniteprep.__version__)').Trim()
+          $staging = Join-Path $env:RUNNER_TEMP 'portable'
+          New-Item -ItemType Directory -Force $staging | Out-Null
+          Copy-Item -Recurse dist\InfinitePrep (Join-Path $staging 'InfinitePrep')
+          New-Item -ItemType File (Join-Path $staging 'InfinitePrep\portable.mode') | Out-Null
+          $zip = "dist\InfinitePrep-$version-windows-x64-portable.zip"
+          Compress-Archive -Path (Join-Path $staging 'InfinitePrep') -DestinationPath $zip
+
+      # NSIS 3.13 is a build-only tool with Rule 9 sign-off (D267). The
+      # archive must match its pinned SHA-256 before anything unpacks it.
+      - name: Fetch pinned NSIS
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          NSIS_URL: https://downloads.sourceforge.net/project/nsis/NSIS%203/3.13/nsis-3.13.zip
+          NSIS_SHA256: ba63dffc4410ee89193e1cb5a41989991bd77c61068da17e3156d136b7b0b3d8
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:RUNNER_TEMP 'nsis-3.13.zip'
+          curl.exe --fail --location --silent --show-error --output $archive $env:NSIS_URL
+          if ($LASTEXITCODE -ne 0) { throw "NSIS download failed with exit code $LASTEXITCODE." }
+          $actual = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:NSIS_SHA256) {
+            throw "NSIS archive SHA-256 is $actual, expected $env:NSIS_SHA256."
+          }
+          Expand-Archive $archive -DestinationPath $env:RUNNER_TEMP
+
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (python -c 'import infiniteprep; print(infiniteprep.__version__)').Trim()
+          $makensis = Join-Path $env:RUNNER_TEMP 'nsis-3.13\makensis.exe'
+          $source = (Resolve-Path dist\InfinitePrep).Path
+          $output = Join-Path (Resolve-Path dist).Path "InfinitePrep-$version-windows-x64-setup.exe"
+          & $makensis /V2 "/DVERSION=$version" "/DSOURCE_DIR=$source" "/DOUTPUT_FILE=$output" packaging\windows\installer.nsi
+          if ($LASTEXITCODE -ne 0) { throw "makensis failed with exit code $LASTEXITCODE." }
+
+      # Install, smoke-check, and uninstall the real setup.exe (D268). The
+      # silent uninstall must remove the program and keep the user's data.
+      - name: Test Windows installer lifecycle
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (python -c 'import infiniteprep; print(infiniteprep.__version__)').Trim()
+          $setup = (Resolve-Path "dist\InfinitePrep-$version-windows-x64-setup.exe").Path
+          $installDir = Join-Path $env:RUNNER_TEMP 'install\InfinitePrep'
+          $dataMarker = Join-Path $env:LOCALAPPDATA 'InfinitePrep\ci-keep.txt'
+          New-Item -ItemType Directory -Force (Split-Path $dataMarker) | Out-Null
+          Set-Content -Path $dataMarker -Value 'keep'
+
+          $install = Start-Process -FilePath $setup -ArgumentList '/S', "/D=$installDir" -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Setup exited with $($install.ExitCode)." }
+          $exe = Join-Path $installDir 'InfinitePrep.exe'
+          if (-not (Test-Path $exe)) { throw "Setup did not install $exe." }
+
+          $result = Join-Path $env:RUNNER_TEMP 'installed-smoke.txt'
+          $smoke = Start-Process -FilePath $exe -ArgumentList '--smoke-check', $result -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "Installed app smoke check exited with $($smoke.ExitCode)." }
+          if ((Get-Content -Raw $result) -ne $version) { throw 'Installed app reported the wrong version.' }
+
+          $startMenu = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\InfinitePrep.lnk'
+          if (-not (Test-Path $startMenu)) { throw 'Start Menu shortcut is missing.' }
+          $desktop = Join-Path ([Environment]::GetFolderPath('Desktop')) 'InfinitePrep.lnk'
+          if (Test-Path $desktop) { throw 'Desktop shortcut appeared without being chosen.' }
+          $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\InfinitePrep'
+          if ((Get-ItemProperty $key).DisplayVersion -ne $version) { throw 'Apps and Features entry is wrong.' }
+
+          # The uninstaller copies itself to a temp folder and returns at once,
+          # so the check waits for the program folder to disappear.
+          $uninstaller = Join-Path $installDir 'Uninstall.exe'
+          Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait
+          $deadline = (Get-Date).AddSeconds(120)
+          while ((Test-Path $installDir) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Seconds 2 }
+          if (Test-Path $installDir) { throw 'Uninstall left the program folder behind.' }
+          if (Test-Path $key) { throw 'Uninstall left the Apps and Features entry behind.' }
+          if (Test-Path $startMenu) { throw 'Uninstall left the Start Menu shortcut behind.' }
+          if (-not (Test-Path $dataMarker)) { throw 'Silent uninstall deleted user data.' }
+          Write-Output "Installer lifecycle passed for version $version."
+
+      - name: Upload Windows packages
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: InfinitePrep-windows-packages
+          path: |
+            dist/InfinitePrep-*-windows-x64-portable.zip
+            dist/InfinitePrep-*-windows-x64-setup.exe
+          retention-days: 3
+          if-no-files-found: error

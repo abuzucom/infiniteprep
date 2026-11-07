@@ -5,14 +5,130 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.32.3] (2026-11-07)
+## [0.40.0] (2026-11-07)
+
+### Fixed
+
+- The manual `build-packages` workflow builds on the pinned `macos-15` image. GitHub no longer supports `macos-14`. GitHub cancelled the macOS job on that image before it started.
 
 ### Added
 
-- Add a GitHub Pages landing page in `docs/index.html`.
-- Describe the current desktop workflow and the project's planned direction.
-- Add noindex metadata and robots.txt preferences for AI training crawlers.
-- Set `infiniteprep.dev` as the GitHub Pages custom domain.
+- A Linux AppImage keeps its database and settings in an `InfinitePrep-Data` folder beside the `.AppImage` file (D83a2a).
+  - The folder name stays the same across versions. A newer AppImage in the same place opens the same library.
+  - Caches and recovery backups stay in the per-user folders, as on Windows.
+  - When the app cannot write to that folder, the `Use my user profile` or `Quit` prompt appears, with `Remember`.
+  - The app trusts the AppImage location only when its own executable runs from the AppImage mount. A copy started from inside another AppImage keeps its own storage.
+  - A Linux tar.gz copy uses the `portable.mode` file like the Windows ZIP. It needs no code change.
+- New test file: `test_storage_appimage.py`.
+
+- Windows packages from the manual `build-packages` workflow (D83a1b).
+  - `InfinitePrep-<version>-windows-x64-portable.zip` holds the bundle with `portable.mode`, LICENSE, and NOTICE.
+  - `InfinitePrep-<version>-windows-x64-setup.exe` is a per-user NSIS installer that needs no admin rights. It installs to `%LocalAppData%\Programs\InfinitePrep`, apart from the data root `%LocalAppData%\InfinitePrep`.
+  - The installer adds a Start Menu shortcut, an optional desktop shortcut that starts unchecked, and an Apps and Features entry.
+  - An earlier installation leads to a prompt to uninstall it and continue. That uninstall keeps the library and saved keys.
+  - The uninstaller keeps all data by default. One unchecked box deletes the library, settings, backups, and cache. A second unchecked box deletes the saved API keys. Music files and exports are never touched.
+  - CI downloads NSIS 3.13 and checks its pinned SHA-256 before use (Rule 9 sign-off). The Windows job installs the built setup silently, runs the installed app's smoke check, checks the shortcut and the Apps and Features entry, and uninstalls silently with the data kept.
+- Every bundle now carries LICENSE and NOTICE beside the executable.
+- A hidden `--forget-credentials` flag removes every key InfinitePrep saved in the OS keyring. The uninstaller's saved-keys box runs it.
+- New tests: `test_windows_packaging.py` and `test_forget_credentials.py`.
+- Portable mode for packaged builds (D83a1a).
+  - A `portable.mode` file beside the executable keeps the database and settings in a `Data` folder there. Caches, recovery backups, and the downloaded fpcalc stay in the per-user folders. Credentials stay in the system keyring.
+  - Only a packaged build looks for the file. A run from source always uses the per-user folders.
+  - A portable copy starts with its own empty library. It never reads or copies the per-user one.
+  - When the app cannot write to `Data`, a prompt offers `Use my user profile` or `Quit`, with a `Remember` checkbox. A remembered choice clears itself once the app can write to `Data` again.
+  - The write check uses a uniquely named temporary file that deletes itself. It never touches a file already in `Data`.
+- When the library folder or database cannot open at startup, a plain-text message names the cause. InfinitePrep then exits with code 1 instead of stopping with a traceback.
+- `src/infiniteprep/storage_paths.py` chooses every storage folder once at startup. Settings, backups, the fpcalc tool, and the waveform cache take the default folder from it.
+- Five new test files cover portable mode:
+  - `test_startup_storage.py`
+  - `test_storage_paths.py`
+  - `test_storage_probe.py`
+  - `test_storage_defaults.py`
+  - `test_storage_prompt.py`
+- A manual `build-packages` workflow builds the PyInstaller bundle on each target OS (D83a0).
+  - The jobs run on pinned `windows-2025`, `macos-15`, and `ubuntu-22.04` images with Python 3.12. The Linux baseline is glibc 2.35.
+  - Each job runs `pip check` after the install. Drift between `requirements-lock.txt` and `pyproject.toml` fails the build.
+  - Each job runs the built app's smoke check and fails when the written version does not match.
+  - Each job uploads its bundle with `actions/upload-artifact` v7.0.2, pinned by commit. GitHub deletes each upload after 3 days.
+  - The workflow runs only when started by hand. A later D83a change adds the release tag trigger.
+- A hidden `--smoke-check <path>` flag loads numpy, scipy, soundfile, keyring, and Qt Multimedia on the offscreen platform. It then writes the version to the path and exits 0. The windowed Windows build has no stdout. The result therefore goes to a file. The flag writes only a new file and refuses an existing file or a directory.
+- Three new test files cover the D83a0 changes and the fix below:
+  - `tests/test_build_packages_workflow.py`
+  - `tests/unit/test_smoke_check.py`
+  - `tests/unit/test_folder_import_progress_reentrancy.py`
+- The detail panel lists every `FieldName`. Track number, disc number, style, and the AcoustID, MusicBrainz, and Discogs IDs join the earlier twelve fields.
+- A read-only Other Tags table under the fields table lists each raw custom tag from the file (D242).
+  - Rows sort by key, ignoring case.
+  - Keys that start with an underscore belong to the app and stay hidden (D245).
+  - Binary values show the byte count and SHA-256. Values over 200 characters show cut short, with the full text in a tooltip. The cut never splits a visible character such as an accented letter or a joined emoji.
+  - The tooltip shows the tag text literally. A value that looks like HTML, such as an `img` tag, never renders as markup or loads anything.
+- `src/infiniteprep/user_agent.py` defines one `USER_AGENT` from the app version and `https://github.com/abuzucom/infiniteprep` (D221). It carries no email address.
+- `src/infiniteprep/qt_logging.py` adds `qt.multimedia.ffmpeg*=false` to `QT_LOGGING_RULES` before `QApplication` starts. Rules already set stay in place.
+- Six new test files cover the changes:
+  - `test_ui_detail_panel_refresh.py`
+  - `test_qt_logging_rules.py`
+  - `test_user_agent.py`
+  - `test_ui_detail_panel_audio_identity.py`
+  - `test_ui_detail_panel_truncation.py`
+  - `test_ui_detail_panel_tooltip.py`
+- A GitHub Pages landing page in `docs/index.html` describes the current desktop workflow and the project's planned direction.
+- `docs/robots.txt` sets crawler preferences for AI training crawlers. The landing page carries noindex metadata.
+- `docs/CNAME` sets `infiniteprep.dev` as the GitHub Pages custom domain.
+
+### Changed
+
+- A key notation change, an accepted proposal, a saved edit, or a lock toggle refreshes the detail tables only. The preview player keeps its track, position, and play state. Only a different file ID loads new audio. A new stored path under the same file ID keeps the loaded track (D246).
+- MusicBrainz, Discogs, AcoustID, and the fpcalc download send the shared `USER_AGENT`. `MB_USER_AGENT` and `DISCOGS_USER_AGENT` keep the same names and now hold that value.
+- The FFmpeg backend of Qt Multimedia no longer writes decoder messages to the console.
+
+### Fixed
+
+- A folder import that finished during a progress update could crash the progress dialog. `QProgressDialog.setValue` processes pending events on a modal dialog. A queued finish could clear the dialog inside that call. The update now sets the label first and calls `setValue` last.
+
+## [0.34.0] (2026-11-06)
+
+### Removed
+
+- InfinitePrep drops the optional `EssentiaCliAnalyzer` subprocess adapter. Essentia carries the AGPL-3.0 license. The app runs no Essentia binary, including a user-installed one. `LocalDspAnalyzer` stays the only analyzer.
+  - This release deletes `adapters/analyzers/essentia_ext.py` and its test.
+  - `AppSettings` drops `prefer_essentia_cli` and `essentia_cli_path`. An older settings file with those fields still loads. The next save omits both fields.
+  - Code that imports `EssentiaCliAnalyzer` or reads the two settings fields now fails. This change breaks compatibility.
+- The README and `docs/technical-decision-record.md` no longer list the Essentia adapter.
+
+### Added
+
+- `tests/unit/test_essentia_removal.py` covers the removal and the load of an older settings file.
+- A new `NOTICE` file lists each third-party component the app ships or downloads, with its license.
+- Section 2.7 of `docs/technical-decision-record.md` records the 2026-11-06 copyleft scan.
+  - A CI workflow read every pinned native wheel for Windows, macOS, and Linux, plus the pinned fpcalc archives.
+  - No GPL or AGPL code ships in the parts InfinitePrep uses. The GCC runtime libraries carry the GCC runtime exception.
+  - The PySide6 wheels carry GPL-3-only Qt modules and GPL-3 Qt tools. The app imports no such module and runs no such tool.
+- Folder import runs on a worker thread (D78b1).
+  - A modal progress dialog shows the current file, its number, and a Cancel button. Playback keeps running.
+  - The scan runs first. Every file then imports in one database transaction, with a savepoint per file.
+  - A file that fails with any error stays out and appears in the report, and the rest of the batch commits. An untrusted file can make a parser raise any error type. The log keeps the traceback.
+  - The worker closes its own database connection before it reports. The window never waits on that close. The window's own connection stays open.
+  - Cancel finishes the current file, then rolls back the whole batch. A crash also leaves nothing from the batch.
+  - A report dialog shows the result, a count per category, and expandable per-file lists. Copy puts the report on the clipboard as plain text.
+  - Closing the window during an import asks whether to wait for the commit or cancel. Either choice closes the window once the batch ends.
+  - The progress label and the report headline show file names as plain text. A name that looks like HTML never renders as rich text.
+  - A failed import shows a fixed message with no exception text.
+  - A Wait or Cancel choice holds for the rest of the import. Later close requests wait without a new prompt.
+  - One file or the scan running past 2 minutes raises an Import Not Responding prompt. Quit Now ends InfinitePrep at once and keeps nothing from the batch. Keep Waiting restarts the limit.
+- `Repository.batch()` holds every write on one thread in a single transaction. `RepositoryBatch.savepoint()` scopes a rollback to one item.
+  - An item whose savepoint cannot roll back raises `BatchIntegrityError`, and the whole batch rolls back. No partial item reaches the commit.
+  - A failed batch rollback logs a warning and keeps the original error. SQLite discards the uncommitted batch when the connection closes.
+  - A batch refuses to start on a connection with an uncommitted transaction. It never absorbs or discards other work.
+  - Each savepoint scope gets its own generated name. No scope can collide with another.
+- `ImportService.import_paths` takes optional `progress` and `should_cancel` callbacks. `ImportBatchReport` adds `failed_files`, `scanned_count`, and `outcome`.
+- Added `tests/unit/test_import_batch_transaction.py` and `tests/unit/test_ui_folder_import.py`.
+
+### Changed
+
+- The package version moves to 0.34.0.
+- Without callbacks, `ImportService.import_paths` also imports in one transaction. A file that raises any error now appears in `failed_files` and no longer stops the call.
+- Item 4 of the decision record no longer claims that no runtime dependency carries a copyleft license. PySide6, Qt, and libsndfile carry LGPL licenses.
+- A new item 5 in the decision record records that user installs come only from the packaged bundles, never from a pip install.
 
 ## [0.32.0] (2026-11-05)
 

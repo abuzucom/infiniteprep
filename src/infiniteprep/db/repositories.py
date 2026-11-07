@@ -3,6 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
+import sqlite3
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -32,6 +37,51 @@ from infiniteprep.domain.models import (
     utc_now_iso,
 )
 
+logger = logging.getLogger(__name__)
+
+
+class BatchIntegrityError(RuntimeError):
+    """A failed item could not roll back to its savepoint, so the whole batch must roll back."""
+
+
+class RepositoryBatch:
+    """An open batch transaction. Each savepoint scope succeeds or rolls back on its own."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        """Wrap the connection that holds the batch transaction."""
+        self._conn = conn
+        self._savepoint_count = 0
+
+    @contextmanager
+    def savepoint(self) -> Iterator[str]:
+        """Keep the writes inside the scope, or roll back to the scope start on an error.
+
+        Yields the savepoint name. Each scope gets its own name, so no other savepoint can
+        collide with it. A savepoint that cannot roll back raises BatchIntegrityError, so
+        no partial item survives into the batch commit.
+        """
+        self._savepoint_count += 1
+        # The name comes only from this counter, never from outside input.
+        name = f"batch_item_{self._savepoint_count}"
+        self._conn.execute(f"SAVEPOINT {name}")
+        try:
+            yield name
+        except Exception as item_error:
+            self._undo_savepoint(name, item_error)
+            raise
+        self._conn.execute(f"RELEASE {name}")
+
+    def _undo_savepoint(self, name: str, item_error: Exception) -> None:
+        """Roll back to the named savepoint and release it, or raise BatchIntegrityError."""
+        try:
+            self._conn.execute(f"ROLLBACK TO {name}")
+            self._conn.execute(f"RELEASE {name}")
+        except sqlite3.Error as rollback_error:
+            raise BatchIntegrityError(
+                "An item failed and could not roll back on its own "
+                f"({type(item_error).__name__}: {item_error}). The whole batch rolls back."
+            ) from rollback_error
+
 
 class Repository:
     """Data access layer wrapping SQLite queries and domain object mapping."""
@@ -39,6 +89,57 @@ class Repository:
     def __init__(self, db: DatabaseManager) -> None:
         """Initialize Repository with a DatabaseManager."""
         self.db = db
+        # Each thread has its own connection, so batch state is per thread too.
+        self._batch_state = threading.local()
+
+    @contextmanager
+    def batch(self) -> Iterator[RepositoryBatch]:
+        """Hold every write on this thread in one transaction until the block ends.
+
+        A clean exit commits. Any exception rolls the whole batch back and propagates.
+        """
+        if getattr(self._batch_state, "active", False):
+            raise RuntimeError(
+                "A repository batch is already open on this thread; finish it before "
+                "opening another."
+            )
+        conn = self.db.connect()
+        # Every write outside a batch commits at once, so an open transaction here means
+        # uncommitted work from elsewhere. The batch refuses to absorb or discard it.
+        if conn.in_transaction:
+            raise RuntimeError(
+                "This thread's connection has an uncommitted transaction; commit or roll "
+                "it back before opening a batch."
+            )
+        conn.execute("BEGIN")
+        self._batch_state.active = True
+        try:
+            yield RepositoryBatch(conn)
+        except BaseException:
+            self._rollback_batch(conn)
+            raise
+        else:
+            conn.commit()
+        finally:
+            self._batch_state.active = False
+
+    @staticmethod
+    def _rollback_batch(conn: sqlite3.Connection) -> None:
+        """Roll back an open batch. A failed rollback logs and leaves the original error."""
+        try:
+            conn.rollback()
+        except sqlite3.Error as exc:
+            # SQLite discards an uncommitted transaction when its connection closes.
+            logger.warning(
+                "Batch rollback failed (%s); the uncommitted batch ends when the "
+                "connection closes.",
+                exc,
+            )
+
+    def _commit(self, conn: sqlite3.Connection) -> None:
+        """Commit a write at once, unless a batch on this thread owns the transaction."""
+        if not getattr(self._batch_state, "active", False):
+            conn.commit()
 
     # ------------------------------------------------------------------
     # Source Groups
@@ -68,7 +169,7 @@ class Repository:
                 group.notes,
             ),
         )
-        conn.commit()
+        self._commit(conn)
         return group
 
     def get_source_group_by_folder(self, folder_path: str) -> SourceGroup | None:
@@ -135,7 +236,7 @@ class Repository:
                 asset.imported_at,
             ),
         )
-        conn.commit()
+        self._commit(conn)
         return asset
 
     def get_file_by_id(self, file_id: str) -> FileAsset | None:
@@ -195,7 +296,7 @@ class Repository:
             """,
             (new_task, new_review, new_err, file_id),
         )
-        conn.commit()
+        self._commit(conn)
 
     # ------------------------------------------------------------------
     # Candidate Matches
@@ -239,7 +340,7 @@ class Repository:
                 match.retrieved_at,
             ),
         )
-        conn.commit()
+        self._commit(conn)
         return match
 
     def list_candidate_matches(
@@ -302,7 +403,7 @@ class Repository:
                 proposal.retrieved_at,
             ),
         )
-        conn.commit()
+        self._commit(conn)
         return proposal
 
     def list_field_proposals(
@@ -344,7 +445,7 @@ class Repository:
             "UPDATE field_proposals SET review_status = ? WHERE id = ?",
             (str(status), proposal_id),
         )
-        conn.commit()
+        self._commit(conn)
 
     # ------------------------------------------------------------------
     # Analysis Results
@@ -387,7 +488,7 @@ class Repository:
                 result.analyzed_at,
             ),
         )
-        conn.commit()
+        self._commit(conn)
         return result
 
     def list_analysis_results(self, file_id: str) -> list[AnalysisResult]:
@@ -435,7 +536,7 @@ class Repository:
                 json.dumps(approved.provider_attribution, ensure_ascii=False),
             ),
         )
-        conn.commit()
+        self._commit(conn)
         return approved
 
     def get_approved_field(self, file_id: str, field_name: str) -> ApprovedField | None:
@@ -460,7 +561,7 @@ class Repository:
             "UPDATE approved_fields SET locked = ? WHERE file_id = ? AND field_name = ?",
             (1 if locked else 0, file_id, field_name),
         )
-        conn.commit()
+        self._commit(conn)
 
     def remove_approved_field(
         self, file_id: str, field_name: str, force_unlock: bool = False
@@ -475,7 +576,7 @@ class Repository:
             "DELETE FROM approved_fields WHERE file_id = ? AND field_name = ?",
             (file_id, field_name),
         )
-        conn.commit()
+        self._commit(conn)
         return True
 
     # ------------------------------------------------------------------
@@ -517,7 +618,7 @@ class Repository:
                 record.timestamp,
             ),
         )
-        conn.commit()
+        self._commit(conn)
         return record
 
     def get_change_record(self, operation_id: str) -> ChangeRecord | None:
@@ -558,7 +659,7 @@ class Repository:
             """,
             (job_id, file_id, job_type, json.dumps(payload or {}), now, now),
         )
-        conn.commit()
+        self._commit(conn)
 
     def update_job_state(
         self, file_id: str, job_type: str, status: str, error: str | None = None
@@ -576,7 +677,7 @@ class Repository:
             """,
             (status, status, error, now, file_id, job_type),
         )
-        conn.commit()
+        self._commit(conn)
 
     def list_pending_jobs(self) -> list[dict[str, Any]]:
         conn = self.db.connect()
@@ -626,7 +727,7 @@ class Repository:
                 exp,
             ),
         )
-        conn.commit()
+        self._commit(conn)
 
     # ------------------------------------------------------------------
     # Row Mappers

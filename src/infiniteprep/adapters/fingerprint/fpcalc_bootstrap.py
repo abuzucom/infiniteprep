@@ -17,7 +17,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
-import platformdirs
+from infiniteprep import storage_paths
+from infiniteprep.user_agent import USER_AGENT
 
 FPCALC_VERSION: Final[str] = "1.5.1"
 MAX_FPCALC_BINARY_BYTES: Final[int] = 33_554_432  # 32 MiB cap for extracted binary
@@ -113,10 +114,7 @@ class FpcalcBootstrapService:
         downloader: Callable[[str], bytes] | None = None,
     ) -> None:
         """Initialize FpcalcBootstrapService with an application bin directory."""
-        if install_dir is None:
-            base = Path(platformdirs.user_data_dir("InfinitePrep", "InfinitePrep"))
-            install_dir = base / "bin"
-        self.install_dir = install_dir
+        self.install_dir = install_dir or storage_paths.current().bin_dir
         self.custom_path = custom_path
         self.downloader = downloader or self._default_download
 
@@ -250,6 +248,6 @@ class FpcalcBootstrapService:
         """Download archive bytes over HTTPS."""
         if not url.startswith("https://"):
             raise ValueError(f"Bootstrap download URL must use https:// scheme: {url}")
-        req = urllib.request.Request(url, headers={"User-Agent": "InfinitePrep/0.1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=30) as resp:
             return bytes(resp.read(MAX_FPCALC_BINARY_BYTES))

@@ -2,13 +2,9 @@
 
 **InfinitePrep** is a cross-platform desktop application (**Windows, macOS, and Linux**) built for DJs to identify, correct, enrich, and safely organize music files (**MP3, FLAC, WAV, and AIFF** write-enabled; **M4A/OGG** read-only and convertible).
 
----
-
 ## Core Loop
 
 `Import files -> inspect metadata and analysis proposals -> approve selected fields -> preview changes -> apply safely -> inspect the change log -> restore from backup`
-
----
 
 ## Capabilities
 
@@ -51,10 +47,7 @@ These modules exist under `src/infiniteprep/` with tests. The desktop launcher a
 - Chromaprint (`fpcalc`) and AcoustID fingerprinting, with the consent-gated, SHA-256 verified `FpcalcBootstrapService` for Windows and macOS.
 - MusicBrainz (`ws/2`) and Discogs adapters with rate limits of 1 request per second and 60 requests per minute, plus a SQLite TTL response cache.
 - Closed-world LLM arbitration through Ollama or an OpenAI-compatible endpoint. `ClosedWorldValidator` limits the model to the supplied candidates. `OllamaBootstrapService` requires explicit consent.
-- `EssentiaCliAnalyzer`, a subprocess wrapper for the Essentia command-line extractor.
 - `ArtworkService` normalizes cover art to a baseline JPEG of at most 800 by 800 pixels.
-
----
 
 ## Pull Request Review
 
@@ -64,8 +57,6 @@ Every pull request receives two model reviews:
 - `abuzucom/euler` code quality review through the `quality-review` check.
 
 Both reviews run after the `ci` workflow completes. A human approval remains required. See [`docs/pr-review.md`](docs/pr-review.md) for pins, settings, and upgrades.
-
----
 
 ## Code Scanning
 
@@ -77,8 +68,6 @@ The analysis covers the Python sources and the workflow files.
 
 See [`docs/code-scanning.md`](docs/code-scanning.md) for the configuration, the repository property that applies it, and the open options.
 
----
-
 ## Dependency Updates
 
 Dependabot proposes the version bumps for the Python packages and the workflow actions.
@@ -88,8 +77,6 @@ A reviewer turns each proposal into a compliant pull request and closes the prop
 `tests/test_dependabot_configuration.py` checks that configuration against the repository.
 
 See [`docs/dependabot.md`](docs/dependabot.md) for the grouping, the red checks, and the review steps.
-
----
 
 ## Agent Policy
 
@@ -119,8 +106,6 @@ Do not run Git commands before consent. After consent, use `scripts/read_git_sta
 output.
 
 `docs/template-drift.md` records local differences from the template.
-
----
 
 ## Setup Walkthrough
 
@@ -202,8 +187,6 @@ reads the source folder.
   the consent-gated `FpcalcBootstrapService`.
 - Ollama for local LLM arbitration. Install it from the Ollama site and pull
   `qwen2.5:3b`. The default endpoint is `http://127.0.0.1:11434/v1`.
-- The Essentia `essentia_streaming_extractor_music` binary for the optional
-  `EssentiaCliAnalyzer`.
 
 ### 5. Launch the desktop application
 
@@ -245,8 +228,6 @@ keyring fails. Environment variables override the keyring:
 | LLM API key | `INFINITEPREP_LLM_API_KEY` |
 
 Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
-
----
 
 ## Usage Walkthrough
 
@@ -373,8 +354,6 @@ Interface:
   lost.
 - The audio preview has no tempo control, key lock, or loop.
 
----
-
 ## Roadmap
 
 Each stage ships as one reviewed pull request. The order reflects current
@@ -436,8 +415,6 @@ Preparation and export:
     and iTunes XML. Import never overwrites user data.
 24. **XDJ and CDJ USB export.** A device database and analysis files that the
     players read directly. Requires testing on hardware.
-
----
 
 ## Testing, Linting & Packaging
 
