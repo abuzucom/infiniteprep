@@ -5,9 +5,12 @@ settings, recovery backups, the waveform cache, and the downloaded fpcalc. A sec
 choice removes the saved API keys from the OS keyring. Music files and exports live
 elsewhere and never appear in the list.
 
-A folder is removed only when its path names InfinitePrep, or when it is a portable
-Data folder whose marker still sits beside it. Any other folder is refused, so a
-wrong location can never send the delete outside InfinitePrep's own folders.
+A folder is removed only when it is one of InfinitePrep's own folders by name:
+- an InfinitePrep or InfinitePrep-Data folder
+- a backups, bin, or Cache folder directly inside an InfinitePrep folder
+- a portable Data folder whose marker still sits beside it
+Any other folder is refused, so a wrong location can never send the delete outside
+InfinitePrep's own folders.
 """
 
 from __future__ import annotations
@@ -21,6 +24,8 @@ from typing import Final
 from infiniteprep.config.credentials import CredentialStore, forget_all_credentials
 from infiniteprep.storage_paths import (
     APP_NAME,
+    BACKUP_DIR_NAME,
+    BIN_DIR_NAME,
     MACOS_DATA_DIR_NAME,
     PORTABLE_DATA_DIR_NAME,
     PORTABLE_MARKER_NAME,
@@ -30,6 +35,9 @@ from infiniteprep.storage_paths import (
 logger = logging.getLogger(__name__)
 
 APP_FOLDER_NAMES: Final[frozenset[str]] = frozenset({APP_NAME, MACOS_DATA_DIR_NAME})
+# Folders the per-user layout nests inside an InfinitePrep folder. Windows puts the
+# cache in InfinitePrep\Cache.
+APP_SUBFOLDER_NAMES: Final[frozenset[str]] = frozenset({BACKUP_DIR_NAME, BIN_DIR_NAME, "Cache"})
 REFUSED_REASON: Final[str] = "Not an InfinitePrep folder, so it was left in place."
 NOT_A_FOLDER_REASON: Final[str] = "Not a plain folder, so it was left in place."
 
@@ -98,9 +106,11 @@ def data_folders(locations: StorageLocations) -> list[Path]:
 
 
 def is_app_folder(folder: Path) -> bool:
-    """Return True when folder is one of InfinitePrep's own folders."""
-    if APP_FOLDER_NAMES.intersection(folder.parts):
+    """Return True when folder is one of InfinitePrep's own folders by its own name."""
+    if folder.name in APP_FOLDER_NAMES:
         return True
+    if folder.name in APP_SUBFOLDER_NAMES:
+        return folder.parent.name == APP_NAME
     marker = folder.parent / PORTABLE_MARKER_NAME
     return folder.name == PORTABLE_DATA_DIR_NAME and marker.is_file()
 

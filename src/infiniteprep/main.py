@@ -115,11 +115,15 @@ def delete_data_and_quit(window: MainWindow, repo: Repository, choice: CleanupCh
             app.setQuitOnLastWindowClosed(True)
         build_cleanup_blocked_box().exec()
         return
-    repo.db.close()
-    report = run_cleanup(choice, storage_paths.current())
-    build_cleanup_result_box(report).exec()
-    if app is not None:
-        app.quit()
+    # From here the window and database are gone, so the app must quit even when
+    # an unexpected error interrupts the cleanup or its message.
+    try:
+        repo.db.close()
+        report = run_cleanup(choice, storage_paths.current())
+        build_cleanup_result_box(report).exec()
+    finally:
+        if app is not None:
+            app.quit()
 
 
 def launch_desktop_app() -> int:

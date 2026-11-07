@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.45.0] (2026-11-07)
+## [0.45.1] (2026-11-07)
 
 ### Fixed
 
@@ -17,7 +17,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Two unchecked boxes choose what goes. One covers the library, settings, recovery backups, waveform cache, and downloaded fpcalc. The other covers the saved API keys.
   - The dialog lists each folder it deletes. A final prompt names everything again and defaults to No.
   - InfinitePrep then closes its window and database, deletes the chosen items, lists what it removed and what remains, and quits.
-  - The cleanup removes only folders that belong to InfinitePrep. It never touches music files or exports.
+  - The cleanup checks each folder's own name and removes only InfinitePrep folders. It never touches music files or exports.
+  - InfinitePrep quits after the cleanup even when an unexpected error interrupts it.
   - While an import keeps the window open, the cleanup deletes nothing and says so.
 - New test files: `test_data_cleanup.py` and `test_cleanup_dialog.py`.
 

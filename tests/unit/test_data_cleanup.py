@@ -182,6 +182,21 @@ def test_foreign_folder_is_refused(tmp_path: Path) -> None:
     assert not report.succeeded
 
 
+def test_guard_checks_the_folder_name_not_any_ancestor(tmp_path: Path) -> None:
+    """A folder merely inside an InfinitePrep folder is refused. Known subfolders pass."""
+    app_root = tmp_path / "InfinitePrep"
+
+    assert not is_app_folder(tmp_path / "InfinitePrep-Data" / "elsewhere")
+    assert not is_app_folder(app_root / "Documents")
+    assert not is_app_folder(tmp_path / "other" / "backups")
+    assert is_app_folder(app_root)
+    assert is_app_folder(tmp_path / "InfinitePrep-Data")
+    assert is_app_folder(app_root / "Cache")
+    assert is_app_folder(app_root / "backups")
+    assert is_app_folder(app_root / "bin")
+    assert not is_app_folder(tmp_path / "Data")
+
+
 def test_one_failure_does_not_stop_the_rest(tmp_path: Path) -> None:
     """A file where a folder should be is reported, and the other folders still go."""
     locations = _per_user(tmp_path)
