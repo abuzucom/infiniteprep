@@ -9,8 +9,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
-import platformdirs
-
+from infiniteprep import storage_paths
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
     SourceChangedDuringWriteError,
@@ -47,10 +46,7 @@ class WriteService:
         """Initialize WriteService with Repository, MetadataTagAdapter, and backup directory."""
         self.repo = repository
         self.tag_adapter = tag_adapter or MetadataTagAdapter()
-        if backup_dir is None:
-            base = Path(platformdirs.user_data_dir("InfinitePrep", "InfinitePrep"))
-            backup_dir = base / "backups"
-        self.backup_dir = backup_dir
+        self.backup_dir = backup_dir or storage_paths.current().backup_dir
         self.allowed_library_root = allowed_library_root
 
     def build_batch_preview(
