@@ -14,14 +14,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Rows sort by key, ignoring case.
   - Keys that start with an underscore belong to the app and stay hidden (D245).
   - Binary values show the byte count and SHA-256. Values over 200 characters show cut short, with the full text in a tooltip. The cut never splits a visible character such as an accented letter or a joined emoji.
+  - The tooltip shows the tag text literally. A value that looks like HTML, such as an `img` tag, never renders as markup or loads anything.
 - `src/infiniteprep/user_agent.py` defines one `USER_AGENT` from the app version and `https://github.com/abuzucom/infiniteprep` (D221). It carries no email address.
 - `src/infiniteprep/qt_logging.py` adds `qt.multimedia.ffmpeg*=false` to `QT_LOGGING_RULES` before `QApplication` starts. Rules already set stay in place.
-- Five new test files cover the changes:
+- Six new test files cover the changes:
   - `test_ui_detail_panel_refresh.py`
   - `test_qt_logging_rules.py`
   - `test_user_agent.py`
   - `test_ui_detail_panel_audio_identity.py`
   - `test_ui_detail_panel_truncation.py`
+  - `test_ui_detail_panel_tooltip.py`
 
 ### Changed
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from PySide6.QtGui import QTextDocument
 from PySide6.QtWidgets import QAbstractItemView
 
 from infiniteprep.db.connection import DatabaseManager
@@ -124,14 +125,21 @@ def test_every_field_name_has_a_row(panel_parts: Any) -> None:
     assert shown == [field.value for field in FieldName]
 
 
+def _rendered_tooltip(tooltip: str) -> str:
+    """Return the text a user sees when Qt renders the tooltip as rich text."""
+    document = QTextDocument()
+    document.setHtml(tooltip)
+    return document.toPlainText()
+
+
 def _other_tag_cells(panel: DetailPanel) -> list[tuple[str, str, str]]:
-    """Return (key, cell text, tooltip) for each Other Tags row."""
+    """Return (key, cell text, rendered tooltip text) for each Other Tags row."""
     table = panel.other_tags_table
     cells = []
     for row in range(table.rowCount()):
         value_item = table.item(row, COL_OTHER_VALUE)
         key_text = table.item(row, COL_OTHER_KEY).text()
-        cells.append((key_text, value_item.text(), value_item.toolTip()))
+        cells.append((key_text, value_item.text(), _rendered_tooltip(value_item.toolTip())))
     return cells
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import unicodedata
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -55,6 +56,9 @@ EMOJI_SKIN_TONE_MODIFIERS: Final[tuple[int, int]] = (0x1F3FB, 0x1F3FF)
 # The app adds keys with this prefix itself, for example _bits_per_sample (D245).
 INTERNAL_TAG_PREFIX: Final[str] = "_"
 LIST_VALUE_SEPARATOR: Final[str] = "; "
+# The paragraph keeps line breaks and spaces as the tag holds them.
+TOOLTIP_PARAGRAPH_OPEN: Final[str] = "<p style='white-space:pre-wrap'>"
+TOOLTIP_PARAGRAPH_CLOSE: Final[str] = "</p>"
 COL_FIELD_NAME: Final[int] = 0
 COL_EXISTING_TAG: Final[int] = 1
 COL_TOP_PROPOSAL: Final[int] = 2
@@ -120,6 +124,16 @@ def truncate_for_cell(text: str) -> str:
         return text
     cut = _grapheme_safe_cut(text, OTHER_TAG_DISPLAY_LIMIT - len(TRUNCATION_MARK))
     return text[:cut] + TRUNCATION_MARK
+
+
+def plain_text_tooltip(text: str) -> str:
+    """Return a tooltip that shows text literally.
+
+    Qt renders a tooltip as rich text when it looks like HTML, and no plain-text
+    tooltip mode exists. Escaping the text inside a fixed paragraph keeps a tag value
+    such as <img src=...> from loading or formatting anything.
+    """
+    return f"{TOOLTIP_PARAGRAPH_OPEN}{html.escape(text, quote=True)}{TOOLTIP_PARAGRAPH_CLOSE}"
 
 
 def other_tag_rows(raw_custom_tags: Mapping[str, object]) -> list[tuple[str, str]]:
@@ -248,7 +262,7 @@ class DetailPanel(QWidget):
         for row_idx, (key, full_text) in enumerate(rows):
             key_item = QTableWidgetItem(key)
             value_item = QTableWidgetItem(truncate_for_cell(full_text))
-            value_item.setToolTip(full_text)
+            value_item.setToolTip(plain_text_tooltip(full_text))
             self.other_tags_table.setItem(row_idx, COL_OTHER_KEY, key_item)
             self.other_tags_table.setItem(row_idx, COL_OTHER_VALUE, value_item)
 
