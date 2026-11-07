@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.43.1] (2026-11-07)
+## [0.44.0] (2026-11-07)
 
 ### Fixed
 
@@ -13,6 +13,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A macOS app bundle with a `portable.mode` file next to `InfinitePrep.app` keeps its database and settings in an `InfinitePrep-Data` folder there (D83a3a).
+  - Without the file, the app uses the per-user folders in `~/Library/Application Support`.
+  - A `portable.mode` file inside the bundle has no effect. The app never writes inside `InfinitePrep.app`.
+  - macOS runs a downloaded app from a hidden read-only copy until the app moves out of Downloads. That copy sees no `portable.mode` file and uses the per-user folders.
+  - When the app cannot write to the folder, the `Use my user profile` or `Quit` prompt appears, with `Remember`.
+- New test file: `test_storage_macos_bundle.py`.
 - Linux packages from the manual `build-packages` workflow (D83a2b).
   - `InfinitePrep-<version>-linux-x86_64.AppImage` keeps its library in `InfinitePrep-Data` beside the file. It uses a plain placeholder icon for now.
   - `InfinitePrep-<version>-linux-x86_64.tar.gz` uses the per-user folders.
