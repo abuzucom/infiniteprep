@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import hashlib
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
 
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -31,23 +33,20 @@ from infiniteprep.domain.models import ApprovedField, FieldProposal, FileAsset
 from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
 from infiniteprep.ui.audio_player import AudioPreviewWidget
 
-DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = (
-    FieldName.ARTIST,
-    FieldName.TITLE,
-    FieldName.MIX_NAME,
-    FieldName.REMIXER,
-    FieldName.RELEASE_TITLE,
-    FieldName.LABEL,
-    FieldName.CATALOG_NUMBER,
-    FieldName.VINYL_POSITION,
-    FieldName.YEAR,
-    FieldName.GENRE,
-    FieldName.BPM,
-    FieldName.KEY,
-)
+DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = tuple(FieldName)
 FIELDS_TABLE_COLUMN_COUNT: Final[int] = 6
 FIELDS_TABLE_STRETCH: Final[int] = 3
+OTHER_TAGS_STRETCH: Final[int] = 1
 CANDIDATE_BOX_STRETCH: Final[int] = 1
+OTHER_TAGS_COLUMN_COUNT: Final[int] = 2
+COL_OTHER_KEY: Final[int] = 0
+COL_OTHER_VALUE: Final[int] = 1
+# Longer values show cut short in the cell. The tooltip holds the full text.
+OTHER_TAG_DISPLAY_LIMIT: Final[int] = 200
+TRUNCATION_MARK: Final[str] = "..."
+# The app adds keys with this prefix itself, for example _bits_per_sample (D245).
+INTERNAL_TAG_PREFIX: Final[str] = "_"
+LIST_VALUE_SEPARATOR: Final[str] = "; "
 COL_FIELD_NAME: Final[int] = 0
 COL_EXISTING_TAG: Final[int] = 1
 COL_TOP_PROPOSAL: Final[int] = 2
@@ -55,6 +54,44 @@ COL_PROPOSAL_SOURCE: Final[int] = 3
 COL_APPROVED_EDIT: Final[int] = 4
 COL_ACTIONS: Final[int] = 5
 ACTION_ROW_MARGIN_PX: Final[int] = 2
+
+
+def _format_scalar_tag_value(value: object) -> str:
+    """Return bytes as their size and SHA-256, and any other value as its text.
+
+    The summary matches the one the tag reader stores for binary frames.
+    """
+    if isinstance(value, bytes | bytearray):
+        digest = hashlib.sha256(value).hexdigest()
+        return f"<{len(value)} bytes, sha256 {digest}>"
+    return str(value)
+
+
+def format_other_tag_value(value: object) -> str:
+    """Return the full display text of one raw custom tag value.
+
+    A list joins its items with a separator. Only one level unpacks, so nesting never
+    recurses.
+    """
+    if isinstance(value, list | tuple):
+        return LIST_VALUE_SEPARATOR.join(_format_scalar_tag_value(item) for item in value)
+    return _format_scalar_tag_value(value)
+
+
+def truncate_for_cell(text: str) -> str:
+    """Return text cut to OTHER_TAG_DISPLAY_LIMIT characters, marked when cut."""
+    if len(text) <= OTHER_TAG_DISPLAY_LIMIT:
+        return text
+    return text[: OTHER_TAG_DISPLAY_LIMIT - len(TRUNCATION_MARK)] + TRUNCATION_MARK
+
+
+def other_tag_rows(raw_custom_tags: Mapping[str, object]) -> list[tuple[str, str]]:
+    """Return (key, full value text) rows sorted by key, without internal keys."""
+    return [
+        (key, format_other_tag_value(raw_custom_tags[key]))
+        for key in sorted(raw_custom_tags, key=str.casefold)
+        if not key.startswith(INTERNAL_TAG_PREFIX)
+    ]
 
 
 class DetailPanel(QWidget):
@@ -79,6 +116,8 @@ class DetailPanel(QWidget):
         self.review_service = review_service
         self.on_change_callback = on_change_callback
         self.current_file_id: str | None = None
+        # The file ID and path in the player. A refresh of the same file keeps playback.
+        self._loaded_audio: tuple[str, str] | None = None
         self.key_notation: KeyDisplayNotation = KeyDisplayNotation.CAMELOT
 
         self.header_label = QLabel("Select a track to inspect metadata and proposals.", self)
@@ -86,6 +125,7 @@ class DetailPanel(QWidget):
         self.warnings_label.setStyleSheet("color: #d97706; font-weight: bold;")
         self.audio_player = AudioPreviewWidget(self, enable_multimedia_backend=enable_audio_backend)
         self.fields_table = QTableWidget(0, FIELDS_TABLE_COLUMN_COUNT, self)
+        self.other_tags_table = QTableWidget(0, OTHER_TAGS_COLUMN_COUNT, self)
         self.candidates_list = QListWidget(self)
 
         self._build_layout()
@@ -112,6 +152,17 @@ class DetailPanel(QWidget):
         header.setStretchLastSection(True)
         root.addWidget(self.fields_table, stretch=FIELDS_TABLE_STRETCH)
 
+        other_box = QGroupBox("Other Tags", self)
+        other_layout = QVBoxLayout(other_box)
+        self.other_tags_table.setHorizontalHeaderLabels(["Key", "Value"])
+        self.other_tags_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.other_tags_table.verticalHeader().setVisible(False)
+        other_header = self.other_tags_table.horizontalHeader()
+        other_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        other_header.setStretchLastSection(True)
+        other_layout.addWidget(self.other_tags_table)
+        root.addWidget(other_box, stretch=OTHER_TAGS_STRETCH)
+
         cand_box = QGroupBox("Candidate Releases & Analysis Evidence", self)
         cand_layout = QVBoxLayout(cand_box)
         cand_layout.addWidget(self.candidates_list)
@@ -135,9 +186,34 @@ class DetailPanel(QWidget):
             f"Write Supported: {asset.is_write_supported}"
         )
         self._populate_warnings(asset)
-        self.audio_player.load_file(Path(asset.current_path), fallback_duration_sec=asset.duration)
+        self._load_audio_if_changed(asset)
         self._populate_fields_table(asset)
+        self._populate_other_tags(asset)
         self._populate_candidates_list(file_id)
+
+    def _load_audio_if_changed(self, asset: FileAsset) -> None:
+        """Load the asset into the player only when a different file is selected.
+
+        Notation changes and field actions refresh the same file. Reloading would stop
+        playback and reset the position.
+        """
+        audio_identity = (asset.id, asset.current_path)
+        if audio_identity == self._loaded_audio:
+            return
+        self._loaded_audio = audio_identity
+        self.audio_player.load_file(Path(asset.current_path), fallback_duration_sec=asset.duration)
+
+    def _populate_other_tags(self, asset: FileAsset) -> None:
+        """Fill the read-only Other Tags table from the file's raw custom tags."""
+        raw_custom_tags = asset.original_tags.get("raw_custom_tags") or {}
+        rows = other_tag_rows(raw_custom_tags)
+        self.other_tags_table.setRowCount(len(rows))
+        for row_idx, (key, full_text) in enumerate(rows):
+            key_item = QTableWidgetItem(key)
+            value_item = QTableWidgetItem(truncate_for_cell(full_text))
+            value_item.setToolTip(full_text)
+            self.other_tags_table.setItem(row_idx, COL_OTHER_KEY, key_item)
+            self.other_tags_table.setItem(row_idx, COL_OTHER_VALUE, value_item)
 
     def _populate_warnings(self, asset: FileAsset) -> None:
         """Render XDJ-RX3 hardware warnings, pitch drift alerts, and rip diagnostics."""

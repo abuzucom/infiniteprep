@@ -15,10 +15,11 @@ from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
 from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
 from infiniteprep.domain.ports import MetadataSearchQuery
+from infiniteprep.user_agent import USER_AGENT
 
 MB_BASE_URL: Final[str] = "https://musicbrainz.org/ws/2"
 MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
-MB_USER_AGENT: Final[str] = "InfinitePrep/0.1.0 (https://github.com/infiniteprep/infiniteprep)"
+MB_USER_AGENT: Final[str] = USER_AGENT
 MB_CACHE_TTL_SEC: Final[int] = 86400
 LUCENE_SPECIAL_RE: Final[re.Pattern[str]] = re.compile(r'([+\-!(){}\[\]^"~*?:\\/]|&&|\|\|)')
 SAFE_ENTITY_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_-]{1,64}$")

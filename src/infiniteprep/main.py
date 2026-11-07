@@ -21,6 +21,7 @@ from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName, SourceType
 from infiniteprep.hashing import compute_sha256
+from infiniteprep.qt_logging import silence_ffmpeg_logs
 from infiniteprep.services.import_service import ImportService, discover_files_bounded
 from infiniteprep.services.job_orchestrator import JobOrchestrator
 from infiniteprep.services.playlist_exporter import PlaylistExporter
@@ -87,6 +88,8 @@ def launch_desktop_app() -> int:
     reconciler = ReconciliationService(repo)
     transcoder = SafeTranscoderAdapter(repo, backup_dir=app_dir / "backups")
     exporter = PlaylistExporter(repo)
+    # Qt reads the logging rules when QApplication starts.
+    silence_ffmpeg_logs()
     qt_app = QApplication.instance() or QApplication(sys.argv)
     saved_theme = SettingsManager().load().theme
     apply_application_theme(qt_app, saved_theme)
