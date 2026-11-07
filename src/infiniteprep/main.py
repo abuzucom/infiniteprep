@@ -8,9 +8,9 @@ import sys
 from pathlib import Path
 from typing import Any, Final
 
-import platformdirs
 from PySide6.QtWidgets import QApplication
 
+from infiniteprep import storage_paths
 from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
 from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapter
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
@@ -37,6 +37,7 @@ from infiniteprep.ui.journal_dialog import JournalDialog
 from infiniteprep.ui.main_window import MainWindow
 from infiniteprep.ui.recovery_dialog import RecoveryDialog
 from infiniteprep.ui.settings_dialog import SettingsDialog
+from infiniteprep.ui.storage_prompt import confirm_storage_fallback
 from infiniteprep.ui.theme import apply_application_theme
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 
@@ -44,6 +45,7 @@ SMOKE_CHECK_FLAG: Final[str] = "--smoke-check"
 # The flag plus one output path.
 SMOKE_CHECK_ARG_COUNT: Final[int] = 2
 SMOKE_CHECK_USAGE_ERROR: Final[int] = 2
+DATABASE_FILE_NAME: Final[str] = "infiniteprep.sqlite3"
 
 
 def run_evaluation_sample(input_dir: Path) -> dict[str, Any]:
@@ -86,17 +88,25 @@ def run_evaluation_sample(input_dir: Path) -> dict[str, Any]:
 
 def launch_desktop_app() -> int:
     """Launch the PySide6 desktop GUI application."""
-    app_dir = Path(platformdirs.user_data_dir("InfinitePrep", "InfinitePrep"))
-    app_dir.mkdir(parents=True, exist_ok=True)
-    repo = Repository(DatabaseManager(app_dir / "infiniteprep.sqlite3"))
-    write_svc = WriteService(repo, backup_dir=app_dir / "backups")
-    orchestrator = JobOrchestrator(repository=repo, audio_analyzer=LocalDspAnalyzer())
-    reconciler = ReconciliationService(repo)
-    transcoder = SafeTranscoderAdapter(repo, backup_dir=app_dir / "backups")
-    exporter = PlaylistExporter(repo)
     # Qt reads the logging rules when QApplication starts.
     silence_ffmpeg_logs()
     qt_app = QApplication.instance() or QApplication(sys.argv)
+    # The unwritable-folder prompt needs Qt, and the database needs the chosen folder.
+    locations = storage_paths.resolve_locations(
+        Path(sys.executable),
+        frozen=bool(getattr(sys, "frozen", False)),
+        confirm_fallback=confirm_storage_fallback,
+    )
+    if locations is None:
+        return 0
+    storage_paths.configure(locations)
+    locations.data_dir.mkdir(parents=True, exist_ok=True)
+    repo = Repository(DatabaseManager(locations.data_dir / DATABASE_FILE_NAME))
+    write_svc = WriteService(repo, backup_dir=locations.backup_dir)
+    orchestrator = JobOrchestrator(repository=repo, audio_analyzer=LocalDspAnalyzer())
+    reconciler = ReconciliationService(repo)
+    transcoder = SafeTranscoderAdapter(repo, backup_dir=locations.backup_dir)
+    exporter = PlaylistExporter(repo)
     saved_theme = SettingsManager().load().theme
     apply_application_theme(qt_app, saved_theme)
 

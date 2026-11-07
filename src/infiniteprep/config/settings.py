@@ -11,8 +11,7 @@ from pathlib import Path
 from typing import Final
 from urllib.parse import urlparse
 
-import platformdirs
-
+from infiniteprep import storage_paths
 from infiniteprep.domain.enums import KeyDisplayNotation
 
 logger = logging.getLogger(__name__)
@@ -150,10 +149,9 @@ class SettingsManager:
     """Loads and saves non-secret AppSettings to a JSON file."""
 
     def __init__(self, settings_path: Path | None = None) -> None:
-        """Initialize SettingsManager with an explicit path or platformdirs default."""
+        """Initialize SettingsManager with an explicit path or the configured settings folder."""
         if settings_path is None:
-            cfg_dir = Path(platformdirs.user_config_dir("InfinitePrep", "InfinitePrep"))
-            settings_path = cfg_dir / "settings.json"
+            settings_path = storage_paths.current().config_dir / "settings.json"
         self.settings_path = settings_path
 
     def load(self) -> AppSettings:
