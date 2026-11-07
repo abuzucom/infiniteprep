@@ -17,8 +17,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
-import platformdirs
-
+from infiniteprep import storage_paths
 from infiniteprep.user_agent import USER_AGENT
 
 FPCALC_VERSION: Final[str] = "1.5.1"
@@ -115,10 +114,7 @@ class FpcalcBootstrapService:
         downloader: Callable[[str], bytes] | None = None,
     ) -> None:
         """Initialize FpcalcBootstrapService with an application bin directory."""
-        if install_dir is None:
-            base = Path(platformdirs.user_data_dir("InfinitePrep", "InfinitePrep"))
-            install_dir = base / "bin"
-        self.install_dir = install_dir
+        self.install_dir = install_dir or storage_paths.current().bin_dir
         self.custom_path = custom_path
         self.downloader = downloader or self._default_download
 

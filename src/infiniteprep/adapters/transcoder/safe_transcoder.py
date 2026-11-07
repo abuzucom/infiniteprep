@@ -11,10 +11,10 @@ from pathlib import Path
 from typing import Final
 
 import numpy as np
-import platformdirs
 import soundfile as sf
 from scipy.signal import resample_poly
 
+from infiniteprep import storage_paths
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
     copy_to_new_verified_file,
@@ -86,10 +86,7 @@ class SafeTranscoderAdapter:
         """Initialize SafeTranscoderAdapter with Repository, MetadataTagAdapter, and backup_dir."""
         self.repo = repository
         self.tag_adapter = tag_adapter or MetadataTagAdapter()
-        if backup_dir is None:
-            base = Path(platformdirs.user_data_dir("InfinitePrep", "InfinitePrep"))
-            backup_dir = base / "backups"
-        self.backup_dir = backup_dir
+        self.backup_dir = backup_dir or storage_paths.current().backup_dir
         self.allowed_export_root = allowed_export_root
 
     def transcode_file(

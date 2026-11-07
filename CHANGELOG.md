@@ -5,10 +5,24 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.36.0] (2026-11-07)
+## [0.37.0] (2026-11-07)
 
 ### Added
 
+- Portable mode for packaged builds (D83a1a).
+  - A `portable.mode` file beside the executable keeps the database and settings in a `Data` folder there. Caches, recovery backups, and the downloaded fpcalc stay in the per-user folders. Credentials stay in the system keyring.
+  - Only a packaged build looks for the file. A run from source always uses the per-user folders.
+  - A portable copy starts with its own empty library. It never reads or copies the per-user one.
+  - When the app cannot write to `Data`, a prompt offers `Use my user profile` or `Quit`, with a `Remember` checkbox. A remembered choice clears itself once the app can write to `Data` again.
+  - The write check uses a uniquely named temporary file that deletes itself. It never touches a file already in `Data`.
+- When the library folder or database cannot open at startup, a plain-text message names the cause. InfinitePrep then exits with code 1 instead of stopping with a traceback.
+- `src/infiniteprep/storage_paths.py` chooses every storage folder once at startup. Settings, backups, the fpcalc tool, and the waveform cache take the default folder from it.
+- Five new test files cover portable mode:
+  - `test_startup_storage.py`
+  - `test_storage_paths.py`
+  - `test_storage_probe.py`
+  - `test_storage_defaults.py`
+  - `test_storage_prompt.py`
 - A manual `build-packages` workflow builds the PyInstaller bundle on each target OS (D83a0).
   - The jobs run on pinned `windows-2025`, `macos-14`, and `ubuntu-22.04` images with Python 3.12. The Linux baseline is glibc 2.35.
   - Each job runs `pip check` after the install. Drift between `requirements-lock.txt` and `pyproject.toml` fails the build.

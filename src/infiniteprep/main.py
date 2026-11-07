@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 from typing import Any, Final
 
-import platformdirs
 from PySide6.QtWidgets import QApplication
 
 from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
@@ -29,6 +28,7 @@ from infiniteprep.services.reconciliation import ReconciliationService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
 from infiniteprep.smoke_check import run_smoke_check
+from infiniteprep.startup_storage import open_storage
 from infiniteprep.ui.action_handlers import (
     export_playlist_with_feedback,
     run_transcode_with_confirmation,
@@ -37,6 +37,7 @@ from infiniteprep.ui.journal_dialog import JournalDialog
 from infiniteprep.ui.main_window import MainWindow
 from infiniteprep.ui.recovery_dialog import RecoveryDialog
 from infiniteprep.ui.settings_dialog import SettingsDialog
+from infiniteprep.ui.storage_prompt import confirm_storage_fallback, show_storage_error
 from infiniteprep.ui.theme import apply_application_theme
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 
@@ -86,17 +87,24 @@ def run_evaluation_sample(input_dir: Path) -> dict[str, Any]:
 
 def launch_desktop_app() -> int:
     """Launch the PySide6 desktop GUI application."""
-    app_dir = Path(platformdirs.user_data_dir("InfinitePrep", "InfinitePrep"))
-    app_dir.mkdir(parents=True, exist_ok=True)
-    repo = Repository(DatabaseManager(app_dir / "infiniteprep.sqlite3"))
-    write_svc = WriteService(repo, backup_dir=app_dir / "backups")
-    orchestrator = JobOrchestrator(repository=repo, audio_analyzer=LocalDspAnalyzer())
-    reconciler = ReconciliationService(repo)
-    transcoder = SafeTranscoderAdapter(repo, backup_dir=app_dir / "backups")
-    exporter = PlaylistExporter(repo)
     # Qt reads the logging rules when QApplication starts.
     silence_ffmpeg_logs()
     qt_app = QApplication.instance() or QApplication(sys.argv)
+    # The storage prompts need Qt, and the database needs the chosen folder.
+    opened = open_storage(
+        Path(sys.executable),
+        frozen=bool(getattr(sys, "frozen", False)),
+        confirm_fallback=confirm_storage_fallback,
+        show_error=show_storage_error,
+    )
+    if isinstance(opened, int):
+        return opened
+    repo = opened.repository
+    write_svc = WriteService(repo, backup_dir=opened.locations.backup_dir)
+    orchestrator = JobOrchestrator(repository=repo, audio_analyzer=LocalDspAnalyzer())
+    reconciler = ReconciliationService(repo)
+    transcoder = SafeTranscoderAdapter(repo, backup_dir=opened.locations.backup_dir)
+    exporter = PlaylistExporter(repo)
     saved_theme = SettingsManager().load().theme
     apply_application_theme(qt_app, saved_theme)
 
