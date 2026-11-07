@@ -198,3 +198,152 @@ jobs:
             dist/InfinitePrep-*-windows-x64-setup.exe
           retention-days: 3
           if-no-files-found: error
+
+      # Two tarballs (D288). The plain one keeps per-user storage. The
+      # portable one carries portable.mode, so its copy keeps its library in a
+      # Data folder beside the executable (D279).
+      - name: Build Linux tarballs
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          folder="InfinitePrep-$version"
+          staging="$RUNNER_TEMP/tarball"
+          mkdir -p "$staging"
+          cp -a dist/InfinitePrep "$staging/$folder"
+          tar_flags=(--owner=0 --group=0 --numeric-owner -czf)
+          tar "${tar_flags[@]}" "dist/$folder-linux-x86_64.tar.gz" -C "$staging" "$folder"
+          touch "$staging/$folder/portable.mode"
+          tar "${tar_flags[@]}" "dist/$folder-linux-x86_64-portable.tar.gz" -C "$staging" "$folder"
+
+      # Build-only tools with Rule 9 sign-off (D286). Each file must match its
+      # pinned SHA-256 before anything runs it. The runtime becomes the start
+      # of the AppImage, and NOTICE lists what it links statically.
+      - name: Fetch pinned AppImage tools
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          LINUXDEPLOY_URL: https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage
+          LINUXDEPLOY_SHA256: c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d
+          APPIMAGE_PLUGIN_URL: https://github.com/linuxdeploy/linuxdeploy-plugin-appimage/releases/download/1-alpha-20250213-1/linuxdeploy-plugin-appimage-x86_64.AppImage
+          APPIMAGE_PLUGIN_SHA256: 992d502a248e14ab185448ddf6f6e7d25558cb84d4623c354c3af350c25fccb3
+          RUNTIME_URL: https://github.com/AppImage/type2-runtime/releases/download/20251108/runtime-x86_64
+          RUNTIME_SHA256: 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
+        run: |
+          tools="$RUNNER_TEMP/appimage-tools"
+          mkdir -p "$tools"
+          cd "$tools"
+          curl --fail --location --silent --show-error -o linuxdeploy-x86_64.AppImage "$LINUXDEPLOY_URL"
+          curl --fail --location --silent --show-error -o linuxdeploy-plugin-appimage-x86_64.AppImage "$APPIMAGE_PLUGIN_URL"
+          curl --fail --location --silent --show-error -o runtime-x86_64 "$RUNTIME_URL"
+          printf '%s  %s\n' \
+            "$LINUXDEPLOY_SHA256" linuxdeploy-x86_64.AppImage \
+            "$APPIMAGE_PLUGIN_SHA256" linuxdeploy-plugin-appimage-x86_64.AppImage \
+            "$RUNTIME_SHA256" runtime-x86_64 | sha256sum --check --strict
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-appimage-x86_64.AppImage
+
+      # linuxdeploy runs without its Qt plugin, because PyInstaller already
+      # bundles Qt (D284). The pinned runtime replaces the plugin's download
+      # of a moving one (D285). The icon is a plain placeholder (D287).
+      - name: Build Linux AppImage
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          # The runner has no FUSE, so each tool unpacks itself before it runs.
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+          LDAI_NO_APPSTREAM: '1'
+        run: |
+          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          tools="$RUNNER_TEMP/appimage-tools"
+          appdir="$RUNNER_TEMP/AppDir"
+          icon="$RUNNER_TEMP/infiniteprep.png"
+          mkdir -p "$appdir/usr/bin"
+          cp -a dist/InfinitePrep/. "$appdir/usr/bin/"
+          python - "$icon" <<'PY'
+          import struct
+          import sys
+          import zlib
+
+          size = 256
+          rows = b"".join(b"\x00" + b"\x20\x60\xa0" * size for _ in range(size))
+
+          def chunk(kind, data):
+              body = kind + data
+              return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+
+          header = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)
+          png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header)
+          png += chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+          with open(sys.argv[1], "wb") as handle:
+              handle.write(png)
+          PY
+          export LDAI_RUNTIME_FILE="$tools/runtime-x86_64"
+          export LDAI_OUTPUT="$GITHUB_WORKSPACE/dist/InfinitePrep-$version-linux-x86_64.AppImage"
+          export LINUXDEPLOY_OUTPUT_VERSION="$version"
+          log="$RUNNER_TEMP/linuxdeploy.log"
+          PATH="$tools:$PATH" "$tools/linuxdeploy-x86_64.AppImage" \
+            --appdir "$appdir" \
+            --executable "$appdir/usr/bin/InfinitePrep" \
+            --desktop-file "$GITHUB_WORKSPACE/packaging/linux/infiniteprep.desktop" \
+            --icon-file "$icon" \
+            --output appimage > "$log" 2>&1 || { cat "$log"; exit 1; }
+          tail -n 40 "$log"
+          if grep -q 'Downloading runtime' "$log"; then
+            echo 'The AppImage build downloaded a runtime instead of the pinned one.'
+            exit 1
+          fi
+          test -x "$LDAI_OUTPUT"
+
+      # Each tarball unpacks into one versioned folder with the notices, and
+      # only the portable one carries the marker. Every package must start.
+      - name: Test Linux packages
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: |
+          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          folder="InfinitePrep-$version"
+          check_smoke() {
+            local result="$RUNNER_TEMP/linux-smoke.txt"
+            rm -f "$result"
+            "$1" --smoke-check "$result"
+            if [ "$(cat "$result")" != "$version" ]; then
+              echo "$1 reported the wrong version."
+              exit 1
+            fi
+          }
+          for kind in plain portable; do
+            suffix=""
+            if [ "$kind" = portable ]; then suffix="-portable"; fi
+            unpack="$RUNNER_TEMP/unpack-$kind"
+            mkdir -p "$unpack"
+            tar -xzf "dist/$folder-linux-x86_64$suffix.tar.gz" -C "$unpack"
+            if [ "$(ls "$unpack")" != "$folder" ]; then
+              echo "The $kind tarball does not unpack into $folder."
+              exit 1
+            fi
+            test -f "$unpack/$folder/LICENSE"
+            test -f "$unpack/$folder/NOTICE"
+            if [ "$kind" = portable ]; then
+              test -f "$unpack/$folder/portable.mode"
+            elif [ -e "$unpack/$folder/portable.mode" ]; then
+              echo 'The plain tarball carries portable.mode.'
+              exit 1
+            fi
+            check_smoke "$unpack/$folder/InfinitePrep"
+          done
+          check_smoke "$GITHUB_WORKSPACE/dist/$folder-linux-x86_64.AppImage"
+          echo "Linux packages passed for version $version."
+
+      - name: Upload Linux packages
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: InfinitePrep-linux-packages
+          path: |
+            dist/InfinitePrep-*-linux-x86_64.tar.gz
+            dist/InfinitePrep-*-linux-x86_64-portable.tar.gz
+            dist/InfinitePrep-*-linux-x86_64.AppImage
+          retention-days: 3
+          if-no-files-found: error

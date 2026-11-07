@@ -37,6 +37,25 @@ Optional separate download
   InfinitePrep downloads it only after user consent and runs it as a
   separate program.
 
+Linux AppImage runtime
+- AppImage type2-runtime 20251108: MIT. It starts every InfinitePrep
+  AppImage and links these libraries statically:
+  - libfuse 3.15.0: LGPL-2.1 for the library.
+  - squashfuse 0.5.2: BSD-2-Clause.
+  - zstd: BSD-3-Clause.
+  - zlib: Zlib.
+  - mimalloc: MIT.
+  - musl libc: MIT.
+- To rebuild or relink the runtime, use its source and build scripts at
+  https://github.com/AppImage/type2-runtime/tree/20251108 and the
+  libfuse 3.15.0 source at
+  https://github.com/libfuse/libfuse/releases/tag/fuse-3.15.0. Then
+  replace the first part of the AppImage with the new runtime, or rebuild
+  the AppImage from the tarball contents with appimagetool.
+
 Build tools (not shipped)
 - PyInstaller: GPL-2.0-or-later WITH Bootloader-exception. The exception
   covers the bootloader inside the packaged application.
+- linuxdeploy 1-alpha-20251107-1 and linuxdeploy-plugin-appimage
+  1-alpha-20250213-1: MIT. The plugin carries appimagetool (MIT) and
+  mksquashfs (GPL-2.0-or-later).
