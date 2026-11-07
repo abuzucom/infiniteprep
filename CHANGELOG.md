@@ -11,10 +11,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - A manual `build-packages` workflow builds the PyInstaller bundle on each target OS (D83a0).
   - The jobs run on pinned `windows-2025`, `macos-14`, and `ubuntu-22.04` images with Python 3.12. The Linux baseline is glibc 2.35.
+  - Each job runs `pip check` after the install. Drift between `requirements-lock.txt` and `pyproject.toml` fails the build.
   - Each job runs the built app's smoke check and fails when the written version does not match.
   - Each job uploads its bundle with `actions/upload-artifact` v7.0.2, pinned by commit. GitHub deletes each upload after 3 days.
   - The workflow runs only when started by hand. A later D83a change adds the release tag trigger.
-- A hidden `--smoke-check <path>` flag loads numpy, scipy, soundfile, keyring, and Qt Multimedia on the offscreen platform. It then writes the version to the path and exits 0. The windowed Windows build has no stdout. The result therefore goes to a file.
+- A hidden `--smoke-check <path>` flag loads numpy, scipy, soundfile, keyring, and Qt Multimedia on the offscreen platform. It then writes the version to the path and exits 0. The windowed Windows build has no stdout. The result therefore goes to a file. The flag writes only a new file and refuses an existing file or a directory.
 - Three new test files cover the D83a0 changes and the fix below:
   - `tests/test_build_packages_workflow.py`
   - `tests/unit/test_smoke_check.py`

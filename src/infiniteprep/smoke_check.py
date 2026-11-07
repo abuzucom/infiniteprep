@@ -48,8 +48,13 @@ def _load_qt_multimedia() -> None:
 
 
 def run_smoke_check(output_path: Path) -> int:
-    """Load the runtime libraries and Qt, write the version to output_path, and return 0."""
+    """Load the runtime libraries and Qt, write the version to output_path, and return 0.
+
+    The file opens in exclusive-create mode, so the check never overwrites an existing
+    file. An existing path raises FileExistsError.
+    """
     _load_native_libraries()
     _load_qt_multimedia()
-    output_path.write_text(__version__, encoding="utf-8")
+    with output_path.open("x", encoding="utf-8") as result_file:
+        result_file.write(__version__)
     return 0

@@ -88,6 +88,13 @@ class BuildPackagesWorkflowTest(unittest.TestCase):
         self.assertIn("requirements-lock.txt", runs)
         self.assertNotIn("--upgrade pip", runs)
 
+    def test_pip_check_runs_before_the_build(self) -> None:
+        """pip check confirms the installed requirements before PyInstaller runs."""
+        runs = [step.get("run", "") for step in self._steps()]
+        check_index = runs.index("python -m pip check")
+        build_index = next(i for i, run in enumerate(runs) if "pyinstaller" in run)
+        self.assertLess(check_index, build_index)
+
 
 if __name__ == "__main__":
     unittest.main()

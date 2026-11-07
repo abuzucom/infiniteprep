@@ -142,7 +142,11 @@ def main(argv: list[str] | None = None) -> int:
         if len(args) != SMOKE_CHECK_ARG_COUNT:
             print("Usage: --smoke-check <output-file>. Pass one output path.", file=sys.stderr)
             return SMOKE_CHECK_USAGE_ERROR
-        return run_smoke_check(Path(args[1]))
+        output_path = Path(args[1])
+        if output_path.exists():
+            print("The smoke-check output path exists. Pass a new file path.", file=sys.stderr)
+            return SMOKE_CHECK_USAGE_ERROR
+        return run_smoke_check(output_path)
     if args and args[0] == "evaluate-sample":
         parser = argparse.ArgumentParser(prog="infiniteprep evaluate-sample")
         parser.add_argument("--input-dir", required=True, help="Directory of pilot audio files.")

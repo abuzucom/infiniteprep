@@ -61,6 +61,11 @@ jobs:
           python -m pip install -r requirements-lock.txt
           python -m pip install --no-deps -e .
 
+      # The lock file and pyproject.toml can drift apart. pip check fails when an
+      # installed package, the app included, misses or conflicts with a requirement.
+      - name: Check installed requirements
+        run: python -m pip check
+
       - name: Build bundle
         run: pyinstaller --noconfirm infiniteprep.spec
 
