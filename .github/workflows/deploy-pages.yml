@@ -2,7 +2,7 @@
 # The site source lives in website/. The artifact path below names that folder.
 name: Deploy static content to Pages
 
-on:
+"on":
   # Runs on pushes targeting the default branch
   push:
     branches: ["main"]

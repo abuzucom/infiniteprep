@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.41.0] (2026-11-07)
+## [0.42.0] (2026-11-07)
 
 ### Fixed
 
@@ -73,6 +73,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `test_ui_detail_panel_tooltip.py`
 - A `deploy-pages` workflow publishes the landing site to GitHub Pages. The workflow runs on every push to `main` and on demand from the Actions tab.
 - Every action in that workflow names a full commit and the release that the commit carries.
+- New test file: `test_pages_deployment_workflow.py`. It checks that the workflow publishes the site folder and no project document.
 - A GitHub Pages landing page in `website/index.html` describes the current desktop workflow and the project's planned direction.
 - `website/robots.txt` sets crawler preferences for AI training crawlers. The landing page carries noindex metadata.
 - `website/CNAME` sets `infiniteprep.dev` as the GitHub Pages custom domain.
@@ -84,7 +85,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The FFmpeg backend of Qt Multimedia no longer writes decoder messages to the console.
 - The site source moves from `docs/` to `website/`. The `docs/` folder keeps the project documents.
 - The deployment uploads the `website/` folder alone. The project documents stay out of the published site.
-- The package version moves to 0.41.0.
+- The package version moves to 0.42.0.
 
 ### Fixed
 
