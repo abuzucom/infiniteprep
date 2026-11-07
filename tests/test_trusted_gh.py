@@ -130,6 +130,108 @@ class TrustedRunnerSafetyTest(unittest.TestCase):
         self.assertEqual(captured["env"]["ALL_PROXY"],
                          "http://proxy.example.test:8080")
 
+    def test_external_config_directory_is_preserved(self):
+        """Preserve an external existing configuration directory."""
+        captured = {}
+
+        def runner(arguments, **kwargs):
+            captured.update(kwargs)
+            return subprocess.CompletedProcess(arguments, 0, "", "")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo_dir = root / "repo"
+            repo_dir.mkdir()
+            config_dir = root / "config"
+            config_dir.mkdir()
+            with patch.dict(os.environ, {"GH_CONFIG_DIR": str(config_dir)}, clear=False):
+                with patch.object(trusted_gh, "resolve_gh", return_value=sys.executable):
+                    with patch.object(trusted_gh, "_safe_directory", return_value=config_dir):
+                        trusted_gh.run_gh(repo_dir, ["api", "user"], runner=runner)
+
+        self.assertEqual(captured["env"]["GH_CONFIG_DIR"], str(config_dir.resolve()))
+
+    def test_repository_config_directory_is_removed(self):
+        """Remove a configuration directory inside the repository."""
+        captured = {}
+
+        def runner(arguments, **kwargs):
+            captured.update(kwargs)
+            return subprocess.CompletedProcess(arguments, 0, "", "")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo_dir = root / "repo"
+            repo_dir.mkdir()
+            config_dir = repo_dir / "config"
+            config_dir.mkdir()
+            with patch.dict(os.environ, {"GH_CONFIG_DIR": str(config_dir)}, clear=False):
+                with patch.object(trusted_gh, "resolve_gh", return_value=sys.executable):
+                    with patch.object(trusted_gh, "_safe_directory", return_value=root):
+                        trusted_gh.run_gh(repo_dir, ["api", "user"], runner=runner)
+
+        self.assertNotIn("GH_CONFIG_DIR", captured["env"])
+
+    def test_relative_config_directory_is_removed(self):
+        """Remove a relative configuration directory."""
+        captured = {}
+
+        def runner(arguments, **kwargs):
+            captured.update(kwargs)
+            return subprocess.CompletedProcess(arguments, 0, "", "")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo_dir = root / "repo"
+            repo_dir.mkdir()
+            with patch.dict(os.environ, {"GH_CONFIG_DIR": "relative/config"}, clear=False):
+                with patch.object(trusted_gh, "resolve_gh", return_value=sys.executable):
+                    with patch.object(trusted_gh, "_safe_directory", return_value=root):
+                        trusted_gh.run_gh(repo_dir, ["api", "user"], runner=runner)
+
+        self.assertNotIn("GH_CONFIG_DIR", captured["env"])
+
+    def test_nonexistent_config_directory_is_removed(self):
+        """Remove a nonexistent configuration directory."""
+        captured = {}
+
+        def runner(arguments, **kwargs):
+            captured.update(kwargs)
+            return subprocess.CompletedProcess(arguments, 0, "", "")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo_dir = root / "repo"
+            repo_dir.mkdir()
+            nonexistent = root / "nonexistent"
+            with patch.dict(os.environ, {"GH_CONFIG_DIR": str(nonexistent)}, clear=False):
+                with patch.object(trusted_gh, "resolve_gh", return_value=sys.executable):
+                    with patch.object(trusted_gh, "_safe_directory", return_value=root):
+                        trusted_gh.run_gh(repo_dir, ["api", "user"], runner=runner)
+
+        self.assertNotIn("GH_CONFIG_DIR", captured["env"])
+
+    def test_file_config_directory_is_removed(self):
+        """Remove a configuration path that is not a directory."""
+        captured = {}
+
+        def runner(arguments, **kwargs):
+            captured.update(kwargs)
+            return subprocess.CompletedProcess(arguments, 0, "", "")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            repo_dir = root / "repo"
+            repo_dir.mkdir()
+            config_file = root / "config_file"
+            config_file.write_text("not a directory\n", encoding="utf-8")
+            with patch.dict(os.environ, {"GH_CONFIG_DIR": str(config_file)}, clear=False):
+                with patch.object(trusted_gh, "resolve_gh", return_value=sys.executable):
+                    with patch.object(trusted_gh, "_safe_directory", return_value=root):
+                        trusted_gh.run_gh(repo_dir, ["api", "user"], runner=runner)
+
+        self.assertNotIn("GH_CONFIG_DIR", captured["env"])
+
     def test_runner_decodes_malformed_output_with_utf8_replacement(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

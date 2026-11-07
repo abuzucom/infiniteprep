@@ -400,12 +400,32 @@ def describe_access_error(error: GitHubAccessError) -> str:
     return f"{message}; inspect proxy variables: {listed}"
 
 
+
+def _sanitize_config_directory(environment: dict, repository: Path) -> None:
+    """Preserve only an external existing configuration directory."""
+    raw = environment.pop("GH_CONFIG_DIR", None)
+    if not raw:
+        return
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        return
+    try:
+        resolved = candidate.resolve(strict=True)
+    except OSError:
+        return
+    if (not resolved.is_dir()
+            or _is_inside(Path(os.path.abspath(candidate)), repository)
+            or _is_inside(resolved, repository)):
+        return
+    environment["GH_CONFIG_DIR"] = str(resolved)
+
+
 def run_gh(repo_root, arguments: list[str], *, runner=None, timeout=None):
     """Run trusted GitHub CLI from outside the repository."""
     repository = Path(repo_root).resolve()
     executable = Path(resolve_gh(repository))
     environment = dict(os.environ)
-    environment.pop("GH_CONFIG_DIR", None)
+    _sanitize_config_directory(environment, repository)
     environment.pop("GH_REPO", None)
     _sanitize_proxy_environment(environment)
     environment.update({"GH_PAGER": "", "GH_PROMPT_DISABLED": "1"})
