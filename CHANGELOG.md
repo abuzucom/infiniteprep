@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.39.0] (2026-11-07)
+## [0.40.0] (2026-11-07)
 
 ### Fixed
 
@@ -71,6 +71,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `test_ui_detail_panel_audio_identity.py`
   - `test_ui_detail_panel_truncation.py`
   - `test_ui_detail_panel_tooltip.py`
+- A GitHub Pages landing page in `docs/index.html` describes the current desktop workflow and the project's planned direction.
+- `docs/robots.txt` sets crawler preferences for AI training crawlers. The landing page carries noindex metadata.
+- `docs/CNAME` sets `infiniteprep.dev` as the GitHub Pages custom domain.
 
 ### Changed
 
