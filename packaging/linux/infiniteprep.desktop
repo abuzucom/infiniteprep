@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=InfinitePrep
+Comment=DJ music metadata identification, analysis, review, and tag management
+Exec=InfinitePrep
+Icon=infiniteprep
+Terminal=false
+Categories=AudioVideo;Audio;
