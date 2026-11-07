@@ -5,10 +5,24 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.37.0] (2026-11-07)
+## [0.38.1] (2026-11-07)
+
+### Fixed
+
+- The manual `build-packages` workflow builds on the pinned `macos-15` image. GitHub no longer supports `macos-14`. GitHub cancelled the macOS job on that image before it started.
 
 ### Added
 
+- Windows packages from the manual `build-packages` workflow (D83a1b).
+  - `InfinitePrep-<version>-windows-x64-portable.zip` holds the bundle with `portable.mode`, LICENSE, and NOTICE.
+  - `InfinitePrep-<version>-windows-x64-setup.exe` is a per-user NSIS installer that needs no admin rights. It installs to `%LocalAppData%\Programs\InfinitePrep`, apart from the data root `%LocalAppData%\InfinitePrep`.
+  - The installer adds a Start Menu shortcut, an optional desktop shortcut that starts unchecked, and an Apps and Features entry.
+  - An earlier installation leads to a prompt to uninstall it and continue. That uninstall keeps the library and saved keys.
+  - The uninstaller keeps all data by default. One unchecked box deletes the library, settings, backups, and cache. A second unchecked box deletes the saved API keys. Music files and exports are never touched.
+  - CI downloads NSIS 3.13 and checks its pinned SHA-256 before use (Rule 9 sign-off). The Windows job installs the built setup silently, runs the installed app's smoke check, checks the shortcut and the Apps and Features entry, and uninstalls silently with the data kept.
+- Every bundle now carries LICENSE and NOTICE beside the executable.
+- A hidden `--forget-credentials` flag removes every key InfinitePrep saved in the OS keyring. The uninstaller's saved-keys box runs it.
+- New tests: `test_windows_packaging.py` and `test_forget_credentials.py`.
 - Portable mode for packaged builds (D83a1a).
   - A `portable.mode` file beside the executable keeps the database and settings in a `Data` folder there. Caches, recovery backups, and the downloaded fpcalc stay in the per-user folders. Credentials stay in the system keyring.
   - Only a packaged build looks for the file. A run from source always uses the per-user folders.
@@ -24,7 +38,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `test_storage_defaults.py`
   - `test_storage_prompt.py`
 - A manual `build-packages` workflow builds the PyInstaller bundle on each target OS (D83a0).
-  - The jobs run on pinned `windows-2025`, `macos-14`, and `ubuntu-22.04` images with Python 3.12. The Linux baseline is glibc 2.35.
+  - The jobs run on pinned `windows-2025`, `macos-15`, and `ubuntu-22.04` images with Python 3.12. The Linux baseline is glibc 2.35.
   - Each job runs `pip check` after the install. Drift between `requirements-lock.txt` and `pyproject.toml` fails the build.
   - Each job runs the built app's smoke check and fails when the written version does not match.
   - Each job uploads its bundle with `actions/upload-artifact` v7.0.2, pinned by commit. GitHub deletes each upload after 3 days.

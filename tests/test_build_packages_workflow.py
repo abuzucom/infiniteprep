@@ -11,7 +11,7 @@ import yaml
 
 WORKFLOW_PATH = Path(__file__).resolve().parent.parent / ".github/workflows/build-packages.yml"
 FULL_SHA_REFERENCE = re.compile(r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$")
-PINNED_IMAGES = ["windows-2025", "macos-14", "ubuntu-22.04"]
+PINNED_IMAGES = ["windows-2025", "macos-15", "ubuntu-22.04"]
 RETENTION_DAYS = 3
 
 
@@ -70,17 +70,22 @@ class BuildPackagesWorkflowTest(unittest.TestCase):
         self.assertLess(build_index, smoke_index)
 
     def test_upload_keeps_bundles_for_three_days(self) -> None:
-        """The bundle upload expires after 3 days and fails when the bundle is missing (D255)."""
+        """Every upload expires after 3 days and fails when its files are missing (D255).
+
+        The bundle upload of dist/InfinitePrep still runs on every OS (D271).
+        """
         uploads = [
             step
             for step in self._steps()
             if step.get("uses", "").startswith("actions/upload-artifact@")
         ]
-        self.assertEqual(len(uploads), 1)
-        settings = uploads[0]["with"]
-        self.assertEqual(settings["retention-days"], RETENTION_DAYS)
-        self.assertEqual(settings["if-no-files-found"], "error")
-        self.assertEqual(settings["path"], "dist/InfinitePrep")
+        self.assertTrue(uploads)
+        for upload in uploads:
+            self.assertEqual(upload["with"]["retention-days"], RETENTION_DAYS)
+            self.assertEqual(upload["with"]["if-no-files-found"], "error")
+        bundle_uploads = [u for u in uploads if u["with"]["path"] == "dist/InfinitePrep"]
+        self.assertEqual(len(bundle_uploads), 1)
+        self.assertNotIn("if", bundle_uploads[0])
 
     def test_installs_no_unpinned_pip_upgrade(self) -> None:
         """The install step uses the locked requirements and never upgrades pip unpinned."""
