@@ -3,9 +3,10 @@
 A packaged build with a portable.mode marker beside its executable keeps the
 database and settings in a Data folder there (D261). A Linux AppImage always
 keeps them in an InfinitePrep-Data folder beside the .AppImage file (D280 to
-D282). Caches, recovery backups, and the downloaded fpcalc stay per-user in
-every mode (D260, D281). Every other run uses the per-user folders from
-platformdirs.
+D282). A macOS app bundle with portable.mode next to its .app keeps them in an
+InfinitePrep-Data folder there (D289, D291). Caches, recovery backups, and the
+downloaded fpcalc stay per-user in every mode (D260, D281). Every other run uses
+the per-user folders from platformdirs.
 
 main() resolves the locations once at startup and calls configure(). Defaults
 elsewhere read current(), which falls back to the per-user folders when nothing
@@ -35,6 +36,12 @@ PORTABLE_DATA_DIR_NAME: Final[str] = "Data"
 # An AppImage is one file, often in a shared folder such as ~/Downloads, so its
 # data folder carries the app name (D282).
 APPIMAGE_DATA_DIR_NAME: Final[str] = "InfinitePrep-Data"
+# A macOS .app usually sits among other apps, so its data folder carries the app
+# name too (D291). The executable lives at <name>.app/Contents/MacOS/<exe>.
+MACOS_DATA_DIR_NAME: Final[str] = "InfinitePrep-Data"
+APP_BUNDLE_SUFFIX: Final[str] = ".app"
+CONTENTS_DIR_NAME: Final[str] = "Contents"
+MACOS_DIR_NAME: Final[str] = "MacOS"
 # The AppImage runtime sets these for the process it starts.
 APPIMAGE_ENV_VAR: Final[str] = "APPIMAGE"
 APPDIR_ENV_VAR: Final[str] = "APPDIR"
@@ -207,10 +214,30 @@ def _adjacent_data_dir(
     appimage_folder = _appimage_folder(executable, appimage)
     if appimage_folder is not None:
         return appimage_folder, appimage_folder / APPIMAGE_DATA_DIR_NAME
+    bundle = _app_bundle(executable.resolve())
+    if bundle is not None:
+        # Only a marker next to the .app counts, so nothing is written inside the
+        # signed bundle. A translocated copy has no neighbors and stays per-user (D292).
+        bundle_folder = bundle.parent
+        if (bundle_folder / PORTABLE_MARKER_NAME).is_file():
+            return bundle_folder, bundle_folder / MACOS_DATA_DIR_NAME
+        return None
     app_folder = executable.resolve().parent
     if (app_folder / PORTABLE_MARKER_NAME).is_file():
         return app_folder, app_folder / PORTABLE_DATA_DIR_NAME
     return None
+
+
+def _app_bundle(executable: Path) -> Path | None:
+    """Return the .app folder when executable sits at <name>.app/Contents/MacOS/<exe>."""
+    macos_dir = executable.parent
+    contents_dir = macos_dir.parent
+    bundle = contents_dir.parent
+    if macos_dir.name != MACOS_DIR_NAME or contents_dir.name != CONTENTS_DIR_NAME:
+        return None
+    if bundle.suffix != APP_BUNDLE_SUFFIX:
+        return None
+    return bundle
 
 
 def resolve_locations(

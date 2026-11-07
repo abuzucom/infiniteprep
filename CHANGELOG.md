@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.40.2] (2026-11-07)
+## [0.44.1] (2026-11-07)
 
 ### Fixed
 
@@ -14,6 +14,22 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A macOS app bundle with a `portable.mode` file next to `InfinitePrep.app` keeps its database and settings in an `InfinitePrep-Data` folder there (D83a3a).
+  - Without the file, the app uses the per-user folders in `~/Library/Application Support`.
+  - A `portable.mode` file inside the bundle has no effect. The app never writes inside `InfinitePrep.app`.
+  - macOS runs a downloaded app from a hidden read-only copy until the app moves out of Downloads. That copy sees no `portable.mode` file and uses the per-user folders.
+  - When the app cannot write to the folder, the `Use my user profile` or `Quit` prompt appears, with `Remember`.
+- New test file: `test_storage_macos_bundle.py`.
+- Linux packages from the manual `build-packages` workflow (D83a2b).
+  - `InfinitePrep-<version>-linux-x86_64.AppImage` keeps its library in `InfinitePrep-Data` beside the file. It uses a plain placeholder icon for now.
+  - `InfinitePrep-<version>-linux-x86_64.tar.gz` uses the per-user folders.
+  - `InfinitePrep-<version>-linux-x86_64-portable.tar.gz` carries `portable.mode`.
+  - Each tarball unpacks into one `InfinitePrep-<version>` folder with LICENSE and NOTICE.
+  - CI downloads linuxdeploy, its AppImage plugin, and AppImage runtime 20251108, and checks each pinned SHA-256 before use (Rule 9 sign-off). The build uses the pinned runtime and fails if it downloads another.
+  - The Linux job unpacks both tarballs, checks the marker and notices, and runs the smoke check on each package.
+  - The AppImage steps take the output path and the desktop file from `GITHUB_WORKSPACE`. A later folder change in the job cannot move the AppImage out of `dist/`.
+- NOTICE lists the AppImage runtime and the libraries it links statically, including libfuse 3.15.0 under LGPL-2.1, with source links for relinking.
+- New test file: `test_linux_packaging.py`.
 - A Linux AppImage keeps its database and settings in an `InfinitePrep-Data` folder beside the `.AppImage` file (D83a2a).
   - The folder name stays the same across versions. A newer AppImage in the same place opens the same library.
   - Caches and recovery backups stay in the per-user folders, as on Windows.
@@ -72,15 +88,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `test_ui_detail_panel_audio_identity.py`
   - `test_ui_detail_panel_truncation.py`
   - `test_ui_detail_panel_tooltip.py`
-- A GitHub Pages landing page in `docs/index.html` describes the current desktop workflow and the project's planned direction.
-- `docs/robots.txt` sets crawler preferences for AI training crawlers. The landing page carries noindex metadata.
-- `docs/CNAME` sets `infiniteprep.dev` as the GitHub Pages custom domain.
+- A `deploy-pages` workflow publishes the landing site to GitHub Pages. The workflow runs on every push to `main` and on demand from the Actions tab.
+- Every action in that workflow names a full commit and the release that the commit carries.
+- New test file: `test_pages_deployment_workflow.py`. It checks that the workflow publishes the site folder and no project document.
+- A GitHub Pages landing page in `website/index.html` describes the current desktop workflow and the project's planned direction.
+- `website/robots.txt` sets crawler preferences for AI training crawlers. The landing page carries noindex metadata.
+- `website/CNAME` sets `infiniteprep.dev` as the GitHub Pages custom domain.
 
 ### Changed
 
 - A key notation change, an accepted proposal, a saved edit, or a lock toggle refreshes the detail tables only. The preview player keeps its track, position, and play state. Only a different file ID loads new audio. A new stored path under the same file ID keeps the loaded track (D246).
 - MusicBrainz, Discogs, AcoustID, and the fpcalc download send the shared `USER_AGENT`. `MB_USER_AGENT` and `DISCOGS_USER_AGENT` keep the same names and now hold that value.
 - The FFmpeg backend of Qt Multimedia no longer writes decoder messages to the console.
+- The site source moves from `docs/` to `website/`. The `docs/` folder keeps the project documents.
+- The deployment uploads the `website/` folder alone. The project documents stay out of the published site.
+- The package version moves to 0.42.0.
 
 ### Fixed
 
