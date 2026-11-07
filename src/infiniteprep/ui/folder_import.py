@@ -249,11 +249,14 @@ class FolderImportController(QObject):
     def _on_progress(self, done: int, total: int, path: str) -> None:
         """Show the current file and its number in the batch, and restart the stuck timer."""
         self._stuck_timer.start()
-        if self._dialog is None or self._dialog.wasCanceled():
+        dialog = self._dialog
+        if dialog is None or dialog.wasCanceled():
             return
-        self._dialog.setMaximum(total)
-        self._dialog.setValue(done - 1)
-        self._dialog.setLabelText(f"Importing {done} of {total}:\n{path}")
+        # setValue on a modal dialog processes pending events. A queued finish can run
+        # _finish inside it and clear self._dialog, so setValue goes last.
+        dialog.setLabelText(f"Importing {done} of {total}:\n{path}")
+        dialog.setMaximum(total)
+        dialog.setValue(done - 1)
 
     @Slot()
     def _on_file_stuck(self) -> None:
