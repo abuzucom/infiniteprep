@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import platformdirs
 from PySide6.QtWidgets import QApplication
@@ -28,6 +28,7 @@ from infiniteprep.services.playlist_exporter import PlaylistExporter
 from infiniteprep.services.reconciliation import ReconciliationService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
+from infiniteprep.smoke_check import run_smoke_check
 from infiniteprep.ui.action_handlers import (
     export_playlist_with_feedback,
     run_transcode_with_confirmation,
@@ -38,6 +39,11 @@ from infiniteprep.ui.recovery_dialog import RecoveryDialog
 from infiniteprep.ui.settings_dialog import SettingsDialog
 from infiniteprep.ui.theme import apply_application_theme
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
+
+SMOKE_CHECK_FLAG: Final[str] = "--smoke-check"
+# The flag plus one output path.
+SMOKE_CHECK_ARG_COUNT: Final[int] = 2
+SMOKE_CHECK_USAGE_ERROR: Final[int] = 2
 
 
 def run_evaluation_sample(input_dir: Path) -> dict[str, Any]:
@@ -130,6 +136,17 @@ def launch_desktop_app() -> int:
 def main(argv: list[str] | None = None) -> int:
     """CLI and desktop entrypoint for infiniteprep."""
     args = sys.argv[1:] if argv is None else argv
+    if args and args[0] == SMOKE_CHECK_FLAG:
+        # A hidden flag for CI. The windowed Windows build has no stdout, so the
+        # result goes to a file.
+        if len(args) != SMOKE_CHECK_ARG_COUNT:
+            print("Usage: --smoke-check <output-file>. Pass one output path.", file=sys.stderr)
+            return SMOKE_CHECK_USAGE_ERROR
+        output_path = Path(args[1])
+        if output_path.exists():
+            print("The smoke-check output path exists. Pass a new file path.", file=sys.stderr)
+            return SMOKE_CHECK_USAGE_ERROR
+        return run_smoke_check(output_path)
     if args and args[0] == "evaluate-sample":
         parser = argparse.ArgumentParser(prog="infiniteprep evaluate-sample")
         parser.add_argument("--input-dir", required=True, help="Directory of pilot audio files.")

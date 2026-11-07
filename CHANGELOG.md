@@ -5,10 +5,21 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.35.0] (2026-11-07)
+## [0.36.0] (2026-11-07)
 
 ### Added
 
+- A manual `build-packages` workflow builds the PyInstaller bundle on each target OS (D83a0).
+  - The jobs run on pinned `windows-2025`, `macos-14`, and `ubuntu-22.04` images with Python 3.12. The Linux baseline is glibc 2.35.
+  - Each job runs `pip check` after the install. Drift between `requirements-lock.txt` and `pyproject.toml` fails the build.
+  - Each job runs the built app's smoke check and fails when the written version does not match.
+  - Each job uploads its bundle with `actions/upload-artifact` v7.0.2, pinned by commit. GitHub deletes each upload after 3 days.
+  - The workflow runs only when started by hand. A later D83a change adds the release tag trigger.
+- A hidden `--smoke-check <path>` flag loads numpy, scipy, soundfile, keyring, and Qt Multimedia on the offscreen platform. It then writes the version to the path and exits 0. The windowed Windows build has no stdout. The result therefore goes to a file. The flag writes only a new file and refuses an existing file or a directory.
+- Three new test files cover the D83a0 changes and the fix below:
+  - `tests/test_build_packages_workflow.py`
+  - `tests/unit/test_smoke_check.py`
+  - `tests/unit/test_folder_import_progress_reentrancy.py`
 - The detail panel lists every `FieldName`. Track number, disc number, style, and the AcoustID, MusicBrainz, and Discogs IDs join the earlier twelve fields.
 - A read-only Other Tags table under the fields table lists each raw custom tag from the file (D242).
   - Rows sort by key, ignoring case.
@@ -30,6 +41,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A key notation change, an accepted proposal, a saved edit, or a lock toggle refreshes the detail tables only. The preview player keeps its track, position, and play state. Only a different file ID loads new audio. A new stored path under the same file ID keeps the loaded track (D246).
 - MusicBrainz, Discogs, AcoustID, and the fpcalc download send the shared `USER_AGENT`. `MB_USER_AGENT` and `DISCOGS_USER_AGENT` keep the same names and now hold that value.
 - The FFmpeg backend of Qt Multimedia no longer writes decoder messages to the console.
+
+### Fixed
+
+- A folder import that finished during a progress update could crash the progress dialog. `QProgressDialog.setValue` processes pending events on a modal dialog. A queued finish could clear the dialog inside that call. The update now sets the label first and calls `setValue` last.
 
 ## [0.34.0] (2026-11-06)
 
