@@ -347,3 +347,73 @@ jobs:
             dist/InfinitePrep-*-linux-x86_64.AppImage
           retention-days: 3
           if-no-files-found: error
+
+      # The notices go inside the bundle first, then the whole app gets an
+      # ad-hoc signature (D83a3c). Apple Silicon runs no unsigned code, and
+      # an ad-hoc signature needs no Apple certificate. Developer ID signing
+      # and notarization wait for D82.
+      - name: Sign macOS app
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          app="dist/InfinitePrep.app"
+          cp LICENSE NOTICE "$app/Contents/Resources/"
+          codesign --force --deep --sign - "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+
+      # Drag-to-install layout with the notices at the root (D298). hdiutil
+      # ships with macOS, so no new build tool is needed.
+      - name: Build macOS DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          staging="$RUNNER_TEMP/dmg"
+          mkdir -p "$staging"
+          ditto dist/InfinitePrep.app "$staging/InfinitePrep.app"
+          ln -s /Applications "$staging/Applications"
+          cp LICENSE NOTICE "$staging/"
+          hdiutil create -volname InfinitePrep -srcfolder "$staging" -ov -format UDZO \
+            "dist/InfinitePrep-$version-macos-arm64.dmg"
+
+      # Mount the real DMG read-only, check its contents and the signed app,
+      # and start the app from the mounted image.
+      - name: Test macOS DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          mount="$RUNNER_TEMP/dmg-mount"
+          mkdir -p "$mount"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount" \
+            "dist/InfinitePrep-$version-macos-arm64.dmg"
+          trap 'hdiutil detach "$mount"' EXIT
+          app="$mount/InfinitePrep.app"
+          test -L "$mount/Applications"
+          test "$(readlink "$mount/Applications")" = /Applications
+          test -f "$mount/LICENSE"
+          test -f "$mount/NOTICE"
+          test -f "$app/Contents/Resources/LICENSE"
+          test -f "$app/Contents/Resources/NOTICE"
+          codesign --verify --deep --strict "$app"
+          plist="$app/Contents/Info.plist"
+          read_plist() { /usr/libexec/PlistBuddy -c "Print :$1" "$plist"; }
+          test "$(read_plist CFBundleIdentifier)" = dev.infiniteprep.app
+          test "$(read_plist LSMinimumSystemVersion)" = 14.4
+          test "$(read_plist CFBundleShortVersionString)" = "$version"
+          result="$RUNNER_TEMP/dmg-smoke.txt"
+          "$app/Contents/MacOS/InfinitePrep" --smoke-check "$result"
+          if [ "$(cat "$result")" != "$version" ]; then
+            echo 'The app in the DMG reported the wrong version.'
+            exit 1
+          fi
+          echo "macOS DMG passed for version $version."
+
+      - name: Upload macOS DMG
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: InfinitePrep-macos-dmg
+          path: dist/InfinitePrep-*-macos-arm64.dmg
+          retention-days: 3
+          if-no-files-found: error

@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.44.1] (2026-11-07)
+## [0.46.1] (2026-11-07)
 
 ### Fixed
 
@@ -13,6 +13,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The manual `build-packages` workflow builds on the pinned `macos-15` image. GitHub no longer supports `macos-14`. GitHub cancelled the macOS job on that image before it started.
 
 ### Added
+
+- A macOS app bundle and DMG from the manual `build-packages` workflow (D83a3c).
+  - The PyInstaller spec builds `InfinitePrep.app` on macOS with the bundle identifier `dev.infiniteprep.app` and a macOS 14.4 minimum.
+  - `InfinitePrep-<version>-macos-arm64.dmg` holds the app, an `Applications` shortcut, LICENSE, and NOTICE. The app also carries both notices in `Contents/Resources`.
+  - The app has an ad-hoc signature. That signature needs no Apple certificate. macOS blocks the first launch of a downloaded ad-hoc app until a person allows it in System Settings. Developer ID signing and notarization wait for D82.
+  - The macOS job mounts the DMG, checks its contents, the signature, the bundle identifier, and the minimum version, and runs the smoke check from the mounted app.
+- New test file: `test_macos_packaging.py`.
+- Settings has a `Delete InfinitePrep Data...` button on every OS (D83a3b).
+  - Two unchecked boxes choose what goes. One covers the library, settings, recovery backups, waveform cache, and downloaded fpcalc. The other covers the saved API keys.
+  - The dialog lists each folder it deletes. A final prompt names everything again and defaults to No.
+  - InfinitePrep then closes its window and database, deletes the chosen items, lists what it removed and what remains, and quits.
+  - The cleanup checks each folder's own name and removes only InfinitePrep folders. It never touches music files or exports.
+  - InfinitePrep quits after the cleanup even when an unexpected error interrupts it.
+  - While an import keeps the window open, the cleanup deletes nothing and says so.
+- New test files: `test_data_cleanup.py` and `test_cleanup_dialog.py`.
 
 - A macOS app bundle with a `portable.mode` file next to `InfinitePrep.app` keeps its database and settings in an `InfinitePrep-Data` folder there (D83a3a).
   - Without the file, the app uses the per-user folders in `~/Library/Application Support`.
