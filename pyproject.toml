@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "infiniteprep"
-version = "0.35.0"
+version = "0.36.0"
 description = "Cross-platform DJ music metadata identification, analysis, review, and tag management application"
 readme = "README.md"
 license = { file = "LICENSE" }
