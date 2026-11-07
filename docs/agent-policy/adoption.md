@@ -128,7 +128,9 @@ Copy `scripts/trusted_bot_identities.py` with it. That registry lists every
 branch-exempt bot. A third-party bot also needs its account ID in the event.
 
 Retry variations include changed flags, working directories, and argument
-order.
+order. Stop after the second unprompted failure. Analyze the error and change
+strategy. An active-human retry instruction resets the retry count and requires
+a fresh attempt.
 
 Code-quality examples:
 
@@ -157,21 +159,8 @@ Run:
 - `python scripts/sync.py --check`
 - `python scripts/sync.py`
 
-Obtain consent before tests, scripts, or Makefile targets.
-
-Architecture:
-
-- `AGENTS.md` defines canonical policy.
-- `scripts/sync.py` generates synchronized copies and shared-file digests.
-- `scripts/check_*.py` provides portable policy checks.
-- `hooks/` provides client enforcement.
-- `tests/` covers checks, hooks, distribution, and wiring.
-- `.agents/`, `.claude/`, `.codex/`, and `.gemini/` hold client settings.
-
-Edit `AGENTS.md` before running synchronization. Do not edit generated copies.
-Existing tests, hooks, and client settings require act-specific consent.
-Preserve checker flags, hook payloads, reusable workflows, and copied policy
-files.
+Obtain consent before tests, scripts, or Makefile targets. Existing tests,
+hooks, and client settings require act-specific consent.
 
 Never rewrite pushed history on a shared branch. Never force-push, rebase,
 amend, or reset published commits without explicit human consent. Add new

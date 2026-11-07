@@ -27,6 +27,7 @@ PROXY_VARIABLES = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
                    "http_proxy", "https_proxy", "all_proxy")
 # The managed Codex sandbox points proxies at this closed loopback port.
 MANAGED_PROXY_HOST = "127.0.0.1"
+MANAGED_PROXY_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 MANAGED_PROXY_PORT = 9
 # Variables like GIT_SSH_COMMAND, GIT_ASKPASS, or LD_PRELOAD make Git run
 # another program, so the child environment starts from this allowlist.
@@ -73,9 +74,10 @@ def is_managed_proxy_placeholder(value: str) -> bool:
         parsed = urllib.parse.urlsplit(candidate if "://" in candidate
                                        else "//" + candidate)
         port = parsed.port
+        hostname = parsed.hostname
     except ValueError:
         return False
-    return parsed.hostname == MANAGED_PROXY_HOST and port == MANAGED_PROXY_PORT
+    return bool(hostname and hostname.casefold() in MANAGED_PROXY_HOSTS and port == MANAGED_PROXY_PORT)
 
 
 def sanitize_managed_proxy(environment: dict) -> None:

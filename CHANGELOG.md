@@ -5,10 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.40.0] (2026-11-07)
+## [0.40.1] (2026-11-07)
 
 ### Fixed
 
+- Synchronize gate and policy templates with `abuzucom/agents` commit `2aa75f5`.
 - The manual `build-packages` workflow builds on the pinned `macos-15` image. GitHub no longer supports `macos-14`. GitHub cancelled the macOS job on that image before it started.
 
 ### Added

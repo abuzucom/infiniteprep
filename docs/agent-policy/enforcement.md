@@ -96,6 +96,10 @@ credential contents. It denies other Wrangler operations.
 The gates route consent-required acts to the active human. Unattended sessions
 refuse those acts.
 
+Shell gates allow repeated `scripts/trusted_gh.py` calls and route
+`-c agents.githubFallback=confirmed` commands to consent without cross-process
+state. Repository hooks cannot force a tool call when a model refuses in prose.
+
 Designed denials, prompts, refusals, opaque-command blocks, and exit code 2 on
 missing shared modules are policy outcomes. They are not defects.
 
@@ -119,11 +123,9 @@ result. Missing or contradictory approval metadata fails closed. Repository
 hooks cannot inspect client prose when the client API hides it. An external
 harness must enforce those claims.
 
-The complete adoption inventory and recovery procedure cover every hook,
-registration, shared module, test, checker, manifest, policy file, and
-synchronized copy. A designed-denial defect report includes the exact input,
-contradictory policy text, and a reproduction. Report a blocked file, command,
-and message. A blocking gate does not authorize another act.
+A designed-denial defect report includes the exact input, contradictory policy
+text, and a reproduction. Report a blocked file, command, and message. A
+blocking gate does not authorize another act.
 
 The destructive gate set includes the Bash, PowerShell, CMD, shared parser,
 platform policy, shared gate, and parity-test files. Register Bash, PowerShell,

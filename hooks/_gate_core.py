@@ -1581,8 +1581,17 @@ def _parse_git_config_path(path: str):
 
 def parse_git_config(cwd: str):
     """Return normalized entries from the repository config under `cwd`."""
-    path = os.path.join(cwd or ".", ".git", "config")
-    return _parse_git_config_path(path)
+    state = {
+        "common_dir": "",
+        "git_dir": "",
+        "explicit_git_dir": False,
+        "cwd": os.path.realpath(cwd or "."),
+    }
+    paths, _reason = _repo_config_paths(state)
+    entries = {}
+    for path, _required in paths or ():
+        entries.update(_parse_git_config_path(path) or {})
+    return entries
 
 
 def _exec_capable_key(entries: dict) -> str:

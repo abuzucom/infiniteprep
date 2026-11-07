@@ -15,6 +15,11 @@ Antigravity uses an ephemeral `PreInvocation` message. Its `PreToolUse`
 payload must remain schema-safe. Do not emit unsupported `injectSteps` fields
 from `PreToolUse`.
 
+Default sandboxes isolate outbound network access. Request the client's
+approved `external-network` path when `scripts/trusted_gh.py` reports a
+connectivity failure. Execute a fresh attempt on active-human retry
+instruction.
+
 Client APIs differ. Do not claim coverage that the client cannot observe.
 Repository hooks remain defense in depth only.
 

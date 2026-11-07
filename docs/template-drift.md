@@ -1,6 +1,6 @@
 # Template drift
 
-Source template: `abuzucom/agents` at commit `b452348`.
+Source template: `abuzucom/agents` at commit `2aa75f56a0359029cc71a0b9866c46fd55104f7e` (`2aa75f5`).
 
 ## Taken
 
