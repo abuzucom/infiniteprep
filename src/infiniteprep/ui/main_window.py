@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Final
 
 from PySide6.QtCore import QByteArray, Qt
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QSplitter,
     QTableWidget,
@@ -36,9 +38,10 @@ from infiniteprep.domain.enums import (
     parse_key_string,
 )
 from infiniteprep.domain.models import FileAsset
-from infiniteprep.services.import_service import ImportService
+from infiniteprep.services.import_service import ImportBatchReport, ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.detail_panel import DetailPanel
+from infiniteprep.ui.folder_import import FolderImportController, ImportReportDialog
 from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
 from infiniteprep.ui.time_format import split_time_seconds
 
@@ -62,6 +65,12 @@ STATUS_FILTER_STRETCH: Final[int] = 1
 SPLITTER_TOP_HEIGHT: Final[int] = 380
 SPLITTER_BOTTOM_HEIGHT: Final[int] = 420
 PLAYLIST_SUFFIX: Final[str] = ".m3u8"
+CLOSE_WAIT: Final[str] = "wait"
+CLOSE_CANCEL: Final[str] = "cancel"
+CLOSE_STAY: Final[str] = "stay"
+IMPORT_FAILURE_TEXT: Final[str] = (
+    "The import stopped and nothing was imported. Check the folder and try again."
+)
 
 
 def format_duration(seconds: float) -> str:
@@ -124,6 +133,10 @@ class MainWindow(QMainWindow):
             parent=self,
             enable_audio_backend=enable_audio_backend,
         )
+        self.import_controller = FolderImportController(self.import_service, self)
+        self.import_controller.completed.connect(self._on_import_completed)
+        self._close_after_import = False
+        self.import_failure_box: QMessageBox | None = None
 
         self._setup_toolbar()
         self._setup_central_widget()
@@ -408,11 +421,81 @@ class MainWindow(QMainWindow):
             apply_application_theme(app, text)
 
     def _prompt_import_folder(self) -> None:
-        """Open directory picker dialog and run non-destructive import."""
+        """Open a folder picker and import the chosen folder in the background."""
         chosen = QFileDialog.getExistingDirectory(self, "Select Music Folder to Import")
         if chosen:
-            self.import_service.import_paths([Path(chosen)])
-            self.refresh_file_table()
+            self.start_folder_import(Path(chosen))
+
+    def start_folder_import(self, folder: Path) -> bool:
+        """Import folder on a worker thread. Return False while another import runs."""
+        return self.import_controller.start([folder])
+
+    def _on_import_completed(self, report: ImportBatchReport | None) -> None:
+        """Refresh the table, then close the window or show the import result."""
+        self.refresh_file_table()
+        if self._close_after_import:
+            self.close()
+            return
+        if report is None:
+            self._show_import_failure()
+            return
+        ImportReportDialog(report, self).open()
+
+    def _show_import_failure(self) -> None:
+        """Warn that the import rolled back. The message holds no exception text."""
+        box = QMessageBox(
+            QMessageBox.Icon.Warning,
+            "Import Failed",
+            IMPORT_FAILURE_TEXT,
+            QMessageBox.StandardButton.Ok,
+            self,
+        )
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        self.import_failure_box = box
+        box.open()
+
+    def ask_close_during_import(self) -> str:
+        """Ask whether to wait for the running import or cancel it.
+
+        Return CLOSE_WAIT, CLOSE_CANCEL, or CLOSE_STAY when the prompt is dismissed.
+        """
+        box = QMessageBox(self)
+        box.setWindowTitle("Import In Progress")
+        box.setText(
+            "An import is still running. Wait for it to finish, or cancel it. "
+            "Cancel keeps nothing from this import."
+        )
+        wait_button = box.addButton("Wait, Then Close", QMessageBox.ButtonRole.AcceptRole)
+        cancel_button = box.addButton(
+            "Cancel Import and Close", QMessageBox.ButtonRole.DestructiveRole
+        )
+        box.addButton("Keep Window Open", QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is wait_button:
+            return CLOSE_WAIT
+        if clicked is cancel_button:
+            return CLOSE_CANCEL
+        return CLOSE_STAY
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Close at once, or ask first while an import runs (D241).
+
+        Once Wait or Cancel is chosen, later close requests during the same import wait
+        for it without asking again.
+        """
+        if not self.import_controller.is_running():
+            super().closeEvent(event)
+            return
+        event.ignore()
+        if self._close_after_import:
+            return
+        choice = self.ask_close_during_import()
+        if choice == CLOSE_STAY:
+            return
+        self._close_after_import = True
+        if choice == CLOSE_CANCEL:
+            self.import_controller.request_cancel()
 
     def _trigger_analyze_all(self) -> None:
         """Invoke batch identification and analysis callback on visible files."""
