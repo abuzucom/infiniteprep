@@ -48,7 +48,7 @@ TRUNCATION_MARK: Final[str] = "..."
 # Code points that attach to the character before them. A truncation cut never lands
 # before one of these, so a visible character never splits.
 MARK_CATEGORIES: Final[frozenset[str]] = frozenset({"Mn", "Mc", "Me"})
-ZERO_WIDTH_JOINER: Final[str] = "‍"
+ZERO_WIDTH_JOINER: Final[str] = chr(0x200D)
 VARIATION_SELECTORS: Final[tuple[int, int]] = (0xFE00, 0xFE0F)
 VARIATION_SELECTORS_SUPPLEMENT: Final[tuple[int, int]] = (0xE0100, 0xE01EF)
 EMOJI_SKIN_TONE_MODIFIERS: Final[tuple[int, int]] = (0x1F3FB, 0x1F3FF)

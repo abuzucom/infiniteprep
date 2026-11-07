@@ -13,14 +13,15 @@ from infiniteprep.ui.detail_panel import (
 # The first character the plain cut would drop.
 CUT_INDEX = OTHER_TAG_DISPLAY_LIMIT - len(TRUNCATION_MARK)
 TAIL = "z" * OTHER_TAG_DISPLAY_LIMIT
-COMBINING_ACUTE = "́"
-ZERO_WIDTH_JOINER = "‍"
-MAN = "\U0001f468"
-WOMAN = "\U0001f469"
-THUMBS_UP = "\U0001f44d"
-MEDIUM_SKIN_TONE = "\U0001f3fd"
-HEART = "❤"
-EMOJI_PRESENTATION = "️"
+# Code points built with chr() keep this file ASCII-only.
+COMBINING_ACUTE = chr(0x0301)
+ZERO_WIDTH_JOINER = chr(0x200D)
+MAN = chr(0x1F468)
+WOMAN = chr(0x1F469)
+THUMBS_UP = chr(0x1F44D)
+MEDIUM_SKIN_TONE = chr(0x1F3FD)
+HEART = chr(0x2764)
+EMOJI_PRESENTATION = chr(0xFE0F)
 
 
 @pytest.mark.parametrize(
