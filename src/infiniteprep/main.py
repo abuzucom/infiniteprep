@@ -11,12 +11,14 @@ from typing import Any, Final
 
 from PySide6.QtWidgets import QApplication
 
+from infiniteprep import storage_paths
 from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
 from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapter
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
 from infiniteprep.adapters.transcoder.safe_transcoder import SafeTranscoderAdapter
 from infiniteprep.config.credentials import CredentialStore, forget_all_credentials
 from infiniteprep.config.settings import SettingsManager
+from infiniteprep.data_cleanup import CleanupChoice, run_cleanup
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName, SourceType
@@ -35,6 +37,7 @@ from infiniteprep.ui.action_handlers import (
     export_playlist_with_feedback,
     run_transcode_with_confirmation,
 )
+from infiniteprep.ui.cleanup_dialog import build_cleanup_blocked_box, build_cleanup_result_box
 from infiniteprep.ui.journal_dialog import JournalDialog
 from infiniteprep.ui.main_window import MainWindow
 from infiniteprep.ui.recovery_dialog import RecoveryDialog
@@ -89,6 +92,40 @@ def run_evaluation_sample(input_dir: Path) -> dict[str, Any]:
     return metrics
 
 
+def open_settings_dialog(window: MainWindow, repo: Repository) -> None:
+    """Show Settings, then run the cleanup when the person confirmed one there."""
+    dialog = SettingsDialog(SettingsManager(), CredentialStore(), parent=window)
+    dialog.exec()
+    if dialog.cleanup_choice is not None:
+        delete_data_and_quit(window, repo, dialog.cleanup_choice)
+
+
+def delete_data_and_quit(window: MainWindow, repo: Repository, choice: CleanupChoice) -> None:
+    """Close the window and the database, delete the chosen items, report, and quit (D295).
+
+    The window closes first, so an import prompt can still stop the cleanup. The
+    database closes before the delete, since Windows cannot remove an open file. Qt
+    must not quit on the last window yet, or the result message would close with it.
+    """
+    app = QApplication.instance()
+    if app is not None:
+        app.setQuitOnLastWindowClosed(False)
+    if not window.close():
+        if app is not None:
+            app.setQuitOnLastWindowClosed(True)
+        build_cleanup_blocked_box().exec()
+        return
+    # From here the window and database are gone, so the app must quit even when
+    # an unexpected error interrupts the cleanup or its message.
+    try:
+        repo.db.close()
+        report = run_cleanup(choice, storage_paths.current())
+        build_cleanup_result_box(report).exec()
+    finally:
+        if app is not None:
+            app.quit()
+
+
 def launch_desktop_app() -> int:
     """Launch the PySide6 desktop GUI application."""
     # Qt reads the logging rules when QApplication starts.
@@ -125,9 +162,7 @@ def launch_desktop_app() -> int:
         on_analyze_batch=handle_analyze_batch,
         on_open_write_dialog=lambda fids: WritePlanDialog(write_svc, fids, parent=window).exec(),
         on_open_journal_dialog=lambda: JournalDialog(repo, write_svc, parent=window).exec(),
-        on_open_settings_dialog=lambda: SettingsDialog(
-            SettingsManager(), CredentialStore(), parent=window
-        ).exec(),
+        on_open_settings_dialog=lambda: open_settings_dialog(window, repo),
         on_transcode_batch=lambda fids: run_transcode_with_confirmation(
             window, repo, transcoder, fids, SettingsManager()
         ),
