@@ -2,13 +2,9 @@
 
 **InfinitePrep** is a cross-platform desktop application (**Windows, macOS, and Linux**) built for DJs to identify, correct, enrich, and safely organize music files (**MP3, FLAC, WAV, and AIFF** write-enabled; **M4A/OGG** read-only and convertible).
 
----
-
 ## Core Loop
 
 `Import files -> inspect metadata and analysis proposals -> approve selected fields -> preview changes -> apply safely -> inspect the change log -> restore from backup`
-
----
 
 ## Capabilities
 
@@ -53,8 +49,6 @@ These modules exist under `src/infiniteprep/` with tests. The desktop launcher a
 - Closed-world LLM arbitration through Ollama or an OpenAI-compatible endpoint. `ClosedWorldValidator` limits the model to the supplied candidates. `OllamaBootstrapService` requires explicit consent.
 - `ArtworkService` normalizes cover art to a baseline JPEG of at most 800 by 800 pixels.
 
----
-
 ## Pull Request Review
 
 Every pull request receives two model reviews:
@@ -63,8 +57,6 @@ Every pull request receives two model reviews:
 - `abuzucom/euler` code quality review through the `quality-review` check.
 
 Both reviews run after the `ci` workflow completes. A human approval remains required. See [`docs/pr-review.md`](docs/pr-review.md) for pins, settings, and upgrades.
-
----
 
 ## Code Scanning
 
@@ -76,8 +68,6 @@ The analysis covers the Python sources and the workflow files.
 
 See [`docs/code-scanning.md`](docs/code-scanning.md) for the configuration, the repository property that applies it, and the open options.
 
----
-
 ## Dependency Updates
 
 Dependabot proposes the version bumps for the Python packages and the workflow actions.
@@ -87,8 +77,6 @@ A reviewer turns each proposal into a compliant pull request and closes the prop
 `tests/test_dependabot_configuration.py` checks that configuration against the repository.
 
 See [`docs/dependabot.md`](docs/dependabot.md) for the grouping, the red checks, and the review steps.
-
----
 
 ## Agent Policy
 
@@ -118,8 +106,6 @@ Do not run Git commands before consent. After consent, use `scripts/read_git_sta
 output.
 
 `docs/template-drift.md` records local differences from the template.
-
----
 
 ## Setup Walkthrough
 
@@ -242,8 +228,6 @@ keyring fails. Environment variables override the keyring:
 | LLM API key | `INFINITEPREP_LLM_API_KEY` |
 
 Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
-
----
 
 ## Usage Walkthrough
 
@@ -370,8 +354,6 @@ Interface:
   lost.
 - The audio preview has no tempo control, key lock, or loop.
 
----
-
 ## Roadmap
 
 Each stage ships as one reviewed pull request. The order reflects current
@@ -433,8 +415,6 @@ Preparation and export:
     and iTunes XML. Import never overwrites user data.
 24. **XDJ and CDJ USB export.** A device database and analysis files that the
     players read directly. Requires testing on hardware.
-
----
 
 ## Testing, Linting & Packaging
 
