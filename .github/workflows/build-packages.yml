@@ -278,13 +278,13 @@ jobs:
               handle.write(png)
           PY
           export LDAI_RUNTIME_FILE="$tools/runtime-x86_64"
-          export LDAI_OUTPUT="$PWD/dist/InfinitePrep-$version-linux-x86_64.AppImage"
+          export LDAI_OUTPUT="$GITHUB_WORKSPACE/dist/InfinitePrep-$version-linux-x86_64.AppImage"
           export LINUXDEPLOY_OUTPUT_VERSION="$version"
           log="$RUNNER_TEMP/linuxdeploy.log"
           PATH="$tools:$PATH" "$tools/linuxdeploy-x86_64.AppImage" \
             --appdir "$appdir" \
             --executable "$appdir/usr/bin/InfinitePrep" \
-            --desktop-file packaging/linux/infiniteprep.desktop \
+            --desktop-file "$GITHUB_WORKSPACE/packaging/linux/infiniteprep.desktop" \
             --icon-file "$icon" \
             --output appimage > "$log" 2>&1 || { cat "$log"; exit 1; }
           tail -n 40 "$log"
@@ -333,7 +333,7 @@ jobs:
             fi
             check_smoke "$unpack/$folder/InfinitePrep"
           done
-          check_smoke "$PWD/dist/$folder-linux-x86_64.AppImage"
+          check_smoke "$GITHUB_WORKSPACE/dist/$folder-linux-x86_64.AppImage"
           echo "Linux packages passed for version $version."
 
       - name: Upload Linux packages

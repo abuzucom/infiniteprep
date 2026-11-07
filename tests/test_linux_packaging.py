@@ -88,6 +88,16 @@ class LinuxPackagingWorkflowTest(unittest.TestCase):
         self.assertIn("packaging/linux/infiniteprep.desktop", run)
         self.assertIn(APPIMAGE, run)
 
+    def test_appimage_paths_do_not_depend_on_the_current_folder(self) -> None:
+        """The AppImage output and desktop file come from GITHUB_WORKSPACE, not $PWD."""
+        for name in ("Build Linux AppImage", "Test Linux packages"):
+            run = self._step(name)["run"]
+            self.assertNotIn("$PWD", run, name)
+            self.assertIn("$GITHUB_WORKSPACE/dist/", run, name)
+        build = self._step("Build Linux AppImage")["run"]
+        self.assertIn('LDAI_OUTPUT="$GITHUB_WORKSPACE/dist/', build)
+        self.assertIn('"$GITHUB_WORKSPACE/packaging/linux/infiniteprep.desktop"', build)
+
     def test_tarballs_differ_only_by_the_marker(self) -> None:
         """The plain tarball is built before the marker is added for the portable one (D288)."""
         run = self._step("Build Linux tarballs")["run"]

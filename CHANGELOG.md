@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.43.0] (2026-11-07)
+## [0.43.1] (2026-11-07)
 
 ### Fixed
 
@@ -20,6 +20,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Each tarball unpacks into one `InfinitePrep-<version>` folder with LICENSE and NOTICE.
   - CI downloads linuxdeploy, its AppImage plugin, and AppImage runtime 20251108, and checks each pinned SHA-256 before use (Rule 9 sign-off). The build uses the pinned runtime and fails if it downloads another.
   - The Linux job unpacks both tarballs, checks the marker and notices, and runs the smoke check on each package.
+  - The AppImage steps take the output path and the desktop file from `GITHUB_WORKSPACE`. A later folder change in the job cannot move the AppImage out of `dist/`.
 - NOTICE lists the AppImage runtime and the libraries it links statically, including libfuse 3.15.0 under LGPL-2.1, with source links for relinking.
 - New test file: `test_linux_packaging.py`.
 - A Linux AppImage keeps its database and settings in an `InfinitePrep-Data` folder beside the `.AppImage` file (D83a2a).
