@@ -14,7 +14,7 @@ from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
 from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapter
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
 from infiniteprep.adapters.transcoder.safe_transcoder import SafeTranscoderAdapter
-from infiniteprep.config.credentials import CredentialStore
+from infiniteprep.config.credentials import CredentialStore, forget_all_credentials
 from infiniteprep.config.settings import SettingsManager
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
@@ -45,6 +45,8 @@ SMOKE_CHECK_FLAG: Final[str] = "--smoke-check"
 # The flag plus one output path.
 SMOKE_CHECK_ARG_COUNT: Final[int] = 2
 SMOKE_CHECK_USAGE_ERROR: Final[int] = 2
+# A hidden flag for the Windows uninstaller's saved-keys box (D266).
+FORGET_CREDENTIALS_FLAG: Final[str] = "--forget-credentials"
 
 
 def run_evaluation_sample(input_dir: Path) -> dict[str, Any]:
@@ -144,6 +146,8 @@ def launch_desktop_app() -> int:
 def main(argv: list[str] | None = None) -> int:
     """CLI and desktop entrypoint for infiniteprep."""
     args = sys.argv[1:] if argv is None else argv
+    if args == [FORGET_CREDENTIALS_FLAG]:
+        return forget_all_credentials()
     if args and args[0] == SMOKE_CHECK_FLAG:
         # A hidden flag for CI. The windowed Windows build has no stdout, so the
         # result goes to a file.
