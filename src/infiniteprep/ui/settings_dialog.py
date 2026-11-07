@@ -19,12 +19,17 @@ from PySide6.QtWidgets import (
 
 from infiniteprep.adapters.llm.ollama_openai import RECOMMENDED_MODELS
 from infiniteprep.adapters.transcoder.safe_transcoder import TranscodeMode, TranscodePreset
+from infiniteprep import storage_paths
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import AppSettings, SettingsManager
+from infiniteprep.data_cleanup import CleanupChoice, data_folders
+from infiniteprep.storage_paths import StorageLocations
+from infiniteprep.ui.cleanup_dialog import CleanupDialog
 from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
 
 SETTINGS_DIALOG_WIDTH: Final[int] = 620
 SETTINGS_DIALOG_HEIGHT: Final[int] = 460
+CLEANUP_BUTTON_LABEL: Final[str] = "Delete InfinitePrep Data..."
 
 
 class SettingsDialog(QDialog):
@@ -35,11 +40,19 @@ class SettingsDialog(QDialog):
         settings_manager: SettingsManager,
         credential_store: CredentialStore,
         parent: QWidget | None = None,
+        storage_locations: StorageLocations | None = None,
     ) -> None:
-        """Initialize SettingsDialog with SettingsManager and CredentialStore."""
+        """Initialize SettingsDialog with SettingsManager and CredentialStore.
+
+        storage_locations names the folders the cleanup action lists. It defaults to the
+        locations chosen at startup.
+        """
         super().__init__(parent)
         self.settings_mgr = settings_manager
         self.creds = credential_store
+        self.storage_locations = storage_locations or storage_paths.current()
+        # Set when the person confirms the cleanup. The caller then runs it (D295).
+        self.cleanup_choice: CleanupChoice | None = None
         self.current_settings: AppSettings = self.settings_mgr.load()
 
         self.setWindowTitle("InfinitePrep Settings & Providers")
@@ -56,6 +69,7 @@ class SettingsDialog(QDialog):
         self.theme_combo = QComboBox(self)
         self.save_btn = QPushButton("Save Settings", self)
         self.cancel_btn = QPushButton("Cancel", self)
+        self.cleanup_btn = QPushButton(CLEANUP_BUTTON_LABEL, self)
 
         self._build_layout()
 
@@ -101,6 +115,7 @@ class SettingsDialog(QDialog):
 
         root.addLayout(form)
         buttons = QHBoxLayout()
+        buttons.addWidget(self.cleanup_btn)
         buttons.addStretch()
         buttons.addWidget(self.save_btn)
         buttons.addWidget(self.cancel_btn)
@@ -108,6 +123,15 @@ class SettingsDialog(QDialog):
 
         self.save_btn.clicked.connect(self.save_settings)
         self.cancel_btn.clicked.connect(self.reject)
+        self.cleanup_btn.clicked.connect(self.open_cleanup_dialog)
+
+    def open_cleanup_dialog(self) -> None:
+        """Open the cleanup dialog. A confirmed choice closes Settings without saving."""
+        dialog = CleanupDialog(data_folders(self.storage_locations), parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        self.cleanup_choice = dialog.choice()
+        self.reject()
 
     def save_settings(self) -> None:
         """Persist updated settings to JSON and secrets to CredentialStore."""

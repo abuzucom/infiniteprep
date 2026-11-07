@@ -445,3 +445,5 @@ The manual `build-packages` workflow also builds the Linux packages:
 - `InfinitePrep-<version>-linux-x86_64-portable.tar.gz` carries `portable.mode` and keeps its library in a `Data` folder beside the executable.
 
 On macOS, a `portable.mode` file next to `InfinitePrep.app` keeps the library in an `InfinitePrep-Data` folder there. Move the app and the file out of Downloads first. macOS runs a downloaded app from a hidden copy, and that copy uses the per-user folders.
+
+To remove InfinitePrep's data on any OS, open Settings and choose `Delete InfinitePrep Data...`. Music files and exports stay.
