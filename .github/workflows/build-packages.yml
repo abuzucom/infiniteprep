@@ -2,18 +2,56 @@
 name: build-packages
 
 # Builds the PyInstaller bundle on each target OS and runs the built app's
-# smoke check. Runs only when started by hand (D248). A later D83a change adds
-# the release tag trigger. Each run keeps its bundles for 3 days (D255).
+# smoke check. A manual run builds and tests only (D248). A pushed v* tag also
+# checks the tag, then uploads every package to a draft release (D314 to D318).
+# Each run keeps its bundles for 3 days (D255).
 
 "on":
   workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
 
 jobs:
+  # A tag must match every version file and point to a commit on main (D317).
+  # A manual run started on a tag also has ref_type tag. The event check keeps
+  # manual runs from releasing (D248).
+  check-tag:
+    name: check-tag
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - name: Check tag against version files
+        run: python packaging/release.py check-tag "$GITHUB_REF_NAME"
+
+      - name: Check tagged commit is on main
+        run: |
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Tag $GITHUB_REF_NAME points to $GITHUB_SHA, which is not on main. Tag a main commit."
+            exit 1
+          fi
+          echo "Tag $GITHUB_REF_NAME points to a commit on main."
+
   bundle:
     name: bundle (${{ matrix.os }})
+    needs: check-tag
+    # A manual run skips check-tag. A tag run builds only after check-tag passes.
+    if: ${{ !cancelled() && (needs.check-tag.result == 'success' || needs.check-tag.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
@@ -472,3 +510,99 @@ jobs:
           path: dist/InfinitePrep-*-macos-arm64.dmg
           retention-days: 3
           if-no-files-found: error
+
+  # Only this job writes to the repository (D315). It gathers the six packages
+  # from this run, writes SHA256SUMS.txt, and fills a draft release. The owner
+  # publishes the draft by hand (D314).
+  release:
+    name: release
+    needs: bundle
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.12'
+
+      - name: Download package artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets="$RUNNER_TEMP/release-assets"
+          mkdir -p "$assets"
+          for name in InfinitePrep-windows-packages InfinitePrep-linux-packages InfinitePrep-macos-dmg; do
+            gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "$assets"
+          done
+          ls -l "$assets"
+          count="$(find "$assets" -maxdepth 1 -type f | wc -l)"
+          if [ "$count" -ne 6 ]; then
+            echo "Expected 6 packages, found $count."
+            exit 1
+          fi
+          python packaging/release.py check-assets "$assets" "${GITHUB_REF_NAME#v}"
+
+      - name: Write checksums and release notes
+        run: |
+          python packaging/release.py checksums "$RUNNER_TEMP/release-assets"
+          python packaging/release.py notes "${GITHUB_REF_NAME#v}" "$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/release-assets/SHA256SUMS.txt"
+
+      # A rerun reuses the draft. An asset already on the draft must match this
+      # build's SHA-256, and a mismatch stops the job (D316). A published
+      # release is never changed.
+      - name: Upload to draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          repo="$GITHUB_REPOSITORY"
+          assets="$RUNNER_TEMP/release-assets"
+          if is_draft="$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [ "$is_draft" != "true" ]; then
+              echo "Release $tag is already published. This job only fills drafts."
+              exit 1
+            fi
+            echo "Reusing the draft release for $tag."
+          else
+            gh release create "$tag" --repo "$repo" --draft --verify-tag \
+              --title "InfinitePrep $tag" \
+              --notes-file "$RUNNER_TEMP/release-notes.md" --generate-notes
+          fi
+          existing="$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name')"
+          # The draft may hold only this build's assets. A stray file fails the job.
+          while IFS= read -r name; do
+            if [ -n "$name" ] && [ ! -f "$assets/$name" ]; then
+              echo "The draft holds $name, which this build does not make."
+              echo "Delete $name from the draft, then rerun the release job."
+              exit 1
+            fi
+          done <<< "$existing"
+          for file in "$assets"/*; do
+            name="$(basename "$file")"
+            if printf '%s\n' "$existing" | grep -Fxq -- "$name"; then
+              # A new folder per asset keeps old downloads apart without deleting anything.
+              check="$(mktemp -d "$RUNNER_TEMP/existing-asset.XXXXXX")"
+              gh release download "$tag" --repo "$repo" --pattern "$name" --dir "$check"
+              old="$(sha256sum "$check/$name" | cut -d ' ' -f 1)"
+              new="$(sha256sum "$file" | cut -d ' ' -f 1)"
+              if [ "$old" != "$new" ]; then
+                echo "$name on the draft has SHA-256 $old, but this build made $new."
+                echo "Delete the draft release, then run the tag build again."
+                exit 1
+              fi
+              echo "$name is already on the draft with the same SHA-256."
+            else
+              gh release upload "$tag" "$file" --repo "$repo"
+            fi
+          done
+          echo "Draft release $tag holds every package and SHA256SUMS.txt. Publish it by hand."
