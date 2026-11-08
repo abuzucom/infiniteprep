@@ -54,7 +54,8 @@ jobs:
             libxcb-xfixes0 \
             libfontconfig1 \
             libpulse0 \
-            libsndfile1
+            libsndfile1 \
+            xvfb
 
       - name: Install locked dependencies and package
         run: |
@@ -85,6 +86,23 @@ jobs:
             exit 1
           fi
           echo "Smoke check passed for version $actual."
+
+      # The spec prunes Linux libraries that no kept binary links against (D304).
+      # The offscreen smoke check above cannot catch a library that only a real
+      # display needs, so the app also starts on X11 under Xvfb.
+      - name: Start built app on X11
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          result="$RUNNER_TEMP/x11-smoke-version.txt"
+          QT_QPA_PLATFORM=xcb xvfb-run --auto-servernum \
+            dist/InfinitePrep/InfinitePrep --smoke-check "$result"
+          expected="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          if [ "$(cat "$result")" != "$expected" ]; then
+            echo 'The X11 start reported the wrong version.'
+            exit 1
+          fi
+          echo "X11 start passed for version $expected."
 
       # The LGPL notices must ship with every bundle and package (D270).
       - name: Add license notices to bundle

@@ -5,9 +5,25 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.46.0] (2026-11-07)
+## [0.46.2] (2026-11-08)
 
 ### Fixed
+
+- The CodeQL configuration lists the `packaging` folder. Code scanning now covers the bundle filters.
+- The spec loads `packaging/bundle_filters.py` by exact file path and no longer changes `sys.path`. A different file named `bundle_filters` cannot replace the filters during a build.
+- NOTICE lists the 72 Ubuntu 22.04 system libraries that the Linux bundle still carries after the trim, each with its license.
+
+## [0.46.1] (2026-11-07)
+
+### Fixed
+
+- Packaged builds no longer ship GPL-3 code the app never uses (D302).
+  - Qt Virtual Keyboard left every bundle. That covers its libraries, frameworks, QML module, and input plugin.
+  - The spec excludes Python's `readline` module. GNU Readline left the Linux bundle.
+- The Linux bundle drops Qt plugins the app does not use (D303). These are the GTK 3 theme, network information, EGLFS, LinuxFB, VNC, Vulkan display, minimal EGL, the evdev and TUIO input plugins, and the Adwaita Wayland decoration.
+- The spec then removes each top-level Linux library that no kept binary links against, until nothing more changes (D304). The build log names every removed file and every kept library.
+- The Linux job starts the built app on X11 under Xvfb. A library that only a real display needs cannot go missing unnoticed. CI installs the `xvfb` package for it (Rule 9 sign-off).
+- New file `packaging/bundle_filters.py` holds the filters. New test file: `test_bundle_exclusions.py`.
 
 - The manual `build-packages` workflow builds on the pinned `macos-15` image. GitHub no longer supports `macos-14`. GitHub cancelled the macOS job on that image before it started.
 
