@@ -37,6 +37,33 @@ Optional separate download
   InfinitePrep downloads it only after user consent and runs it as a
   separate program.
 
+Linux system libraries (AppImage and tarballs)
+- The Linux bundle carries these libraries from the Ubuntu 22.04 build
+  image. Each stays a separate shared library file in the bundle, so it
+  can be replaced. The license names follow each Ubuntu source
+  package.
+  - GNU C library part libmvec, GLib (libglib-2.0, libgthread-2.0),
+    libgcrypt, libgpg-error, libsystemd, PulseAudio (libpulse,
+    libpulsecommon), libsndfile, libapparmor, libasyncns, and
+    libkeyutils: LGPL-2.1-or-later.
+  - libgcc_s and libstdc++: GPL-3.0-or-later WITH GCC-exception-3.1.
+  - libpython3.12: PSF-2.0.
+  - OpenSSL 3 (libssl, libcrypto): Apache-2.0.
+  - D-Bus (libdbus-1): AFL-2.1, chosen from its AFL-2.1 or GPL-2.0
+    dual license.
+  - FreeType: FTL, chosen from its FTL or GPL-2.0 dual license.
+  - libcap: BSD-3-Clause, chosen from its BSD-3-Clause or GPL-2.0
+    dual license.
+  - X11 and XCB (libX11, libX11-xcb, libXau, libXdmcp, libXext,
+    libXrandr, libXrender, libxcb and its extension libraries),
+    libxkbcommon, libxkbcommon-x11, Expat, libffi, Fontconfig,
+    Brotli, Kerberos (libkrb5, libkrb5support, libk5crypto,
+    libgssapi_krb5), and libcom_err: MIT-style licenses.
+  - FLAC, Ogg, Vorbis, Opus, PCRE, libuuid, and zstd: BSD-3-Clause.
+  - lz4: BSD-2-Clause. libbsd and libmd: BSD-style licenses.
+  - zlib: Zlib. bzip2: bzip2-1.0.6. libpng: libpng license.
+  - xz (liblzma) and SQLite: public domain.
+
 Linux AppImage runtime
 - AppImage type2-runtime 20251108: MIT. It starts every InfinitePrep
   AppImage and links these libraries statically:

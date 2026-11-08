@@ -1,12 +1,34 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller specification for packaging InfinitePrep as a standalone desktop app."""
 
+import importlib.util
 import re
 import sys
 from pathlib import Path
 
 project_root = Path.cwd()
 src_dir = project_root / "src"
+
+
+def load_bundle_filters():
+    """Load packaging/bundle_filters.py from its exact path.
+
+    sys.path stays unchanged, so no other file named bundle_filters can take its place.
+    """
+    filters_path = project_root / "packaging" / "bundle_filters.py"
+    module_spec = importlib.util.spec_from_file_location("bundle_filters", filters_path)
+    if module_spec is None or module_spec.loader is None:
+        raise SystemExit(f"Cannot load {filters_path}. Restore packaging/bundle_filters.py.")
+    module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(module)
+    return module
+
+
+bundle_filters = load_bundle_filters()
+drop_entries = bundle_filters.drop_entries
+is_gpl3_component = bundle_filters.is_gpl3_component
+is_unused_linux_plugin = bundle_filters.is_unused_linux_plugin
+prune_unneeded_libraries = bundle_filters.prune_unneeded_libraries
 
 # macOS bundle settings (D83a3c). The identifier stays fixed once released (D297).
 MACOS_BUNDLE_IDENTIFIER = "dev.infiniteprep.app"
@@ -33,9 +55,41 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    # Python's readline module links GNU Readline (GPL-3) on Linux (D302).
+    excludes=["readline"],
     noarchive=False,
 )
+
+
+def report_dropped(reason, dropped):
+    """Print each removed destination, so the build log names every change."""
+    for destination in sorted(dropped):
+        print(f"infiniteprep.spec: dropped {destination} ({reason})")
+
+
+# Qt Virtual Keyboard and GNU Readline are GPL-3-only and unused (D302).
+a.binaries, dropped = drop_entries(a.binaries, is_gpl3_component)
+report_dropped("GPL-3", dropped)
+a.datas, dropped = drop_entries(a.datas, is_gpl3_component)
+report_dropped("GPL-3", dropped)
+
+if sys.platform.startswith("linux"):
+    from PyInstaller.depend import bindepend
+
+    # Unused Linux Qt plugins go first, then the libraries only they needed (D303, D304).
+    a.binaries, dropped = drop_entries(a.binaries, is_unused_linux_plugin)
+    report_dropped("unused Linux Qt plugin", dropped)
+
+    def linked_library_names(source):
+        """Return the names of the libraries a collected binary links against."""
+        return {name for name, _path in bindepend.get_imports(source)}
+
+    a.binaries, dropped = prune_unneeded_libraries(a.binaries, linked_library_names)
+    report_dropped("no kept binary links it", dropped)
+    for destination, _source, _typecode in sorted(a.binaries):
+        if "/" not in destination.replace("\\", "/") and destination.startswith("lib"):
+            print(f"infiniteprep.spec: kept library {destination}")
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
