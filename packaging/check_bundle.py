@@ -65,24 +65,23 @@ WRAPPER_PREFIX: Final[str] = "pyside6-"
 PATH_SEPARATOR: Final[str] = "/"
 # The ten GPL-3-only Qt module families (D231). Each marker matches as a substring
 # of the lowercase path. The markers cover Linux, macOS, and Windows file names.
+# Module stems also catch QML plugins such as libqquick3dplugin and
+# libdatavisualizationqmlplugin. Qt Lottie Animation builds its library as Bodymovin.
 GPL3_MODULE_MARKERS: Final[tuple[str, ...]] = (
     "qt6charts",
     "qtcharts",
-    "qt6datavisualization",
-    "qtdatavisualization",
+    "chartsqml",
+    "datavisualization",
     "qt6graphs",
     "qtgraphs",
+    "graphsplugin",
     "virtualkeyboard",
-    "qt6quick3d",
-    "qtquick3d",
-    "qt6lottie",
-    "qtlottie",
-    "qt6quicktimeline",
-    "qtquicktimeline",
-    "qt6networkauth",
-    "qtnetworkauth",
-    "qt6httpserver",
-    "qthttpserver",
+    "quick3d",
+    "lottie",
+    "bodymovin",
+    "quicktimeline",
+    "networkauth",
+    "httpserver",
 )
 # GNU Readline is GPL-3 (D302): the library and Python's readline module.
 READLINE_PREFIXES: Final[tuple[str, ...]] = ("libreadline", "readline.")
@@ -172,9 +171,20 @@ def _tool_name(part: str) -> str:
 
 
 def bundle_files(bundle: Path) -> list[str]:
-    """Return every file below the bundle as a sorted list of relative POSIX paths."""
-    files = (path for path in bundle.rglob("*") if path.is_file())
+    """Return every file below the bundle as a sorted list of relative POSIX paths.
+
+    A symlink counts as a file unless it points to a folder. A dangling link would
+    otherwise escape the check and still ship through cp -a and tar.
+    """
+    files = (path for path in bundle.rglob("*") if _is_listed_entry(path))
     return sorted(path.relative_to(bundle).as_posix() for path in files)
+
+
+def _is_listed_entry(path: Path) -> bool:
+    """Return True for a regular file or a symlink that does not point to a folder."""
+    if path.is_symlink():
+        return not path.is_dir()
+    return path.is_file()
 
 
 def check_files(files: Sequence[str], patterns: Sequence[re.Pattern[str]]) -> BundleReport:

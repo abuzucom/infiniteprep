@@ -9,7 +9,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `packaging/check_bundle.py` checks each built bundle before packaging. Every file must match a pattern in `packaging/bundle-allowlist/<os>.txt`. Qt tools, GPL-3-only Qt modules, and GNU Readline always fail the check. LICENSE, NOTICE, and ICU-LICENSE.txt must sit at the bundle root.
+- `packaging/check_bundle.py` checks each built bundle before packaging. Every file must match a pattern in `packaging/bundle-allowlist/<os>.txt`. Qt tools, GPL-3-only Qt modules, and GNU Readline always fail the check. LICENSE, NOTICE, and ICU-LICENSE.txt must sit at the bundle root. Dangling symlinks count as files. A broken link cannot skip the check.
 - build-packages fetches the ICU 73.2 license from the `release-73-2` tag and checks its pinned SHA-256. Every bundle and package ships the file as ICU-LICENSE.txt.
 - NOTICE names the LGPL source locations for Qt, PySide6, and shiboken6. A three-year written offer covers the LGPL-2.1 components. Requests go to legal@infiniteprep.dev or a GitHub issue.
 
