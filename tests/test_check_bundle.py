@@ -274,9 +274,7 @@ class WorkflowWiringTest(unittest.TestCase):
         """The check follows the notices and comes before every upload and package step."""
         step = self._step("Check bundle contents")
         self.assertNotIn("if", step)
-        self.assertIn(
-            'python packaging/check_bundle.py dist/InfinitePrep "$os_name"', step["run"]
-        )
+        self.assertIn('python packaging/check_bundle.py dist/InfinitePrep "$os_name"', step["run"])
         self.assertIn("tr '[:upper:]' '[:lower:]'", step["run"])
         check = self.names.index("Check bundle contents")
         self.assertGreater(check, self.names.index("Add license notices to bundle"))
