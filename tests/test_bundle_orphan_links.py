@@ -96,12 +96,20 @@ class LoadedOrphanTest(unittest.TestCase):
 class SpecLoadedOrphanWiringTest(unittest.TestCase):
     """The spec checks the dropped binaries on every OS and stops the build on a conflict."""
 
-    def test_spec_stops_the_build_before_the_linux_block(self) -> None:
-        """The check runs on the kept binaries and dropped orphans, outside any OS branch."""
+    def test_spec_checks_after_the_plugin_trim_and_before_the_prune(self) -> None:
+        """The check sees the binaries left after the Linux plugin trim, then stops the build.
+
+        Dropped EGLFS plugins link the dropped EGLFS libraries, so the check must follow
+        the plugin trim. The prune must follow the check, so a conflict stops the build
+        before any further change.
+        """
         spec = SPEC_PATH.read_text(encoding="utf-8")
+        plugin_trim = spec.index("drop_entries(a.binaries, is_unused_linux_plugin)")
         check = spec.index("find_loaded_orphans(a.binaries, orphan_binaries, linked_library_names)")
         stop = spec.index("raise SystemExit(", check)
-        self.assertLess(stop, spec.index('if sys.platform.startswith("linux"):'))
+        prune = spec.index("prune_unneeded_libraries(a.binaries, linked_library_names)")
+        self.assertLess(plugin_trim, check)
+        self.assertLess(stop, prune)
         self.assertIn("from PyInstaller.depend import bindepend", spec)
 
 

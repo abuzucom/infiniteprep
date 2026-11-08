@@ -97,7 +97,15 @@ a.binaries, orphan_binaries = drop_entries(a.binaries, is_orphan_on_this_platfor
 report_dropped("no Qt file loads it", orphan_binaries)
 a.datas, dropped = drop_entries(a.datas, is_orphan_on_this_platform)
 report_dropped("no Qt file loads it", dropped)
+
+if sys.platform.startswith("linux"):
+    # Unused Linux Qt plugins go first, then the libraries only they needed (D303, D304).
+    a.binaries, dropped = drop_entries(a.binaries, is_unused_linux_plugin)
+    report_dropped("unused Linux Qt plugin", dropped)
+
 # The orphan lists are fixed names. A kept binary that still links one stops the build.
+# The check runs after the Linux plugin trim, because the dropped EGLFS plugins link
+# the EGLFS libraries.
 loaded_orphans = find_loaded_orphans(a.binaries, orphan_binaries, linked_library_names)
 if loaded_orphans:
     for conflict in loaded_orphans:
@@ -108,10 +116,6 @@ if loaded_orphans:
     )
 
 if sys.platform.startswith("linux"):
-    # Unused Linux Qt plugins go first, then the libraries only they needed (D303, D304).
-    a.binaries, dropped = drop_entries(a.binaries, is_unused_linux_plugin)
-    report_dropped("unused Linux Qt plugin", dropped)
-
     a.binaries, dropped = prune_unneeded_libraries(a.binaries, linked_library_names)
     report_dropped("no kept binary links it", dropped)
     for destination, _source, _typecode in sorted(a.binaries):
