@@ -104,6 +104,8 @@ class ReleaseWorkflowTest(unittest.TestCase):
             "gh release upload",
         ):
             self.assertIn(fragment, run)
+        self.assertIn("which this build does not make", run)
+        self.assertLess(run.index("which this build does not make"), run.index("gh release upload"))
         self.assertNotIn("--clobber", run)
         self.assertNotIn("gh release edit", run)
         self.assertLess(run.index("sha256sum"), run.index("gh release upload"))

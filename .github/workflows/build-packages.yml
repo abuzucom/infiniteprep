@@ -578,6 +578,14 @@ jobs:
               --notes-file "$RUNNER_TEMP/release-notes.md" --generate-notes
           fi
           existing="$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name')"
+          # The draft may hold only this build's assets. A stray file fails the job.
+          while IFS= read -r name; do
+            if [ -n "$name" ] && [ ! -f "$assets/$name" ]; then
+              echo "The draft holds $name, which this build does not make."
+              echo "Delete $name from the draft, then rerun the release job."
+              exit 1
+            fi
+          done <<< "$existing"
           check="$RUNNER_TEMP/existing-asset"
           for file in "$assets"/*; do
             name="$(basename "$file")"

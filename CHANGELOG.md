@@ -10,7 +10,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - A pushed `v*` tag runs build-packages as a release. The tag must match `__version__`, `pyproject.toml`, and the top CHANGELOG entry, and must point to a commit on main. A release job then uploads the six packages and `SHA256SUMS.txt` to a draft release. Only the owner publishes it.
-- A rerun of the release job reuses the draft. An asset already on the draft must match the new SHA-256, or the job stops. A published release is never changed.
+- A rerun of the release job reuses the draft. An asset already on the draft must match the new SHA-256, or the job stops. A draft asset that this build does not make also stops the job. A published release is never changed.
 - `packaging/release.py` checks the tag, writes `SHA256SUMS.txt`, and writes the release notes from the CHANGELOG entry.
 
 - `packaging/check_bundle.py` checks each built bundle before packaging. Every file must match a pattern in `packaging/bundle-allowlist/<os>.txt`. Qt tools, GPL-3-only Qt modules, and GNU Readline always fail the check. LICENSE, NOTICE, and ICU-LICENSE.txt must sit at the bundle root. Dangling symlinks count as files. A broken link cannot skip the check.
