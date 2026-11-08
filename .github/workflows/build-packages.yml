@@ -17,9 +17,11 @@ permissions:
 
 jobs:
   # A tag must match every version file and point to a commit on main (D317).
+  # A manual run started on a tag also has ref_type tag. The event check keeps
+  # manual runs from releasing (D248).
   check-tag:
     name: check-tag
-    if: github.ref_type == 'tag'
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
@@ -515,7 +517,7 @@ jobs:
   release:
     name: release
     needs: bundle
-    if: github.ref_type == 'tag'
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:

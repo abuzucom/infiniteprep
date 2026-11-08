@@ -9,7 +9,8 @@ from typing import Any
 import yaml
 
 WORKFLOW_PATH = Path(__file__).resolve().parent.parent / ".github/workflows/build-packages.yml"
-TAG_CONDITION = "github.ref_type == 'tag'"
+# A manual run started on a tag also has ref_type tag. The event must also be a push.
+TAG_CONDITION = "github.event_name == 'push' && github.ref_type == 'tag'"
 PACKAGE_ARTIFACTS = (
     "InfinitePrep-windows-packages",
     "InfinitePrep-linux-packages",
