@@ -12,6 +12,7 @@ ROOT: Final[Path] = Path(__file__).resolve().parent.parent
 WORKFLOWS: Final[Path] = ROOT / ".github" / "workflows"
 SYNC_WORKFLOW: Final[Path] = WORKFLOWS / "sync-check.yml"
 SECURITY_CALLER: Final[Path] = WORKFLOWS / "security-review-pr.yml"
+QUALITY_CALLER: Final[Path] = WORKFLOWS / "quality-review-pr.yml"
 SUITE_COMMANDS: Final[tuple[str, ...]] = (
     "python scripts/run_tests.py",
     "python scripts/check_hook_coverage.py",
@@ -69,6 +70,12 @@ class SyncCheckEventPathTest(unittest.TestCase):
 class SecurityReviewPushGuardTest(unittest.TestCase):
     """The security review resolves a pull request only for pull request runs."""
 
+    def test_workflow_run_trigger_ignores_main_branch(self) -> None:
+        workflow = load_workflow(SECURITY_CALLER)
+        on_trigger = workflow.get("on") or workflow.get(True) or {}
+        trigger = on_trigger.get("workflow_run", {})
+        self.assertEqual(trigger.get("branches-ignore"), ["main"])
+
     def test_resolve_job_skips_push_triggered_ci_runs(self) -> None:
         workflow = load_workflow(SECURITY_CALLER)
         self.assertEqual(workflow["jobs"]["resolve-pr"].get("if"), PULL_REQUEST_GUARD)
@@ -77,6 +84,16 @@ class SecurityReviewPushGuardTest(unittest.TestCase):
         jobs = load_workflow(SECURITY_CALLER)["jobs"]
         for job_name in ("review", "fork-review", "fork-review-skipped"):
             self.assertIn("needs.resolve-pr.result == 'success'", jobs[job_name]["if"])
+
+
+class QualityReviewPushGuardTest(unittest.TestCase):
+    """The quality review ignores main branch pushes on workflow_run."""
+
+    def test_workflow_run_trigger_ignores_main_branch(self) -> None:
+        workflow = load_workflow(QUALITY_CALLER)
+        on_trigger = workflow.get("on") or workflow.get(True) or {}
+        trigger = on_trigger.get("workflow_run", {})
+        self.assertEqual(trigger.get("branches-ignore"), ["main"])
 
 
 if __name__ == "__main__":

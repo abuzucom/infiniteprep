@@ -82,6 +82,7 @@ class SecurityReviewWiringTest(unittest.TestCase):
         self.assertIn("workflow_run:", self.text)
         self.assertIn("workflows: [ci]", self.text)
         self.assertIn("types: [completed]", self.text)
+        self.assertIn("branches-ignore:\n      - main", self.text)
         self.assertIn('workflowRun?.name === "ci"', self.text)
 
     def test_review_jobs_pin_workflow_and_policy_to_one_commit(self) -> None:
@@ -125,6 +126,7 @@ class QualityReviewWiringTest(unittest.TestCase):
         self.assertIn("workflow_run:", self.text)
         self.assertIn("workflows: [ci]", self.text)
         self.assertIn("types: [completed]", self.text)
+        self.assertIn("branches-ignore:\n      - main", self.text)
 
     def test_review_job_pins_workflow_and_policy_to_one_commit(self) -> None:
         review_job = extract_job_block(self.text, "review")

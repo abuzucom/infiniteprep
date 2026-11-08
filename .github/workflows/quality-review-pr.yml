@@ -10,6 +10,8 @@ name: quality-review-pr
   workflow_run:
     workflows: [ci]
     types: [completed]
+    branches-ignore:
+      - main
 
 # Each job declares only the permissions it uses.
 permissions:
