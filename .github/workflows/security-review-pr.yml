@@ -4,10 +4,12 @@ name: security-review-pr
 # ci workflow completes. The workflow_run trigger runs default-branch code.
 # Pull request files stay review data.
 
-on:
+"on":
   workflow_run:
     workflows: [ci]
     types: [completed]
+    branches-ignore:
+      - main
 
 concurrency:
   group: security-review-${{ github.event.workflow_run.head_sha }}${{ github.event.pull_request.head.sha }}

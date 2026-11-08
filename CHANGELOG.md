@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.48.2] (2026-11-08)
+## [0.48.3] (2026-11-08)
 
 ### Added
 
@@ -19,6 +19,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The `security-review-pr` and `quality-review-pr` workflows ignore `main` branch completion events on the `ci` workflow_run trigger, suppressing redundant post-merge review workflow runs on `main`.
+- `tests/test_review_wiring.py` and `tests/test_push_event_workflow_wiring.py` check that `security-review-pr` and `quality-review-pr` specify `branches-ignore: [main]` on `workflow_run`.
 - The deploy-pages workflow filters pushes to main with `website/**` and the workflow file path. Merged pull requests that do not touch website files skip deployment.
 - `test_pages_deployment_workflow.py` checks that the push trigger specifies the path filters.
 - NOTICE lists ICU 73.2 and the further Qt libraries that the bundles carry.
