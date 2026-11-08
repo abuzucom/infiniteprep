@@ -199,9 +199,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error(f"{args.folder} is not a folder. Pass the folder of release assets.")
         print(f"release: wrote {write_checksums(args.folder)}")
         return 0
-    args.output.write_text(release_notes(args.version, ROOT), encoding="utf-8", newline="\n")
-    print(f"release: wrote {args.output}")
-    return 0
+    if args.command == "notes":
+        args.output.write_text(release_notes(args.version, ROOT), encoding="utf-8", newline="\n")
+        print(f"release: wrote {args.output}")
+        return 0
+    parser.error(f"Subcommand {args.command} has no handler. Add one to main().")
 
 
 if __name__ == "__main__":
