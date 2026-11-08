@@ -177,7 +177,9 @@ class SpecAndWorkflowTest(unittest.TestCase):
         return step
 
     def test_spec_excludes_readline_and_applies_every_filter(self) -> None:
-        """The spec excludes the readline module and runs each filter."""
+        """The spec loads the filters by exact path, excludes readline, and runs each filter."""
+        self.assertNotIn("sys.path.insert", self.spec)
+        self.assertIn('spec_from_file_location("bundle_filters", filters_path)', self.spec)
         self.assertIn('excludes=["readline"]', self.spec)
         for call in (
             "drop_entries(a.binaries, is_gpl3_component)",

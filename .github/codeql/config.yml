@@ -19,6 +19,7 @@ paths:
   - .github
   - ci
   - hooks
+  - packaging
   - scripts
   - src
   - tests

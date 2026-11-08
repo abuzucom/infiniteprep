@@ -1,21 +1,34 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller specification for packaging InfinitePrep as a standalone desktop app."""
 
+import importlib.util
 import re
 import sys
 from pathlib import Path
 
 project_root = Path.cwd()
 src_dir = project_root / "src"
-sys.path.insert(0, str(project_root / "packaging"))
 
-# The packaging folder joins sys.path above, so this import must follow it.
-from bundle_filters import (
-    drop_entries,
-    is_gpl3_component,
-    is_unused_linux_plugin,
-    prune_unneeded_libraries,
-)
+
+def load_bundle_filters():
+    """Load packaging/bundle_filters.py from its exact path.
+
+    sys.path stays unchanged, so no other file named bundle_filters can take its place.
+    """
+    filters_path = project_root / "packaging" / "bundle_filters.py"
+    module_spec = importlib.util.spec_from_file_location("bundle_filters", filters_path)
+    if module_spec is None or module_spec.loader is None:
+        raise SystemExit(f"Cannot load {filters_path}. Restore packaging/bundle_filters.py.")
+    module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(module)
+    return module
+
+
+bundle_filters = load_bundle_filters()
+drop_entries = bundle_filters.drop_entries
+is_gpl3_component = bundle_filters.is_gpl3_component
+is_unused_linux_plugin = bundle_filters.is_unused_linux_plugin
+prune_unneeded_libraries = bundle_filters.prune_unneeded_libraries
 
 # macOS bundle settings (D83a3c). The identifier stays fixed once released (D297).
 MACOS_BUNDLE_IDENTIFIER = "dev.infiniteprep.app"

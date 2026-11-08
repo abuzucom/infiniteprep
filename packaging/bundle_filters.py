@@ -77,7 +77,10 @@ def drop_entries(
 
 
 def is_prunable_library(destination: str) -> bool:
-    """Return True for a top-level shared library that only a link dependency brought in."""
+    """Return True for a top-level Linux .so library that only a link dependency brought in.
+
+    The spec prunes on Linux only, so Windows .dll and macOS .dylib names never match.
+    """
     path = PurePosixPath(destination.replace("\\", "/"))
     if len(path.parts) != 1 or not path.name.startswith("lib"):
         return False

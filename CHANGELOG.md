@@ -5,6 +5,14 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.46.2] (2026-11-08)
+
+### Fixed
+
+- The CodeQL configuration lists the `packaging` folder. Code scanning now covers the bundle filters.
+- The spec loads `packaging/bundle_filters.py` by exact file path and no longer changes `sys.path`. A different file named `bundle_filters` cannot replace the filters during a build.
+- NOTICE lists the 72 Ubuntu 22.04 system libraries that the Linux bundle still carries after the trim, each with its license.
+
 ## [0.46.1] (2026-11-07)
 
 ### Fixed
