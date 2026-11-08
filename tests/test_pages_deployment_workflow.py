@@ -41,6 +41,15 @@ class PagesDeploymentWorkflowTest(unittest.TestCase):
         self.assertEqual(triggers["push"]["branches"], ["main"])
         self.assertIn("workflow_dispatch", triggers)
 
+    def test_skips_when_website_path_untouched(self) -> None:
+        """The push trigger filters on the website directory and workflow file."""
+        push_trigger = self.workflow["on"]["push"]
+        self.assertIn("paths", push_trigger)
+        self.assertEqual(
+            push_trigger["paths"],
+            ["website/**", ".github/workflows/deploy-pages.yml"],
+        )
+
     def test_token_writes_the_site_and_nothing_else(self) -> None:
         """The workflow token writes the Pages site and proves the deployment identity."""
         self.assertEqual(self.workflow["permissions"], EXPECTED_PERMISSIONS)

@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.48.1] (2026-11-08)
+## [0.48.2] (2026-11-08)
 
 ### Added
 
@@ -19,6 +19,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The deploy-pages workflow filters pushes to main with `website/**` and the workflow file path. Merged pull requests that do not touch website files skip deployment.
+- `test_pages_deployment_workflow.py` checks that the push trigger specifies the path filters.
 - NOTICE lists ICU 73.2 and the further Qt libraries that the bundles carry.
 - NOTICE names GPL-2.0-or-later as the second option of the D-Bus and FreeType dual licenses. It names LGPL-2.0-or-later for libkeyutils.
 - NOTICE names BSD-3-Clause as the chosen option of the zstd dual license.
