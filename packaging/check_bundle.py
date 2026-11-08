@@ -33,9 +33,10 @@ OPERATING_SYSTEMS: Final[tuple[str, ...]] = ("windows", "macos", "linux")
 REQUIRED_NOTICES: Final[tuple[str, ...]] = ("LICENSE", "NOTICE", "ICU-LICENSE.txt")
 COMMENT_PREFIX: Final[str] = "#"
 CHECK_FAILED: Final[int] = 1
-# Qt tool programs carry GPL-3 with the Qt GPL exception, and the app never runs
-# them (D228). Matched against the lowercase file name without ".exe", and against
-# macOS ".app" folder names.
+# Qt tool programs carry GPL-3 with the Qt GPL exception. The app never runs them
+# (D228). Each lowercase path part is compared after one launcher suffix and the
+# "pyside6-" wrapper prefix come off. Data files such as "rcc.dat" keep their suffix
+# and stay allowed.
 QT_TOOL_NAMES: Final[frozenset[str]] = frozenset(
     {
         "assistant",
@@ -59,8 +60,9 @@ QT_TOOL_NAMES: Final[frozenset[str]] = frozenset(
         "uic",
     }
 )
-EXECUTABLE_SUFFIX: Final[str] = ".exe"
-APP_SUFFIX: Final[str] = ".app"
+LAUNCHER_SUFFIXES: Final[tuple[str, ...]] = (".exe", ".bat", ".cmd", ".sh", ".py", ".app")
+WRAPPER_PREFIX: Final[str] = "pyside6-"
+PATH_SEPARATOR: Final[str] = "/"
 # The ten GPL-3-only Qt module families (D231). Each marker matches as a substring
 # of the lowercase path. The markers cover Linux, macOS, and Windows file names.
 GPL3_MODULE_MARKERS: Final[tuple[str, ...]] = (
@@ -106,18 +108,21 @@ class BundleReport(NamedTuple):
 def compile_pattern(pattern: str) -> re.Pattern[str]:
     """Translate one allowlist pattern into an anchored regular expression.
 
-    The translation uses no nested quantifier. Matching cannot backtrack heavily.
-    A "**" that does not start a path part raises ValueError. So does a bare "**" that
-    does not end the pattern.
+    The translation puts no quantifier on a group that holds one. Matching cannot
+    backtrack heavily. A "**" that does not start a path part raises ValueError. So do
+    a bare "**" that does not end the pattern and a pattern that ends in "/".
     """
+    if pattern.endswith(PATH_SEPARATOR):
+        raise ValueError(f"{pattern!r} ends in '/' and matches no file. Use a trailing '/**'.")
     parts: list[str] = []
     index = 0
     while index < len(pattern):
-        at_part_start = index == 0 or pattern[index - 1] == "/"
+        at_part_start = index == 0 or pattern[index - 1] == PATH_SEPARATOR
         if pattern.startswith("**", index) and not at_part_start:
             raise ValueError(f"'**' must start a path part in {pattern!r}.")
         if pattern.startswith("**/", index):
-            parts.append("(?:.*/)?")
+            # An alternation instead of an optional group keeps quantifiers unnested.
+            parts.append("(?:.*/|)")
             index += len("**/")
         elif pattern.startswith("**", index):
             if index + len("**") != len(pattern):
@@ -153,14 +158,17 @@ def is_denied(relative_path: str) -> bool:
         return True
     if path.name.startswith(READLINE_PREFIXES):
         return True
-    if path.name.removesuffix(EXECUTABLE_SUFFIX) in QT_TOOL_NAMES:
-        return True
-    return any(part.removesuffix(APP_SUFFIX) in QT_TOOL_NAMES for part in _app_folders(path))
+    # Every part counts, so a file inside a folder named after a tool also fails.
+    return any(_tool_name(part) in QT_TOOL_NAMES for part in path.parts)
 
 
-def _app_folders(path: PurePosixPath) -> list[str]:
-    """Return the path parts that end in ".app"."""
-    return [part for part in path.parts if part.endswith(APP_SUFFIX)]
+def _tool_name(part: str) -> str:
+    """Return a path part without one launcher suffix and without the wrapper prefix."""
+    for suffix in LAUNCHER_SUFFIXES:
+        if part.endswith(suffix):
+            part = part.removesuffix(suffix)
+            break
+    return part.removeprefix(WRAPPER_PREFIX)
 
 
 def bundle_files(bundle: Path) -> list[str]:
