@@ -207,7 +207,11 @@ def check_bundle(bundle: Path, operating_system: str) -> BundleReport:
         )
     allowlist = ALLOWLIST_DIR / f"{operating_system}.txt"
     patterns = read_allowlist(allowlist.read_text(encoding="utf-8").splitlines())
-    return check_files(bundle_files(bundle), patterns)
+    report = check_files(bundle_files(bundle), patterns)
+    # The inventory keeps dangling links for the allowlist and denylist. A notice
+    # must also resolve to a file, or the bundle ships no license text.
+    missing = [notice for notice in REQUIRED_NOTICES if not (bundle / notice).is_file()]
+    return report._replace(missing_notices=missing)
 
 
 def print_report(report: BundleReport) -> None:
