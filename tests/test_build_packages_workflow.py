@@ -29,9 +29,10 @@ class BuildPackagesWorkflowTest(unittest.TestCase):
         """Return every step of the bundle job."""
         return self.workflow["jobs"]["bundle"]["steps"]
 
-    def test_runs_only_when_started_by_hand(self) -> None:
-        """The only trigger is workflow_dispatch until the release stage adds tags (D248)."""
-        self.assertEqual(list(self.workflow["on"]), ["workflow_dispatch"])
+    def test_runs_by_hand_or_on_version_tags(self) -> None:
+        """A manual run or a pushed v* tag starts the workflow, and nothing else (D248, D314)."""
+        self.assertEqual(list(self.workflow["on"]), ["workflow_dispatch", "push"])
+        self.assertEqual(self.workflow["on"]["push"], {"tags": ["v*"]})
 
     def test_token_is_read_only(self) -> None:
         """The workflow token can read the repository and nothing else."""

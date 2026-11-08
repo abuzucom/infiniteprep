@@ -5,9 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.47.0] (2026-11-08)
+## [0.48.0] (2026-11-08)
 
 ### Added
+
+- A pushed `v*` tag runs build-packages as a release. The tag must match `__version__`, `pyproject.toml`, and the top CHANGELOG entry, and must point to a commit on main. A release job then uploads the six packages and `SHA256SUMS.txt` to a draft release. Only the owner publishes it.
+- A rerun of the release job reuses the draft. An asset already on the draft must match the new SHA-256, or the job stops. A published release is never changed.
+- `packaging/release.py` checks the tag, writes `SHA256SUMS.txt`, and writes the release notes from the CHANGELOG entry.
 
 - `packaging/check_bundle.py` checks each built bundle before packaging. Every file must match a pattern in `packaging/bundle-allowlist/<os>.txt`. Qt tools, GPL-3-only Qt modules, and GNU Readline always fail the check. LICENSE, NOTICE, and ICU-LICENSE.txt must sit at the bundle root. Dangling symlinks count as files. A broken link cannot skip the check.
 - build-packages fetches the ICU 73.2 license from the `release-73-2` tag and checks its pinned SHA-256. Every bundle and package ships the file as ICU-LICENSE.txt.
