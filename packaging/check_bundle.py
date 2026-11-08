@@ -12,9 +12,11 @@ The check fails when any of these holds:
 - LICENSE, NOTICE, or ICU-LICENSE.txt is missing from the bundle root.
 
 Allowlist patterns match paths relative to the bundle root, with forward slashes.
-"*" matches within one path part, "?" matches one character within a part, and
-"**/" matches any number of whole parts, including none. Lines starting with "#"
-are comments.
+"*" matches within one path part, and "?" matches one character within a part.
+"**/" at the start of a part matches any number of whole parts, including none. A
+trailing "/**" matches every file below that folder. "**" alone matches every file.
+Any other "**" is an error.
+Lines starting with "#" are comments.
 """
 
 from __future__ import annotations
@@ -23,9 +25,8 @@ import argparse
 import re
 import sys
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Final
+from typing import Final, NamedTuple
 
 ALLOWLIST_DIR: Final[Path] = Path(__file__).resolve().parent / "bundle-allowlist"
 OPERATING_SYSTEMS: Final[tuple[str, ...]] = ("windows", "macos", "linux")
@@ -85,9 +86,12 @@ GPL3_MODULE_MARKERS: Final[tuple[str, ...]] = (
 READLINE_PREFIXES: Final[tuple[str, ...]] = ("libreadline", "readline.")
 
 
-@dataclass(frozen=True)
-class BundleReport:
-    """The problems one bundle check found, each list sorted."""
+class BundleReport(NamedTuple):
+    """The problems one bundle check found, each list sorted.
+
+    A NamedTuple needs no entry in sys.modules. The tests load this file by path. A
+    dataclass fails under that load.
+    """
 
     unlisted: list[str]
     denied: list[str]
@@ -103,14 +107,21 @@ def compile_pattern(pattern: str) -> re.Pattern[str]:
     """Translate one allowlist pattern into an anchored regular expression.
 
     The translation uses no nested quantifier. Matching cannot backtrack heavily.
+    A "**" that does not start a path part raises ValueError. So does a bare "**" that
+    does not end the pattern.
     """
     parts: list[str] = []
     index = 0
     while index < len(pattern):
+        at_part_start = index == 0 or pattern[index - 1] == "/"
+        if pattern.startswith("**", index) and not at_part_start:
+            raise ValueError(f"'**' must start a path part in {pattern!r}.")
         if pattern.startswith("**/", index):
             parts.append("(?:.*/)?")
             index += len("**/")
         elif pattern.startswith("**", index):
+            if index + len("**") != len(pattern):
+                raise ValueError(f"A bare '**' must end the pattern in {pattern!r}.")
             parts.append(".*")
             index += len("**")
         elif pattern[index] == "*":
@@ -148,8 +159,8 @@ def is_denied(relative_path: str) -> bool:
 
 
 def _app_folders(path: PurePosixPath) -> list[str]:
-    """Return the folder names in the path that end in ".app"."""
-    return [part for part in path.parts[:-1] if part.endswith(APP_SUFFIX)]
+    """Return the path parts that end in ".app"."""
+    return [part for part in path.parts if part.endswith(APP_SUFFIX)]
 
 
 def bundle_files(bundle: Path) -> list[str]:
@@ -168,7 +179,14 @@ def check_files(files: Sequence[str], patterns: Sequence[re.Pattern[str]]) -> Bu
 
 
 def check_bundle(bundle: Path, operating_system: str) -> BundleReport:
-    """Check a built bundle folder against the allowlist of one operating system."""
+    """Check a built bundle folder against the allowlist of one operating system.
+
+    An operating system outside OPERATING_SYSTEMS raises ValueError.
+    """
+    if operating_system not in OPERATING_SYSTEMS:
+        raise ValueError(
+            f"Unknown operating system {operating_system!r}. Pass one of {OPERATING_SYSTEMS}."
+        )
     allowlist = ALLOWLIST_DIR / f"{operating_system}.txt"
     patterns = read_allowlist(allowlist.read_text(encoding="utf-8").splitlines())
     return check_files(bundle_files(bundle), patterns)
@@ -197,7 +215,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not report.passed:
         print(
             "check_bundle: the bundle check failed. Review each file above. Update"
-            f" packaging/bundle-allowlist/{args.operating_system}.txt or the spec."
+            f" packaging/bundle-allowlist/{args.operating_system}.txt or infiniteprep.spec."
         )
         return CHECK_FAILED
     print(f"check_bundle: {args.operating_system} bundle passed.")
