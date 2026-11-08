@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.48.0] (2026-11-08)
+## [0.48.1] (2026-11-08)
 
 ### Added
 
@@ -25,6 +25,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - NOTICE adds the FreeType credit line and the libbsd four-clause BSD acknowledgments.
 
 ### Fixed
+
+- The release job checks the six package names for the tag version. A missing or extra file stops the job and names the file.
+- The tag check reports a missing version file, an unparsable `pyproject.toml`, or an empty version as a problem line instead of a traceback. The tag `v` alone no longer passes.
+- The release notes no longer crash when the last CHANGELOG heading has no line break after it.
+- The release upload compares each draft asset in a new temporary folder and deletes nothing.
 
 - Qt files that no bundled binary loads leave the packaged builds. QtPdf and its PDF image plugin leave every bundle. The two EGLFS libraries and the unused PySide6 QtConcurrent and QtDBus bindings leave the Linux bundle. QML and Quick leave the macOS bundle, and the Windows build tries the same.
 - The build stops on every OS when a kept binary still links a dropped Qt file. The log names each binary and the link.

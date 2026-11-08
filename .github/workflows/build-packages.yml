@@ -549,6 +549,7 @@ jobs:
             echo "Expected 6 packages, found $count."
             exit 1
           fi
+          python packaging/release.py check-assets "$assets" "${GITHUB_REF_NAME#v}"
 
       - name: Write checksums and release notes
         run: |
@@ -586,12 +587,11 @@ jobs:
               exit 1
             fi
           done <<< "$existing"
-          check="$RUNNER_TEMP/existing-asset"
           for file in "$assets"/*; do
             name="$(basename "$file")"
             if printf '%s\n' "$existing" | grep -Fxq -- "$name"; then
-              rm -rf "$check"
-              mkdir -p "$check"
+              # A new folder per asset keeps old downloads apart without deleting anything.
+              check="$(mktemp -d "$RUNNER_TEMP/existing-asset.XXXXXX")"
               gh release download "$tag" --repo "$repo" --pattern "$name" --dir "$check"
               old="$(sha256sum "$check/$name" | cut -d ' ' -f 1)"
               new="$(sha256sum "$file" | cut -d ' ' -f 1)"

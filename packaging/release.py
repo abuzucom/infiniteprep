@@ -1,13 +1,15 @@
 """Release helpers for the tag release in build-packages (D83a4b, D314 to D318).
 
-Three subcommands, each run from the repository root:
+Four subcommands, each run from the repository root:
 
     python packaging/release.py check-tag v0.48.0
+    python packaging/release.py check-assets <asset-folder> 0.48.0
     python packaging/release.py checksums <asset-folder>
     python packaging/release.py notes 0.48.0 <output-file>
 
 check-tag fails unless the tag equals "v" plus the version in
 src/infiniteprep/__init__.py, pyproject.toml, and the top CHANGELOG entry (D317).
+check-assets fails unless the folder holds exactly the six packages of the version (D319).
 checksums writes SHA256SUMS.txt in the sha256sum format, sorted by file name.
 notes writes the CHANGELOG section of one version and a fixed download block (D318).
 """
@@ -26,8 +28,20 @@ from typing import Final
 ROOT: Final[Path] = Path(__file__).resolve().parent.parent
 TAG_PREFIX: Final[str] = "v"
 CHECKSUM_FILE: Final[str] = "SHA256SUMS.txt"
-READ_CHUNK_BYTES: Final[int] = 1024 * 1024
 CHECK_FAILED: Final[int] = 1
+INIT_FILE: Final[str] = "src/infiniteprep/__init__.py"
+PYPROJECT_FILE: Final[str] = "pyproject.toml"
+CHANGELOG_FILE: Final[str] = "CHANGELOG.md"
+ASSET_PREFIX: Final[str] = "InfinitePrep"
+# The six packages that build-packages makes, after "InfinitePrep-<version>-".
+ASSET_SUFFIXES: Final[tuple[str, ...]] = (
+    "windows-x64-portable.zip",
+    "windows-x64-setup.exe",
+    "linux-x86_64.AppImage",
+    "linux-x86_64.tar.gz",
+    "linux-x86_64-portable.tar.gz",
+    "macos-arm64.dmg",
+)
 VERSION_LINE: Final[re.Pattern[str]] = re.compile(r'^__version__ = "([^"]+)"$', re.MULTILINE)
 # A CHANGELOG release heading, such as "## [0.47.0] (2026-11-08)".
 RELEASE_HEADING: Final[re.Pattern[str]] = re.compile(r"^## \[([^\]]+)\]", re.MULTILINE)
@@ -43,39 +57,68 @@ DOWNLOAD_NOTES: Final[str] = """\
 """
 
 
+def _read_text(path: Path) -> str:
+    """Return the text of a file, or an empty string when the file is absent."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+
+
 def read_versions(root: Path) -> dict[str, str]:
-    """Return the version each source file states, keyed by its relative path."""
-    init_text = (root / "src" / "infiniteprep" / "__init__.py").read_text(encoding="utf-8")
-    init_match = VERSION_LINE.search(init_text)
-    with (root / "pyproject.toml").open("rb") as handle:
-        pyproject = tomllib.load(handle)
-    changelog_match = RELEASE_HEADING.search((root / "CHANGELOG.md").read_text(encoding="utf-8"))
+    """Return the version each source file states, keyed by its relative path.
+
+    A missing file or an unparsable pyproject.toml states an empty version.
+    """
+    init_match = VERSION_LINE.search(_read_text(root / INIT_FILE))
+    try:
+        pyproject = tomllib.loads(_read_text(root / PYPROJECT_FILE))
+    except tomllib.TOMLDecodeError:
+        pyproject = {}
+    changelog_match = RELEASE_HEADING.search(_read_text(root / CHANGELOG_FILE))
     return {
-        "src/infiniteprep/__init__.py": init_match.group(1) if init_match else "",
-        "pyproject.toml": str(pyproject.get("project", {}).get("version", "")),
-        "CHANGELOG.md": changelog_match.group(1) if changelog_match else "",
+        INIT_FILE: init_match.group(1) if init_match else "",
+        PYPROJECT_FILE: str(pyproject.get("project", {}).get("version", "")),
+        CHANGELOG_FILE: changelog_match.group(1) if changelog_match else "",
     }
 
 
 def tag_problems(tag: str, root: Path) -> list[str]:
-    """Return one line per file whose version does not match the tag."""
+    """Return one line per missing file, empty version, or version that differs from the tag."""
     if not tag.startswith(TAG_PREFIX):
         return [f"Tag {tag!r} does not start with {TAG_PREFIX!r}."]
     expected = tag.removeprefix(TAG_PREFIX)
-    return [
-        f"{source} states version {found!r}, but the tag names {expected!r}."
-        for source, found in read_versions(root).items()
-        if found != expected
-    ]
+    problems = [] if expected else [f"Tag {tag!r} names no version."]
+    for source, found in read_versions(root).items():
+        if not (root / source).is_file():
+            problems.append(f"{source} is missing from the checkout.")
+        elif not found:
+            problems.append(f"{source} states no version.")
+        elif found != expected:
+            problems.append(f"{source} states version {found!r}, but the tag names {expected!r}.")
+    return problems
 
 
 def file_sha256(path: Path) -> str:
-    """Return the SHA-256 hex digest of a file, read in chunks."""
-    digest = hashlib.sha256()
+    """Return the SHA-256 hex digest of a file."""
     with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(READ_CHUNK_BYTES), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+        return hashlib.file_digest(handle, "sha256").hexdigest()
+
+
+def expected_assets(version: str) -> set[str]:
+    """Return the six package file names that a build of this version makes."""
+    return {f"{ASSET_PREFIX}-{version}-{suffix}" for suffix in ASSET_SUFFIXES}
+
+
+def asset_problems(folder: Path, version: str) -> list[str]:
+    """Return one line per expected package that is missing and per extra entry."""
+    present = {path.name for path in folder.iterdir()}
+    expected = expected_assets(version)
+    missing = [f"Package {name} is missing." for name in sorted(expected - present)]
+    extra = [
+        f"{name} is not a package of version {version}." for name in sorted(present - expected)
+    ]
+    return missing + extra
 
 
 def write_checksums(folder: Path) -> Path:
@@ -98,7 +141,8 @@ def changelog_section(version: str, changelog: str) -> str:
     for index, heading in enumerate(headings):
         if heading.group(1) != version:
             continue
-        body_start = changelog.index("\n", heading.start()) + 1
+        line_end = changelog.find("\n", heading.start())
+        body_start = len(changelog) if line_end == -1 else line_end + 1
         body_end = headings[index + 1].start() if index + 1 < len(headings) else len(changelog)
         return changelog[body_start:body_end].strip() + "\n"
     raise ValueError(f"CHANGELOG.md has no section for version {version}. Add one first.")
@@ -110,8 +154,20 @@ def release_notes(version: str, root: Path) -> str:
     return f"{changelog_section(version, changelog)}\n{DOWNLOAD_NOTES}"
 
 
+def _report_assets(folder: Path, version: str) -> int:
+    """Print each asset problem and return 0 when the folder holds exactly the six packages."""
+    problems = asset_problems(folder, version)
+    for problem in problems:
+        print(f"release: {problem}")
+    if problems:
+        print("release: rebuild the packages for this tag, then rerun the release job.")
+        return CHECK_FAILED
+    print(f"release: {folder} holds the six packages of version {version}.")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run one subcommand and return 0 on success, 1 on a failed tag check."""
+    """Run one subcommand and return 0 on success, 1 on a failed tag or asset check."""
     parser = argparse.ArgumentParser(description="Release helpers for build-packages.")
     commands = parser.add_subparsers(dest="command", required=True)
     check = commands.add_parser("check-tag", help="Check a tag against the version files.")
@@ -121,7 +177,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     notes = commands.add_parser("notes", help="Write the release notes of a version.")
     notes.add_argument("version")
     notes.add_argument("output", type=Path)
+    assets = commands.add_parser("check-assets", help="Check the package names in a folder.")
+    assets.add_argument("folder", type=Path)
+    assets.add_argument("version")
     args = parser.parse_args(argv)
+    if args.command == "check-assets":
+        if not args.folder.is_dir():
+            parser.error(f"{args.folder} is not a folder. Pass the folder of release assets.")
+        return _report_assets(args.folder, args.version)
     if args.command == "check-tag":
         problems = tag_problems(args.tag, ROOT)
         for problem in problems:
