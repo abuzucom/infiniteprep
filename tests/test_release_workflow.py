@@ -85,7 +85,7 @@ class ReleaseWorkflowTest(unittest.TestCase):
         download = self._step("release", "Download package artifacts")["run"]
         for artifact in PACKAGE_ARTIFACTS:
             self.assertIn(artifact, download)
-        self.assertIn('-ne 6 ]', download)
+        self.assertIn("-ne 6 ]", download)
         written = self._step("release", "Write checksums and release notes")["run"]
         self.assertIn("release.py checksums", written)
         self.assertIn('release.py notes "${GITHUB_REF_NAME#v}"', written)
