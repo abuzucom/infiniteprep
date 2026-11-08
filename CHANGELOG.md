@@ -5,9 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.46.2] (2026-11-08)
+## [0.46.3] (2026-11-08)
 
 ### Fixed
+
+- Qt files that no bundled binary loads leave the packaged builds. QtPdf and its PDF image plugin leave every bundle. The two EGLFS libraries and the unused PySide6 QtConcurrent and QtDBus bindings leave the Linux bundle. QML and Quick leave the macOS bundle, and the Windows build tries the same.
+- The build excludes setuptools and pkg_resources. No app module imports either package.
+- The bundle smoke check fails with exit code 1 when Qt Multimedia finds no playback backend. Every packaged build now proves that the FFmpeg playback plugin loads.
 
 - The CodeQL configuration lists the `packaging` folder. Code scanning now covers the bundle filters.
 - The spec loads `packaging/bundle_filters.py` by exact file path and no longer changes `sys.path`. A different file named `bundle_filters` cannot replace the filters during a build.

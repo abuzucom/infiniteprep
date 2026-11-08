@@ -8,6 +8,8 @@ plus the destinations it dropped, so the build log can name every removed file.
   bundle.
 - On Linux, unused Qt plugins leave the bundle. Then any top-level library that no
   kept binary links against leaves too, until nothing more changes.
+- Qt libraries that no kept binary loads leave each bundle (D313). Research run
+  42468442490 mapped the links on Linux and macOS.
 """
 
 from __future__ import annotations
@@ -41,6 +43,45 @@ LINUX_UNUSED_PLUGIN_PATHS: Final[tuple[str, ...]] = (
 PROTECTED_LIBRARY_PREFIXES: Final[tuple[str, ...]] = ("libpython", "libgcc_s")
 SYMLINK_TYPECODE: Final[str] = "SYMLINK"
 SHARED_LIBRARY_MARKER: Final[str] = ".so"
+# File-name prefixes of orphaned Qt files per platform (D313). Only the PDF image
+# plugin loads QtPdf, and the app never opens PDF files as images. On Linux the
+# EGLFS libraries only load each other, and the app never imports the PySide6
+# QtConcurrent and QtDBus bindings. The Qt libraries under those bindings stay. On
+# Windows, dropping QML and Quick is a trial: the smoke check fails when the
+# FFmpeg playback plugin cannot load without them.
+ORPHAN_QT_FILE_PREFIXES: Final[dict[str, tuple[str, ...]]] = {
+    "linux": (
+        "libqt6pdf.so",
+        "libqpdf.so",
+        "libqt6eglfsdeviceintegration.so",
+        "libqt6eglfskmssupport.so",
+        "qtconcurrent.abi3.so",
+        "qtdbus.abi3.so",
+    ),
+    "darwin": ("libqpdf.dylib",),
+    "win32": (
+        "qt6pdf.dll",
+        "qpdf.dll",
+        "qt6qml.dll",
+        "qt6qmlmeta.dll",
+        "qt6qmlmodels.dll",
+        "qt6qmlworkerscript.dll",
+        "qt6quick.dll",
+    ),
+}
+# macOS ships Qt as frameworks. Nothing loads QML and Quick there, because the macOS
+# FFmpeg plugin does not link them.
+MACOS_ORPHAN_FRAMEWORKS: Final[tuple[str, ...]] = (
+    "qtpdf",
+    "qtqml",
+    "qtqmlmeta",
+    "qtqmlmodels",
+    "qtqmlworkerscript",
+    "qtquick",
+)
+FRAMEWORK_SUFFIX: Final[str] = ".framework"
+DARWIN_PLATFORM: Final[str] = "darwin"
+LINUX_PLATFORM: Final[str] = "linux"
 
 
 def _normalized(destination: str) -> str:
@@ -60,6 +101,31 @@ def is_unused_linux_plugin(destination: str) -> bool:
     """Return True for a Linux Qt plugin the app does not use (D303)."""
     path = _normalized(destination)
     return any(marker in path for marker in LINUX_UNUSED_PLUGIN_PATHS)
+
+
+def _platform_key(platform: str) -> str:
+    """Return the ORPHAN_QT_FILE_PREFIXES key for a sys.platform value."""
+    if platform.startswith(LINUX_PLATFORM):
+        return LINUX_PLATFORM
+    return platform
+
+
+def is_orphaned_qt_component(destination: str, platform: str) -> bool:
+    """Return True for a Qt file that no kept binary loads on this platform (D313).
+
+    platform takes a sys.platform value, such as "linux", "darwin", or "win32".
+    """
+    key = _platform_key(platform)
+    path = PurePosixPath(_normalized(destination))
+    if path.name.startswith(ORPHAN_QT_FILE_PREFIXES.get(key, ())):
+        return True
+    if key != DARWIN_PLATFORM:
+        return False
+    framework_parts = {f"{name}{FRAMEWORK_SUFFIX}" for name in MACOS_ORPHAN_FRAMEWORKS}
+    if framework_parts.intersection(path.parts):
+        return True
+    # PyInstaller also places a top-level symlink named after each framework binary.
+    return path.name in MACOS_ORPHAN_FRAMEWORKS
 
 
 def drop_entries(

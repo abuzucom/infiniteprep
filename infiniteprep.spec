@@ -27,6 +27,7 @@ def load_bundle_filters():
 bundle_filters = load_bundle_filters()
 drop_entries = bundle_filters.drop_entries
 is_gpl3_component = bundle_filters.is_gpl3_component
+is_orphaned_qt_component = bundle_filters.is_orphaned_qt_component
 is_unused_linux_plugin = bundle_filters.is_unused_linux_plugin
 prune_unneeded_libraries = bundle_filters.prune_unneeded_libraries
 
@@ -35,6 +36,9 @@ MACOS_BUNDLE_IDENTIFIER = "dev.infiniteprep.app"
 MACOS_MINIMUM_VERSION = "14.4"
 version_source = (src_dir / "infiniteprep" / "__init__.py").read_text(encoding="utf-8")
 APP_VERSION = re.search(r'^__version__ = "([^"]+)"$', version_source, re.MULTILINE).group(1)
+# The app never imports setuptools or pkg_resources (D313). Excluding them also keeps
+# PyInstaller from adding the pkg_resources runtime hook.
+UNUSED_PYTHON_PACKAGES = ["setuptools", "pkg_resources"]
 
 a = Analysis(
     [str(src_dir / "infiniteprep" / "main.py")],
@@ -56,7 +60,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     # Python's readline module links GNU Readline (GPL-3) on Linux (D302).
-    excludes=["readline"],
+    excludes=["readline"] + UNUSED_PYTHON_PACKAGES,
     noarchive=False,
 )
 
@@ -72,6 +76,18 @@ a.binaries, dropped = drop_entries(a.binaries, is_gpl3_component)
 report_dropped("GPL-3", dropped)
 a.datas, dropped = drop_entries(a.datas, is_gpl3_component)
 report_dropped("GPL-3", dropped)
+
+
+def is_orphan_on_this_platform(destination):
+    """Return True for a Qt file that no kept binary loads on the build platform."""
+    return is_orphaned_qt_component(destination, sys.platform)
+
+
+# Qt files that nothing loads go before the Linux prune, so it sees the final set (D313).
+a.binaries, dropped = drop_entries(a.binaries, is_orphan_on_this_platform)
+report_dropped("no Qt file loads it", dropped)
+a.datas, dropped = drop_entries(a.datas, is_orphan_on_this_platform)
+report_dropped("no Qt file loads it", dropped)
 
 if sys.platform.startswith("linux"):
     from PyInstaller.depend import bindepend

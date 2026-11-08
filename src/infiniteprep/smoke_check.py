@@ -9,8 +9,10 @@ error before it writes the version file.
 from __future__ import annotations
 
 import os
+import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 
 import keyring
 import numpy
@@ -27,6 +29,25 @@ QT_PLATFORM_VAR: Final[str] = "QT_QPA_PLATFORM"
 OFFSCREEN_PLATFORM: Final[str] = "offscreen"
 SMOKE_WINDOW_NAME: Final[str] = "hann"
 SMOKE_WINDOW_LENGTH: Final[int] = 8
+# A missing backend returns an exit code instead of raising. The windowed Windows
+# build would show an error dialog for an exception, and CI would wait on it.
+SMOKE_CHECK_BACKEND_ERROR: Final[int] = 1
+BACKEND_ERROR_MESSAGE: Final[str] = (
+    "Qt Multimedia found no playback backend. Rebuild the bundle with the FFmpeg media"
+    " plugin and every Qt library it loads."
+)
+
+
+class MediaPlayer(Protocol):
+    """The part of QMediaPlayer the smoke check uses."""
+
+    def isAvailable(self) -> bool:  # Qt's own method name.
+        """Return True when a multimedia backend loaded."""
+        ...
+
+    def deleteLater(self) -> None:  # Qt's own method name.
+        """Schedule the player for deletion."""
+        ...
 
 
 def _load_native_libraries() -> None:
@@ -38,23 +59,35 @@ def _load_native_libraries() -> None:
     keyring.get_keyring()
 
 
-def _load_qt_multimedia() -> None:
-    """Start Qt offscreen and create a media player, which loads the multimedia backend."""
+def _load_qt_multimedia(player_factory: Callable[[], MediaPlayer]) -> bool:
+    """Start Qt offscreen, create a media player, and return whether a backend loaded.
+
+    Creating the player loads the multimedia backend. On every OS that backend is the
+    FFmpeg plugin, so a plugin that cannot load its Qt libraries shows up here.
+    """
     os.environ.setdefault(QT_PLATFORM_VAR, OFFSCREEN_PLATFORM)
     application = QApplication.instance() or QApplication([])
-    player = QMediaPlayer()
+    player = player_factory()
+    backend_available = player.isAvailable()
     player.deleteLater()
     application.processEvents()
+    return backend_available
 
 
-def run_smoke_check(output_path: Path) -> int:
+def run_smoke_check(
+    output_path: Path, player_factory: Callable[[], MediaPlayer] = QMediaPlayer
+) -> int:
     """Load the runtime libraries and Qt, write the version to output_path, and return 0.
 
     The file opens in exclusive-create mode, so the check never overwrites an existing
-    file. An existing path raises FileExistsError.
+    file. An existing path raises FileExistsError. Without a multimedia backend the
+    check writes no file and returns SMOKE_CHECK_BACKEND_ERROR.
     """
     _load_native_libraries()
-    _load_qt_multimedia()
+    backend_available = _load_qt_multimedia(player_factory)
+    if not backend_available:
+        print(BACKEND_ERROR_MESSAGE, file=sys.stderr)
+        return SMOKE_CHECK_BACKEND_ERROR
     with output_path.open("x", encoding="utf-8") as result_file:
         result_file.write(__version__)
     return 0
