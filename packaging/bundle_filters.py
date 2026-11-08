@@ -142,6 +142,32 @@ def drop_entries(
     return kept, dropped
 
 
+def find_loaded_orphans(
+    kept: Iterable[TocEntry], dropped_destinations: Iterable[str], needed_names: NeededNames
+) -> list[str]:
+    """Return one line per kept binary that still links a dropped orphan, sorted.
+
+    The orphan lists are fixed names, so a later PySide6 or PyInstaller release could
+    add a binary that needs one of them. The spec calls this on every OS and stops the
+    build when the result is not empty. Names compare by file name, in lowercase,
+    because Windows names ignore case and macOS links name a path to the binary.
+    """
+    dropped_names = {_file_name(destination) for destination in dropped_destinations}
+    conflicts: list[str] = []
+    for destination, source, typecode in kept:
+        if typecode == SYMLINK_TYPECODE:
+            continue
+        for name in needed_names(source):
+            if _file_name(name) in dropped_names:
+                conflicts.append(f"{destination} loads {name}")
+    return sorted(conflicts)
+
+
+def _file_name(path: str) -> str:
+    """Return the last component of a path with either separator, in lowercase."""
+    return PurePosixPath(_normalized(path)).name
+
+
 def is_prunable_library(destination: str) -> bool:
     """Return True for a top-level Linux .so library that only a link dependency brought in.
 

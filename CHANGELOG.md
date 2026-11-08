@@ -10,6 +10,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - Qt files that no bundled binary loads leave the packaged builds. QtPdf and its PDF image plugin leave every bundle. The two EGLFS libraries and the unused PySide6 QtConcurrent and QtDBus bindings leave the Linux bundle. QML and Quick leave the macOS bundle, and the Windows build tries the same.
+- The build stops on every OS when a kept binary still links a dropped Qt file. The log names each binary and the link.
 - The build excludes setuptools and pkg_resources. No app module imports either package.
 - The bundle smoke check fails with exit code 1 when Qt Multimedia finds no playback backend. Every packaged build now proves that the FFmpeg playback plugin loads.
 

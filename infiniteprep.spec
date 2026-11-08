@@ -6,6 +6,8 @@ import re
 import sys
 from pathlib import Path
 
+from PyInstaller.depend import bindepend
+
 project_root = Path.cwd()
 src_dir = project_root / "src"
 
@@ -26,6 +28,7 @@ def load_bundle_filters():
 
 bundle_filters = load_bundle_filters()
 drop_entries = bundle_filters.drop_entries
+find_loaded_orphans = bundle_filters.find_loaded_orphans
 is_gpl3_component = bundle_filters.is_gpl3_component
 is_orphaned_qt_component = bundle_filters.is_orphaned_qt_component
 is_unused_linux_plugin = bundle_filters.is_unused_linux_plugin
@@ -83,22 +86,30 @@ def is_orphan_on_this_platform(destination):
     return is_orphaned_qt_component(destination, sys.platform)
 
 
+def linked_library_names(source):
+    """Return the names of the libraries a collected binary links against."""
+    return {name for name, _path in bindepend.get_imports(source)}
+
+
 # Qt files that nothing loads go before the Linux prune, so it sees the final set (D313).
-a.binaries, dropped = drop_entries(a.binaries, is_orphan_on_this_platform)
-report_dropped("no Qt file loads it", dropped)
+a.binaries, orphan_binaries = drop_entries(a.binaries, is_orphan_on_this_platform)
+report_dropped("no Qt file loads it", orphan_binaries)
 a.datas, dropped = drop_entries(a.datas, is_orphan_on_this_platform)
 report_dropped("no Qt file loads it", dropped)
+# The orphan lists are fixed names. A kept binary that still links one stops the build.
+loaded_orphans = find_loaded_orphans(a.binaries, orphan_binaries, linked_library_names)
+if loaded_orphans:
+    for conflict in loaded_orphans:
+        print(f"infiniteprep.spec: {conflict}")
+    raise SystemExit(
+        "A kept binary links a dropped Qt file. Remove that file from"
+        " ORPHAN_QT_FILE_PREFIXES or MACOS_ORPHAN_FRAMEWORKS in packaging/bundle_filters.py."
+    )
 
 if sys.platform.startswith("linux"):
-    from PyInstaller.depend import bindepend
-
     # Unused Linux Qt plugins go first, then the libraries only they needed (D303, D304).
     a.binaries, dropped = drop_entries(a.binaries, is_unused_linux_plugin)
     report_dropped("unused Linux Qt plugin", dropped)
-
-    def linked_library_names(source):
-        """Return the names of the libraries a collected binary links against."""
-        return {name for name, _path in bindepend.get_imports(source)}
 
     a.binaries, dropped = prune_unneeded_libraries(a.binaries, linked_library_names)
     report_dropped("no kept binary links it", dropped)
