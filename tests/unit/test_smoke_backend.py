@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -48,9 +49,9 @@ def test_real_backend_is_available_and_the_version_is_written(qapp: Any, tmp_pat
 
 
 def test_missing_backend_fails_before_any_file_is_written(
-    qapp: Any, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    qapp: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """Without a backend the check returns the backend error, writes nothing, and says why."""
+    """Without a backend the check returns the backend error, writes nothing, and logs why."""
     players: list[UnavailablePlayer] = []
 
     def make_player() -> UnavailablePlayer:
@@ -60,9 +61,15 @@ def test_missing_backend_fails_before_any_file_is_written(
 
     result_file = tmp_path / "smoke-version.txt"
 
-    exit_code = run_smoke_check(result_file, player_factory=make_player)
+    with caplog.at_level(logging.ERROR, logger="infiniteprep.smoke_check"):
+        exit_code = run_smoke_check(result_file, player_factory=make_player)
 
     assert exit_code == SMOKE_CHECK_BACKEND_ERROR
     assert not result_file.exists()
-    assert BACKEND_ERROR_MESSAGE in capsys.readouterr().err
+    logged = [
+        (record.levelno, record.getMessage())
+        for record in caplog.records
+        if record.name == "infiniteprep.smoke_check"
+    ]
+    assert logged == [(logging.ERROR, BACKEND_ERROR_MESSAGE)]
     assert [player.deleted for player in players] == [True]

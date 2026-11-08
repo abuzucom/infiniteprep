@@ -43,6 +43,13 @@ LINUX_UNUSED_PLUGIN_PATHS: Final[tuple[str, ...]] = (
 PROTECTED_LIBRARY_PREFIXES: Final[tuple[str, ...]] = ("libpython", "libgcc_s")
 SYMLINK_TYPECODE: Final[str] = "SYMLINK"
 SHARED_LIBRARY_MARKER: Final[str] = ".so"
+# The orphan lists come from research run 42468442490 on the research-linuxdeploy
+# workflow. It printed the links of every bundled binary with readelf -d on Linux and
+# otool -L on macOS. To rebuild the lists after a PySide6 update, run that map again
+# and keep only Qt files that no other bundled binary links. The build log prints a
+# "dropped" line for each match. A missing line means a name stopped matching. A
+# kept binary that links a dropped file stops the build (find_loaded_orphans).
+#
 # File-name prefixes of orphaned Qt files per platform (D313). Only the PDF image
 # plugin loads QtPdf, and the app never opens PDF files as images. On Linux the
 # EGLFS libraries only load each other, and the app never imports the PySide6

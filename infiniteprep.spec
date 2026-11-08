@@ -62,7 +62,8 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    # Python's readline module links GNU Readline (GPL-3) on Linux (D302).
+    # Python's readline module links GNU Readline (GPL-3) on Linux (D302). The exclusion
+    # applies on every OS, because no InfinitePrep code uses the module.
     excludes=["readline"] + UNUSED_PYTHON_PACKAGES,
     noarchive=False,
 )

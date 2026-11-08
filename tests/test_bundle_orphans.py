@@ -143,18 +143,17 @@ class OrphanedQtFileTest(unittest.TestCase):
 
     def test_drop_entries_removes_orphans_and_reports_them(self) -> None:
         """drop_entries with the orphan filter keeps the rest in order."""
-        entries = [
-            ("PySide6/Qt/lib/libQt6Core.so.6", "/build/core", "BINARY"),
-            ("PySide6/Qt/lib/libQt6Pdf.so.6", "/build/pdf", "BINARY"),
-            ("PySide6/Qt/lib/libQt6Quick.so.6", "/build/quick", "BINARY"),
-        ]
+        core = ("PySide6/Qt/lib/libQt6Core.so.6", "/build/core", "BINARY")
+        pdf = ("PySide6/Qt/lib/libQt6Pdf.so.6", "/build/pdf", "BINARY")
+        quick = ("PySide6/Qt/lib/libQt6Quick.so.6", "/build/quick", "BINARY")
 
         kept, dropped = FILTERS.drop_entries(
-            entries, lambda destination: FILTERS.is_orphaned_qt_component(destination, "linux")
+            [core, pdf, quick],
+            lambda destination: FILTERS.is_orphaned_qt_component(destination, "linux"),
         )
 
-        self.assertEqual([entry[0] for entry in kept], [entries[0][0], entries[2][0]])
-        self.assertEqual(dropped, ["PySide6/Qt/lib/libQt6Pdf.so.6"])
+        self.assertEqual(kept, [core, quick])
+        self.assertEqual(dropped, [pdf[0]])
 
 
 class SpecOrphanWiringTest(unittest.TestCase):
@@ -177,7 +176,7 @@ class SpecOrphanWiringTest(unittest.TestCase):
         self.assertIn("is_orphaned_qt_component(destination, sys.platform)", self.spec)
 
     def test_setuptools_and_pkg_resources_are_excluded(self) -> None:
-        """The Analysis excludes keep readline and add setuptools and pkg_resources."""
+        """The Analysis keeps the readline exclusion and adds setuptools and pkg_resources."""
         self.assertIn('UNUSED_PYTHON_PACKAGES = ["setuptools", "pkg_resources"]', self.spec)
         self.assertIn('excludes=["readline"] + UNUSED_PYTHON_PACKAGES', self.spec)
 

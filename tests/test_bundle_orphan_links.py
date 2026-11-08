@@ -99,9 +99,7 @@ class SpecLoadedOrphanWiringTest(unittest.TestCase):
     def test_spec_stops_the_build_before_the_linux_block(self) -> None:
         """The check runs on the kept binaries and dropped orphans, outside any OS branch."""
         spec = SPEC_PATH.read_text(encoding="utf-8")
-        check = spec.index(
-            "find_loaded_orphans(a.binaries, orphan_binaries, linked_library_names)"
-        )
+        check = spec.index("find_loaded_orphans(a.binaries, orphan_binaries, linked_library_names)")
         stop = spec.index("raise SystemExit(", check)
         self.assertLess(stop, spec.index('if sys.platform.startswith("linux"):'))
         self.assertIn("from PyInstaller.depend import bindepend", spec)

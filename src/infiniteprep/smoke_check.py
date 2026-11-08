@@ -8,8 +8,8 @@ error before it writes the version file.
 
 from __future__ import annotations
 
+import logging
 import os
-import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final, Protocol
@@ -23,6 +23,7 @@ from PySide6.QtWidgets import QApplication
 
 from infiniteprep import __version__
 
+LOGGER: Final[logging.Logger] = logging.getLogger(__name__)
 QT_PLATFORM_VAR: Final[str] = "QT_QPA_PLATFORM"
 # The offscreen platform needs no display, so CI runners and the windowed
 # Windows build can run the check without opening a window.
@@ -86,7 +87,9 @@ def run_smoke_check(
     _load_native_libraries()
     backend_available = _load_qt_multimedia(player_factory)
     if not backend_available:
-        print(BACKEND_ERROR_MESSAGE, file=sys.stderr)
+        # The app configures no log handler, so logging's last-resort handler writes
+        # this to stderr.
+        LOGGER.error(BACKEND_ERROR_MESSAGE)
         return SMOKE_CHECK_BACKEND_ERROR
     with output_path.open("x", encoding="utf-8") as result_file:
         result_file.write(__version__)
