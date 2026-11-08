@@ -1,8 +1,10 @@
 # Windows bundle allowlist (D300), checked by packaging/check_bundle.py.
 # Built from research run 42473611567 on the trimmed bundle (version 0.46.3).
 # Patterns match paths relative to dist/InfinitePrep. "*" stays within one path
-# part, and "**/" spans folders. Each native library has its own line. A new
-# native library fails the check until a review adds it here.
+# part, and "**/" spans folders. Each native file has its own line, except the
+# extension modules inside the numpy and scipy package folders. Those packages'
+# own licenses cover every module in them. A new native file anywhere else fails
+# the check until a review adds it here.
 
 # App and notices
 InfinitePrep.exe
@@ -15,7 +17,25 @@ _internal/infiniteprep/db/schema.sql
 # Python 3.12 runtime, standard library extensions, and the C runtime
 _internal/python3.dll
 _internal/python312.dll
-_internal/*.pyd
+_internal/_asyncio.pyd
+_internal/_bz2.pyd
+_internal/_ctypes.pyd
+_internal/_decimal.pyd
+_internal/_elementtree.pyd
+_internal/_hashlib.pyd
+_internal/_lzma.pyd
+_internal/_multiprocessing.pyd
+_internal/_overlapped.pyd
+_internal/_queue.pyd
+_internal/_socket.pyd
+_internal/_sqlite3.pyd
+_internal/_ssl.pyd
+_internal/_uuid.pyd
+_internal/_wmi.pyd
+_internal/pyexpat.pyd
+_internal/select.pyd
+_internal/unicodedata.pyd
+_internal/_cffi_backend.cp312-win_amd64.pyd
 _internal/sqlite3.dll
 _internal/libcrypto-3.dll
 _internal/libcrypto-3-x64.dll
