@@ -10,8 +10,14 @@ Desktop UI and playback
 - Qt 6 and PySide6 6.12.0 (QtCore, QtGui, QtWidgets, QtMultimedia):
   LGPL-3.0-only. InfinitePrep links Qt dynamically, and the packaged
   folder layout keeps every Qt library replaceable.
+- Qt 6 libraries that these modules load, such as QtDBus, QtNetwork,
+  QtOpenGL, QtSvg, QtConcurrent, QtQml, QtQuick, QtWaylandClient, and
+  QtXcbQpa: LGPL-3.0-only.
 - FFmpeg 9.0.1, inside Qt Multimedia: LGPL-2.1-or-later.
 - shiboken6 6.12.0: LGPL-3.0-only.
+- ICU 73.2, inside Qt: Unicode-DFS-2016, with the ICU license for older
+  code and the third-party notices of its LICENSE file. That file ships
+  as ICU-LICENSE.txt beside this NOTICE.
 
 Audio decoding and analysis
 - soundfile 0.14.0: BSD-3-Clause.
@@ -44,14 +50,17 @@ Linux system libraries (AppImage and tarballs)
   package.
   - GNU C library part libmvec, GLib (libglib-2.0, libgthread-2.0),
     libgcrypt, libgpg-error, libsystemd, PulseAudio (libpulse,
-    libpulsecommon), libsndfile, libapparmor, libasyncns, and
-    libkeyutils: LGPL-2.1-or-later.
+    libpulsecommon), libsndfile, libapparmor, and libasyncns:
+    LGPL-2.1-or-later.
+  - libkeyutils: LGPL-2.0-or-later.
   - libgcc_s and libstdc++: GPL-3.0-or-later WITH GCC-exception-3.1.
   - libpython3.12: PSF-2.0.
   - OpenSSL 3 (libssl, libcrypto): Apache-2.0.
-  - D-Bus (libdbus-1): AFL-2.1, chosen from its AFL-2.1 or GPL-2.0
-    dual license.
-  - FreeType: FTL, chosen from its FTL or GPL-2.0 dual license.
+  - D-Bus (libdbus-1): AFL-2.1, chosen from its AFL-2.1 or
+    GPL-2.0-or-later dual license.
+  - FreeType: FTL, chosen from its FTL or GPL-2.0-or-later dual
+    license. Portions of this software are copyright (c) 2021 The
+    FreeType Project (www.freetype.org). All rights reserved.
   - libcap: BSD-3-Clause, chosen from its BSD-3-Clause or GPL-2.0
     dual license.
   - X11 and XCB (libX11, libX11-xcb, libXau, libXdmcp, libXext,
@@ -59,9 +68,16 @@ Linux system libraries (AppImage and tarballs)
     libxkbcommon, libxkbcommon-x11, Expat, libffi, Fontconfig,
     Brotli, Kerberos (libkrb5, libkrb5support, libk5crypto,
     libgssapi_krb5), and libcom_err: MIT-style licenses.
-  - FLAC, Ogg, Vorbis, Opus, PCRE, libuuid, and zstd: BSD-3-Clause.
+  - FLAC, Ogg, Vorbis, Opus, PCRE, and libuuid: BSD-3-Clause.
+  - zstd: BSD-3-Clause, chosen from its BSD-3-Clause or GPL-2.0 dual
+    license.
   - lz4: BSD-2-Clause. libbsd and libmd: BSD-style licenses.
-  - zlib: Zlib. bzip2: bzip2-1.0.6. libpng: libpng license.
+  - libbsd carries files under the original four-clause BSD license.
+    This product includes software developed by Christopher G.
+    Demetriou. This product includes software developed by Niels
+    Provos.
+  - zlib: Zlib. libpng: libpng license.
+  - bzip2 (libbz2, which Qt's FFmpeg loads): bzip2-1.0.6.
   - xz (liblzma) and SQLite: public domain.
 
 Linux AppImage runtime
@@ -79,6 +95,20 @@ Linux AppImage runtime
   https://github.com/libfuse/libfuse/releases/tag/fuse-3.15.0. Then
   replace the first part of the AppImage with the new runtime, or rebuild
   the AppImage from the tarball contents with appimagetool.
+
+Source code for LGPL components
+- Qt 6.12.0 source: https://download.qt.io/official_releases/qt/6.12/6.12.0/
+- PySide6 and shiboken6 6.12.0 source:
+  https://code.qt.io/cgit/pyside/pyside-setup.git/tag/?h=v6.12.0
+- Written offer. For at least three years after the date of each
+  InfinitePrep release, ABUZUCOM LLC offers to give any third party the
+  complete corresponding source code of each LGPL-2.1 component in that
+  release. The offer covers the Ubuntu system libraries above, FFmpeg,
+  libsndfile, libquadmath, and the AppImage runtime's libfuse. The
+  charge is no more than the cost of the physical distribution. Send a
+  request to legal@infiniteprep.dev, or open an issue at
+  https://github.com/abuzucom/infiniteprep/issues. Name the release
+  version and the component.
 
 Build tools (not shipped)
 - PyInstaller: GPL-2.0-or-later WITH Bootloader-exception. The exception

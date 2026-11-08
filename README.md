@@ -449,3 +449,11 @@ The macOS job builds `InfinitePrep-<version>-macos-arm64.dmg` for Apple Silicon 
 On macOS, a `portable.mode` file next to `InfinitePrep.app` keeps the library in an `InfinitePrep-Data` folder there. Move the app and the file out of Downloads first. macOS runs a downloaded app from a hidden copy, and that copy uses the per-user folders.
 
 To remove InfinitePrep's data on any OS, open Settings and choose `Delete InfinitePrep Data...`. Music files and exports stay.
+
+Before it packages anything, `build-packages` runs `packaging/check_bundle.py` on each bundle. Every file must match a pattern in `packaging/bundle-allowlist/<os>.txt`. Qt tools, GPL-3-only Qt modules, and GNU Readline always fail the check. A new library in a bundle therefore needs a reviewed allowlist entry and a NOTICE entry. To run the check locally, pass the bundle folder and `windows`, `macos`, or `linux`:
+
+```bash
+python packaging/check_bundle.py dist/InfinitePrep linux
+```
+
+Every bundle ships `LICENSE`, `NOTICE`, and `ICU-LICENSE.txt`. NOTICE also carries the written offer for the source code of the LGPL-2.1 components.

@@ -104,10 +104,43 @@ jobs:
           fi
           echo "X11 start passed for version $expected."
 
-      # The LGPL notices must ship with every bundle and package (D270).
+      # ICU 73.2 ships inside the PySide6 wheel without its license text. The
+      # ICU license requires its notice with every copy (D310). The file must
+      # match its pinned SHA-256 before it joins any bundle.
+      - name: Fetch pinned ICU license
+        shell: bash
+        env:
+          ICU_LICENSE_URL: https://raw.githubusercontent.com/unicode-org/icu/release-73-2/icu4c/LICENSE
+          ICU_LICENSE_SHA256: f3005e195ff74d8812cc1f182a1c446fab678d70a10e3dada497585befee5416
+        run: |
+          mkdir -p "$RUNNER_TEMP/icu"
+          license="$RUNNER_TEMP/icu/ICU-LICENSE.txt"
+          curl --fail --location --silent --show-error -o "$license" "$ICU_LICENSE_URL"
+          python - "$license" "$ICU_LICENSE_SHA256" <<'PY'
+          import hashlib
+          import sys
+          from pathlib import Path
+
+          actual = hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest()
+          if actual != sys.argv[2]:
+              sys.exit(f"ICU license SHA-256 is {actual}, expected {sys.argv[2]}.")
+          print("ICU license matches its pinned SHA-256.")
+          PY
+
+      # The LGPL notices and the ICU license must ship with every bundle and
+      # package (D270, D310).
       - name: Add license notices to bundle
         shell: bash
-        run: cp LICENSE NOTICE dist/InfinitePrep/
+        run: cp LICENSE NOTICE "$RUNNER_TEMP/icu/ICU-LICENSE.txt" dist/InfinitePrep/
+
+      # Each file must match a pattern in the OS allowlist. A Qt tool, a
+      # GPL-3-only Qt module, or GNU Readline fails the check. The notices
+      # must sit at the bundle root (D231, D300, D301).
+      - name: Check bundle contents
+        shell: bash
+        run: |
+          os_name="$(printf '%s' "$RUNNER_OS" | tr '[:upper:]' '[:lower:]')"
+          python packaging/check_bundle.py dist/InfinitePrep "$os_name"
 
       - name: Upload bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
@@ -181,6 +214,9 @@ jobs:
           if ($install.ExitCode -ne 0) { throw "Setup exited with $($install.ExitCode)." }
           $exe = Join-Path $installDir 'InfinitePrep.exe'
           if (-not (Test-Path $exe)) { throw "Setup did not install $exe." }
+          foreach ($notice in 'LICENSE', 'NOTICE', 'ICU-LICENSE.txt') {
+            if (-not (Test-Path (Join-Path $installDir $notice))) { throw "Setup did not install $notice." }
+          }
 
           $result = Join-Path $env:RUNNER_TEMP 'installed-smoke.txt'
           $smoke = Start-Process -FilePath $exe -ArgumentList '--smoke-check', $result -Wait -PassThru
@@ -343,6 +379,7 @@ jobs:
             fi
             test -f "$unpack/$folder/LICENSE"
             test -f "$unpack/$folder/NOTICE"
+            test -f "$unpack/$folder/ICU-LICENSE.txt"
             if [ "$kind" = portable ]; then
               test -f "$unpack/$folder/portable.mode"
             elif [ -e "$unpack/$folder/portable.mode" ]; then
@@ -375,7 +412,7 @@ jobs:
         shell: bash
         run: |
           app="dist/InfinitePrep.app"
-          cp LICENSE NOTICE "$app/Contents/Resources/"
+          cp LICENSE NOTICE "$RUNNER_TEMP/icu/ICU-LICENSE.txt" "$app/Contents/Resources/"
           codesign --force --deep --sign - "$app"
           codesign --verify --deep --strict --verbose=2 "$app"
 
@@ -390,7 +427,7 @@ jobs:
           mkdir -p "$staging"
           ditto dist/InfinitePrep.app "$staging/InfinitePrep.app"
           ln -s /Applications "$staging/Applications"
-          cp LICENSE NOTICE "$staging/"
+          cp LICENSE NOTICE "$RUNNER_TEMP/icu/ICU-LICENSE.txt" "$staging/"
           hdiutil create -volname InfinitePrep -srcfolder "$staging" -ov -format UDZO \
             "dist/InfinitePrep-$version-macos-arm64.dmg"
 
@@ -409,10 +446,10 @@ jobs:
           app="$mount/InfinitePrep.app"
           test -L "$mount/Applications"
           test "$(readlink "$mount/Applications")" = /Applications
-          test -f "$mount/LICENSE"
-          test -f "$mount/NOTICE"
-          test -f "$app/Contents/Resources/LICENSE"
-          test -f "$app/Contents/Resources/NOTICE"
+          for notice in LICENSE NOTICE ICU-LICENSE.txt; do
+            test -f "$mount/$notice"
+            test -f "$app/Contents/Resources/$notice"
+          done
           codesign --verify --deep --strict "$app"
           plist="$app/Contents/Info.plist"
           read_plist() { /usr/libexec/PlistBuddy -c "Print :$1" "$plist"; }

@@ -5,7 +5,20 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.46.3] (2026-11-08)
+## [0.47.0] (2026-11-08)
+
+### Added
+
+- `packaging/check_bundle.py` checks each built bundle before packaging. Every file must match a pattern in `packaging/bundle-allowlist/<os>.txt`. Qt tools, GPL-3-only Qt modules, and GNU Readline always fail the check. LICENSE, NOTICE, and ICU-LICENSE.txt must sit at the bundle root.
+- build-packages fetches the ICU 73.2 license from the `release-73-2` tag and checks its pinned SHA-256. Every bundle and package ships the file as ICU-LICENSE.txt.
+- NOTICE names the LGPL source locations for Qt, PySide6, and shiboken6. A three-year written offer covers the LGPL-2.1 components. Requests go to legal@infiniteprep.dev or a GitHub issue.
+
+### Changed
+
+- NOTICE lists ICU 73.2 and the further Qt libraries that the bundles carry.
+- NOTICE names GPL-2.0-or-later as the second option of the D-Bus and FreeType dual licenses. It names LGPL-2.0-or-later for libkeyutils.
+- NOTICE names BSD-3-Clause as the chosen option of the zstd dual license.
+- NOTICE adds the FreeType credit line and the libbsd four-clause BSD acknowledgments.
 
 ### Fixed
 

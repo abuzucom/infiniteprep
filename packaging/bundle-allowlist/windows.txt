@@ -1,0 +1,109 @@
+# Windows bundle allowlist (D300), checked by packaging/check_bundle.py.
+# Built from research run 42473611567 on the trimmed bundle (version 0.46.3).
+# Patterns match paths relative to dist/InfinitePrep. "*" stays within one path
+# part, and "**/" spans folders. Each native library has its own line. A new
+# native library fails the check until a review adds it here.
+
+# App and notices
+InfinitePrep.exe
+LICENSE
+NOTICE
+ICU-LICENSE.txt
+_internal/base_library.zip
+_internal/infiniteprep/db/schema.sql
+
+# Python 3.12 runtime, standard library extensions, and the C runtime
+_internal/python3.dll
+_internal/python312.dll
+_internal/*.pyd
+_internal/sqlite3.dll
+_internal/libcrypto-3.dll
+_internal/libcrypto-3-x64.dll
+_internal/libssl-3.dll
+_internal/libssl-3-x64.dll
+_internal/libffi-8.dll
+_internal/ucrtbase.dll
+_internal/VCRUNTIME140.dll
+_internal/VCRUNTIME140_1.dll
+_internal/api-ms-win-core-*.dll
+_internal/api-ms-win-crt-*.dll
+
+# Package metadata that PyInstaller hooks keep
+_internal/keyring-*.dist-info/**
+_internal/numpy-*.dist-info/**
+_internal/pluggy-*.dist-info/**
+
+# NumPy and SciPy
+_internal/numpy/**/*.pyd
+_internal/numpy.libs/libscipy_openblas64_-*.dll
+_internal/numpy.libs/msvcp140-*.dll
+_internal/scipy/**/*.pyd
+_internal/scipy.libs/libscipy_openblas-*.dll
+
+# soundfile and libsndfile
+_internal/_soundfile_data/COPYING
+_internal/_soundfile_data/libsndfile_x64.dll
+
+# shiboken6
+_internal/shiboken6/MSVCP140.dll
+_internal/shiboken6/VCRUNTIME140.dll
+_internal/shiboken6/VCRUNTIME140_1.dll
+_internal/shiboken6/Shiboken.pyd
+_internal/shiboken6/shiboken6.abi3.dll
+
+# PySide6 bindings and Qt libraries
+_internal/PySide6/pyside6.abi3.dll
+_internal/PySide6/QtCore.pyd
+_internal/PySide6/QtGui.pyd
+_internal/PySide6/QtMultimedia.pyd
+_internal/PySide6/QtMultimediaWidgets.pyd
+_internal/PySide6/QtNetwork.pyd
+_internal/PySide6/QtWidgets.pyd
+_internal/PySide6/Qt6Core.dll
+_internal/PySide6/Qt6Gui.dll
+_internal/PySide6/Qt6Multimedia.dll
+_internal/PySide6/Qt6MultimediaWidgets.dll
+_internal/PySide6/Qt6Network.dll
+_internal/PySide6/Qt6OpenGL.dll
+_internal/PySide6/Qt6Svg.dll
+_internal/PySide6/Qt6Widgets.dll
+_internal/PySide6/opengl32sw.dll
+_internal/PySide6/MSVCP140.dll
+_internal/PySide6/MSVCP140_1.dll
+_internal/PySide6/MSVCP140_2.dll
+_internal/PySide6/VCRUNTIME140.dll
+_internal/PySide6/VCRUNTIME140_1.dll
+
+# FFmpeg inside Qt Multimedia
+_internal/PySide6/avcodec-63.dll
+_internal/PySide6/avformat-63.dll
+_internal/PySide6/avutil-61.dll
+_internal/PySide6/swresample-7.dll
+_internal/PySide6/swscale-10.dll
+
+# Qt plugins
+_internal/PySide6/plugins/generic/qtuiotouchplugin.dll
+_internal/PySide6/plugins/iconengines/qsvgicon.dll
+_internal/PySide6/plugins/imageformats/qgif.dll
+_internal/PySide6/plugins/imageformats/qicns.dll
+_internal/PySide6/plugins/imageformats/qico.dll
+_internal/PySide6/plugins/imageformats/qjpeg.dll
+_internal/PySide6/plugins/imageformats/qsvg.dll
+_internal/PySide6/plugins/imageformats/qtga.dll
+_internal/PySide6/plugins/imageformats/qtiff.dll
+_internal/PySide6/plugins/imageformats/qwbmp.dll
+_internal/PySide6/plugins/imageformats/qwebp.dll
+_internal/PySide6/plugins/multimedia/ffmpegmediaplugin.dll
+_internal/PySide6/plugins/multimedia/windowsmediaplugin.dll
+_internal/PySide6/plugins/networkinformation/qnetworklistmanager.dll
+_internal/PySide6/plugins/platforms/qdirect2d.dll
+_internal/PySide6/plugins/platforms/qminimal.dll
+_internal/PySide6/plugins/platforms/qoffscreen.dll
+_internal/PySide6/plugins/platforms/qwindows.dll
+_internal/PySide6/plugins/styles/qmodernwindowsstyle.dll
+_internal/PySide6/plugins/tls/qcertonlybackend.dll
+_internal/PySide6/plugins/tls/qopensslbackend.dll
+_internal/PySide6/plugins/tls/qschannelbackend.dll
+
+# Qt translations
+_internal/PySide6/translations/*.qm
