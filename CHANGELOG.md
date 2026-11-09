@@ -5,6 +5,14 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.48.4] (2026-11-09)
+
+### Added
+
+- `services/usb/` package with read-only Linux drive inspection (`LinuxDriveInspector`), using fixed argument arrays for `lsblk` and `df` without shell interpolation (`shell=False`) to record drive identity, partition layout, filesystem attributes, and free space (USB-1, #153).
+- Immutable `@dataclass(frozen=True)` models for drive identity, partition metadata, space statistics, and inspection records.
+- Unit tests in `tests/unit/test_usb_linux_inspection.py` covering recorded outputs for a FAT32 stick, a multi-partition system disk, and malformed command replies.
+
 ## [0.48.3] (2026-11-08)
 
 ### Added
