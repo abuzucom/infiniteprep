@@ -110,4 +110,4 @@ class WaveformAnalysisPool(QObject):
             return
         self._shutdown = True
         self._cancel_tasks()
-        self._pool.waitForDone(2_000)
+        self._pool.waitForDone()

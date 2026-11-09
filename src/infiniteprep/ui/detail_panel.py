@@ -290,7 +290,7 @@ class DetailPanel(QWidget):
 
     def _request_waveform_analysis(self, asset: FileAsset) -> None:
         """Submit one job for the selected track and retain a fallback overview."""
-        path = self.audio_player.current_file_path or Path(asset.current_path)
+        path = Path(asset.current_path)
         if asset.id == self._analysis_file_id and path == self._analysis_path:
             return
         self._analysis_generation += 1
