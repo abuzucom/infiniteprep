@@ -6,12 +6,18 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QPainter, QPixmap
 
 from infiniteprep.config.settings import DEFAULT_WAVEFORM_ZOOM_SECONDS, SettingsManager
 from infiniteprep.services.waveform_analysis import SpectrumWaveform
-from infiniteprep.ui.audio_player import AudioPreviewWidget
+from infiniteprep.ui.audio_player import (
+    DEFAULT_ENVELOPE_BINS,
+    FALLBACK_ENVELOPE_EMPTY,
+    AudioPreviewWidget,
+)
+from tests.fixtures.audio_factory import create_wav_fixture
 
 ANALYZED_FIXTURE_DURATION_SEC = 60.0
 ANALYZED_FIXTURE_SAMPLE_COUNT = 600
@@ -144,6 +150,25 @@ def test_overview_remains_visible_without_spectrum_result(qtbot: Any) -> None:
     widget.show_status("Playback failed")
     widget.show_analysis_complete()
     assert widget.status_label.text() == "Playback failed"
+
+
+def test_load_file_does_not_scan_waveform_on_the_ui_thread(
+    qtbot: Any, tmp_path: Path, monkeypatch: Any
+) -> None:
+    """Loading a selected track displays fallback bars until the worker completes."""
+    path = create_wav_fixture(tmp_path / "track.wav", duration_sec=TRACK_DURATION_SEC)
+    widget = AudioPreviewWidget()
+    qtbot.addWidget(widget)
+    widget.show()
+
+    def fail_if_scanned(*_args: Any, **_kwargs: Any) -> list[float]:
+        pytest.fail("track waveform decoding must run outside the UI thread")
+
+    monkeypatch.setattr("infiniteprep.ui.audio_player.extract_waveform_envelope", fail_if_scanned)
+    widget.load_file(path)
+
+    assert widget.waveform_bar.envelope == [FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS
+    assert widget.waveform_bar.isVisible()
 
 
 def test_zero_duration_spectrum_can_render_in_zoom(qtbot: Any) -> None:

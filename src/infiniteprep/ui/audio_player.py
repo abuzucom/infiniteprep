@@ -536,14 +536,14 @@ class AudioPreviewWidget(QWidget):
         self.position_slider.setAccessibleDescription(format_clock(self.current_position_sec))
 
     def load_file(self, file_path: Path, fallback_duration_sec: float | None = None) -> None:
-        """Load an audio file, compute its waveform envelope, and update cue positions."""
+        """Load a track without decoding its overview on the UI thread."""
         self.current_file_path = file_path
         self.current_position_sec = 0.0
         probed = self._probe_duration(file_path)
         self.duration_sec = probed if probed > 0.0 else float(fallback_duration_sec or 0.0)
         self.cue_positions = compute_cue_jump_positions(self.duration_sec)
         self.waveform_bar.spectrum = None
-        self.waveform_bar.set_envelope(extract_waveform_envelope(file_path))
+        self.waveform_bar.set_envelope([FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS)
         self.waveform_bar.set_playback(0.0, self.duration_sec)
         self.show_status("")
         if self.player is not None:
