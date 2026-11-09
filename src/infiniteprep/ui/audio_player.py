@@ -258,25 +258,37 @@ class WaveformOverviewBar(QWidget):
         colors = (QColor("#22c55e"), QColor("#3b82f6"), QColor("#ef4444"))
         for color in colors:
             color.setAlpha(128)
-        names = ("low", "mid", "high")
+        dimensions = (width, height)
+        analysis = (start, end, count, analyzed_duration, colors)
         for column in range(width):
-            time_start = start + column * (end - start) / max(width, 1)
-            time_end = start + (column + 1) * (end - start) / max(width, 1)
-            if time_end <= 0.0 or time_start >= analyzed_duration:
-                continue
-            sample_start = max(0, int(time_start * count / max(analyzed_duration, 1e-9)))
-            sample_end = min(
-                count,
-                max(sample_start + 1, int(np.ceil(time_end * count / analyzed_duration))),
-            )
-            for name, color in zip(names, colors, strict=True):
-                values = getattr(self.spectrum, name)[sample_start:sample_end]
-                peak = float(values.max()) if len(values) else 0.0
-                half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * 0.45)
-                top = int((height - half_height * 2) / 2)
-                bar_height = int(half_height * 2)
-                painter.fillRect(column, top, 1, bar_height, color)
+            self._paint_zoom_column(painter, column, dimensions, analysis)
         painter.fillRect(width // 2, 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b"))
+
+    def _paint_zoom_column(
+        self,
+        painter: QPainter,
+        column: int,
+        dimensions: tuple[int, int],
+        analysis: tuple[float, float, int, float, tuple[QColor, ...]],
+    ) -> None:
+        """Draw one spectrum column, skipping regions outside analyzed audio."""
+        width, height = dimensions
+        start, end, count, analyzed_duration, colors = analysis
+        time_start = start + column * (end - start) / max(width, 1)
+        time_end = start + (column + 1) * (end - start) / max(width, 1)
+        if time_end <= 0.0 or time_start >= analyzed_duration:
+            return
+        sample_start = max(0, int(time_start * count / max(analyzed_duration, 1e-9)))
+        sample_end = min(
+            count,
+            max(sample_start + 1, int(np.ceil(time_end * count / analyzed_duration))),
+        )
+        for name, color in zip(("low", "mid", "high"), colors, strict=True):
+            values = getattr(self.spectrum, name)[sample_start:sample_end]
+            peak = float(values.max()) if len(values) else 0.0
+            half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * 0.45)
+            top = int((height - half_height * 2) / 2)
+            painter.fillRect(column, top, 1, int(half_height * 2), color)
 
     def _paint_zoom_overview(self, painter: QPainter, width: int, height: int) -> None:
         """Show the selected overview segment until spectrum analysis completes."""
