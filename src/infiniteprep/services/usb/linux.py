@@ -95,24 +95,18 @@ def _sanitize_mount_point(val: Any) -> str | None:
 
 def _extract_partition_number(part_dict: dict[str, Any], fallback_index: int) -> int:
     """Determine partition number from PARTN column, name suffix, or fallback index."""
-    partn_val = part_dict.get("partn")
-    if partn_val is not None:
-        try:
-            partn_int = int(str(partn_val).strip())
-            if partn_int > 0:
-                return partn_int
-        except (ValueError, TypeError):
-            pass
+    partn_val = _clean_str(part_dict.get("partn"))
+    if partn_val and partn_val.isdigit():
+        partn_int = int(partn_val)
+        if partn_int > 0:
+            return partn_int
 
-    name_str = str(part_dict.get("name") or "").strip()
+    name_str = _clean_str(part_dict.get("name")) or ""
     match = re.search(r"(\d+)$", name_str)
-    if match:
-        try:
-            num = int(match.group(1))
-            if num > 0:
-                return num
-        except ValueError:
-            pass
+    if match and match.group(1).isdigit():
+        num = int(match.group(1))
+        if num > 0:
+            return num
 
     return fallback_index
 
