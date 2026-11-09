@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from infiniteprep.config.settings import SettingsManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
     FieldName,
@@ -34,6 +35,7 @@ from infiniteprep.domain.enums import (
 from infiniteprep.domain.models import ApprovedField, FieldProposal, FileAsset
 from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
 from infiniteprep.ui.audio_player import AudioPreviewWidget
+from infiniteprep.ui.waveform_worker import WaveformAnalysisPool
 
 DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = tuple(FieldName)
 FIELDS_TABLE_COLUMN_COUNT: Final[int] = 6
@@ -156,6 +158,7 @@ class DetailPanel(QWidget):
         parent: QWidget | None = None,
         *,
         enable_audio_backend: bool = False,
+        settings_manager: SettingsManager | None = None,
     ) -> None:
         """Initialize DetailPanel with Repository, ReviewService, and AudioPreviewWidget.
 
@@ -169,12 +172,22 @@ class DetailPanel(QWidget):
         self.current_file_id: str | None = None
         # The file ID in the player. A refresh of the same file ID keeps playback (D246).
         self._loaded_audio_id: str | None = None
+        self._analysis_generation = 0
+        self._analysis_file_id: str | None = None
+        self._analysis_path: Path | None = None
         self.key_notation: KeyDisplayNotation = KeyDisplayNotation.CAMELOT
 
         self.header_label = QLabel("Select a track to inspect metadata and proposals.", self)
         self.warnings_label = QLabel("", self)
         self.warnings_label.setStyleSheet("color: #d97706; font-weight: bold;")
-        self.audio_player = AudioPreviewWidget(self, enable_multimedia_backend=enable_audio_backend)
+        self.audio_player = AudioPreviewWidget(
+            self,
+            enable_multimedia_backend=enable_audio_backend,
+            settings_manager=settings_manager,
+        )
+        self.waveform_pool = WaveformAnalysisPool(self)
+        self.waveform_pool.completed.connect(self._on_waveform_completed)
+        self.waveform_pool.failed.connect(self._on_waveform_failed)
         self.fields_table = QTableWidget(0, FIELDS_TABLE_COLUMN_COUNT, self)
         self.other_tags_table = QTableWidget(0, OTHER_TAGS_COLUMN_COUNT, self)
         self.candidates_list = QListWidget(self)
@@ -227,6 +240,10 @@ class DetailPanel(QWidget):
 
     def load_file_asset(self, file_id: str) -> None:
         """Populate the detail panel for the specified file_id."""
+        if file_id != self.current_file_id:
+            self._analysis_generation += 1
+            self._analysis_file_id = None
+            self._analysis_path = None
         self.current_file_id = file_id
         asset = self.repo.get_file_by_id(file_id)
         if asset is None:
@@ -238,6 +255,7 @@ class DetailPanel(QWidget):
         )
         self._populate_warnings(asset)
         self._load_audio_if_changed(asset)
+        self._request_waveform_analysis(asset)
         self._populate_fields_table(asset)
         self._populate_other_tags(asset)
         self._populate_candidates_list(file_id)
@@ -253,6 +271,30 @@ class DetailPanel(QWidget):
             return
         self._loaded_audio_id = asset.id
         self.audio_player.load_file(Path(asset.current_path), fallback_duration_sec=asset.duration)
+
+    def _request_waveform_analysis(self, asset: FileAsset) -> None:
+        """Submit one job for the selected track and retain a fallback overview."""
+        path = Path(asset.current_path)
+        if asset.id == self._analysis_file_id and path == self._analysis_path:
+            return
+        self._analysis_generation += 1
+        self._analysis_file_id = asset.id
+        self._analysis_path = path
+        self.audio_player.show_analysis_pending()
+        self.waveform_pool.submit(path, asset.id, self._analysis_generation)
+
+    def _on_waveform_completed(self, file_id: str, generation: int, waveform: object) -> None:
+        """Display only results that still match the selected track generation."""
+        if file_id != self.current_file_id or generation != self._analysis_generation:
+            return
+        self.audio_player.set_spectrum_waveform(waveform)
+        self.audio_player.show_status("")
+
+    def _on_waveform_failed(self, file_id: str, generation: int, message: str) -> None:
+        """Display current analysis failures without clearing the overview."""
+        if file_id != self.current_file_id or generation != self._analysis_generation:
+            return
+        self.audio_player.show_analysis_failure(message)
 
     def _populate_other_tags(self, asset: FileAsset) -> None:
         """Fill the read-only Other Tags table from the file's raw custom tags."""
