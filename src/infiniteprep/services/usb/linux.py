@@ -100,7 +100,7 @@ class LinuxDriveInspector:
 
         for inspection in all_drives:
             drive = inspection.drive
-            if drive.name == target_name or drive.path == target or drive.path == f"/dev/{target_name}":
+            if drive.name == target_name or drive.path in (target, f"/dev/{target_name}"):
                 return inspection
 
         raise CommandExecutionError(f"Device '{device_name_or_path}' was not found.")
@@ -188,12 +188,29 @@ class LinuxDriveInspector:
         df_space: dict[str, SpaceInfo],
     ) -> DriveInspection:
         """Construct a DriveInspection record from a blockdevice dictionary."""
+        identity = self._build_drive_identity(dev)
+        partition_scheme = _clean_str(dev.get("pttype"))
+        partitions, space_entries = self._collect_partitions_and_spaces(
+            dev,
+            partition_scheme=partition_scheme,
+            df_space=df_space,
+        )
+        unique_space_entries = self._deduplicate_spaces(space_entries)
+
+        return DriveInspection(
+            drive=identity,
+            partitions=tuple(partitions),
+            space_by_mount=unique_space_entries,
+        )
+
+    @staticmethod
+    def _build_drive_identity(dev: dict[str, Any]) -> DriveIdentity:
+        """Extract DriveIdentity from a blockdevice dictionary."""
         name = str(dev.get("name") or "")
         path = str(dev.get("path") or (f"/dev/{name}" if name else ""))
         size_bytes = _clean_int(dev.get("size"))
-        partition_scheme = _clean_str(dev.get("pttype"))
 
-        identity = DriveIdentity(
+        return DriveIdentity(
             name=name,
             path=path,
             size_bytes=size_bytes,
@@ -206,6 +223,13 @@ class LinuxDriveInspector:
             subsystem=_clean_str(dev.get("subsystems")),
         )
 
+    def _collect_partitions_and_spaces(
+        self,
+        dev: dict[str, Any],
+        partition_scheme: str | None,
+        df_space: dict[str, SpaceInfo],
+    ) -> tuple[list[PartitionInfo], list[tuple[str, SpaceInfo]]]:
+        """Collect partition records and space entries from device or its children."""
         partitions: list[PartitionInfo] = []
         space_entries: list[tuple[str, SpaceInfo]] = []
 
@@ -221,7 +245,6 @@ class LinuxDriveInspector:
                 partitions.append(part)
                 space_entries.extend(part_spaces)
         else:
-            # Drive may have a filesystem directly on the disk without a partition table
             fstype = _clean_str(dev.get("fstype"))
             mount_points = self._extract_mountpoints(dev)
             if fstype or mount_points:
@@ -234,19 +257,20 @@ class LinuxDriveInspector:
                 partitions.append(part)
                 space_entries.extend(part_spaces)
 
-        # Deduplicate space entries by mountpoint
+        return partitions, space_entries
+
+    @staticmethod
+    def _deduplicate_spaces(
+        space_entries: list[tuple[str, SpaceInfo]],
+    ) -> tuple[tuple[str, SpaceInfo], ...]:
+        """Deduplicate space entries by mount point while preserving order."""
         seen_mounts: set[str] = set()
         unique_space_entries: list[tuple[str, SpaceInfo]] = []
         for mount, space in space_entries:
             if mount not in seen_mounts:
                 seen_mounts.add(mount)
                 unique_space_entries.append((mount, space))
-
-        return DriveInspection(
-            drive=identity,
-            partitions=tuple(partitions),
-            space_by_mount=tuple(unique_space_entries),
-        )
+        return tuple(unique_space_entries)
 
     def _parse_partition(
         self,
@@ -256,48 +280,70 @@ class LinuxDriveInspector:
         df_space: dict[str, SpaceInfo],
     ) -> tuple[PartitionInfo, list[tuple[str, SpaceInfo]]]:
         """Parse one partition entry and collect its associated space metrics."""
+        mount_points = self._extract_mountpoints(part_dict)
+        partition_info = self._build_partition_info(
+            part_dict,
+            parent_scheme=parent_scheme,
+            fallback_index=fallback_index,
+            mount_points=mount_points,
+        )
+        spaces = self._collect_partition_spaces(part_dict, mount_points, df_space)
+        return partition_info, spaces
+
+    @staticmethod
+    def _build_partition_info(
+        part_dict: dict[str, Any],
+        parent_scheme: str | None,
+        fallback_index: int,
+        mount_points: tuple[str, ...],
+    ) -> PartitionInfo:
+        """Construct PartitionInfo from raw dictionary attributes."""
         name = str(part_dict.get("name") or "")
         path = str(part_dict.get("path") or (f"/dev/{name}" if name else ""))
-        size_bytes = _clean_int(part_dict.get("size"))
-        mount_points = self._extract_mountpoints(part_dict)
 
-        part_scheme = _clean_str(part_dict.get("pttype")) or parent_scheme
-        part_type = _clean_str(part_dict.get("parttype"))
-        filesystem = _clean_str(part_dict.get("fstype"))
-        label = _clean_str(part_dict.get("label"))
-        uuid = _clean_str(part_dict.get("uuid"))
-        is_read_only = bool(part_dict.get("ro"))
-
-        partition_info = PartitionInfo(
+        return PartitionInfo(
             name=name,
             path=path,
-            size_bytes=size_bytes,
+            size_bytes=_clean_int(part_dict.get("size")),
             partition_number=fallback_index,
-            partition_scheme=part_scheme,
-            partition_type=part_type,
-            filesystem=filesystem,
-            label=label,
-            uuid=uuid,
+            partition_scheme=_clean_str(part_dict.get("pttype")) or parent_scheme,
+            partition_type=_clean_str(part_dict.get("parttype")),
+            filesystem=_clean_str(part_dict.get("fstype")),
+            label=_clean_str(part_dict.get("label")),
+            uuid=_clean_str(part_dict.get("uuid")),
             mount_points=mount_points,
-            is_read_only=is_read_only,
+            is_read_only=bool(part_dict.get("ro")),
         )
 
+    def _collect_partition_spaces(
+        self,
+        part_dict: dict[str, Any],
+        mount_points: tuple[str, ...],
+        df_space: dict[str, SpaceInfo],
+    ) -> list[tuple[str, SpaceInfo]]:
+        """Resolve SpaceInfo for all mount points of a partition."""
         spaces: list[tuple[str, SpaceInfo]] = []
         for mount in mount_points:
             if mount in df_space:
                 spaces.append((mount, df_space[mount]))
-            else:
-                # Fall back to lsblk fields if df didn't capture this mount
-                fsavail = part_dict.get("fsavail")
-                fssize = part_dict.get("fssize")
-                fsused = part_dict.get("fsused")
-                if fssize is not None and fsavail is not None:
-                    total_b = _clean_int(fssize)
-                    avail_b = _clean_int(fsavail)
-                    used_b = _clean_int(fsused) if fsused is not None else max(0, total_b - avail_b)
-                    spaces.append((mount, SpaceInfo(total_bytes=total_b, used_bytes=used_b, available_bytes=avail_b)))
+                continue
+            space = self._extract_lsblk_space(part_dict)
+            if space is not None:
+                spaces.append((mount, space))
+        return spaces
 
-        return partition_info, spaces
+    @staticmethod
+    def _extract_lsblk_space(part_dict: dict[str, Any]) -> SpaceInfo | None:
+        """Extract fallback SpaceInfo directly from lsblk fields."""
+        fssize = part_dict.get("fssize")
+        fsavail = part_dict.get("fsavail")
+        if fssize is None or fsavail is None:
+            return None
+        total_b = _clean_int(fssize)
+        avail_b = _clean_int(fsavail)
+        fsused = part_dict.get("fsused")
+        used_b = _clean_int(fsused) if fsused is not None else max(0, total_b - avail_b)
+        return SpaceInfo(total_bytes=total_b, used_bytes=used_b, available_bytes=avail_b)
 
     @staticmethod
     def _extract_mountpoints(device_entry: dict[str, Any]) -> tuple[str, ...]:

@@ -312,7 +312,9 @@ class TestUsbLinuxInspection(unittest.TestCase):
     """Test suite for Linux drive inspection parsing, free space correlation, and error handling."""
 
     def test_inspect_fat32_stick(self) -> None:
-        """Inspector correctly extracts identity, partition, filesystem, and free space for a FAT32 stick."""
+        """Inspector correctly extracts identity, partition, filesystem,
+        and free space for a FAT32 stick.
+        """
         executed, inspector = _make_mock_runner(
             lsblk_stdout=FAT32_STICK_LSBLK_JSON,
             df_stdout=FAT32_STICK_DF_OUTPUT,
