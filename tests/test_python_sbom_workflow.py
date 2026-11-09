@@ -43,6 +43,7 @@ class PythonSbomWorkflowTest(unittest.TestCase):
         self.assertIn("cyclonedx-py", command)
         self.assertIn("environment", command)
         self.assertIn("app_python=\"$(python -c 'import sys; print(sys.executable)')\"", command)
+        self.assertIn('environment "$app_python" -E', command)
         self.assertIn("--output-format JSON", command)
         self.assertIn("$RUNNER_TEMP/InfinitePrep-python-$RUNNER_OS.cdx.json", command)
         build_index = next(

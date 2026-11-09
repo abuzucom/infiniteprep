@@ -121,7 +121,7 @@ jobs:
             -r requirements-sbom.txt
           sbom_path="$RUNNER_TEMP/InfinitePrep-python-$RUNNER_OS.cdx.json"
           app_python="$(python -c 'import sys; print(sys.executable)')"
-          "$cyclonedx_command" environment "$app_python" \
+          "$cyclonedx_command" environment "$app_python" -E \
             --output-format JSON --output-file "$sbom_path"
 
       - name: Build bundle
