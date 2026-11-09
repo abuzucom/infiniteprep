@@ -5,7 +5,14 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.48.4] (2026-11-09)
+## [0.49.0] (2026-11-09)
+
+### Added
+
+- `services/usb/` package with read-only Linux drive inspection (`LinuxDriveInspector`), using fixed argument arrays for `lsblk` and `df` without shell interpolation (`shell=False`) to record drive identity, partition layout, filesystem attributes, and free space (USB-1, #153).
+- Immutable `@dataclass(frozen=True)` models for drive identity, partition metadata, space statistics, and inspection records, with helper properties for FAT32 and exFAT detection.
+- Untrusted USB device metadata sanitization in `services/usb/linux.py` stripping ANSI escape sequences, control characters, and NUL bytes, enforcing path traversal protections, validating mapping types for block devices and partitions, and resolving partition numbers from PARTN columns (#153).
+- Unit tests in `tests/unit/test_usb_linux_inspection.py` covering recorded outputs for FAT32 and exFAT removable drives, a multi-partition system disk, untrusted metadata sanitization, and malformed command replies.
 
 ### Changed
 
