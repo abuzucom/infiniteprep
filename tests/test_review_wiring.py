@@ -71,18 +71,13 @@ class CiWorkflowTest(unittest.TestCase):
             text.count("persist-credentials: false"),
         )
 
-    def test_ci_ruff_version_matches_project_and_lock(self) -> None:
-        sources = (
-            read_workflow_text(CI_WORKFLOW),
-            (ROOT / "pyproject.toml").read_text(encoding="utf-8"),
-            (ROOT / "requirements-lock.txt").read_text(encoding="utf-8"),
-        )
-        versions = []
-        for source in sources:
-            match = re.search(r"ruff==([0-9.]+)", source)
-            self.assertIsNotNone(match)
-            versions.append(match.group(1))
-        self.assertEqual(len(set(versions)), 1)
+    def test_ci_lint_tools_use_lockfile_constraints(self) -> None:
+        workflow = read_workflow_text(CI_WORKFLOW)
+        command = "python -m pip install --constraint requirements-lock.txt ruff pytest"
+        self.assertTrue(command in workflow, "CI lint tools must use lockfile constraints")
+        lockfile = (ROOT / "requirements-lock.txt").read_text(encoding="utf-8")
+        self.assertRegex(lockfile, r"(?m)^ruff==[0-9.]+$")
+        self.assertRegex(lockfile, r"(?m)^pytest==[0-9.]+$")
 
 
 class SecurityReviewWiringTest(unittest.TestCase):
