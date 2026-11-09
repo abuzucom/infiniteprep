@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +32,7 @@ def test_new_stored_path_under_same_id_keeps_playback(qtbot: Any, tmp_path: Path
     panel.audio_player.toggle_play_pause()
 
     moved = track.with_name("track-renamed.wav")
-    track.rename(moved)
+    shutil.copy2(track, moved)
     stored = repository.get_file_by_id(asset.id)
     assert stored is not None
     stored.current_path = str(moved)
