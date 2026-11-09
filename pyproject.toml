@@ -17,18 +17,18 @@ dependencies = [
     "scipy==1.18.1",
     "soundfile==0.14.0",
     "keyring==25.7.0",
-    "platformdirs==4.14.2",
+    "platformdirs==4.14.5",
     "PySide6==6.12.0",
     "qt-material==2.17",
     "Jinja2==3.1.6",
-    "MarkupSafe==3.0.2",
+    "MarkupSafe==3.0.4",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest==9.2.0",
     "pytest-qt==4.5.0",
-    "ruff==0.17.3",
+    "ruff==0.17.4",
     "pyinstaller==6.22.3",
 ]
 
