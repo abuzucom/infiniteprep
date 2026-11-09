@@ -168,6 +168,114 @@ SYSTEM_DISK_DF_OUTPUT: Final[str] = (
     "/dev/nvme0n1p2 950000000000 500000000000 420000000000      55% /\n"
 )
 
+EXFAT_STICK_LSBLK_JSON: Final[str] = json.dumps(
+    {
+        "blockdevices": [
+            {
+                "name": "sdc",
+                "path": "/dev/sdc",
+                "model": "Extreme PRO",
+                "vendor": "SanDisk",
+                "serial": "AA01092837465012",
+                "rm": True,
+                "ro": False,
+                "type": "disk",
+                "fstype": None,
+                "label": None,
+                "uuid": None,
+                "fsavail": None,
+                "fsused": None,
+                "fssize": None,
+                "mountpoints": [None],
+                "pttype": "dos",
+                "parttype": None,
+                "size": 128035676160,
+                "children": [
+                    {
+                        "name": "sdc1",
+                        "path": "/dev/sdc1",
+                        "model": None,
+                        "vendor": None,
+                        "serial": None,
+                        "rm": True,
+                        "ro": False,
+                        "type": "part",
+                        "fstype": "exfat",
+                        "label": "EXFAT_MUSIC",
+                        "uuid": "5A3C-1F2E",
+                        "fsavail": 120000000000,
+                        "fsused": 8035676160,
+                        "fssize": 128035676160,
+                        "mountpoints": ["/media/user/EXFAT_MUSIC"],
+                        "pttype": "dos",
+                        "parttype": "0x7",
+                        "size": 128035676160,
+                    }
+                ],
+            }
+        ]
+    }
+)
+
+EXFAT_STICK_DF_OUTPUT: Final[str] = (
+    "Filesystem     1-blocks       Used     Available Capacity Mounted on\n"
+    "/dev/sdc1  128035676160 8035676160  120000000000       7% /media/user/EXFAT_MUSIC\n"
+)
+
+EXFAT_GPT_SSD_LSBLK_JSON: Final[str] = json.dumps(
+    {
+        "blockdevices": [
+            {
+                "name": "sdd",
+                "path": "/dev/sdd",
+                "model": "T7 Shield",
+                "vendor": "Samsung",
+                "serial": "S5T7NS0R998877",
+                "rm": True,
+                "ro": False,
+                "type": "disk",
+                "fstype": None,
+                "label": None,
+                "uuid": None,
+                "fsavail": None,
+                "fsused": None,
+                "fssize": None,
+                "mountpoints": [None],
+                "pttype": "gpt",
+                "parttype": None,
+                "size": 2000398934016,
+                "children": [
+                    {
+                        "name": "sdd1",
+                        "path": "/dev/sdd1",
+                        "model": None,
+                        "vendor": None,
+                        "serial": None,
+                        "rm": True,
+                        "ro": False,
+                        "type": "part",
+                        "fstype": "exfat",
+                        "label": "T7_DJ_ARCHIVE",
+                        "uuid": "4D2E-99AA",
+                        "fsavail": 1500000000000,
+                        "fsused": 500398934016,
+                        "fssize": 2000398934016,
+                        "mountpoints": ["/media/user/T7_DJ_ARCHIVE"],
+                        "pttype": "gpt",
+                        "parttype": "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7",
+                        "size": 2000398934016,
+                    }
+                ],
+            }
+        ]
+    }
+)
+
+EXFAT_GPT_SSD_DF_OUTPUT: Final[str] = (
+    "Filesystem          1-blocks         Used     Available Capacity Mounted on\n"
+    "/dev/sdd1      2000398934016 500398934016 1500000000000      26% /media/user/T7_DJ_ARCHIVE\n"
+)
+
 
 def _make_mock_runner(
     lsblk_stdout: str = "{}",
@@ -399,6 +507,72 @@ class TestUsbLinuxInspection(unittest.TestCase):
         self.assertEqual(
             space,
             SpaceInfo(total_bytes=1200000, used_bytes=200000, available_bytes=1000000),
+        )
+
+    def test_inspect_exfat_stick(self) -> None:
+        """Inspector correctly detects exFAT filesystem and records drive metrics."""
+        _, inspector = _make_mock_runner(
+            lsblk_stdout=EXFAT_STICK_LSBLK_JSON,
+            df_stdout=EXFAT_STICK_DF_OUTPUT,
+        )
+
+        inspections = inspector.inspect_all()
+        self.assertEqual(len(inspections), 1)
+        report = inspections[0]
+
+        self.assertTrue(report.drive.is_removable)
+        self.assertEqual(report.drive.name, "sdc")
+        self.assertEqual(report.drive.model, "Extreme PRO")
+        self.assertTrue(report.has_exfat_partition)
+        self.assertFalse(report.has_fat32_partition)
+
+        self.assertEqual(len(report.partitions), 1)
+        part = report.partitions[0]
+        self.assertEqual(part.name, "sdc1")
+        self.assertEqual(part.filesystem, "exfat")
+        self.assertTrue(part.is_exfat)
+        self.assertFalse(part.is_fat32)
+        self.assertEqual(part.label, "EXFAT_MUSIC")
+        self.assertEqual(part.partition_scheme, "dos")
+        self.assertEqual(part.partition_type, "0x7")
+
+        space = report.space_for_mount("/media/user/EXFAT_MUSIC")
+        self.assertEqual(
+            space,
+            SpaceInfo(
+                total_bytes=128035676160,
+                used_bytes=8035676160,
+                available_bytes=120000000000,
+            ),
+        )
+
+    def test_inspect_exfat_gpt_ssd(self) -> None:
+        """Inspector correctly parses an exFAT partition on a GPT partition table."""
+        _, inspector = _make_mock_runner(
+            lsblk_stdout=EXFAT_GPT_SSD_LSBLK_JSON,
+            df_stdout=EXFAT_GPT_SSD_DF_OUTPUT,
+        )
+
+        report = inspector.inspect_device("sdd")
+        self.assertTrue(report.drive.is_removable)
+        self.assertEqual(report.drive.model, "T7 Shield")
+        self.assertTrue(report.has_exfat_partition)
+
+        part = report.partitions[0]
+        self.assertEqual(part.partition_scheme, "gpt")
+        self.assertEqual(part.partition_type, "ebd0a0a2-b9e5-4433-87c0-68b6b72699c7")
+        self.assertEqual(part.filesystem, "exfat")
+        self.assertTrue(part.is_exfat)
+        self.assertEqual(part.label, "T7_DJ_ARCHIVE")
+
+        space = report.space_for_mount("/media/user/T7_DJ_ARCHIVE")
+        self.assertEqual(
+            space,
+            SpaceInfo(
+                total_bytes=2000398934016,
+                used_bytes=500398934016,
+                available_bytes=1500000000000,
+            ),
         )
 
 

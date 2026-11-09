@@ -42,6 +42,16 @@ class PartitionInfo:
     mount_points: tuple[str, ...] = field(default_factory=tuple)
     is_read_only: bool = False
 
+    @property
+    def is_exfat(self) -> bool:
+        """Return True if this partition has an exFAT filesystem."""
+        return (self.filesystem or "").casefold() == "exfat"
+
+    @property
+    def is_fat32(self) -> bool:
+        """Return True if this partition has a FAT32/vfat filesystem."""
+        return (self.filesystem or "").casefold() in ("vfat", "fat32")
+
 
 @dataclass(frozen=True)
 class DriveIdentity:
@@ -75,3 +85,13 @@ class DriveInspection:
     def space_for_mount(self, mount_point: str) -> SpaceInfo | None:
         """Return space statistics for a given mount point if recorded."""
         return self.space_map.get(mount_point)
+
+    @property
+    def has_exfat_partition(self) -> bool:
+        """Return True if any partition on this drive has an exFAT filesystem."""
+        return any(p.is_exfat for p in self.partitions)
+
+    @property
+    def has_fat32_partition(self) -> bool:
+        """Return True if any partition on this drive has a FAT32 filesystem."""
+        return any(p.is_fat32 for p in self.partitions)
