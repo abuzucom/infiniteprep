@@ -19,7 +19,7 @@ CHECKOUT_ACTION: Final[str] = "actions/checkout@"
 # Each pin names the commit of the release tag the maintainer approved under Rule 9.
 APPROVED_PINS: Final[dict[str, str]] = {
     "actions/dependency-review-action": "a1d282b36b6f3519aa1f3fc636f609c47dddb294",
-    "github/codeql-action/upload-sarif": "9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+    "github/codeql-action/upload-sarif": "33d7b85da1a04171e211befe2c739303b9a4c066",
     "microsoft/security-devops-action": "cf28f87c67770dbaa208cce3665fafc849f77507",
 }
 # PyYAML reads the bare `on` key as the boolean True.
