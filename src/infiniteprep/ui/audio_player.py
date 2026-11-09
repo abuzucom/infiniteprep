@@ -146,6 +146,7 @@ class WaveformOverviewBar(QWidget):
         super().__init__(parent)
         self.setMinimumHeight(WAVEFORM_MIN_HEIGHT_PX)
         self.envelope: list[float] = [FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS
+        self.fallback_envelope = list(self.envelope)
         self.playhead_ratio: float = 0.0
         self.duration_sec = 0.0
         self.position_sec = 0.0
@@ -160,6 +161,28 @@ class WaveformOverviewBar(QWidget):
     def set_envelope(self, envelope: list[float]) -> None:
         """Update the waveform envelope values and trigger a repaint."""
         self.envelope = envelope or [FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS
+        self.fallback_envelope = list(self.envelope)
+        self.update()
+
+    def set_spectrum_envelope(self, peaks: np.ndarray, analyzed_duration: float) -> None:
+        """Overlay analyzed peaks and retain fallback coverage beyond the analysis cap."""
+        self.envelope = list(self.fallback_envelope)
+        if not peaks.size or analyzed_duration <= 0.0 or self.duration_sec <= 0.0:
+            self.update()
+            return
+        covered = min(
+            len(self.envelope),
+            max(
+                1,
+                int(np.ceil(len(self.envelope) * min(1.0, analyzed_duration / self.duration_sec))),
+            ),
+        )
+        groups = np.array_split(peaks, covered)
+        max_peak = max((float(group.max()) for group in groups if group.size), default=0.0)
+        if max_peak:
+            self.envelope[:covered] = [
+                float(group.max()) / max_peak if group.size else 0.0 for group in groups
+            ]
         self.update()
 
     def set_playhead_ratio(self, ratio: float) -> None:
@@ -277,6 +300,8 @@ class WaveformOverviewBar(QWidget):
         time_start = start + column * (end - start) / max(width, 1)
         time_end = start + (column + 1) * (end - start) / max(width, 1)
         if time_end <= 0.0 or time_start >= analyzed_duration:
+            if time_start >= analyzed_duration:
+                self._paint_zoom_fallback_column(painter, column, (time_start, time_end), height)
             return
         sample_start = max(0, int(time_start * count / max(analyzed_duration, 1e-9)))
         sample_end = min(
@@ -289,6 +314,24 @@ class WaveformOverviewBar(QWidget):
             half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * 0.45)
             top = int((height - half_height * 2) / 2)
             painter.fillRect(column, top, 1, int(half_height * 2), color)
+
+    def _paint_zoom_fallback_column(
+        self,
+        painter: QPainter,
+        column: int,
+        interval: tuple[float, float],
+        height: int,
+    ) -> None:
+        """Draw fallback envelope data for a zoom interval beyond the analysis cap."""
+        count = len(self.envelope)
+        if self.duration_sec <= 0.0 or count == 0:
+            return
+        first = max(0, int(interval[0] * count / self.duration_sec))
+        last = min(count, max(first + 1, int(np.ceil(interval[1] * count / self.duration_sec))))
+        peak = max(self.envelope[first:last], default=FALLBACK_ENVELOPE_EMPTY)
+        half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * WAVEFORM_HALF_HEIGHT_SCALE)
+        top = int((height - half_height * 2) / 2)
+        painter.fillRect(column, top, 1, int(half_height * 2), QColor("#6b7280"))
 
     def _paint_zoom_overview(self, painter: QPainter, width: int, height: int) -> None:
         """Show the selected overview segment until spectrum analysis completes."""
@@ -481,16 +524,10 @@ class AudioPreviewWidget(QWidget):
         self.waveform_bar.update()
 
     def set_spectrum_waveform(self, waveform: object) -> None:
-        """Attach analyzed bands and replace the fallback overview with its peaks."""
+        """Attach analyzed bands and overlay covered overview peaks."""
         self.waveform_bar.spectrum = waveform
         peaks = np.asarray(waveform.overall, dtype=np.float32)
-        if peaks.size:
-            groups = np.array_split(peaks, min(DEFAULT_ENVELOPE_BINS, peaks.size))
-            max_peak = max(float(group.max()) for group in groups if group.size)
-            self.waveform_bar.set_envelope(
-                [float(group.max()) / max_peak if max_peak else 0.0 for group in groups]
-            )
-        self.waveform_bar.update()
+        self.waveform_bar.set_spectrum_envelope(peaks, float(waveform.duration_sec))
 
     def show_analysis_pending(self) -> None:
         """Show analysis progress without hiding the current overview."""

@@ -40,6 +40,15 @@ logger = logging.getLogger(__name__)
 _CACHE_UPDATE_LOCK = threading.Lock()
 
 
+class WaveformAnalysisCancelled(Exception):
+    """Raised when a caller no longer needs an in-progress analysis."""
+
+
+def _check_cancelled(cancel_event: threading.Event | None) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        raise WaveformAnalysisCancelled
+
+
 @dataclass(frozen=True)
 class SpectrumWaveform:
     """Track-normalized band peaks with equal-duration columns."""
@@ -61,12 +70,13 @@ class SpectrumWaveform:
             object.__setattr__(self, name, immutable)
 
 
-def _cache_key(source: Path) -> str:
+def _cache_key(source: Path, cancel_event: threading.Event | None = None) -> str:
     """Hash complete content on every call to detect same-size source changes."""
     digest = hashlib.sha256()
     bytes_seen = 0
     with source.open("rb") as stream:
         for block in iter(lambda: stream.read(HASH_BLOCK_BYTES), b""):
+            _check_cancelled(cancel_event)
             bytes_seen += len(block)
             # The source can grow after the public entry point checks its size.
             if bytes_seen > MAX_PREVIEW_FILE_BYTES:
@@ -101,7 +111,7 @@ def _filter_bank(sample_rate: int, channels: int) -> list[tuple[np.ndarray, np.n
     return filters
 
 
-def _decode_waveform(source: Path) -> SpectrumWaveform:
+def _decode_waveform(source: Path, cancel_event: threading.Event | None = None) -> SpectrumWaveform:
     """Decode capped blocks while retaining filter state across boundaries."""
     with sf.SoundFile(source) as audio:
         if audio.samplerate <= MIN_SAMPLE_RATE_HZ:
@@ -113,6 +123,7 @@ def _decode_waveform(source: Path) -> SpectrumWaveform:
         filters = _filter_bank(audio.samplerate, audio.channels)
         position = 0
         while position < frame_count:
+            _check_cancelled(cancel_event)
             block = audio.read(
                 min(STREAM_BLOCK_FRAMES, frame_count - position),
                 dtype="float32",
@@ -237,6 +248,7 @@ def analyze_waveform(
     cache_directory: Path | None = None,
     *,
     max_cache_bytes: int = DEFAULT_CACHE_BYTES,
+    cancel_event: threading.Event | None = None,
 ) -> SpectrumWaveform:
     """Return causal band envelope peaks with at most 30 minutes of decoded audio.
 
@@ -245,17 +257,20 @@ def analyze_waveform(
     log warnings and preserve the analysis result. Source filesystem errors propagate.
     """
     source = Path(file_path)
+    _check_cancelled(cancel_event)
     if max_cache_bytes < 0:
         raise ValueError("Cache size must be nonnegative. Supply a valid byte limit.")
     if source.stat().st_size > MAX_PREVIEW_FILE_BYTES:
         raise ValueError("Audio exceeds 500 MiB. Supply a smaller track.")
     directory = Path(cache_directory or storage_paths.current().cache_dir)
-    key = _cache_key(source)
+    key = _cache_key(source, cancel_event)
     entry = directory / f"spectrum-{key}.npz"
     waveform = _load_cache(entry)
+    _check_cancelled(cancel_event)
     cache_miss = waveform is None
     if waveform is None:
-        waveform = _decode_waveform(source)
+        waveform = _decode_waveform(source, cancel_event)
+    _check_cancelled(cancel_event)
     _update_cache(directory, entry, waveform, max_cache_bytes, cache_miss)
     return waveform
 

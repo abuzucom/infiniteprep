@@ -1,6 +1,7 @@
 """Generated audio exercises spectrum analysis and disk caching."""
 
 import os
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +11,7 @@ import soundfile as sf
 from infiniteprep.services import waveform_analysis as analysis
 from infiniteprep.services.waveform_analysis import (
     SpectrumWaveform,
+    WaveformAnalysisCancelled,
     analyze_waveform,
     downsample_waveform,
 )
@@ -21,6 +23,15 @@ def write_tone(path: Path, frequency: float, seconds: float = 1.25) -> Path:
     times = np.arange(round(sample_rate * seconds)) / sample_rate
     sf.write(path, 0.8 * np.sin(2 * np.pi * frequency * times), sample_rate, subtype="FLOAT")
     return path
+
+
+def test_cancelled_analysis_exits_before_file_access(tmp_path: Path) -> None:
+    """A canceled worker does not continue hashing or decoding its stale path."""
+    cancel_event = threading.Event()
+    cancel_event.set()
+
+    with pytest.raises(WaveformAnalysisCancelled):
+        analyze_waveform(tmp_path / "missing.wav", cancel_event=cancel_event)
 
 
 @pytest.mark.parametrize("frequency,band", [(60, "low"), (1000, "mid"), (8000, "high")])

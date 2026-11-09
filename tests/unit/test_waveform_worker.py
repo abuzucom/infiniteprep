@@ -16,7 +16,7 @@ def test_worker_pool_limits_active_analyses(qtbot: Any, monkeypatch: Any) -> Non
     maximum_active = 0
     lock = threading.Lock()
 
-    def analyze(_path: Path) -> str:
+    def analyze(_path: Path, *, cancel_event: threading.Event) -> str:
         nonlocal active, maximum_active
         with lock:
             active += 1
@@ -34,6 +34,29 @@ def test_worker_pool_limits_active_analyses(qtbot: Any, monkeypatch: Any) -> Non
     for index in range(5):
         pool.submit(Path(f"track-{index}.wav"), f"track-{index}", index)
 
-    qtbot.waitUntil(lambda: len(completed) == 5, timeout=3000)
+    qtbot.waitUntil(lambda: bool(completed), timeout=3000)
     assert maximum_active == 2
-    assert {result[0] for result in completed} == {f"track-{index}" for index in range(5)}
+    assert [(result[0], result[1]) for result in completed] == [("track-4", 4)]
+    pool.shutdown()
+
+
+def test_shutdown_cancels_running_analysis(qtbot: Any, monkeypatch: Any) -> None:
+    """Application shutdown signals active workers and clears queued work."""
+    started = threading.Event()
+    cancelled = threading.Event()
+
+    def analyze(_path: Path, *, cancel_event: threading.Event) -> str:
+        started.set()
+        cancel_event.wait(2.0)
+        cancelled.set()
+        return "waveform"
+
+    monkeypatch.setattr("infiniteprep.ui.waveform_worker.analyze_waveform", analyze)
+    pool = WaveformAnalysisPool()
+    pool.submit(Path("track.wav"), "track", 1)
+    assert started.wait(1.0)
+
+    pool.shutdown()
+
+    assert cancelled.is_set()
+    assert pool.wait_for_done(100)

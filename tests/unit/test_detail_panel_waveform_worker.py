@@ -49,12 +49,11 @@ def test_stale_track_result_does_not_replace_selected_waveform(
     first_waveform = SpectrumWaveform(*([np.full(2, 0.2, dtype=np.float32)] * 4), 1.0)
     second_waveform = SpectrumWaveform(*([np.full(2, 0.8, dtype=np.float32)] * 4), 1.0)
     first_started = threading.Event()
-    release_first = threading.Event()
 
-    def analyze(path: Path) -> SpectrumWaveform:
+    def analyze(path: Path, *, cancel_event: threading.Event) -> SpectrumWaveform:
         if path.name == "first.wav":
             first_started.set()
-            release_first.wait(3)
+            cancel_event.wait(3)
             return first_waveform
         return second_waveform
 
@@ -73,7 +72,7 @@ def test_stale_track_result_does_not_replace_selected_waveform(
         lambda: panel.audio_player.waveform_bar.spectrum is second_waveform,
         timeout=3000,
     )
-    release_first.set()
-    qtbot.waitUntil(lambda: len(completed) == 2, timeout=3000)
+    qtbot.waitUntil(lambda: len(completed) == 1, timeout=3000)
+    assert completed == [second_asset.id]
     assert panel.audio_player.waveform_bar.spectrum is second_waveform
     assert panel.current_file_id == second_asset.id

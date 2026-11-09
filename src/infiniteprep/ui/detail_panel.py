@@ -11,6 +11,7 @@ from typing import Final
 
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -194,6 +195,9 @@ class DetailPanel(QWidget):
         self.waveform_pool = WaveformAnalysisPool(self)
         self.waveform_pool.completed.connect(self._on_waveform_completed)
         self.waveform_pool.failed.connect(self._on_waveform_failed)
+        application = QApplication.instance()
+        if application is not None:
+            application.aboutToQuit.connect(self.waveform_pool.shutdown)
         self.fields_table = QTableWidget(0, FIELDS_TABLE_COLUMN_COUNT, self)
         self.other_tags_table = QTableWidget(0, OTHER_TAGS_COLUMN_COUNT, self)
         self.candidates_list = QListWidget(self)

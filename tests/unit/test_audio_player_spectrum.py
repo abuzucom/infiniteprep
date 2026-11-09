@@ -109,6 +109,31 @@ def test_zero_duration_spectrum_can_render_in_zoom(qtbot: Any) -> None:
     assert widget.waveform_bar.duration_sec == 10.0
 
 
+def test_zoom_uses_fallback_after_analysis_duration_cap(qtbot: Any) -> None:
+    """A capped analysis leaves later track regions navigable in zoom mode."""
+    widget = AudioPreviewWidget()
+    qtbot.addWidget(widget)
+    widget.duration_sec = 60.0
+    widget.waveform_bar.set_playback(45.0, 60.0)
+    widget.waveform_bar.set_envelope([0.2] * 120)
+    peaks = np.ones(300, dtype=np.float32)
+    widget.set_spectrum_waveform(SpectrumWaveform(peaks, peaks, peaks, peaks, 30.0))
+    assert widget.waveform_bar.envelope[90] == 0.2
+    image = QPixmap(80, 44)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+
+    widget.waveform_bar._paint_zoom_column(
+        painter,
+        1,
+        (80, 44),
+        (45.0, 46.0, 600, 30.0, ()),
+    )
+
+    painter.end()
+    assert image.toImage().pixelColor(1, 22).name() == "#6b7280"
+
+
 def test_backend_duration_updates_waveform_timebase(qtbot: Any) -> None:
     """A duration supplied after probing updates the waveform navigation range."""
     widget = AudioPreviewWidget()
