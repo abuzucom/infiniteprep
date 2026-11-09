@@ -11,7 +11,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `services/usb/` package with read-only Linux drive inspection (`LinuxDriveInspector`), using fixed argument arrays for `lsblk` and `df` without shell interpolation (`shell=False`) to record drive identity, partition layout, filesystem attributes, and free space (USB-1, #153).
 - Immutable `@dataclass(frozen=True)` models for drive identity, partition metadata, space statistics, and inspection records, with helper properties for FAT32 and exFAT detection.
-- Unit tests in `tests/unit/test_usb_linux_inspection.py` covering recorded outputs for FAT32 and exFAT removable drives, a multi-partition system disk, and malformed command replies.
+- Untrusted USB device metadata sanitization in `services/usb/linux.py` stripping ANSI escape sequences, control characters, and NUL bytes, enforcing path traversal protections, validating mapping types for block devices and partitions, and resolving partition numbers from PARTN columns (#153).
+- Unit tests in `tests/unit/test_usb_linux_inspection.py` covering recorded outputs for FAT32 and exFAT removable drives, a multi-partition system disk, untrusted metadata sanitization, and malformed command replies.
 
 ## [0.48.3] (2026-11-08)
 

@@ -577,6 +577,198 @@ class TestUsbLinuxInspection(unittest.TestCase):
             ),
         )
 
+    def test_bus_type_and_subsystem_extraction(self) -> None:
+        """Inspector correctly populates bus_type and subsystem from lsblk output."""
+        usb_json = json.dumps(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sdb",
+                        "path": "/dev/sdb",
+                        "type": "disk",
+                        "tran": "usb",
+                        "subsystems": "block:scsi:pci:usb",
+                        "children": [],
+                    }
+                ]
+            }
+        )
+        _, inspector = _make_mock_runner(lsblk_stdout=usb_json)
+        inspections = inspector.inspect_all()
+        self.assertEqual(len(inspections), 1)
+        self.assertEqual(inspections[0].drive.bus_type, "usb")
+        self.assertEqual(inspections[0].drive.subsystem, "block:scsi:pci:usb")
+
+    def test_malformed_blockdevice_element_raises_parse_error(self) -> None:
+        """Top-level blockdevices entries that are not mappings raise InspectionParseError."""
+        for invalid_element in (None, "not-a-dict", 12345, [1, 2]):
+            bad_json = json.dumps({"blockdevices": [invalid_element]})
+            _, inspector = _make_mock_runner(lsblk_stdout=bad_json)
+            with self.assertRaises(InspectionParseError):
+                inspector.inspect_all()
+
+    def test_malformed_child_element_raises_parse_error(self) -> None:
+        """Child partition entries that are not mappings raise InspectionParseError."""
+        for invalid_child in (None, "scalar", 999):
+            bad_json = json.dumps(
+                {
+                    "blockdevices": [
+                        {
+                            "name": "sdb",
+                            "type": "disk",
+                            "children": [invalid_child],
+                        }
+                    ]
+                }
+            )
+            _, inspector = _make_mock_runner(lsblk_stdout=bad_json)
+            with self.assertRaises(InspectionParseError):
+                inspector.inspect_all()
+
+    def test_malformed_df_numeric_fields_skipped(self) -> None:
+        """Malformed df output lines with non-numeric fields are skipped without false zeros."""
+        malformed_df = (
+            "Filesystem     1-blocks       Used  Available Capacity Mounted on\n"
+            "/dev/sdb1        INVALID 1468940288 30541987840       5% /media/user/DJ_SET_1\n"
+        )
+        _, inspector = _make_mock_runner(
+            lsblk_stdout=FAT32_STICK_LSBLK_JSON,
+            df_stdout=malformed_df,
+        )
+        report = inspector.inspect_all()[0]
+        space = report.space_for_mount("/media/user/DJ_SET_1")
+        self.assertIsNotNone(space)
+        self.assertEqual(space.total_bytes, 32010928128)
+
+    def test_partition_number_from_partn_and_name_pattern(self) -> None:
+        """Partition numbers are accurately read from PARTN or parsed from device name."""
+        non_consecutive_json = json.dumps(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sdb",
+                        "type": "disk",
+                        "children": [
+                            {
+                                "name": "sdb2",
+                                "type": "part",
+                                "partn": "2",
+                                "fstype": "ext4",
+                            },
+                            {
+                                "name": "sdb5",
+                                "type": "part",
+                                "partn": None,
+                                "fstype": "ext4",
+                            },
+                        ],
+                    }
+                ]
+            }
+        )
+        _, inspector = _make_mock_runner(lsblk_stdout=non_consecutive_json)
+        partitions = inspector.inspect_all()[0].partitions
+        self.assertEqual(len(partitions), 2)
+        self.assertEqual(partitions[0].partition_number, 2)
+        self.assertEqual(partitions[1].partition_number, 5)
+
+    def test_untrusted_metadata_sanitization(self) -> None:
+        """All USB device metadata fields are sanitized from escape sequences and controls."""
+        malicious_json = json.dumps(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sdb",
+                        "path": "/dev/sdb",
+                        "type": "disk",
+                        "model": "\x1b[31;1mFlashDrive\x1b[0m\x00\x07",
+                        "vendor": "Generic\x1b[2JUSB",
+                        "serial": "SN-9876\r\n",
+                        "children": [
+                            {
+                                "name": "sdb1",
+                                "type": "part",
+                                "label": "MALICIOUS\x1b[?25h_VOLUME",
+                                "uuid": "ABCD-1234\x00",
+                                "fstype": "vfat\n",
+                                "mountpoints": ["/media/user/SAFE"],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        _, inspector = _make_mock_runner(lsblk_stdout=malicious_json)
+        report = inspector.inspect_all()[0]
+        self.assertEqual(report.drive.model, "FlashDrive")
+        self.assertEqual(report.drive.vendor, "GenericUSB")
+        self.assertEqual(report.drive.serial, "SN-9876")
+        self.assertEqual(report.partitions[0].label, "MALICIOUS_VOLUME")
+        self.assertEqual(report.partitions[0].uuid, "ABCD-1234")
+        self.assertEqual(report.partitions[0].filesystem, "vfat")
+
+    def test_unsafe_device_name_and_path_rejected(self) -> None:
+        """Path traversal attempts in device names or paths raise InspectionParseError."""
+        for unsafe_name in ("../../etc/passwd", "sdb/extra", "..", ""):
+            bad_json = json.dumps(
+                {
+                    "blockdevices": [
+                        {
+                            "name": unsafe_name,
+                            "type": "disk",
+                        }
+                    ]
+                }
+            )
+            _, inspector = _make_mock_runner(lsblk_stdout=bad_json)
+            with self.assertRaises(InspectionParseError):
+                inspector.inspect_all()
+
+        bad_path_json = json.dumps(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sdb",
+                        "path": "/dev/../etc/shadow",
+                        "type": "disk",
+                    }
+                ]
+            }
+        )
+        _, inspector = _make_mock_runner(lsblk_stdout=bad_path_json)
+        with self.assertRaises(InspectionParseError):
+            inspector.inspect_all()
+
+    def test_inspect_device_path_traversal_rejected(self) -> None:
+        """inspect_device rejects path traversal arguments with CommandExecutionError."""
+        _, inspector = _make_mock_runner(lsblk_stdout=FAT32_STICK_LSBLK_JSON)
+        with self.assertRaises(CommandExecutionError):
+            inspector.inspect_device("../../dev/sdb")
+
+    def test_unsafe_mount_point_filtered(self) -> None:
+        """Mount points with path traversal or relative paths are filtered out."""
+        traversal_mounts_json = json.dumps(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sdb",
+                        "type": "disk",
+                        "children": [
+                            {
+                                "name": "sdb1",
+                                "type": "part",
+                                "mountpoints": ["../../etc", "relative/path", "/valid/mount"],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        _, inspector = _make_mock_runner(lsblk_stdout=traversal_mounts_json)
+        report = inspector.inspect_all()[0]
+        self.assertEqual(report.partitions[0].mount_points, ("/valid/mount",))
+
 
 if __name__ == "__main__":
     unittest.main()
+
