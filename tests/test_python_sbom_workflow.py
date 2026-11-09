@@ -49,7 +49,8 @@ class PythonSbomWorkflowTest(unittest.TestCase):
             index for index, step in enumerate(steps) if "pyinstaller" in step.get("run", "")
         )
         check_index = next(
-            index for index, step in enumerate(steps)
+            index
+            for index, step in enumerate(steps)
             if step.get("name") == "Check installed requirements"
         )
         self.assertLess(check_index, steps.index(sbom_step))
@@ -72,8 +73,7 @@ class PythonSbomWorkflowTest(unittest.TestCase):
         self.assertEqual(sbom_uploads[0]["with"]["retention-days"], 3)
         self.assertEqual(sbom_uploads[0]["with"]["if-no-files-found"], "error")
         bundle_uploads = [
-            step for step in uploads
-            if step.get("with", {}).get("path") == "dist/InfinitePrep"
+            step for step in uploads if step.get("with", {}).get("path") == "dist/InfinitePrep"
         ]
         self.assertEqual(len(bundle_uploads), 1)
 
