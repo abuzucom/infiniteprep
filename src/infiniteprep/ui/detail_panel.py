@@ -182,17 +182,12 @@ class DetailPanel(QWidget):
         self.header_label = QLabel("Select a track to inspect metadata and proposals.", self)
         self.warnings_label = QLabel("", self)
         self.warnings_label.setStyleSheet("color: #d97706; font-weight: bold;")
-        if settings_manager is None:
-            self.audio_player = AudioPreviewWidget(
-                self,
-                enable_multimedia_backend=enable_audio_backend,
-            )
-        else:
-            self.audio_player = AudioPreviewWidget(
-                self,
-                enable_multimedia_backend=enable_audio_backend,
-                settings_manager=settings_manager,
-            )
+        self.settings_manager = settings_manager or SettingsManager()
+        self.audio_player = AudioPreviewWidget(
+            self,
+            enable_multimedia_backend=enable_audio_backend,
+            settings_manager=self.settings_manager,
+        )
         self.waveform_pool = WaveformAnalysisPool(self)
         self.waveform_pool.completed.connect(self._on_waveform_completed)
         self.waveform_pool.failed.connect(self._on_waveform_failed)

@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 _CACHE_UPDATE_LOCK = threading.Lock()
 
 
-class WaveformAnalysisCancelled(Exception):
+class WaveformAnalysisCancelled(BaseException):
     """Raised when a caller no longer needs an in-progress analysis."""
 
 

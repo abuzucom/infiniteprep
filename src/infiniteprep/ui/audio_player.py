@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from infiniteprep.config.settings import SettingsManager
+from infiniteprep.config.settings import DEFAULT_WAVEFORM_ZOOM_SECONDS, SettingsManager
 from infiniteprep.ui.time_format import split_time_seconds
 
 logger = logging.getLogger(__name__)
@@ -47,8 +47,13 @@ FALLBACK_ENVELOPE_SILENT: Final[float] = 0.05
 WAVEFORM_MIN_HEIGHT_PX: Final[int] = 44
 WAVEFORM_HALF_HEIGHT_SCALE: Final[float] = 0.45
 WAVEFORM_MIN_HALF_BAR_PX: Final[float] = 2.0
+WAVEFORM_FULL_HEIGHT_SCALE: Final[float] = 2.0
+WAVEFORM_CENTER_DIVISOR: Final[float] = 2.0
+ZOOM_PLAYHEAD_CENTER_RATIO: Final[float] = 0.5
+SPECTRUM_OVERLAY_ALPHA: Final[int] = 128
+SPECTRUM_DURATION_EPSILON_SEC: Final[float] = 1e-9
 PLAYHEAD_WIDTH_PX: Final[int] = 2
-ZOOM_SECONDS: Final[tuple[int, ...]] = (2, 4, 8, 16, 32)
+ZOOM_SECONDS: Final[tuple[int, ...]] = (2, 4, DEFAULT_WAVEFORM_ZOOM_SECONDS, 16, 32)
 OVERVIEW_MODE: Final[str] = "Overview"
 ZOOM_MODE: Final[str] = "Zoom"
 LAYOUT_MARGIN_PX: Final[int] = 4
@@ -150,7 +155,7 @@ class WaveformOverviewBar(QWidget):
         self.playhead_ratio: float = 0.0
         self.duration_sec = 0.0
         self.position_sec = 0.0
-        self.zoom_seconds = 8
+        self.zoom_seconds = DEFAULT_WAVEFORM_ZOOM_SECONDS
         self.view_mode = OVERVIEW_MODE
         self.spectrum: object | None = None
         self._dragging = False
@@ -160,8 +165,14 @@ class WaveformOverviewBar(QWidget):
 
     def set_envelope(self, envelope: list[float]) -> None:
         """Update the waveform envelope values and trigger a repaint."""
-        self.envelope = envelope or [FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS
-        self.fallback_envelope = list(self.envelope)
+        self.fallback_envelope = envelope or [FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS
+        if self.spectrum is None:
+            self.envelope = list(self.fallback_envelope)
+        else:
+            self.set_spectrum_envelope(
+                np.asarray(self.spectrum.overall, dtype=np.float32),
+                float(self.spectrum.duration_sec),
+            )
         self.update()
 
     def set_spectrum_envelope(self, peaks: np.ndarray, analyzed_duration: float) -> None:
@@ -195,12 +206,17 @@ class WaveformOverviewBar(QWidget):
         self.position_sec = max(0.0, float(position_sec))
         self.duration_sec = max(0.0, float(duration_sec))
         ratio = self.position_sec / self.duration_sec if self.duration_sec else 0.0
-        self.set_playhead_ratio(0.5 if self.view_mode == ZOOM_MODE else ratio)
+        self.set_playhead_ratio(
+            ZOOM_PLAYHEAD_CENTER_RATIO if self.view_mode == ZOOM_MODE else ratio
+        )
 
     def zoom_window(self) -> tuple[float, float]:
         """Return the time interval centered around the playhead."""
         width = min(float(self.zoom_seconds), self.duration_sec)
-        return self.position_sec - width / 2.0, self.position_sec + width / 2.0
+        return (
+            self.position_sec - width / WAVEFORM_CENTER_DIVISOR,
+            self.position_sec + width / WAVEFORM_CENTER_DIVISOR,
+        )
 
     def _seek_from_x(self, x: float) -> None:
         """Map a canvas coordinate to the overview or zoom time interval."""
@@ -211,7 +227,9 @@ class WaveformOverviewBar(QWidget):
             seek_ratio = target / self.duration_sec if self.duration_sec > 0 else 0.0
         else:
             seek_ratio = ratio
-        self.set_playhead_ratio(ratio if self.view_mode == OVERVIEW_MODE else 0.5)
+        self.set_playhead_ratio(
+            ratio if self.view_mode == OVERVIEW_MODE else ZOOM_PLAYHEAD_CENTER_RATIO
+        )
         if callable(self.on_seek_ratio):
             self.on_seek_ratio(seek_ratio)
 
@@ -227,7 +245,7 @@ class WaveformOverviewBar(QWidget):
             start, end = self._drag_window
             ratio = event.position().x() / float(max(1, self.width()))
             target = start + ratio * (end - start)
-            self.set_playhead_ratio(0.5)
+            self.set_playhead_ratio(ZOOM_PLAYHEAD_CENTER_RATIO)
             if callable(self.on_seek_ratio):
                 self.on_seek_ratio(target / self.duration_sec)
 
@@ -249,7 +267,7 @@ class WaveformOverviewBar(QWidget):
             return
         count = max(1, len(self.envelope))
         bar_w = max(1.0, rect.width() / float(count))
-        mid_y = rect.height() / 2.0
+        mid_y = rect.height() * ZOOM_PLAYHEAD_CENTER_RATIO
         for idx, amp in enumerate(self.envelope):
             half_h = max(
                 WAVEFORM_MIN_HALF_BAR_PX, amp * (rect.height() * WAVEFORM_HALF_HEIGHT_SCALE)
@@ -263,7 +281,7 @@ class WaveformOverviewBar(QWidget):
                 int(idx * bar_w),
                 int(mid_y - half_h),
                 max(1, int(bar_w - 1)),
-                int(half_h * 2),
+                int(half_h * WAVEFORM_FULL_HEIGHT_SCALE),
                 color,
             )
         play_x = int(self.playhead_ratio * rect.width())
@@ -276,16 +294,24 @@ class WaveformOverviewBar(QWidget):
         count = len(self.spectrum.overall)
         analyzed_duration = float(self.spectrum.duration_sec)
         if count == 0 or analyzed_duration <= 0.0:
-            painter.fillRect(width // 2, 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b"))
+            painter.fillRect(
+                int(width * ZOOM_PLAYHEAD_CENTER_RATIO),
+                0,
+                PLAYHEAD_WIDTH_PX,
+                height,
+                QColor("#f59e0b"),
+            )
             return
         colors = (QColor("#22c55e"), QColor("#3b82f6"), QColor("#ef4444"))
         for color in colors:
-            color.setAlpha(128)
+            color.setAlpha(SPECTRUM_OVERLAY_ALPHA)
         dimensions = (width, height)
         analysis = (start, end, count, analyzed_duration, colors)
         for column in range(width):
             self._paint_zoom_column(painter, column, dimensions, analysis)
-        painter.fillRect(width // 2, 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b"))
+        painter.fillRect(
+            int(width * ZOOM_PLAYHEAD_CENTER_RATIO), 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b")
+        )
 
     def _paint_zoom_column(
         self,
@@ -299,11 +325,16 @@ class WaveformOverviewBar(QWidget):
         start, end, count, analyzed_duration, colors = analysis
         time_start = start + column * (end - start) / max(width, 1)
         time_end = start + (column + 1) * (end - start) / max(width, 1)
+        if self.duration_sec <= 0.0:
+            return
         if time_end <= 0.0 or time_start >= analyzed_duration:
             if time_start >= analyzed_duration:
                 self._paint_zoom_fallback_column(painter, column, (time_start, time_end), height)
             return
-        sample_start = max(0, int(time_start * count / max(analyzed_duration, 1e-9)))
+        sample_start = max(
+            0,
+            int(time_start * count / max(analyzed_duration, SPECTRUM_DURATION_EPSILON_SEC)),
+        )
         sample_end = min(
             count,
             max(sample_start + 1, int(np.ceil(time_end * count / analyzed_duration))),
@@ -312,8 +343,8 @@ class WaveformOverviewBar(QWidget):
             values = getattr(self.spectrum, name)[sample_start:sample_end]
             peak = float(values.max()) if len(values) else 0.0
             half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * WAVEFORM_HALF_HEIGHT_SCALE)
-            top = int((height - half_height * 2) / 2)
-            painter.fillRect(column, top, 1, int(half_height * 2), color)
+            top = int((height - half_height * WAVEFORM_FULL_HEIGHT_SCALE) / WAVEFORM_CENTER_DIVISOR)
+            painter.fillRect(column, top, 1, int(half_height * WAVEFORM_FULL_HEIGHT_SCALE), color)
 
     def _paint_zoom_fallback_column(
         self,
@@ -326,32 +357,54 @@ class WaveformOverviewBar(QWidget):
         count = len(self.envelope)
         if self.duration_sec <= 0.0 or count == 0:
             return
-        first = max(0, int(interval[0] * count / self.duration_sec))
-        last = min(count, max(first + 1, int(np.ceil(interval[1] * count / self.duration_sec))))
+        duration = max(self.duration_sec, SPECTRUM_DURATION_EPSILON_SEC)
+        first = max(0, int(interval[0] * count / duration))
+        last = min(count, max(first + 1, int(np.ceil(interval[1] * count / duration))))
         peak = max(self.envelope[first:last], default=FALLBACK_ENVELOPE_EMPTY)
         half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * WAVEFORM_HALF_HEIGHT_SCALE)
-        top = int((height - half_height * 2) / 2)
-        painter.fillRect(column, top, 1, int(half_height * 2), QColor("#6b7280"))
+        top = int((height - half_height * WAVEFORM_FULL_HEIGHT_SCALE) / WAVEFORM_CENTER_DIVISOR)
+        painter.fillRect(
+            column,
+            top,
+            1,
+            int(half_height * WAVEFORM_FULL_HEIGHT_SCALE),
+            QColor("#6b7280"),
+        )
 
     def _paint_zoom_overview(self, painter: QPainter, width: int, height: int) -> None:
         """Show the selected overview segment until spectrum analysis completes."""
         start, end = self.zoom_window()
         count = len(self.envelope)
         if self.duration_sec <= 0.0 or count == 0:
-            painter.fillRect(width // 2, 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b"))
+            painter.fillRect(
+                int(width * ZOOM_PLAYHEAD_CENTER_RATIO),
+                0,
+                PLAYHEAD_WIDTH_PX,
+                height,
+                QColor("#f59e0b"),
+            )
             return
         for column in range(width):
             time_start = start + column * (end - start) / max(width, 1)
             time_end = start + (column + 1) * (end - start) / max(width, 1)
             if time_end <= 0.0 or time_start >= self.duration_sec:
                 continue
-            first = max(0, int(time_start * count / self.duration_sec))
-            last = min(count, max(first + 1, int(np.ceil(time_end * count / self.duration_sec))))
+            duration = max(self.duration_sec, SPECTRUM_DURATION_EPSILON_SEC)
+            first = max(0, int(time_start * count / duration))
+            last = min(count, max(first + 1, int(np.ceil(time_end * count / duration))))
             peak = max(self.envelope[first:last], default=FALLBACK_ENVELOPE_EMPTY)
             half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * WAVEFORM_HALF_HEIGHT_SCALE)
-            top = int((height - half_height * 2) / 2)
-            painter.fillRect(column, top, 1, int(half_height * 2), QColor("#4b82e8"))
-        painter.fillRect(width // 2, 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b"))
+            top = int((height - half_height * WAVEFORM_FULL_HEIGHT_SCALE) / WAVEFORM_CENTER_DIVISOR)
+            painter.fillRect(
+                column,
+                top,
+                1,
+                int(half_height * WAVEFORM_FULL_HEIGHT_SCALE),
+                QColor("#4b82e8"),
+            )
+        painter.fillRect(
+            int(width * ZOOM_PLAYHEAD_CENTER_RATIO), 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b")
+        )
 
 
 class AudioPreviewWidget(QWidget):
@@ -489,8 +542,8 @@ class AudioPreviewWidget(QWidget):
         probed = self._probe_duration(file_path)
         self.duration_sec = probed if probed > 0.0 else float(fallback_duration_sec or 0.0)
         self.cue_positions = compute_cue_jump_positions(self.duration_sec)
-        self.waveform_bar.set_envelope(extract_waveform_envelope(file_path))
         self.waveform_bar.spectrum = None
+        self.waveform_bar.set_envelope(extract_waveform_envelope(file_path))
         self.waveform_bar.set_playback(0.0, self.duration_sec)
         self.show_status("")
         if self.player is not None:
@@ -500,7 +553,7 @@ class AudioPreviewWidget(QWidget):
     def _load_zoom_seconds(self) -> int:
         """Load a supported zoom duration, falling back to the D79b default."""
         saved = self.settings_manager.load().waveform_zoom_seconds
-        return saved if saved in ZOOM_SECONDS else 8
+        return saved if saved in ZOOM_SECONDS else DEFAULT_WAVEFORM_ZOOM_SECONDS
 
     def _on_view_changed(self, mode: str) -> None:
         """Switch between the track overview and centered zoom view."""

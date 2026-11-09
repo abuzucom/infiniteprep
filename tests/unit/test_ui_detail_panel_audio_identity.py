@@ -19,6 +19,8 @@ from tests.fixtures.audio_factory import create_wav_fixture
 
 TRACK_SECONDS = 2.0
 SEEK_SECONDS = 0.5
+PEAK_SAMPLE_COUNT = 2
+ANALYSIS_WAIT_TIMEOUT_MS = 3_000
 
 
 def test_new_stored_path_under_same_id_keeps_playback(
@@ -31,7 +33,7 @@ def test_new_stored_path_under_same_id_keeps_playback(
     panel = DetailPanel(repository, ReviewService(repository))
     qtbot.addWidget(panel)
     analyzed_paths: list[Path] = []
-    peaks = np.ones(2, dtype=np.float32)
+    peaks = np.ones(PEAK_SAMPLE_COUNT, dtype=np.float32)
 
     def analyze(path: Path, *, cancel_event: Any) -> SpectrumWaveform:
         analyzed_paths.append(path)
@@ -50,7 +52,7 @@ def test_new_stored_path_under_same_id_keeps_playback(
     stored.current_path = str(moved)
     repository.upsert_file_asset(stored)
     panel.load_file_asset(asset.id)
-    qtbot.waitUntil(lambda: moved in analyzed_paths, timeout=3000)
+    qtbot.waitUntil(lambda: moved in analyzed_paths, timeout=ANALYSIS_WAIT_TIMEOUT_MS)
 
     assert panel.audio_player.current_file_path == loaded_path
     assert analyzed_paths[-1] == moved

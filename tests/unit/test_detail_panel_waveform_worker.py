@@ -17,24 +17,38 @@ from infiniteprep.services.waveform_analysis import SpectrumWaveform
 from infiniteprep.ui.detail_panel import DetailPanel
 from tests.fixtures.audio_factory import create_wav_fixture
 
+PEAK_BIN_COUNT = 2
+SPECTRUM_BAND_COUNT = 4
+FIRST_PEAK = 0.2
+SECOND_PEAK = 0.8
+WAVEFORM_DURATION_SECONDS = 1.0
+ANALYSIS_WAIT_TIMEOUT_MS = 3_000
+STALE_ANALYSIS_MAX_WAIT_SECONDS = 3.0
 
-def test_detail_panel_omits_default_settings_keyword_for_audio_double(
+
+def test_detail_panel_passes_shared_settings_manager_to_audio_preview(
     qtbot: Any, monkeypatch: Any
 ) -> None:
-    """The existing audio preview constructor seam accepts the original keywords."""
-    received: list[bool] = []
+    """The panel shares one settings store with its audio preview."""
+    received: list[tuple[bool, bool]] = []
 
     class PreviewDouble(QWidget):
-        def __init__(self, parent: QWidget, enable_multimedia_backend: bool = False) -> None:
+        def __init__(
+            self,
+            parent: QWidget,
+            enable_multimedia_backend: bool = False,
+            *,
+            settings_manager: Any,
+        ) -> None:
             super().__init__(parent)
-            received.append(enable_multimedia_backend)
+            received.append((enable_multimedia_backend, settings_manager is not None))
 
     monkeypatch.setattr("infiniteprep.ui.detail_panel.AudioPreviewWidget", PreviewDouble)
     repository = Repository(DatabaseManager(":memory:"))
     panel = DetailPanel(repository, ReviewService(repository))
     qtbot.addWidget(panel)
 
-    assert received == [False]
+    assert received == [(False, True)]
 
 
 def test_stale_track_result_does_not_replace_selected_waveform(
@@ -46,14 +60,20 @@ def test_stale_track_result_does_not_replace_selected_waveform(
     repository = Repository(DatabaseManager(":memory:"))
     imported = ImportService(repository).import_paths([first, second]).imported_files
     first_asset, second_asset = sorted(imported, key=lambda asset: asset.current_path)
-    first_waveform = SpectrumWaveform(*([np.full(2, 0.2, dtype=np.float32)] * 4), 1.0)
-    second_waveform = SpectrumWaveform(*([np.full(2, 0.8, dtype=np.float32)] * 4), 1.0)
+    first_waveform = SpectrumWaveform(
+        *([np.full(PEAK_BIN_COUNT, FIRST_PEAK, dtype=np.float32)] * SPECTRUM_BAND_COUNT),
+        WAVEFORM_DURATION_SECONDS,
+    )
+    second_waveform = SpectrumWaveform(
+        *([np.full(PEAK_BIN_COUNT, SECOND_PEAK, dtype=np.float32)] * SPECTRUM_BAND_COUNT),
+        WAVEFORM_DURATION_SECONDS,
+    )
     first_started = threading.Event()
 
     def analyze(path: Path, *, cancel_event: threading.Event) -> SpectrumWaveform:
         if path.name == "first.wav":
             first_started.set()
-            cancel_event.wait(3)
+            cancel_event.wait(STALE_ANALYSIS_MAX_WAIT_SECONDS)
             return first_waveform
         return second_waveform
 
@@ -65,14 +85,14 @@ def test_stale_track_result_does_not_replace_selected_waveform(
         lambda file_id, _generation, _data: completed.append(file_id)
     )
     panel.load_file_asset(first_asset.id)
-    qtbot.waitUntil(first_started.is_set, timeout=3000)
+    qtbot.waitUntil(first_started.is_set, timeout=ANALYSIS_WAIT_TIMEOUT_MS)
     panel.load_file_asset(second_asset.id)
 
     qtbot.waitUntil(
         lambda: panel.audio_player.waveform_bar.spectrum is second_waveform,
-        timeout=3000,
+        timeout=ANALYSIS_WAIT_TIMEOUT_MS,
     )
-    qtbot.waitUntil(lambda: len(completed) == 1, timeout=3000)
+    qtbot.waitUntil(lambda: len(completed) == 1, timeout=ANALYSIS_WAIT_TIMEOUT_MS)
     assert completed == [second_asset.id]
     assert panel.audio_player.waveform_bar.spectrum is second_waveform
     assert panel.current_file_id == second_asset.id

@@ -15,6 +15,7 @@ from infiniteprep import storage_paths
 from infiniteprep.domain.enums import KeyDisplayNotation
 
 logger = logging.getLogger(__name__)
+DEFAULT_WAVEFORM_ZOOM_SECONDS: Final[int] = 8
 
 ALLOWED_LOCAL_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "localhost", "::1"})
 BLOCKED_METADATA_HOSTS: Final[frozenset[str]] = frozenset(
@@ -143,7 +144,7 @@ class AppSettings:
     file_table_column_count: int = 0  # Column count when the layout was saved.
     detail_table_layout: str = ""  # Base64-encoded QHeaderView state.
     detail_table_column_count: int = 0  # Column count when the layout was saved.
-    waveform_zoom_seconds: int = 8
+    waveform_zoom_seconds: int = DEFAULT_WAVEFORM_ZOOM_SECONDS
 
 
 class SettingsManager:
