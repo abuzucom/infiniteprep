@@ -36,9 +36,7 @@ LSBLK_COMMAND: Final[tuple[str, ...]] = (
 DF_COMMAND: Final[tuple[str, ...]] = ("df", "-P", "-B1")
 DEFAULT_COMMAND_TIMEOUT_SECONDS: Final[float] = 15.0
 MAX_METADATA_STR_LEN: Final[int] = 512
-ANSI_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(
-    r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])"
-)
+ANSI_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 DEVICE_NAME_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_\-\./]+$")
 
 
@@ -160,7 +158,7 @@ class LinuxDriveInspector:
         target_name = target.removeprefix("/dev/")
         for inspection in self.inspect_all():
             drive = inspection.drive
-            if drive.name == target_name or drive.path == target or drive.path == f"/dev/{target_name}":
+            if drive.name == target_name or drive.path in (target, f"/dev/{target_name}"):
                 return inspection
 
         raise CommandExecutionError(f"Device '{device_name_or_path}' was not found.")
@@ -363,7 +361,12 @@ class LinuxDriveInspector:
                 avail_b = _clean_int(part_dict.get("fsavail"))
                 used_val = part_dict.get("fsused")
                 used_b = _clean_int(used_val) if used_val is not None else max(0, total_b - avail_b)
-                spaces.append((mount, SpaceInfo(total_bytes=total_b, used_bytes=used_b, available_bytes=avail_b)))
+                space_info = SpaceInfo(
+                    total_bytes=total_b,
+                    used_bytes=used_b,
+                    available_bytes=avail_b,
+                )
+                spaces.append((mount, space_info))
         return spaces
 
     @staticmethod
