@@ -1,4 +1,4 @@
-"""Release helpers for the tag release in build-packages (D83a4b, D314 to D318).
+"""Release helpers for the tag release in build-packages (D83a4b, D314 to D318, D328).
 
 Four subcommands, each run from the repository root:
 
@@ -9,7 +9,8 @@ Four subcommands, each run from the repository root:
 
 check-tag fails unless the tag equals "v" plus the version in
 src/infiniteprep/__init__.py, pyproject.toml, and the top CHANGELOG entry (D317).
-check-assets fails unless the folder holds exactly the six packages of the version (D319).
+check-assets fails unless the folder holds exactly the expected packages and
+attestation bundles of the version (D319, D328).
 checksums writes SHA256SUMS.txt in the sha256sum format, sorted by file name.
 notes writes the CHANGELOG section of one version and a fixed download block (D318).
 """
@@ -42,6 +43,7 @@ ASSET_SUFFIXES: Final[tuple[str, ...]] = (
     "linux-x86_64-portable.tar.gz",
     "macos-arm64.dmg",
 )
+BUNDLE_SUFFIX: Final[str] = ".sigstore.json"
 VERSION_LINE: Final[re.Pattern[str]] = re.compile(r'^__version__ = "([^"]+)"$', re.MULTILINE)
 # A CHANGELOG release heading, such as "## [0.47.0] (2026-11-08)".
 RELEASE_HEADING: Final[re.Pattern[str]] = re.compile(r"^## \[([^\]]+)\]", re.MULTILINE)
@@ -105,18 +107,36 @@ def file_sha256(path: Path) -> str:
         return hashlib.file_digest(handle, "sha256").hexdigest()
 
 
-def expected_assets(version: str) -> set[str]:
+def expected_packages(version: str) -> set[str]:
     """Return the six package file names that a build of this version makes."""
     return {f"{ASSET_PREFIX}-{version}-{suffix}" for suffix in ASSET_SUFFIXES}
 
 
-def asset_problems(folder: Path, version: str) -> list[str]:
-    """Return one line per expected package that is missing and per extra entry."""
+def expected_bundles(version: str) -> set[str]:
+    """Return the six Sigstore bundle file names that attest this version's packages (D328)."""
+    return {f"{name}{BUNDLE_SUFFIX}" for name in expected_packages(version)}
+
+
+def expected_assets(version: str, *, include_bundles: bool = True) -> set[str]:
+    """Return the expected asset names of this version (D319, D328)."""
+    packages = expected_packages(version)
+    return packages | expected_bundles(version) if include_bundles else packages
+
+
+def _asset_kind(name: str) -> str:
+    """Return 'Bundle' for a Sigstore bundle and 'Package' for a release package."""
+    return "Bundle" if name.endswith(BUNDLE_SUFFIX) else "Package"
+
+
+def asset_problems(folder: Path, version: str, *, require_bundles: bool = False) -> list[str]:
+    """Return one line per expected asset that is missing and per extra entry."""
     present = {path.name for path in folder.iterdir()}
-    expected = expected_assets(version)
-    missing = [f"Package {name} is missing." for name in sorted(expected - present)]
+    bundles_expected = require_bundles or any(name.endswith(BUNDLE_SUFFIX) for name in present)
+    expected = expected_assets(version, include_bundles=bundles_expected)
+    missing = [f"{_asset_kind(name)} {name} is missing." for name in sorted(expected - present)]
     extra = [
-        f"{name} is not a package of version {version}." for name in sorted(present - expected)
+        f"{name} is not a release asset of version {version}."
+        for name in sorted(present - expected)
     ]
     return missing + extra
 
@@ -154,15 +174,16 @@ def release_notes(version: str, root: Path) -> str:
     return f"{changelog_section(version, changelog)}\n{DOWNLOAD_NOTES}"
 
 
-def _report_assets(folder: Path, version: str) -> int:
-    """Print each asset problem and return 0 when the folder holds exactly the six packages."""
-    problems = asset_problems(folder, version)
+def _report_assets(folder: Path, version: str, *, require_bundles: bool = False) -> int:
+    """Print each asset problem and return 0 when the folder holds the expected assets."""
+    problems = asset_problems(folder, version, require_bundles=require_bundles)
     for problem in problems:
         print(f"release: {problem}")
     if problems:
         print("release: rebuild the packages for this tag, then rerun the release job.")
         return CHECK_FAILED
-    print(f"release: {folder} holds the six packages of version {version}.")
+    count = len([path for path in folder.iterdir() if path.is_file()])
+    print(f"release: {folder} holds the {count} release assets of version {version}.")
     return 0
 
 
@@ -180,11 +201,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     assets = commands.add_parser("check-assets", help="Check the package names in a folder.")
     assets.add_argument("folder", type=Path)
     assets.add_argument("version")
+    assets.add_argument(
+        "--require-bundles",
+        action="store_true",
+        help="Require the six Sigstore bundle files alongside the packages (D328).",
+    )
     args = parser.parse_args(argv)
     if args.command == "check-assets":
         if not args.folder.is_dir():
             parser.error(f"{args.folder} is not a folder. Pass the folder of release assets.")
-        return _report_assets(args.folder, args.version)
+        return _report_assets(args.folder, args.version, require_bundles=args.require_bundles)
     if args.command == "check-tag":
         problems = tag_problems(args.tag, ROOT)
         for problem in problems:

@@ -16,7 +16,7 @@ PACKAGE_ARTIFACTS = (
     "InfinitePrep-linux-packages",
     "InfinitePrep-macos-dmg",
 )
-FIRST_PARTY_ACTIONS = ("actions/checkout@", "actions/setup-python@")
+FIRST_PARTY_ACTIONS = ("actions/checkout@", "actions/setup-python@", "actions/attest@")
 
 
 class ReleaseWorkflowTest(unittest.TestCase):
@@ -62,17 +62,26 @@ class ReleaseWorkflowTest(unittest.TestCase):
         self.assertNotIn("permissions", bundle)
 
     def test_only_the_release_job_can_write(self) -> None:
-        """The release job alone holds contents: write, after every bundle job."""
+        """The release job alone writes to the repo, after every bundle job (D315, D325)."""
         release = self.jobs["release"]
         self.assertEqual(release["needs"], "bundle")
         self.assertEqual(release["if"], TAG_CONDITION)
-        self.assertEqual(release["permissions"], {"contents": "write", "actions": "read"})
+        self.assertEqual(
+            release["permissions"],
+            {
+                "contents": "write",
+                "actions": "read",
+                "id-token": "write",
+                "attestations": "write",
+                "artifact-metadata": "write",
+            },
+        )
         for name, job in self.jobs.items():
             if name != "release":
                 self.assertNotIn("permissions", job, name)
 
     def test_release_job_uses_no_third_party_action(self) -> None:
-        """Every action in the release job is a first-party checkout or setup."""
+        """Every action in the release job is a first-party checkout, setup, or attest (D325)."""
         uses = [step["uses"] for step in self.jobs["release"]["steps"] if "uses" in step]
         self.assertTrue(uses)
         for reference in uses:

@@ -5,6 +5,22 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.48.4] (2026-11-09)
+
+### Added
+
+- The `release` job in `build-packages.yml` publishes a GitHub build-provenance attestation for each of the six packages and `SHA256SUMS.txt` with `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6` (v4.2.2, D325).
+- The `release` job uploads each package's Sigstore bundle as `<package>.sigstore.json` to the draft release, with its hash recorded in `SHA256SUMS.txt` (D328).
+- `packaging/release.py check-assets` learns the Sigstore bundle names and supports `--require-bundles` to verify that the folder holds all six packages and six Sigstore bundles (D328).
+- The Releases section in `README.md` documents package provenance verification commands with `gh attestation verify`.
+- `tests/test_release_attestation.py` checks workflow permissions, actions/attest commit pinning, subject paths, bundle copying, asset verification, and README verification documentation.
+
+### Changed
+
+- The `release` job in `build-packages.yml` gains `id-token: write`, `attestations: write`, and `artifact-metadata: write` permissions.
+- `tests/test_release_workflow.py` permits `actions/attest@` in the release job and checks the expanded permission set.
+- `tests/test_release_review_fixes.py` tests check-assets with both packages and Sigstore bundles.
+
 ## [0.48.3] (2026-11-08)
 
 ### Added
