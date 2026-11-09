@@ -5,13 +5,15 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.48.5] (2026-11-09)
+## [0.49.1] (2026-11-09)
 
 ### Added
 
 - Selected-track spectrum analysis runs in a two-worker background pool. The
   waveform view adds persistent zoom windows and keeps the current overview
   visible while analysis runs or fails.
+- Guard zoom rendering for empty analyses and keep playback errors separate
+  from waveform status messages.
 
 ### Changed
 

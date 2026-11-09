@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from PySide6.QtWidgets import QWidget
 
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
@@ -15,6 +16,25 @@ from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.waveform_analysis import SpectrumWaveform
 from infiniteprep.ui.detail_panel import DetailPanel
 from tests.fixtures.audio_factory import create_wav_fixture
+
+
+def test_detail_panel_omits_default_settings_keyword_for_audio_double(
+    qtbot: Any, monkeypatch: Any
+) -> None:
+    """The existing audio preview constructor seam accepts the original keywords."""
+    received: list[bool] = []
+
+    class PreviewDouble(QWidget):
+        def __init__(self, parent: QWidget, enable_multimedia_backend: bool = False) -> None:
+            super().__init__(parent)
+            received.append(enable_multimedia_backend)
+
+    monkeypatch.setattr("infiniteprep.ui.detail_panel.AudioPreviewWidget", PreviewDouble)
+    repository = Repository(DatabaseManager(":memory:"))
+    panel = DetailPanel(repository, ReviewService(repository))
+    qtbot.addWidget(panel)
+
+    assert received == [False]
 
 
 def test_stale_track_result_does_not_replace_selected_waveform(
@@ -49,7 +69,10 @@ def test_stale_track_result_does_not_replace_selected_waveform(
     qtbot.waitUntil(first_started.is_set, timeout=3000)
     panel.load_file_asset(second_asset.id)
 
-    qtbot.waitUntil(lambda: panel.audio_player.waveform_bar.spectrum is second_waveform, timeout=3000)
+    qtbot.waitUntil(
+        lambda: panel.audio_player.waveform_bar.spectrum is second_waveform,
+        timeout=3000,
+    )
     release_first.set()
     qtbot.waitUntil(lambda: len(completed) == 2, timeout=3000)
     assert panel.audio_player.waveform_bar.spectrum is second_waveform

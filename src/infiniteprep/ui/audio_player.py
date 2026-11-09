@@ -217,8 +217,11 @@ class WaveformOverviewBar(QWidget):
         painter = QPainter(self)
         rect = self.rect()
         painter.fillRect(rect, QColor("#181c24"))
-        if self.view_mode == ZOOM_MODE and self.spectrum is not None:
-            self._paint_zoom(painter, rect.width(), rect.height())
+        if self.view_mode == ZOOM_MODE:
+            if self.spectrum is None:
+                self._paint_zoom_overview(painter, rect.width(), rect.height())
+            else:
+                self._paint_zoom(painter, rect.width(), rect.height())
             painter.end()
             return
         count = max(1, len(self.envelope))
@@ -249,7 +252,12 @@ class WaveformOverviewBar(QWidget):
         start, end = self.zoom_window()
         count = len(self.spectrum.overall)
         analyzed_duration = float(self.spectrum.duration_sec)
+        if count == 0 or analyzed_duration <= 0.0:
+            painter.fillRect(width // 2, 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b"))
+            return
         colors = (QColor("#22c55e"), QColor("#3b82f6"), QColor("#ef4444"))
+        for color in colors:
+            color.setAlpha(128)
         names = ("low", "mid", "high")
         for column in range(width):
             time_start = start + column * (end - start) / max(width, 1)
@@ -268,6 +276,26 @@ class WaveformOverviewBar(QWidget):
                 top = int((height - half_height * 2) / 2)
                 bar_height = int(half_height * 2)
                 painter.fillRect(column, top, 1, bar_height, color)
+        painter.fillRect(width // 2, 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b"))
+
+    def _paint_zoom_overview(self, painter: QPainter, width: int, height: int) -> None:
+        """Show the selected overview segment until spectrum analysis completes."""
+        start, end = self.zoom_window()
+        count = len(self.envelope)
+        if self.duration_sec <= 0.0 or count == 0:
+            painter.fillRect(width // 2, 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b"))
+            return
+        for column in range(width):
+            time_start = start + column * (end - start) / max(width, 1)
+            time_end = start + (column + 1) * (end - start) / max(width, 1)
+            if time_end <= 0.0 or time_start >= self.duration_sec:
+                continue
+            first = max(0, int(time_start * count / self.duration_sec))
+            last = min(count, max(first + 1, int(np.ceil(time_end * count / self.duration_sec))))
+            peak = max(self.envelope[first:last], default=FALLBACK_ENVELOPE_EMPTY)
+            half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * 0.45)
+            top = int((height - half_height * 2) / 2)
+            painter.fillRect(column, top, 1, int(half_height * 2), QColor("#4b82e8"))
         painter.fillRect(width // 2, 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b"))
 
 
@@ -314,6 +342,9 @@ class AudioPreviewWidget(QWidget):
         self.status_label = QLabel("", self)
         self.status_label.setTextFormat(Qt.TextFormat.PlainText)
         self.status_label.setWordWrap(True)
+        self.analysis_status_label = QLabel("", self)
+        self.analysis_status_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.analysis_status_label.setWordWrap(True)
         self.time_label = QLabel("00:00.0 / 00:00.0", self)
         self.play_btn = QPushButton("Play", self)
         self.stop_btn = QPushButton("Stop", self)
@@ -352,6 +383,7 @@ class AudioPreviewWidget(QWidget):
         controls.addWidget(self.time_label)
         root.addLayout(controls)
         root.addWidget(self.status_label)
+        root.addWidget(self.analysis_status_label)
 
     def _connect_signals(self) -> None:
         """Connect QMediaPlayer, slider, and button signals."""
@@ -424,7 +456,7 @@ class AudioPreviewWidget(QWidget):
     def _on_zoom_changed(self, label: str) -> None:
         """Persist the selected zoom interval across tracks and restarts."""
         try:
-            seconds = int(label.split()[0])
+            seconds = int(label.split(maxsplit=1)[0])
         except (ValueError, IndexError):
             return
         if seconds not in ZOOM_SECONDS:
@@ -450,11 +482,15 @@ class AudioPreviewWidget(QWidget):
 
     def show_analysis_pending(self) -> None:
         """Show analysis progress without hiding the current overview."""
-        self.show_status("Analyzing waveform...")
+        self.analysis_status_label.setText("Analyzing waveform...")
 
     def show_analysis_failure(self, message: str) -> None:
         """Report analysis failure while retaining the current overview."""
-        self.show_status(f"Spectrum analysis failed: {message}")
+        self.analysis_status_label.setText(f"Spectrum analysis failed: {message}")
+
+    def show_analysis_complete(self) -> None:
+        """Clear analysis progress without changing playback status."""
+        self.analysis_status_label.clear()
 
     def _probe_duration(self, file_path: Path) -> float:
         """Probe audio duration in seconds via soundfile, logging and returning 0.0 on error."""
@@ -513,10 +549,13 @@ class AudioPreviewWidget(QWidget):
 
     def _on_media_duration_changed(self, duration_ms: int) -> None:
         """Handle durationChanged signal from QMediaPlayer."""
-        if duration_ms > 0 and self.duration_sec <= 0.0:
+        if duration_ms <= 0:
+            return
+        if self.duration_sec <= 0.0:
             self.duration_sec = duration_ms / MS_PER_SECOND
             self.cue_positions = compute_cue_jump_positions(self.duration_sec)
-            self._update_time_label()
+        self.waveform_bar.set_playback(self.current_position_sec, self.duration_sec)
+        self._update_time_label()
 
     def _update_time_label(self) -> None:
         """Show the current and total time, and mirror the position on the slider."""

@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, Signal, Slot
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal, Slot
 
 from infiniteprep.services.waveform_analysis import analyze_waveform
 
 MAX_WAVEFORM_WORKERS = 2
+_SHARED_POOL = QThreadPool()
+_SHARED_POOL.setMaxThreadCount(MAX_WAVEFORM_WORKERS)
+_SHARED_POOL.setExpiryTimeout(-1)
 
 
 class _WorkerSignals(QObject):
@@ -47,9 +50,7 @@ class WaveformAnalysisPool(QObject):
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
-        self._pool = QThreadPool(self)
-        self._pool.setMaxThreadCount(MAX_WAVEFORM_WORKERS)
-        self._pool.setExpiryTimeout(-1)
+        self._pool = _SHARED_POOL
 
     def submit(self, path: Path, file_id: str, generation: int) -> None:
         """Queue one analysis while retaining the selected track identity."""

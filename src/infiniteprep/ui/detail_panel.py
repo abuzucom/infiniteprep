@@ -180,11 +180,17 @@ class DetailPanel(QWidget):
         self.header_label = QLabel("Select a track to inspect metadata and proposals.", self)
         self.warnings_label = QLabel("", self)
         self.warnings_label.setStyleSheet("color: #d97706; font-weight: bold;")
-        self.audio_player = AudioPreviewWidget(
-            self,
-            enable_multimedia_backend=enable_audio_backend,
-            settings_manager=settings_manager,
-        )
+        if settings_manager is None:
+            self.audio_player = AudioPreviewWidget(
+                self,
+                enable_multimedia_backend=enable_audio_backend,
+            )
+        else:
+            self.audio_player = AudioPreviewWidget(
+                self,
+                enable_multimedia_backend=enable_audio_backend,
+                settings_manager=settings_manager,
+            )
         self.waveform_pool = WaveformAnalysisPool(self)
         self.waveform_pool.completed.connect(self._on_waveform_completed)
         self.waveform_pool.failed.connect(self._on_waveform_failed)
@@ -274,7 +280,7 @@ class DetailPanel(QWidget):
 
     def _request_waveform_analysis(self, asset: FileAsset) -> None:
         """Submit one job for the selected track and retain a fallback overview."""
-        path = Path(asset.current_path)
+        path = self.audio_player.current_file_path or Path(asset.current_path)
         if asset.id == self._analysis_file_id and path == self._analysis_path:
             return
         self._analysis_generation += 1
@@ -288,7 +294,7 @@ class DetailPanel(QWidget):
         if file_id != self.current_file_id or generation != self._analysis_generation:
             return
         self.audio_player.set_spectrum_waveform(waveform)
-        self.audio_player.show_status("")
+        self.audio_player.show_analysis_complete()
 
     def _on_waveform_failed(self, file_id: str, generation: int, message: str) -> None:
         """Display current analysis failures without clearing the overview."""

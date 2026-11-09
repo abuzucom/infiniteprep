@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 from PySide6.QtCore import QPoint
+from PySide6.QtGui import QPainter, QPixmap
 
 from infiniteprep.config.settings import SettingsManager
 from infiniteprep.services.waveform_analysis import SpectrumWaveform
@@ -74,3 +75,35 @@ def test_overview_remains_visible_without_spectrum_result(qtbot: Any) -> None:
     widget.show_analysis_failure("decode failed")
     assert widget.waveform_bar.isVisible()
     assert widget.waveform_bar.envelope == [0.2, 0.8]
+    widget.show_status("Playback failed")
+    widget.show_analysis_complete()
+    assert widget.status_label.text() == "Playback failed"
+
+
+def test_zero_duration_spectrum_can_render_in_zoom(qtbot: Any) -> None:
+    """An empty analysis keeps the zoom paint path safe with a fallback duration."""
+    widget = AudioPreviewWidget()
+    qtbot.addWidget(widget)
+    empty = np.array([], dtype=np.float32)
+    widget.set_spectrum_waveform(SpectrumWaveform(empty, empty, empty, empty, 0.0))
+    widget.duration_sec = 10.0
+    widget.view_combo.setCurrentText("Zoom")
+    widget.waveform_bar.set_playback(3.0, 10.0)
+    image = QPixmap(80, 44)
+    painter = QPainter(image)
+
+    widget.waveform_bar._paint_zoom(painter, 80, 44)
+
+    painter.end()
+    assert widget.waveform_bar.duration_sec == 10.0
+
+
+def test_backend_duration_updates_waveform_timebase(qtbot: Any) -> None:
+    """A duration supplied after probing updates the waveform navigation range."""
+    widget = AudioPreviewWidget()
+    qtbot.addWidget(widget)
+
+    widget._on_media_duration_changed(12_000)
+
+    assert widget.duration_sec == 12.0
+    assert widget.waveform_bar.duration_sec == 12.0
