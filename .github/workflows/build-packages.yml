@@ -105,6 +105,33 @@ jobs:
       - name: Check installed requirements
         run: python -m pip check
 
+      - name: Generate Python SBOM
+        shell: bash
+        run: |
+          tool_venv="$RUNNER_TEMP/cyclonedx-tool"
+          python -m venv "$tool_venv"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            tool_python="$tool_venv/Scripts/python.exe"
+            cyclonedx_command="$tool_venv/Scripts/cyclonedx-py.exe"
+          else
+            tool_python="$tool_venv/bin/python"
+            cyclonedx_command="$tool_venv/bin/cyclonedx-py"
+          fi
+          "$tool_python" -m pip install --require-hashes --only-binary=:all: \
+            -r requirements-sbom.txt
+          sbom_path="$RUNNER_TEMP/InfinitePrep-python-$RUNNER_OS.cdx.json"
+          app_python="$(python -c 'import sys; print(sys.executable)')"
+          "$cyclonedx_command" environment "$app_python" \
+            --output-format JSON --output-file "$sbom_path"
+
+      - name: Upload Python SBOM
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: InfinitePrep-python-sbom-${{ matrix.os }}
+          path: ${{ runner.temp }}/InfinitePrep-python-${{ runner.os }}.cdx.json
+          retention-days: 3
+          if-no-files-found: error
+
       - name: Build bundle
         run: pyinstaller --noconfirm infiniteprep.spec
 
