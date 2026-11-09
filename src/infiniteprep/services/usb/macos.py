@@ -2,10 +2,11 @@
 
 This module executes fixed argument arrays without shell interpolation to inspect
 connected storage devices, partition schemes, filesystems, and available space.
-It parses only plist output up to MAX_PLIST_OUTPUT_BYTES bytes and performs
-strictly read-only queries (list, info). It correlates APFS container entries
-through APFSPhysicalStores and attaches their volumes to the owning physical
-drive. It treats all USB-supplied metadata as untrusted input.
+It captures stdout through a bounded pipe read capped at MAX_PLIST_OUTPUT_BYTES,
+parses only plist output, and performs strictly read-only queries (list, info).
+It correlates APFS container entries through APFSPhysicalStores and attaches
+their volumes to every owning physical drive. It treats all USB-supplied
+metadata as untrusted input. Construction requires macOS.
 """
 
 from __future__ import annotations
@@ -13,20 +14,23 @@ from __future__ import annotations
 import plistlib
 import re
 import subprocess
+import sys
+import tempfile
 from collections.abc import Callable
 from typing import Any, Final
 from xml.parsers.expat import ExpatError
 
 from infiniteprep.services.usb._shared import (
+    DEFAULT_COMMAND_TIMEOUT_SECONDS,
     clean_int,
     clean_str,
-    default_command_runner,
     sanitize_mount_point,
 )
 from infiniteprep.services.usb.models import (
     CommandExecutionError,
     DriveIdentity,
     DriveInspection,
+    DriveInspectionError,
     InspectionParseError,
     PartitionInfo,
     SpaceInfo,
@@ -36,6 +40,49 @@ DISKUTIL_LIST_COMMAND: Final[tuple[str, ...]] = ("diskutil", "list", "-plist")
 DISKUTIL_INFO_COMMAND: Final[tuple[str, ...]] = ("diskutil", "info", "-plist")
 MACOS_DEVICE_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"^disk\d+(?:s\d+)*$")
 MAX_PLIST_OUTPUT_BYTES: Final[int] = 8 * 1024 * 1024
+
+
+def bounded_command_runner(
+    cmd: list[str],
+    timeout_seconds: float,
+) -> subprocess.CompletedProcess[str]:
+    """Execute a fixed command array, capping captured stdout at the byte limit.
+
+    The pipe read stops at MAX_PLIST_OUTPUT_BYTES plus one byte, so oversized
+    replies never fully enter Python memory. Stderr drains through a spooled
+    temporary file, which avoids pipe-buffer deadlocks.
+    """
+    with tempfile.SpooledTemporaryFile() as stderr_file:
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=stderr_file,
+            shell=False,
+        )
+        try:
+            stdout_bytes = process.stdout.read(MAX_PLIST_OUTPUT_BYTES + 1)
+            if len(stdout_bytes) > MAX_PLIST_OUTPUT_BYTES:
+                process.kill()
+                process.wait()
+                raise InspectionParseError(
+                    f"diskutil output exceeds the {MAX_PLIST_OUTPUT_BYTES} byte limit."
+                )
+            try:
+                process.wait(timeout=timeout_seconds)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                raise
+            stderr_file.seek(0)
+            stderr_text = stderr_file.read().decode("utf-8", errors="replace")
+        finally:
+            process.stdout.close()
+    return subprocess.CompletedProcess(
+        cmd,
+        process.returncode,
+        stdout_bytes.decode("utf-8", errors="replace"),
+        stderr_text,
+    )
 
 
 def _sanitize_diskutil_identifier(val: Any) -> str:
@@ -73,14 +120,35 @@ def _info_flag(info: dict[str, Any], key: str) -> bool:
 
 
 class MacOSDriveInspector:
-    """Inspects macOS drives, partitions, filesystems, and free space in read-only mode."""
+    """Inspects macOS drives, partitions, filesystems, and free space in read-only mode.
+
+    Construction requires macOS and raises :class:`DriveInspectionError` on any
+    other platform. The class stays importable everywhere; only construction is
+    platform gated.
+    """
 
     def __init__(
         self,
         command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
+        timeout_seconds: float = DEFAULT_COMMAND_TIMEOUT_SECONDS,
     ) -> None:
-        """Initialize with optional command runner for hermetic testing."""
-        self._command_runner = command_runner or default_command_runner
+        """Initialize with optional command runner and timeout override for testing.
+
+        Injected command runners own their resource behavior and ignore
+        ``timeout_seconds``; the bound applies to the built-in bounded runner.
+        """
+        if sys.platform != "darwin":
+            raise DriveInspectionError(
+                f"MacOSDriveInspector requires macOS; current platform is '{sys.platform}'."
+            )
+        if timeout_seconds <= 0:
+            raise DriveInspectionError("timeout_seconds must be positive.")
+        self._timeout_seconds = timeout_seconds
+        self._command_runner = command_runner or self._bounded_runner
+
+    def _bounded_runner(self, cmd: list[str]) -> subprocess.CompletedProcess[str]:
+        """Run a fixed command array, discarding stdout above the byte cap."""
+        return bounded_command_runner(cmd, self._timeout_seconds)
 
     def inspect_all(self) -> tuple[DriveInspection, ...]:
         """Inspect all physical disks and return DriveInspection records."""
@@ -173,9 +241,7 @@ class MacOSDriveInspector:
         """Parse plist bytes into a mapping, capping accepted output size before parsing."""
         encoded = stdout.encode("utf-8")
         if len(encoded) > max_bytes:
-            raise InspectionParseError(
-                f"{source} output exceeds the {MAX_PLIST_OUTPUT_BYTES} byte limit."
-            )
+            raise InspectionParseError(f"{source} output exceeds the {max_bytes} byte limit.")
         try:
             data = plistlib.loads(encoded)
         except (ValueError, ExpatError) as exc:
@@ -266,11 +332,14 @@ class MacOSDriveInspector:
         self,
         entries: list[dict[str, Any]],
     ) -> dict[str, list[dict[str, Any]]]:
-        """Map APFS volumes to their owning physical disk before any info invocation.
+        """Map APFS volumes to their owning physical disks before any info invocation.
 
-        Container entries own APFSPhysicalStores and APFSVolumes. Volumes attach to
-        the owning disk of the first physical store. APFSVolumes listed directly on
-        a physical disk entry (legacy shape) attach to that disk.
+        Container entries own APFSPhysicalStores and APFSVolumes. Physical store
+        entries carry ``DeviceIdentifier``; the ``APFSPhysicalStore`` key remains
+        a compatibility fallback. Volumes attach to the owning disk of every
+        validated store so multi-store containers lose no records. APFSVolumes
+        listed directly on a physical disk entry (legacy shape) attach to that
+        disk.
         """
         volumes_by_disk: dict[str, list[dict[str, Any]]] = {}
         known_identifiers = {
@@ -292,13 +361,19 @@ class MacOSDriveInspector:
                     raise InspectionParseError(
                         "diskutil 'APFSPhysicalStores' entry is not a mapping."
                     )
-            store_id = _sanitize_diskutil_identifier(stores[0].get("APFSPhysicalStore"))
-            owning_disk = self._owning_disk_identifier(store_id)
-            if owning_disk not in known_identifiers:
-                raise InspectionParseError(
-                    f"APFS physical store '{store_id}' names unknown disk '{owning_disk}'."
+            store_ids = [
+                _sanitize_diskutil_identifier(
+                    store.get("DeviceIdentifier") or store.get("APFSPhysicalStore")
                 )
-            volumes_by_disk.setdefault(owning_disk, []).extend(volumes)
+                for store in stores
+            ]
+            owning_disks = list(dict.fromkeys(map(self._owning_disk_identifier, store_ids)))
+            for owning_disk in owning_disks:
+                if owning_disk not in known_identifiers:
+                    raise InspectionParseError(
+                        f"APFS physical store names unknown disk '{owning_disk}'."
+                    )
+                volumes_by_disk.setdefault(owning_disk, []).extend(volumes)
         return volumes_by_disk
 
     def _partition_and_volume_entries(
@@ -348,7 +423,8 @@ class MacOSDriveInspector:
         partition = PartitionInfo(
             name=identifier,
             path=f"/dev/{identifier}",
-            size_bytes=clean_int(part_dict.get("Size")),
+            size_bytes=clean_int(part_dict.get("Size"))
+            or (clean_int(volume_info.get("TotalSize")) if volume_info else 0),
             partition_number=_partition_number_from_identifier(identifier, fallback_index),
             partition_scheme=parent_scheme,
             partition_type=clean_str(part_dict.get("PartitionType"))

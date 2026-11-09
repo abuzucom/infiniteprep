@@ -8,18 +8,23 @@ argument arrays reach subprocess.
 from __future__ import annotations
 
 import subprocess
+import sys
 import unittest
 from typing import Final
+from unittest import mock
 
 from infiniteprep.services.usb._shared import clean_str
 from infiniteprep.services.usb.macos import (
     DISKUTIL_INFO_COMMAND,
     DISKUTIL_LIST_COMMAND,
+    MAX_PLIST_OUTPUT_BYTES,
     MacOSDriveInspector,
+    bounded_command_runner,
 )
 from infiniteprep.services.usb.models import (
     CommandExecutionError,
     DriveInspection,
+    DriveInspectionError,
     InspectionParseError,
     SpaceInfo,
 )
@@ -138,7 +143,7 @@ SYSTEM_DISK_LIST_PLIST: Final[str] = (
     + "\t\t\t<key>APFSPhysicalStores</key>\n"
     + "\t\t\t<array>\n"
     + "\t\t\t\t<dict>\n"
-    + "\t\t\t\t\t<key>APFSPhysicalStore</key>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n"
     + "\t\t\t\t\t<string>disk0s2</string>\n"
     + "\t\t\t\t</dict>\n"
     + "\t\t\t</array>\n"
@@ -442,7 +447,7 @@ CONTAINER_ORPHAN_LIST_PLIST: Final[str] = (
     + "\t\t\t<key>APFSPhysicalStores</key>\n"
     + "\t\t\t<array>\n"
     + "\t\t\t\t<dict>\n"
-    + "\t\t\t\t\t<key>APFSPhysicalStore</key>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n"
     + "\t\t\t\t\t<string>disk9s1</string>\n"
     + "\t\t\t\t</dict>\n"
     + "\t\t\t</array>\n"
@@ -458,6 +463,160 @@ CONTAINER_ORPHAN_LIST_PLIST: Final[str] = (
     + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk1</string>\n"
     + "\t\t</dict>\n"
     + "\t</array>\n"
+    + "</dict>\n"
+    + "</plist>\n"
+)
+
+CONTAINER_FALLBACK_KEY_LIST_PLIST: Final[str] = (
+    PLIST_HEADER
+    + "<dict>\n"
+    + "\t<key>AllDisksAndPartitions</key>\n"
+    + "\t<array>\n"
+    + "\t\t<dict>\n"
+    + "\t\t\t<key>Content</key>\n\t\t\t<string>GUID_partition_scheme</string>\n"
+    + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk8</string>\n"
+    + "\t\t\t<key>Partitions</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>Content</key>\n\t\t\t\t\t<string>Apple_APFS</string>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk8s1</string>\n"
+    + "\t\t\t\t\t<key>PartitionType</key>\n\t\t\t\t\t<string>Apple_APFS</string>\n"
+    + "\t\t\t\t\t<key>Size</key>\n\t\t\t\t\t<integer>1000</integer>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>Size</key>\n\t\t\t<integer>1000</integer>\n"
+    + "\t\t</dict>\n"
+    + "\t\t<dict>\n"
+    + "\t\t\t<key>APFSPhysicalStores</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>APFSPhysicalStore</key>\n"
+    + "\t\t\t\t\t<string>disk8s1</string>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>APFSVolumes</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk1s1</string>\n"
+    + "\t\t\t\t\t<key>FilesystemType</key>\n\t\t\t\t\t<string>APFS</string>\n"
+    + "\t\t\t\t\t<key>MountPoint</key>\n\t\t\t\t\t<string>/Volumes/Ghost</string>\n"
+    + "\t\t\t\t\t<key>VolumeName</key>\n\t\t\t\t\t<string>Ghost</string>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk1</string>\n"
+    + "\t\t</dict>\n"
+    + "\t</array>\n"
+    + "</dict>\n"
+    + "</plist>\n"
+)
+
+CONTAINER_FALLBACK_DISK_INFO_PLIST: Final[str] = (
+    PLIST_HEADER
+    + "<dict>\n"
+    + "\t<key>DeviceIdentifier</key>\n\t<string>disk8</string>\n"
+    + "\t<key>DeviceName</key>\n\t<string>Generic Storage</string>\n"
+    + "\t<key>DiskSize</key>\n\t<integer>1000</integer>\n"
+    + "</dict>\n"
+    + "</plist>\n"
+)
+
+CONTAINER_FALLBACK_VOLUME_INFO_PLIST: Final[str] = (
+    PLIST_HEADER
+    + "<dict>\n"
+    + "\t<key>DeviceIdentifier</key>\n\t<string>disk1s1</string>\n"
+    + "\t<key>MountPoint</key>\n\t<string>/Volumes/Ghost</string>\n"
+    + "\t<key>TotalSize</key>\n\t<integer>900</integer>\n"
+    + "\t<key>VolumeFreeSpace</key>\n\t<integer>300</integer>\n"
+    + "</dict>\n"
+    + "</plist>\n"
+)
+
+MULTI_STORE_LIST_PLIST: Final[str] = (
+    PLIST_HEADER
+    + "<dict>\n"
+    + "\t<key>AllDisksAndPartitions</key>\n"
+    + "\t<array>\n"
+    + "\t\t<dict>\n"
+    + "\t\t\t<key>Content</key>\n\t\t\t<string>GUID_partition_scheme</string>\n"
+    + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk0</string>\n"
+    + "\t\t\t<key>Partitions</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>Content</key>\n\t\t\t\t\t<string>Apple_APFS</string>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk0s2</string>\n"
+    + "\t\t\t\t\t<key>PartitionType</key>\n\t\t\t\t\t<string>Apple_APFS</string>\n"
+    + "\t\t\t\t\t<key>Size</key>\n\t\t\t\t\t<integer>2000</integer>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>Size</key>\n\t\t\t<integer>2000</integer>\n"
+    + "\t\t</dict>\n"
+    + "\t\t<dict>\n"
+    + "\t\t\t<key>Content</key>\n\t\t\t<string>GUID_partition_scheme</string>\n"
+    + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk1</string>\n"
+    + "\t\t\t<key>Partitions</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>Content</key>\n\t\t\t\t\t<string>Apple_APFS</string>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk1s2</string>\n"
+    + "\t\t\t\t\t<key>PartitionType</key>\n\t\t\t\t\t<string>Apple_APFS</string>\n"
+    + "\t\t\t\t\t<key>Size</key>\n\t\t\t\t\t<integer>3000</integer>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>Size</key>\n\t\t\t<integer>3000</integer>\n"
+    + "\t\t</dict>\n"
+    + "\t\t<dict>\n"
+    + "\t\t\t<key>APFSPhysicalStores</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk0s2</string>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk1s2</string>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>APFSVolumes</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk2s1</string>\n"
+    + "\t\t\t\t\t<key>FilesystemType</key>\n\t\t\t\t\t<string>APFS</string>\n"
+    + "\t\t\t\t\t<key>MountPoint</key>\n\t\t\t\t\t<string>/Volumes/Fusion</string>\n"
+    + "\t\t\t\t\t<key>VolumeName</key>\n\t\t\t\t\t<string>Fusion HD</string>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk2</string>\n"
+    + "\t\t</dict>\n"
+    + "\t</array>\n"
+    + "</dict>\n"
+    + "</plist>\n"
+)
+
+MULTI_STORE_DISK0_INFO_PLIST: Final[str] = (
+    PLIST_HEADER
+    + "<dict>\n"
+    + "\t<key>DeviceIdentifier</key>\n\t<string>disk0</string>\n"
+    + "\t<key>DeviceName</key>\n\t<string>Fusion SSD</string>\n"
+    + "\t<key>DiskSize</key>\n\t<integer>2000</integer>\n"
+    + "</dict>\n"
+    + "</plist>\n"
+)
+
+MULTI_STORE_DISK1_INFO_PLIST: Final[str] = (
+    PLIST_HEADER
+    + "<dict>\n"
+    + "\t<key>DeviceIdentifier</key>\n\t<string>disk1</string>\n"
+    + "\t<key>DeviceName</key>\n\t<string>Fusion HDD</string>\n"
+    + "\t<key>DiskSize</key>\n\t<integer>3000</integer>\n"
+    + "</dict>\n"
+    + "</plist>\n"
+)
+
+MULTI_STORE_VOLUME_INFO_PLIST: Final[str] = (
+    PLIST_HEADER
+    + "<dict>\n"
+    + "\t<key>DeviceIdentifier</key>\n\t<string>disk2s1</string>\n"
+    + "\t<key>MountPoint</key>\n\t<string>/Volumes/Fusion</string>\n"
+    + "\t<key>TotalSize</key>\n\t<integer>5000</integer>\n"
+    + "\t<key>VolumeFreeSpace</key>\n\t<integer>1000</integer>\n"
     + "</dict>\n"
     + "</plist>\n"
 )
@@ -641,6 +800,13 @@ def system_disk_runner() -> FakeRunner:
 class TestUsbMacosInspection(unittest.TestCase):
     """Hermetic tests parsing recorded diskutil plist output."""
 
+    REAL_PLATFORM: Final[str] = sys.platform
+
+    def setUp(self) -> None:
+        platform_patcher = mock.patch("sys.platform", "darwin")
+        platform_patcher.start()
+        self.addCleanup(platform_patcher.stop)
+
     def assert_fixed_diskutil_commands(self, runner: FakeRunner) -> None:
         """Assert every executed command is a fixed diskutil argument array."""
         self.assertTrue(runner.commands)
@@ -731,6 +897,7 @@ class TestUsbMacosInspection(unittest.TestCase):
         self.assertEqual(system_volume.partition_scheme, "GUID_partition_scheme")
         self.assertEqual(system_volume.filesystem, "APFS")
         self.assertEqual(system_volume.mount_points, ("/",))
+        self.assertEqual(system_volume.size_bytes, 994138292224)
         self.assertEqual(
             inspection.space_for_mount("/"),
             SpaceInfo(
@@ -813,6 +980,79 @@ class TestUsbMacosInspection(unittest.TestCase):
         with self.assertRaises(InspectionParseError):
             MacOSDriveInspector(command_runner=runner).inspect_all()
         self.assertEqual(runner.commands, [list(DISKUTIL_LIST_COMMAND)])
+
+    def test_apfs_physical_store_fallback_key(self) -> None:
+        """Containers using the APFSPhysicalStore key still resolve their volumes."""
+        runner = FakeRunner(
+            list_plist=CONTAINER_FALLBACK_KEY_LIST_PLIST,
+            info_by_device={
+                "disk8": CONTAINER_FALLBACK_DISK_INFO_PLIST,
+                "disk1s1": CONTAINER_FALLBACK_VOLUME_INFO_PLIST,
+            },
+        )
+        inspections = MacOSDriveInspector(command_runner=runner).inspect_all()
+        self.assertEqual(len(inspections), 1)
+        volume = inspections[0].partitions[1]
+        self.assertEqual(volume.name, "disk1s1")
+        self.assertEqual(volume.mount_points, ("/Volumes/Ghost",))
+        self.assertEqual(volume.size_bytes, 900)
+
+    def test_multi_store_container_attaches_to_all_owners(self) -> None:
+        """A multi-store container attaches its volumes to every store owner."""
+        runner = FakeRunner(
+            list_plist=MULTI_STORE_LIST_PLIST,
+            info_by_device={
+                "disk0": MULTI_STORE_DISK0_INFO_PLIST,
+                "disk1": MULTI_STORE_DISK1_INFO_PLIST,
+                "disk2s1": MULTI_STORE_VOLUME_INFO_PLIST,
+            },
+        )
+        inspections = MacOSDriveInspector(command_runner=runner).inspect_all()
+        self.assertEqual([inspection.drive.name for inspection in inspections], ["disk0", "disk1"])
+        for inspection in inspections:
+            volume = inspection.partitions[1]
+            self.assertEqual(volume.name, "disk2s1")
+            self.assertEqual(volume.size_bytes, 5000)
+            self.assertEqual(
+                inspection.space_for_mount("/Volumes/Fusion"),
+                SpaceInfo(total_bytes=5000, used_bytes=4000, available_bytes=1000),
+            )
+
+    def test_constructor_rejects_non_macos_platform(self) -> None:
+        """Construction raises a clear error off macOS."""
+        if sys.platform == "darwin":
+            self.skipTest("the platform guard passes on macOS hosts")
+        with (
+            mock.patch("sys.platform", self.REAL_PLATFORM),
+            self.assertRaisesRegex(DriveInspectionError, "requires macOS"),
+        ):
+            MacOSDriveInspector(command_runner=FakeRunner(list_plist="", info_by_device={}))
+
+    def test_constructor_rejects_nonpositive_timeout(self) -> None:
+        """Construction rejects zero and negative timeout overrides."""
+        runner = fat32_stick_runner()
+        for bad_timeout in (0, -5.0):
+            with self.assertRaisesRegex(DriveInspectionError, "positive"):
+                MacOSDriveInspector(command_runner=runner, timeout_seconds=bad_timeout)
+
+    def test_constructor_accepts_custom_timeout(self) -> None:
+        """A positive timeout override keeps inspection behavior intact."""
+        inspector = MacOSDriveInspector(command_runner=fat32_stick_runner(), timeout_seconds=5.0)
+        inspections = inspector.inspect_all()
+        self.assertEqual(inspections[0].drive.name, "disk2")
+
+    def test_bounded_runner_captures_small_output(self) -> None:
+        """The bounded runner captures small stdout and stderr without loss."""
+        result = bounded_command_runner([sys.executable, "-c", "print('hello')"], 15.0)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.strip(), "hello")
+        self.assertEqual(result.stderr, "")
+
+    def test_bounded_runner_rejects_oversized_output(self) -> None:
+        """The bounded runner discards stdout above the cap during capture."""
+        oversized = f"print('x' * {MAX_PLIST_OUTPUT_BYTES + 100})"
+        with self.assertRaisesRegex(InspectionParseError, "byte limit"):
+            bounded_command_runner([sys.executable, "-c", oversized], 15.0)
 
     def test_oversized_plist_raises_parse_error(self) -> None:
         """Plist output above the byte cap raises before parsing."""
