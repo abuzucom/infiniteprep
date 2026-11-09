@@ -5,6 +5,18 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.48.4] (2026-11-09)
+
+### Changed
+
+- Update `platformdirs` from 4.14.2 to 4.14.5.
+- Update `MarkupSafe` from 3.0.2 to 3.0.4.
+- Update the development tool `ruff` from 0.17.3 to 0.17.4.
+- Resolve Ruff and pytest CI versions from `requirements-lock.txt`.
+- Pin `github/codeql-action/upload-sarif` to v4.39.3.
+- Pin `actions/configure-pages` to v6.0.0.
+- Pin `actions/upload-pages-artifact` to v5.0.0.
+
 ## [0.48.3] (2026-11-08)
 
 ### Added

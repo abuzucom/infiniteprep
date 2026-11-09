@@ -71,6 +71,14 @@ class CiWorkflowTest(unittest.TestCase):
             text.count("persist-credentials: false"),
         )
 
+    def test_ci_lint_tools_use_lockfile_constraints(self) -> None:
+        workflow = read_workflow_text(CI_WORKFLOW)
+        command = "python -m pip install --constraint requirements-lock.txt ruff pytest"
+        self.assertTrue(command in workflow, "CI lint tools must use lockfile constraints")
+        lockfile = (ROOT / "requirements-lock.txt").read_text(encoding="utf-8")
+        self.assertRegex(lockfile, r"(?m)^ruff==[0-9.]+$")
+        self.assertRegex(lockfile, r"(?m)^pytest==[0-9.]+$")
+
 
 class SecurityReviewWiringTest(unittest.TestCase):
     """Keep the foucault caller pinned, scoped, and complete."""
