@@ -71,6 +71,19 @@ class CiWorkflowTest(unittest.TestCase):
             text.count("persist-credentials: false"),
         )
 
+    def test_ci_ruff_version_matches_project_and_lock(self) -> None:
+        sources = (
+            read_workflow_text(CI_WORKFLOW),
+            (ROOT / "pyproject.toml").read_text(encoding="utf-8"),
+            (ROOT / "requirements-lock.txt").read_text(encoding="utf-8"),
+        )
+        versions = []
+        for source in sources:
+            match = re.search(r"ruff==([0-9.]+)", source)
+            self.assertIsNotNone(match)
+            versions.append(match.group(1))
+        self.assertEqual(len(set(versions)), 1)
+
 
 class SecurityReviewWiringTest(unittest.TestCase):
     """Keep the foucault caller pinned, scoped, and complete."""
