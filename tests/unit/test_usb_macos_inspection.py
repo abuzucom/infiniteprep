@@ -31,12 +31,8 @@ PLIST_HEADER: Final[str] = (
     '<plist version="1.0">\n'
 )
 
-FAT32_STICK_LIST_PLIST: Final[str] = (
-    PLIST_HEADER
-    + "<dict>\n"
-    + "\t<key>AllDisksAndPartitions</key>\n"
-    + "\t<array>\n"
-    + "\t\t<dict>\n"
+FAT32_DISK_ENTRY_XML: Final[str] = (
+    "\t\t<dict>\n"
     + "\t\t\t<key>Content</key>\n\t\t\t<string>FDisk_partition_scheme</string>\n"
     + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk2</string>\n"
     + "\t\t\t<key>Partitions</key>\n"
@@ -54,10 +50,24 @@ FAT32_STICK_LIST_PLIST: Final[str] = (
     + "\t\t\t</array>\n"
     + "\t\t\t<key>Size</key>\n\t\t\t<integer>32010928128</integer>\n"
     + "\t\t</dict>\n"
-    + "\t</array>\n"
-    + "</dict>\n"
-    + "</plist>\n"
 )
+
+
+def list_plist(entries_xml: str) -> str:
+    """Wrap recorded AllDisksAndPartitions entry blocks in a full plist document."""
+    return (
+        PLIST_HEADER
+        + "<dict>\n"
+        + "\t<key>AllDisksAndPartitions</key>\n"
+        + "\t<array>\n"
+        + entries_xml
+        + "\t</array>\n"
+        + "</dict>\n"
+        + "</plist>\n"
+    )
+
+
+FAT32_STICK_LIST_PLIST: Final[str] = list_plist(FAT32_DISK_ENTRY_XML)
 
 FAT32_DISK_INFO_PLIST: Final[str] = (
     PLIST_HEADER
@@ -101,6 +111,37 @@ SYSTEM_DISK_LIST_PLIST: Final[str] = (
     + "\t<key>AllDisksAndPartitions</key>\n"
     + "\t<array>\n"
     + "\t\t<dict>\n"
+    + "\t\t\t<key>Content</key>\n\t\t\t<string>GUID_partition_scheme</string>\n"
+    + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk0</string>\n"
+    + "\t\t\t<key>Partitions</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>Content</key>\n\t\t\t\t\t<string>Apple EFI</string>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk0s1</string>\n"
+    + "\t\t\t\t\t<key>FilesystemType</key>\n\t\t\t\t\t<string>FAT32</string>\n"
+    + "\t\t\t\t\t<key>PartitionUUID</key>\n"
+    + "\t\t\t\t\t<string>C6A9D2E6-3B1F-4A0C-8D7E-5F6A7B8C9D0E</string>\n"
+    + "\t\t\t\t\t<key>PartitionType</key>\n\t\t\t\t\t<string>Apple EFI</string>\n"
+    + "\t\t\t\t\t<key>Size</key>\n\t\t\t\t\t<integer>524288000</integer>\n"
+    + "\t\t\t\t\t<key>VolumeName</key>\n\t\t\t\t\t<string>EFI</string>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>Content</key>\n\t\t\t\t\t<string>Apple_APFS</string>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk0s2</string>\n"
+    + "\t\t\t\t\t<key>PartitionType</key>\n\t\t\t\t\t<string>Apple_APFS</string>\n"
+    + "\t\t\t\t\t<key>Size</key>\n\t\t\t\t\t<integer>994138292224</integer>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>Size</key>\n\t\t\t<integer>994662581248</integer>\n"
+    + "\t\t</dict>\n"
+    + "\t\t<dict>\n"
+    + "\t\t\t<key>APFSPhysicalStores</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>APFSPhysicalStore</key>\n"
+    + "\t\t\t\t\t<string>disk0s2</string>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
     + "\t\t\t<key>APFSVolumes</key>\n"
     + "\t\t\t<array>\n"
     + "\t\t\t\t<dict>\n"
@@ -128,28 +169,9 @@ SYSTEM_DISK_LIST_PLIST: Final[str] = (
     + "\t\t\t\t\t<string>3C4D5E6F-7A8B-9C0D-1E2F-3A4B5C6D7E8F</string>\n"
     + "\t\t\t\t</dict>\n"
     + "\t\t\t</array>\n"
-    + "\t\t\t<key>Content</key>\n\t\t\t<string>GUID_partition_scheme</string>\n"
-    + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk0</string>\n"
-    + "\t\t\t<key>Partitions</key>\n"
-    + "\t\t\t<array>\n"
-    + "\t\t\t\t<dict>\n"
-    + "\t\t\t\t\t<key>Content</key>\n\t\t\t\t\t<string>Apple EFI</string>\n"
-    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk0s1</string>\n"
-    + "\t\t\t\t\t<key>FilesystemType</key>\n\t\t\t\t\t<string>FAT32</string>\n"
-    + "\t\t\t\t\t<key>PartitionUUID</key>\n"
-    + "\t\t\t\t\t<string>C6A9D2E6-3B1F-4A0C-8D7E-5F6A7B8C9D0E</string>\n"
-    + "\t\t\t\t\t<key>PartitionType</key>\n\t\t\t\t\t<string>Apple EFI</string>\n"
-    + "\t\t\t\t\t<key>Size</key>\n\t\t\t\t\t<integer>524288000</integer>\n"
-    + "\t\t\t\t\t<key>VolumeName</key>\n\t\t\t\t\t<string>EFI</string>\n"
-    + "\t\t\t\t</dict>\n"
-    + "\t\t\t\t<dict>\n"
-    + "\t\t\t\t\t<key>Content</key>\n\t\t\t\t\t<string>Apple_APFS</string>\n"
-    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk0s2</string>\n"
-    + "\t\t\t\t\t<key>PartitionType</key>\n\t\t\t\t\t<string>Apple_APFS</string>\n"
-    + "\t\t\t\t\t<key>Size</key>\n\t\t\t\t\t<integer>994138292224</integer>\n"
-    + "\t\t\t\t</dict>\n"
-    + "\t\t\t</array>\n"
-    + "\t\t\t<key>Size</key>\n\t\t\t<integer>994662581248</integer>\n"
+    + "\t\t\t<key>Content</key>\n\t\t\t<string>Apple_APFS Container</string>\n"
+    + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk1</string>\n"
+    + "\t\t\t<key>Size</key>\n\t\t\t<integer>994138292224</integer>\n"
     + "\t\t</dict>\n"
     + "\t</array>\n"
     + "</dict>\n"
@@ -204,12 +226,8 @@ DATA_VOLUME_INFO_PLIST: Final[str] = (
     + "</plist>\n"
 )
 
-EXFAT_STICK_LIST_PLIST: Final[str] = (
-    PLIST_HEADER
-    + "<dict>\n"
-    + "\t<key>AllDisksAndPartitions</key>\n"
-    + "\t<array>\n"
-    + "\t\t<dict>\n"
+EXFAT_DISK_ENTRY_XML: Final[str] = (
+    "\t\t<dict>\n"
     + "\t\t\t<key>Content</key>\n\t\t\t<string>FDisk_partition_scheme</string>\n"
     + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk3</string>\n"
     + "\t\t\t<key>Partitions</key>\n"
@@ -226,10 +244,11 @@ EXFAT_STICK_LIST_PLIST: Final[str] = (
     + "\t\t\t</array>\n"
     + "\t\t\t<key>Size</key>\n\t\t\t<integer>64023056384</integer>\n"
     + "\t\t</dict>\n"
-    + "\t</array>\n"
-    + "</dict>\n"
-    + "</plist>\n"
 )
+
+EXFAT_STICK_LIST_PLIST: Final[str] = list_plist(EXFAT_DISK_ENTRY_XML)
+
+COMBINED_LIST_PLIST: Final[str] = list_plist(FAT32_DISK_ENTRY_XML + EXFAT_DISK_ENTRY_XML)
 
 EXFAT_DISK_INFO_PLIST: Final[str] = (
     PLIST_HEADER
@@ -339,6 +358,104 @@ OVERFLOW_LIST_PLIST: Final[str] = (
     + "\t\t\t\t</dict>\n"
     + "\t\t\t</array>\n"
     + "\t\t\t<key>Size</key>\n\t\t\t<integer>100</integer>\n"
+    + "\t\t</dict>\n"
+    + "\t</array>\n"
+    + "</dict>\n"
+    + "</plist>\n"
+)
+
+LEGACY_APFS_LIST_PLIST: Final[str] = (
+    PLIST_HEADER
+    + "<dict>\n"
+    + "\t<key>AllDisksAndPartitions</key>\n"
+    + "\t<array>\n"
+    + "\t\t<dict>\n"
+    + "\t\t\t<key>APFSVolumes</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk7s2</string>\n"
+    + "\t\t\t\t\t<key>FilesystemType</key>\n\t\t\t\t\t<string>APFS</string>\n"
+    + "\t\t\t\t\t<key>MountPoint</key>\n\t\t\t\t\t<string>/Volumes/Legacy</string>\n"
+    + "\t\t\t\t\t<key>VolumeName</key>\n\t\t\t\t\t<string>Legacy HD</string>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>Content</key>\n\t\t\t<string>GUID_partition_scheme</string>\n"
+    + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk7</string>\n"
+    + "\t\t\t<key>Partitions</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>Content</key>\n\t\t\t\t\t<string>Apple EFI</string>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk7s1</string>\n"
+    + "\t\t\t\t\t<key>FilesystemType</key>\n\t\t\t\t\t<string>FAT32</string>\n"
+    + "\t\t\t\t\t<key>Size</key>\n\t\t\t\t\t<integer>524288000</integer>\n"
+    + "\t\t\t\t\t<key>VolumeName</key>\n\t\t\t\t\t<string>EFI</string>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>Size</key>\n\t\t\t<integer>4001000</integer>\n"
+    + "\t\t</dict>\n"
+    + "\t</array>\n"
+    + "</dict>\n"
+    + "</plist>\n"
+)
+
+LEGACY_APFS_DISK_INFO_PLIST: Final[str] = (
+    PLIST_HEADER
+    + "<dict>\n"
+    + "\t<key>DeviceIdentifier</key>\n\t<string>disk7</string>\n"
+    + "\t<key>DeviceName</key>\n\t<string>Generic Storage</string>\n"
+    + "\t<key>DiskSize</key>\n\t<integer>4001000</integer>\n"
+    + "</dict>\n"
+    + "</plist>\n"
+)
+
+LEGACY_APFS_VOLUME_INFO_PLIST: Final[str] = (
+    PLIST_HEADER
+    + "<dict>\n"
+    + "\t<key>DeviceIdentifier</key>\n\t<string>disk7s2</string>\n"
+    + "\t<key>MountPoint</key>\n\t<string>/Volumes/Legacy</string>\n"
+    + "\t<key>TotalSize</key>\n\t<integer>1000</integer>\n"
+    + "\t<key>VolumeFreeSpace</key>\n\t<integer>400</integer>\n"
+    + "</dict>\n"
+    + "</plist>\n"
+)
+
+CONTAINER_ORPHAN_LIST_PLIST: Final[str] = (
+    PLIST_HEADER
+    + "<dict>\n"
+    + "\t<key>AllDisksAndPartitions</key>\n"
+    + "\t<array>\n"
+    + "\t\t<dict>\n"
+    + "\t\t\t<key>Content</key>\n\t\t\t<string>GUID_partition_scheme</string>\n"
+    + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk8</string>\n"
+    + "\t\t\t<key>Partitions</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>Content</key>\n\t\t\t\t\t<string>Apple_APFS</string>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk8s1</string>\n"
+    + "\t\t\t\t\t<key>PartitionType</key>\n\t\t\t\t\t<string>Apple_APFS</string>\n"
+    + "\t\t\t\t\t<key>Size</key>\n\t\t\t\t\t<integer>1000</integer>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>Size</key>\n\t\t\t<integer>1000</integer>\n"
+    + "\t\t</dict>\n"
+    + "\t\t<dict>\n"
+    + "\t\t\t<key>APFSPhysicalStores</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>APFSPhysicalStore</key>\n"
+    + "\t\t\t\t\t<string>disk9s1</string>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>APFSVolumes</key>\n"
+    + "\t\t\t<array>\n"
+    + "\t\t\t\t<dict>\n"
+    + "\t\t\t\t\t<key>DeviceIdentifier</key>\n\t\t\t\t\t<string>disk1s1</string>\n"
+    + "\t\t\t\t\t<key>FilesystemType</key>\n\t\t\t\t\t<string>APFS</string>\n"
+    + "\t\t\t\t\t<key>MountPoint</key>\n\t\t\t\t\t<string>/Volumes/Ghost</string>\n"
+    + "\t\t\t\t\t<key>VolumeName</key>\n\t\t\t\t\t<string>Ghost</string>\n"
+    + "\t\t\t\t</dict>\n"
+    + "\t\t\t</array>\n"
+    + "\t\t\t<key>DeviceIdentifier</key>\n\t\t\t<string>disk1</string>\n"
     + "\t\t</dict>\n"
     + "\t</array>\n"
     + "</dict>\n"
@@ -588,6 +705,7 @@ class TestUsbMacosInspection(unittest.TestCase):
         inspections = MacOSDriveInspector(command_runner=runner).inspect_all()
         self.assertEqual(len(runner.commands), 4)
         self.assertEqual(len(inspections), 1)
+        self.assertFalse(any(inspection.drive.name == "disk1" for inspection in inspections))
         inspection = inspections[0]
         drive = inspection.drive
         self.assertEqual(drive.name, "disk0")
@@ -666,6 +784,67 @@ class TestUsbMacosInspection(unittest.TestCase):
         partition = inspections[0].partitions[0]
         self.assertEqual(partition.filesystem, "FAT32")
         self.assertTrue(partition.is_fat32)
+
+    def test_legacy_apfs_volumes_on_disk_entry(self) -> None:
+        """APFS volumes listed directly on a disk entry attach to that disk."""
+        runner = FakeRunner(
+            list_plist=LEGACY_APFS_LIST_PLIST,
+            info_by_device={
+                "disk7": LEGACY_APFS_DISK_INFO_PLIST,
+                "disk7s2": LEGACY_APFS_VOLUME_INFO_PLIST,
+            },
+        )
+        inspections = MacOSDriveInspector(command_runner=runner).inspect_all()
+        self.assertEqual(len(inspections), 1)
+        inspection = inspections[0]
+        self.assertEqual(len(inspection.partitions), 2)
+        volume = inspection.partitions[1]
+        self.assertEqual(volume.name, "disk7s2")
+        self.assertEqual(volume.partition_number, 2)
+        self.assertEqual(volume.mount_points, ("/Volumes/Legacy",))
+        self.assertEqual(
+            inspection.space_for_mount("/Volumes/Legacy"),
+            SpaceInfo(total_bytes=1000, used_bytes=600, available_bytes=400),
+        )
+
+    def test_container_with_unknown_physical_store_raises(self) -> None:
+        """A container naming an unknown physical store raises before any info call."""
+        runner = FakeRunner(list_plist=CONTAINER_ORPHAN_LIST_PLIST, info_by_device={})
+        with self.assertRaises(InspectionParseError):
+            MacOSDriveInspector(command_runner=runner).inspect_all()
+        self.assertEqual(runner.commands, [list(DISKUTIL_LIST_COMMAND)])
+
+    def test_oversized_plist_raises_parse_error(self) -> None:
+        """Plist output above the byte cap raises before parsing."""
+        with self.assertRaisesRegex(InspectionParseError, "byte limit"):
+            MacOSDriveInspector._parse_plist_dict(
+                NON_MAPPING_LIST_PLIST,
+                "diskutil list",
+                max_bytes=4,
+            )
+
+    def test_inspect_device_info_calls_limited_to_target(self) -> None:
+        """inspect_device runs info calls only for the matching drive."""
+        runner = FakeRunner(
+            list_plist=COMBINED_LIST_PLIST,
+            info_by_device={
+                "disk2": FAT32_DISK_INFO_PLIST,
+                "disk2s1": FAT32_VOLUME_INFO_PLIST,
+                "disk3": EXFAT_DISK_INFO_PLIST,
+                "disk3s1": EXFAT_VOLUME_INFO_PLIST,
+            },
+        )
+        inspection = MacOSDriveInspector(command_runner=runner).inspect_device("disk3")
+        self.assertEqual(
+            runner.commands,
+            [
+                list(DISKUTIL_LIST_COMMAND),
+                [*DISKUTIL_INFO_COMMAND, "disk3"],
+                [*DISKUTIL_INFO_COMMAND, "disk3s1"],
+            ],
+        )
+        self.assertEqual(inspection.drive.name, "disk3")
+        self.assertTrue(inspection.has_exfat_partition)
 
     def test_malformed_list_plist_raises_parse_error(self) -> None:
         """A malformed list reply raises InspectionParseError."""

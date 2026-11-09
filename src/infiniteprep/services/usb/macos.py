@@ -2,8 +2,10 @@
 
 This module executes fixed argument arrays without shell interpolation to inspect
 connected storage devices, partition schemes, filesystems, and available space.
-It parses only plist output and performs strictly read-only queries (list, info).
-It treats all USB-supplied metadata as untrusted input.
+It parses only plist output up to MAX_PLIST_OUTPUT_BYTES bytes and performs
+strictly read-only queries (list, info). It correlates APFS container entries
+through APFSPhysicalStores and attaches their volumes to the owning physical
+drive. It treats all USB-supplied metadata as untrusted input.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from infiniteprep.services.usb.models import (
 DISKUTIL_LIST_COMMAND: Final[tuple[str, ...]] = ("diskutil", "list", "-plist")
 DISKUTIL_INFO_COMMAND: Final[tuple[str, ...]] = ("diskutil", "info", "-plist")
 MACOS_DEVICE_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"^disk\d+(?:s\d+)*$")
+MAX_PLIST_OUTPUT_BYTES: Final[int] = 8 * 1024 * 1024
 
 
 def _sanitize_diskutil_identifier(val: Any) -> str:
@@ -80,9 +83,14 @@ class MacOSDriveInspector:
         self._command_runner = command_runner or default_command_runner
 
     def inspect_all(self) -> tuple[DriveInspection, ...]:
-        """Inspect all disks reported by diskutil list and return DriveInspection records."""
+        """Inspect all physical disks and return DriveInspection records."""
         entries = self._run_and_parse_list()
-        return tuple(self._build_drive_inspection(entry) for entry in entries)
+        volumes_by_disk = self._collect_apfs_volumes(entries)
+        return tuple(
+            self._build_drive_inspection(entry, volumes_by_disk)
+            for entry in entries
+            if not self._is_container_entry(entry)
+        )
 
     def inspect_device(self, device_name_or_path: str) -> DriveInspection:
         """Inspect a device by identifier (e.g. 'disk2') or path (e.g. '/dev/disk2s1')."""
@@ -92,15 +100,19 @@ class MacOSDriveInspector:
         target_name = target.removeprefix("/dev/")
         if "/" in target_name or not MACOS_DEVICE_SAFE_RE.match(target_name):
             raise CommandExecutionError(f"Device '{device_name_or_path}' is invalid or unsafe.")
-        for inspection in self.inspect_all():
-            drive = inspection.drive
-            if drive.name == target_name or drive.path in (target, f"/dev/{target_name}"):
-                return inspection
-            if any(
-                p.name == target_name or p.path in (target, f"/dev/{target_name}")
-                for p in inspection.partitions
-            ):
-                return inspection
+        entries = self._run_and_parse_list()
+        volumes_by_disk = self._collect_apfs_volumes(entries)
+        for entry in entries:
+            if self._is_container_entry(entry):
+                continue
+            identifier = _sanitize_diskutil_identifier(entry.get("DeviceIdentifier"))
+            matches = identifier == target_name or self._entry_has_device(
+                entry,
+                target_name,
+                volumes_by_disk,
+            )
+            if matches:
+                return self._build_drive_inspection(entry, volumes_by_disk)
 
         raise CommandExecutionError(f"Device '{device_name_or_path}' was not found.")
 
@@ -153,10 +165,19 @@ class MacOSDriveInspector:
         return self._parse_plist_dict(completed.stdout, "diskutil info")
 
     @staticmethod
-    def _parse_plist_dict(stdout: str, source: str) -> dict[str, Any]:
-        """Parse plist bytes into a mapping, mapping all parse failures to InspectionParseError."""
+    def _parse_plist_dict(
+        stdout: str,
+        source: str,
+        max_bytes: int = MAX_PLIST_OUTPUT_BYTES,
+    ) -> dict[str, Any]:
+        """Parse plist bytes into a mapping, capping accepted output size before parsing."""
+        encoded = stdout.encode("utf-8")
+        if len(encoded) > max_bytes:
+            raise InspectionParseError(
+                f"{source} output exceeds the {MAX_PLIST_OUTPUT_BYTES} byte limit."
+            )
         try:
-            data = plistlib.loads(stdout.encode("utf-8"))
+            data = plistlib.loads(encoded)
         except (ValueError, ExpatError) as exc:
             # plistlib.InvalidFileException subclasses ValueError; XML faults raise ExpatError.
             raise InspectionParseError(f"{source} returned malformed plist: {exc}") from exc
@@ -164,7 +185,11 @@ class MacOSDriveInspector:
             raise InspectionParseError(f"{source} output is not a mapping.")
         return data
 
-    def _build_drive_inspection(self, entry: dict[str, Any]) -> DriveInspection:
+    def _build_drive_inspection(
+        self,
+        entry: dict[str, Any],
+        volumes_by_disk: dict[str, list[dict[str, Any]]],
+    ) -> DriveInspection:
         """Construct a DriveInspection record from one AllDisksAndPartitions entry."""
         identifier = _sanitize_diskutil_identifier(entry.get("DeviceIdentifier"))
         disk_info = self._run_info_plist(identifier)
@@ -173,7 +198,7 @@ class MacOSDriveInspector:
         partitions: list[PartitionInfo] = []
         space_entries: list[tuple[str, SpaceInfo]] = []
         fallback_index = 1
-        for part_dict in self._partition_entries(entry):
+        for part_dict in self._partition_and_volume_entries(entry, volumes_by_disk):
             partition, spaces = self._build_partition(part_dict, scheme, fallback_index)
             fallback_index += 1
             partitions.append(partition)
@@ -221,6 +246,88 @@ class MacOSDriveInspector:
                     raise InspectionParseError(f"diskutil '{key}' entry is not a mapping.")
                 collected.append(item)
         return collected
+
+    @staticmethod
+    def _is_container_entry(entry: dict[str, Any]) -> bool:
+        """Return True for synthesized APFS container entries carrying physical stores."""
+        return "APFSPhysicalStores" in entry
+
+    @staticmethod
+    def _owning_disk_identifier(store_identifier: str) -> str:
+        """Reduce a physical store identifier to its owning disk identifier."""
+        match = re.match(r"^disk\d+", store_identifier)
+        if not match:
+            raise InspectionParseError(
+                f"Invalid APFS physical store identifier: {store_identifier!r}"
+            )
+        return match.group(0)
+
+    def _collect_apfs_volumes(
+        self,
+        entries: list[dict[str, Any]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Map APFS volumes to their owning physical disk before any info invocation.
+
+        Container entries own APFSPhysicalStores and APFSVolumes. Volumes attach to
+        the owning disk of the first physical store. APFSVolumes listed directly on
+        a physical disk entry (legacy shape) attach to that disk.
+        """
+        volumes_by_disk: dict[str, list[dict[str, Any]]] = {}
+        known_identifiers = {
+            _sanitize_diskutil_identifier(entry.get("DeviceIdentifier")) for entry in entries
+        }
+        for entry in entries:
+            volumes = entry.get("APFSVolumes")
+            if not volumes:
+                continue
+            identifier = _sanitize_diskutil_identifier(entry.get("DeviceIdentifier"))
+            if not self._is_container_entry(entry):
+                volumes_by_disk.setdefault(identifier, []).extend(volumes)
+                continue
+            stores = entry.get("APFSPhysicalStores")
+            if not isinstance(stores, list) or not stores:
+                raise InspectionParseError("diskutil 'APFSPhysicalStores' must be a nonempty list.")
+            for store in stores:
+                if not isinstance(store, dict):
+                    raise InspectionParseError(
+                        "diskutil 'APFSPhysicalStores' entry is not a mapping."
+                    )
+            store_id = _sanitize_diskutil_identifier(stores[0].get("APFSPhysicalStore"))
+            owning_disk = self._owning_disk_identifier(store_id)
+            if owning_disk not in known_identifiers:
+                raise InspectionParseError(
+                    f"APFS physical store '{store_id}' names unknown disk '{owning_disk}'."
+                )
+            volumes_by_disk.setdefault(owning_disk, []).extend(volumes)
+        return volumes_by_disk
+
+    def _partition_and_volume_entries(
+        self,
+        entry: dict[str, Any],
+        volumes_by_disk: dict[str, list[dict[str, Any]]],
+    ) -> list[dict[str, Any]]:
+        """Collect partition mappings plus correlated APFS volumes for one disk.
+
+        APFS volumes arrive exclusively through the correlation map, which covers
+        the container-entry shape and the legacy direct-on-disk shape.
+        """
+        identifier = _sanitize_diskutil_identifier(entry.get("DeviceIdentifier"))
+        raw_partitions = entry.get("Partitions")
+        partitions = list(raw_partitions) if isinstance(raw_partitions, list) else []
+        return partitions + volumes_by_disk.get(identifier, [])
+
+    def _entry_has_device(
+        self,
+        entry: dict[str, Any],
+        target_name: str,
+        volumes_by_disk: dict[str, list[dict[str, Any]]],
+    ) -> bool:
+        """Return True when one of the entry's devices matches the target identifier."""
+        part_dicts = self._partition_and_volume_entries(entry, volumes_by_disk)
+        return any(
+            _sanitize_diskutil_identifier(part_dict.get("DeviceIdentifier")) == target_name
+            for part_dict in part_dicts
+        )
 
     def _build_partition(
         self,

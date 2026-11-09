@@ -5,17 +5,23 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.50.0] (2026-11-09)
+## [0.50.1] (2026-11-09)
 
 ### Added
 
 - `services/usb/macos.py` with read-only macOS drive inspection (`MacOSDriveInspector`), using fixed argument arrays for `diskutil list -plist` and `diskutil info -plist` without shell interpolation and `plistlib` parsing to record the same fields as the Linux inspector (USB-2, #154).
 - Untrusted `diskutil` reply sanitization in `services/usb/macos.py` validating device identifiers and partition structure before any `diskutil info` invocation, filtering traversal mount points, truncating overlong labels, normalizing `MS-DOS FAT32` filesystem names, and deriving partition numbers from `diskNsM` identifiers (#154).
-- Unit tests in `tests/unit/test_usb_macos_inspection.py` covering recorded plists for a FAT32 stick, an exFAT stick, an APFS system disk, and malformed replies, plus command failure, timeout, traversal rejection, and fixed-argv guarantees (#154).
+- APFS container correlation in `services/usb/macos.py` attaching container volumes to the owning physical drive through `APFSPhysicalStores` and skipping synthesized container entries as drives (#154).
+- Unit tests in `tests/unit/test_usb_macos_inspection.py` covering recorded plists for a FAT32 stick, an exFAT stick, an APFS system disk with a synthesized container entry, a legacy APFS volume shape, and malformed replies, plus command failure, timeout, traversal rejection, oversized-reply rejection, targeted device resolution, and fixed-argv guarantees (#154).
 
 ### Changed
 
 - Extract shared inspector helpers into `services/usb/_shared.py` (`clean_str`, `clean_int`, `sanitize_mount_point`, `default_command_runner`). The Linux inspector keeps its behavior.
+
+### Fixed
+
+- `services/usb/macos.py` caps accepted `diskutil` stdout at `MAX_PLIST_OUTPUT_BYTES` (8 MiB) before `plistlib` parsing and raises `InspectionParseError` on oversized replies (#154).
+- `inspect_device` in `services/usb/macos.py` runs `diskutil info` only for the matching drive and its mounted volumes instead of every disk (#154).
 
 ### Added
 
