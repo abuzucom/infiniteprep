@@ -768,6 +768,57 @@ class TestUsbLinuxInspection(unittest.TestCase):
         report = inspector.inspect_all()[0]
         self.assertEqual(report.partitions[0].mount_points, ("/valid/mount",))
 
+    def test_df_escaped_whitespace_mount_point_decoded(self) -> None:
+        """Octal escape sequences in df mount points are decoded to match lsblk mounts."""
+        stick_json = json.dumps(
+            {
+                "blockdevices": [
+                    {
+                        "name": "sdb",
+                        "type": "disk",
+                        "children": [
+                            {
+                                "name": "sdb1",
+                                "type": "part",
+                                "fstype": "vfat",
+                                "mountpoints": ["/media/user/USB STICK"],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        df_output = (
+            "Filesystem     1-blocks       Used  Available Capacity Mounted on\n"
+            "/dev/sdb1   32010928128 1468940288 30541987840       5% /media/user/USB\\040STICK\n"
+        )
+        _, inspector = _make_mock_runner(
+            lsblk_stdout=stick_json,
+            df_stdout=df_output,
+        )
+        report = inspector.inspect_all()[0]
+        space = report.space_for_mount("/media/user/USB STICK")
+        self.assertIsNotNone(space)
+        self.assertEqual(space.total_bytes, 32010928128)
+
+    def test_scalar_children_raises_parse_error(self) -> None:
+        """Non-list non-null children values raise InspectionParseError."""
+        for invalid_children in ("not-a-list", 42, {"key": "val"}, True):
+            bad_json = json.dumps(
+                {
+                    "blockdevices": [
+                        {
+                            "name": "sdb",
+                            "type": "disk",
+                            "children": invalid_children,
+                        }
+                    ]
+                }
+            )
+            _, inspector = _make_mock_runner(lsblk_stdout=bad_json)
+            with self.assertRaises(InspectionParseError):
+                inspector.inspect_all()
+
 
 if __name__ == "__main__":
     unittest.main()

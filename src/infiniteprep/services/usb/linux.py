@@ -24,7 +24,8 @@ from infiniteprep.services.usb.models import (
 )
 
 LSBLK_COLUMNS: Final[str] = (
-    "NAME,PATH,MODEL,VENDOR,SERIAL,RM,RO,TYPE,FSTYPE,LABEL,UUID,FSAVAIL,FSUSED,FSSIZE,MOUNTPOINTS,PTTYPE,PARTTYPE,SIZE,TRAN,SUBSYSTEMS,PARTN"
+    "NAME,PATH,MODEL,VENDOR,SERIAL,RM,RO,TYPE,FSTYPE,LABEL,UUID,"
+    "FSAVAIL,FSUSED,FSSIZE,MOUNTPOINTS,PTTYPE,PARTTYPE,SIZE,TRAN,SUBSYSTEMS,PARTN"
 )
 LSBLK_COMMAND: Final[tuple[str, ...]] = (
     "lsblk",
@@ -38,6 +39,12 @@ DEFAULT_COMMAND_TIMEOUT_SECONDS: Final[float] = 15.0
 MAX_METADATA_STR_LEN: Final[int] = 512
 ANSI_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 DEVICE_NAME_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_\-\./]+$")
+OCTAL_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"\\([0-7]{3})")
+
+
+def _decode_df_mount(raw: str) -> str:
+    """Decode octal escape sequences (e.g. \\040 for space) in df mount paths."""
+    return OCTAL_ESCAPE_RE.sub(lambda m: chr(int(m.group(1), 8)), raw)
 
 
 def _clean_str(val: Any, max_len: int = MAX_METADATA_STR_LEN) -> str | None:
@@ -215,7 +222,8 @@ class LinuxDriveInspector:
             if not (parts[1].isdigit() and parts[2].isdigit() and parts[3].isdigit()):
                 continue
 
-            mount_point = _sanitize_mount_point(" ".join(parts[5:]))
+            raw_mount = " ".join(parts[5:])
+            mount_point = _sanitize_mount_point(_decode_df_mount(raw_mount))
             if not mount_point:
                 continue
 
@@ -255,6 +263,8 @@ class LinuxDriveInspector:
         partitions: list[PartitionInfo] = []
         space_entries: list[tuple[str, SpaceInfo]] = []
         children = dev.get("children")
+        if children is not None and not isinstance(children, list):
+            raise InspectionParseError("lsblk 'children' must be a list or null.")
 
         if isinstance(children, list) and children:
             for child_index, child in enumerate(children, start=1):
