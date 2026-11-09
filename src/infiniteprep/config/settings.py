@@ -143,6 +143,7 @@ class AppSettings:
     file_table_column_count: int = 0  # Column count when the layout was saved.
     detail_table_layout: str = ""  # Base64-encoded QHeaderView state.
     detail_table_column_count: int = 0  # Column count when the layout was saved.
+    waveform_zoom_seconds: int = 8
 
 
 class SettingsManager:

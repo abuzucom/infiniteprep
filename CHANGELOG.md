@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.49.0] (2026-11-09)
+## [0.49.1] (2026-11-09)
 
 ### Added
 
@@ -13,6 +13,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Immutable `@dataclass(frozen=True)` models for drive identity, partition metadata, space statistics, and inspection records, with helper properties for FAT32 and exFAT detection.
 - Untrusted USB device metadata sanitization in `services/usb/linux.py` stripping ANSI escape sequences, control characters, and NUL bytes, enforcing path traversal protections, validating mapping types for block devices and partitions, and resolving partition numbers from PARTN columns (#153).
 - Unit tests in `tests/unit/test_usb_linux_inspection.py` covering recorded outputs for FAT32 and exFAT removable drives, a multi-partition system disk, untrusted metadata sanitization, and malformed command replies.
+- Selected-track spectrum analysis runs in a two-worker background pool. The
+  waveform view adds persistent zoom windows and keeps the current overview
+  visible while analysis runs or fails.
+- Guard zoom rendering for empty analyses and keep playback errors separate
+  from waveform status messages.
 
 ### Changed
 

@@ -9,6 +9,7 @@ import logging
 import math
 import os
 import re
+import threading
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -36,6 +37,7 @@ HASH_BLOCK_BYTES = 1024 * 1024
 FIELDS = ("low", "mid", "high", "overall")
 CACHE_NAME = re.compile(r"spectrum-[0-9a-f]{64}\.npz")
 logger = logging.getLogger(__name__)
+_CACHE_UPDATE_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -216,17 +218,18 @@ def _update_cache(
     write_entry: bool,
 ) -> None:
     """Stop publishing archives if budget enforcement fails."""
-    try:
-        if write_entry and size_limit > 0:
-            _store_cache(directory, entry, waveform, size_limit)
-        else:
-            _evict_cache(directory, size_limit)
-    except OSError as error:
-        logger.warning(
-            "Spectrum cache update failed (%s, errno=%s). Check cache directory permissions.",
-            type(error).__name__,
-            error.errno,
-        )
+    with _CACHE_UPDATE_LOCK:
+        try:
+            if write_entry and size_limit > 0:
+                _store_cache(directory, entry, waveform, size_limit)
+            else:
+                _evict_cache(directory, size_limit)
+        except OSError as error:
+            logger.warning(
+                "Spectrum cache update failed (%s, errno=%s). Check cache directory permissions.",
+                type(error).__name__,
+                error.errno,
+            )
 
 
 def analyze_waveform(
