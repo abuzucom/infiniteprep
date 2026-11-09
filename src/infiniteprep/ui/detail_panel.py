@@ -9,6 +9,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
 
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -241,6 +242,11 @@ class DetailPanel(QWidget):
         cand_layout = QVBoxLayout(cand_box)
         cand_layout.addWidget(self.candidates_list)
         root.addWidget(cand_box, stretch=CANDIDATE_BOX_STRETCH)
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Stop stale analysis work when this panel is closed independently."""
+        self.waveform_pool.shutdown()
+        super().closeEvent(event)
 
     def set_key_notation(self, notation: KeyDisplayNotation) -> None:
         """Change key display notation and refresh the current file view."""

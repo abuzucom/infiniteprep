@@ -22,18 +22,23 @@ class _WorkerSignals(QObject):
 
     completed = Signal(str, int, object)
     failed = Signal(str, int, str)
-    finished = Signal(object)
 
 
 class _AnalysisTask(QRunnable):
     """Analyze one path and report its identity with the result."""
 
-    def __init__(self, file_id: str, generation: int, path: Path) -> None:
+    def __init__(
+        self,
+        file_id: str,
+        generation: int,
+        path: Path,
+        cancel_event: threading.Event,
+    ) -> None:
         super().__init__()
         self.file_id = file_id
         self.generation = generation
         self.path = path
-        self.cancel_event = threading.Event()
+        self.cancel_event = cancel_event
         self.signals = _WorkerSignals()
         self.setAutoDelete(True)
 
@@ -49,8 +54,6 @@ class _AnalysisTask(QRunnable):
         else:
             if not self.cancel_event.is_set():
                 self.signals.completed.emit(self.file_id, self.generation, waveform)
-        finally:
-            self.signals.finished.emit(id(self))
 
 
 class WaveformAnalysisPool(QObject):
@@ -64,7 +67,7 @@ class WaveformAnalysisPool(QObject):
         self._pool = QThreadPool(self)
         self._pool.setMaxThreadCount(MAX_WAVEFORM_WORKERS)
         self._pool.setExpiryTimeout(-1)
-        self._tasks: dict[int, _AnalysisTask] = {}
+        self._cancel_events: list[threading.Event] = []
         self._shutdown = False
 
     def submit(self, path: Path, file_id: str, generation: int) -> None:
@@ -72,24 +75,19 @@ class WaveformAnalysisPool(QObject):
         if self._shutdown:
             return
         self._cancel_tasks()
-        task = _AnalysisTask(file_id, generation, Path(path))
+        cancel_event = threading.Event()
+        task = _AnalysisTask(file_id, generation, Path(path), cancel_event)
         task.signals.completed.connect(self._forward_completed, Qt.ConnectionType.QueuedConnection)
         task.signals.failed.connect(self._forward_failed, Qt.ConnectionType.QueuedConnection)
-        task.signals.finished.connect(self._task_finished, Qt.ConnectionType.QueuedConnection)
-        self._tasks[id(task)] = task
+        self._cancel_events.append(cancel_event)
         self._pool.start(task)
 
     def _cancel_tasks(self) -> None:
         """Cancel active tasks and discard obsolete tasks still waiting in the queue."""
-        for task in self._tasks.values():
-            task.cancel_event.set()
+        for cancel_event in self._cancel_events:
+            cancel_event.set()
         self._pool.clear()
-        self._tasks.clear()
-
-    @Slot(object)
-    def _task_finished(self, task_id: int) -> None:
-        """Release a task after its worker has emitted its terminal signal."""
-        self._tasks.pop(task_id, None)
+        self._cancel_events.clear()
 
     @Slot(str, int, object)
     def _forward_completed(self, file_id: str, generation: int, waveform: object) -> None:
