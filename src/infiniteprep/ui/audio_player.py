@@ -311,7 +311,7 @@ class WaveformOverviewBar(QWidget):
         for name, color in zip(("low", "mid", "high"), colors, strict=True):
             values = getattr(self.spectrum, name)[sample_start:sample_end]
             peak = float(values.max()) if len(values) else 0.0
-            half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * 0.45)
+            half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * WAVEFORM_HALF_HEIGHT_SCALE)
             top = int((height - half_height * 2) / 2)
             painter.fillRect(column, top, 1, int(half_height * 2), color)
 
@@ -348,7 +348,7 @@ class WaveformOverviewBar(QWidget):
             first = max(0, int(time_start * count / self.duration_sec))
             last = min(count, max(first + 1, int(np.ceil(time_end * count / self.duration_sec))))
             peak = max(self.envelope[first:last], default=FALLBACK_ENVELOPE_EMPTY)
-            half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * 0.45)
+            half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * WAVEFORM_HALF_HEIGHT_SCALE)
             top = int((height - half_height * 2) / 2)
             painter.fillRect(column, top, 1, int(half_height * 2), QColor("#4b82e8"))
         painter.fillRect(width // 2, 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b"))
