@@ -14,6 +14,11 @@ import subprocess
 from collections.abc import Callable
 from typing import Any, Final
 
+from infiniteprep.services.usb._shared import (
+    DEFAULT_COMMAND_TIMEOUT_SECONDS,
+    clean_int,
+    clean_str,
+)
 from infiniteprep.services.usb.models import (
     CommandExecutionError,
     DriveIdentity,
@@ -35,9 +40,6 @@ LSBLK_COMMAND: Final[tuple[str, ...]] = (
     LSBLK_COLUMNS,
 )
 DF_COMMAND: Final[tuple[str, ...]] = ("df", "-P", "-B1")
-DEFAULT_COMMAND_TIMEOUT_SECONDS: Final[float] = 15.0
-MAX_METADATA_STR_LEN: Final[int] = 512
-ANSI_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 DEVICE_NAME_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_\-\./]+$")
 OCTAL_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"\\([0-7]{3})")
 
@@ -47,33 +49,9 @@ def _decode_df_mount(raw: str) -> str:
     return OCTAL_ESCAPE_RE.sub(lambda m: chr(int(m.group(1), 8)), raw)
 
 
-def _clean_str(val: Any, max_len: int = MAX_METADATA_STR_LEN) -> str | None:
-    """Sanitize untrusted metadata string, removing escape sequences and control characters."""
-    if val is None:
-        return None
-    raw = str(val)
-    no_ansi = ANSI_ESCAPE_RE.sub("", raw)
-    filtered = "".join(ch for ch in no_ansi if ch.isprintable() and ch != "\x00")
-    stripped = filtered.strip()
-    if not stripped:
-        return None
-    return stripped[:max_len]
-
-
-def _clean_int(val: Any, default: int = 0) -> int:
-    """Convert value to non-negative int, returning default on failure."""
-    if val is None:
-        return default
-    try:
-        parsed = int(val)
-        return max(0, parsed)
-    except (ValueError, TypeError):
-        return default
-
-
 def _sanitize_device_name(val: Any) -> str:
     """Validate and sanitize device name from untrusted output."""
-    raw = _clean_str(val)
+    raw = clean_str(val)
     if not raw or ".." in raw or "/" in raw or not DEVICE_NAME_SAFE_RE.match(raw):
         raise InspectionParseError(f"Invalid or unsafe block device name: {val!r}")
     return raw
@@ -81,7 +59,7 @@ def _sanitize_device_name(val: Any) -> str:
 
 def _sanitize_device_path(raw_path: Any, safe_name: str) -> str:
     """Validate device path or synthesize safe /dev/{name}."""
-    cleaned = _clean_str(raw_path)
+    cleaned = clean_str(raw_path)
     if cleaned:
         if ".." in cleaned or not cleaned.startswith("/dev/"):
             raise InspectionParseError(f"Unsafe block device path: {raw_path!r}")
@@ -94,7 +72,7 @@ def _sanitize_device_path(raw_path: Any, safe_name: str) -> str:
 
 def _sanitize_mount_point(val: Any) -> str | None:
     """Sanitize untrusted mountpoint path, preventing traversal and control characters."""
-    cleaned = _clean_str(val)
+    cleaned = clean_str(val)
     if not cleaned or ".." in cleaned or not cleaned.startswith("/"):
         return None
     return cleaned
@@ -102,13 +80,13 @@ def _sanitize_mount_point(val: Any) -> str | None:
 
 def _extract_partition_number(part_dict: dict[str, Any], fallback_index: int) -> int:
     """Determine partition number from PARTN column, name suffix, or fallback index."""
-    partn_val = _clean_str(part_dict.get("partn"))
+    partn_val = clean_str(part_dict.get("partn"))
     if partn_val and partn_val.isdigit():
         partn_int = int(partn_val)
         if partn_int > 0:
             return partn_int
 
-    name_str = _clean_str(part_dict.get("name")) or ""
+    name_str = clean_str(part_dict.get("name")) or ""
     match = re.search(r"(\d+)$", name_str)
     if match and match.group(1).isdigit():
         num = int(match.group(1))
@@ -153,7 +131,7 @@ class LinuxDriveInspector:
 
     def inspect_device(self, device_name_or_path: str) -> DriveInspection:
         """Inspect a specific device by name (e.g. 'sdb') or device path (e.g. '/dev/sdb')."""
-        target = _clean_str(device_name_or_path)
+        target = clean_str(device_name_or_path)
         if not target or ".." in target:
             raise CommandExecutionError(f"Device '{device_name_or_path}' is invalid or unsafe.")
         target_name = target.removeprefix("/dev/")
@@ -243,14 +221,14 @@ class LinuxDriveInspector:
         return DriveIdentity(
             name=name,
             path=path,
-            size_bytes=_clean_int(dev.get("size")),
-            model=_clean_str(dev.get("model")),
-            vendor=_clean_str(dev.get("vendor")),
-            serial=_clean_str(dev.get("serial")),
+            size_bytes=clean_int(dev.get("size")),
+            model=clean_str(dev.get("model")),
+            vendor=clean_str(dev.get("vendor")),
+            serial=clean_str(dev.get("serial")),
             is_removable=bool(dev.get("rm")),
             is_read_only=bool(dev.get("ro")),
-            bus_type=_clean_str(dev.get("tran")),
-            subsystem=_clean_str(dev.get("subsystems")),
+            bus_type=clean_str(dev.get("tran")),
+            subsystem=clean_str(dev.get("subsystems")),
         )
 
     def _collect_partitions(
@@ -278,7 +256,7 @@ class LinuxDriveInspector:
                 )
                 partitions.append(part)
                 space_entries.extend(part_spaces)
-        elif _clean_str(dev.get("fstype")) or self._extract_mountpoints(dev):
+        elif clean_str(dev.get("fstype")) or self._extract_mountpoints(dev):
             part, part_spaces = self._parse_partition(
                 dev,
                 parent_scheme=parent_scheme,
@@ -310,7 +288,7 @@ class LinuxDriveInspector:
     ) -> DriveInspection:
         """Construct a DriveInspection record from a blockdevice dictionary."""
         identity = self._build_drive_identity(dev)
-        partition_scheme = _clean_str(dev.get("pttype"))
+        partition_scheme = clean_str(dev.get("pttype"))
         partitions, space_entries = self._collect_partitions(
             dev,
             parent_scheme=partition_scheme,
@@ -336,13 +314,13 @@ class LinuxDriveInspector:
         partition_info = PartitionInfo(
             name=name,
             path=_sanitize_device_path(part_dict.get("path"), name),
-            size_bytes=_clean_int(part_dict.get("size")),
+            size_bytes=clean_int(part_dict.get("size")),
             partition_number=_extract_partition_number(part_dict, fallback_index),
-            partition_scheme=_clean_str(part_dict.get("pttype")) or parent_scheme,
-            partition_type=_clean_str(part_dict.get("parttype")),
-            filesystem=_clean_str(part_dict.get("fstype")),
-            label=_clean_str(part_dict.get("label")),
-            uuid=_clean_str(part_dict.get("uuid")),
+            partition_scheme=clean_str(part_dict.get("pttype")) or parent_scheme,
+            partition_type=clean_str(part_dict.get("parttype")),
+            filesystem=clean_str(part_dict.get("fstype")),
+            label=clean_str(part_dict.get("label")),
+            uuid=clean_str(part_dict.get("uuid")),
             mount_points=mount_points,
             is_read_only=bool(part_dict.get("ro")),
         )
@@ -361,10 +339,10 @@ class LinuxDriveInspector:
             if mount in df_space:
                 spaces.append((mount, df_space[mount]))
             elif part_dict.get("fssize") is not None and part_dict.get("fsavail") is not None:
-                total_b = _clean_int(part_dict.get("fssize"))
-                avail_b = _clean_int(part_dict.get("fsavail"))
+                total_b = clean_int(part_dict.get("fssize"))
+                avail_b = clean_int(part_dict.get("fsavail"))
                 used_val = part_dict.get("fsused")
-                used_b = _clean_int(used_val) if used_val is not None else max(0, total_b - avail_b)
+                used_b = clean_int(used_val) if used_val is not None else max(0, total_b - avail_b)
                 space_info = SpaceInfo(
                     total_bytes=total_b,
                     used_bytes=used_b,

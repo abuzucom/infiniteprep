@@ -5,10 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.49.0] (2026-11-09)
+## [0.50.0] (2026-11-09)
 
 ### Added
 
+- `WindowsDriveInspector` in `services/usb/windows.py` performing read-only Windows drive inspection with fixed PowerShell Storage command projections for `Get-Disk`, `Get-Partition`, and `Get-Volume`, executed as fixed argument arrays with `shell=False` and a timeout, and with no drive data in command text (USB-3, #155).
+- Shared sanitization helpers in `services/usb/_shared.py` for untrusted drive metadata, used by both the Linux and Windows inspectors.
+- Unit tests in `tests/unit/test_usb_windows_inspection.py` covering recorded outputs for a FAT32 stick, an exFAT stick, and a GPT system disk, plus malformed command replies, fixed command arrays, and untrusted metadata sanitization.
 - `services/usb/` package with read-only Linux drive inspection (`LinuxDriveInspector`), using fixed argument arrays for `lsblk` and `df` without shell interpolation (`shell=False`) to record drive identity, partition layout, filesystem attributes, and free space (USB-1, #153).
 - Immutable `@dataclass(frozen=True)` models for drive identity, partition metadata, space statistics, and inspection records, with helper properties for FAT32 and exFAT detection.
 - Untrusted USB device metadata sanitization in `services/usb/linux.py` stripping ANSI escape sequences, control characters, and NUL bytes, enforcing path traversal protections, validating mapping types for block devices and partitions, and resolving partition numbers from PARTN columns (#153).
