@@ -8,6 +8,7 @@ placeholders, never real local identifiers.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import unittest
 from typing import Final
@@ -28,6 +29,7 @@ from infiniteprep.services.usb.windows import (
     VOLUME_COMMAND,
     VOLUME_COMMAND_TEXT,
     WindowsDriveInspector,
+    _decode_capped,
 )
 
 _BS: Final[str] = chr(92)
@@ -422,8 +424,9 @@ class TestUsbWindowsInspection(unittest.TestCase):
         )
 
     def test_commands_pin_system_powershell(self) -> None:
-        """Command arrays target the System32 interpreter with a fixed policy flag."""
-        expected_exe = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        """Command arrays target the SystemRoot-pinned interpreter as fixed arrays."""
+        system_root = os.environ.get("SYSTEMROOT") or "C:\\Windows"
+        expected_exe = system_root + r"\System32\WindowsPowerShell\v1.0\powershell.exe"
         for command, text in (
             (DISK_COMMAND, DISK_COMMAND_TEXT),
             (PARTITION_COMMAND, PARTITION_COMMAND_TEXT),
@@ -431,15 +434,7 @@ class TestUsbWindowsInspection(unittest.TestCase):
         ):
             self.assertEqual(
                 command,
-                (
-                    expected_exe,
-                    "-NoProfile",
-                    "-NonInteractive",
-                    "-ExecutionPolicy",
-                    "Restricted",
-                    "-Command",
-                    text,
-                ),
+                (expected_exe, "-NoProfile", "-NonInteractive", "-Command", text),
             )
 
     def test_oversized_output_raises_parse_error(self) -> None:
@@ -447,6 +442,18 @@ class TestUsbWindowsInspection(unittest.TestCase):
         _, inspector = _make_mock_runner(disks_stdout="[" + "a" * (MAX_COMMAND_OUTPUT_BYTES) + "]")
         with self.assertRaises(InspectionParseError):
             inspector.inspect_all()
+
+    def test_decode_capped_rejects_oversized_output(self) -> None:
+        """The byte cap rejects oversized stdout and stderr before decoding."""
+        oversized = b"a" * (MAX_COMMAND_OUTPUT_BYTES + 1)
+        with self.assertRaises(InspectionParseError):
+            _decode_capped(oversized, b"")
+        with self.assertRaises(InspectionParseError):
+            _decode_capped(b"", oversized)
+        self.assertEqual(
+            _decode_capped(b"\xff\xfebad", b"ok"),
+            ("\ufffd\ufffdbad", "ok"),
+        )
 
     def test_command_failure_message_is_bounded(self) -> None:
         """A huge stderr reply yields a bounded error message."""
@@ -457,7 +464,7 @@ class TestUsbWindowsInspection(unittest.TestCase):
         noisy = WindowsDriveInspector(command_runner=loud_runner)
         with self.assertRaises(CommandExecutionError) as ctx:
             noisy.inspect_all()
-        self.assertLessEqual(len(str(ctx.exception)), MAX_ERROR_TEXT_LEN + 64)
+        self.assertLessEqual(len(str(ctx.exception)), MAX_ERROR_TEXT_LEN)
 
     def test_malformed_json_raises_parse_error(self) -> None:
         """Malformed JSON from any command raises InspectionParseError."""

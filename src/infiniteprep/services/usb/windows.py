@@ -4,20 +4,25 @@ This module executes fixed argument arrays without shell interpolation to inspec
 connected storage disks, partition layouts, volumes, and available space.
 It performs strictly read-only queries and treats all drive-supplied metadata as
 untrusted input. No drive data is ever placed in command text.
+
+The interpreter is Windows PowerShell 5.1 on Windows 10/11. The -Command input
+is not gated by the ExecutionPolicy (only script files are), so no policy flag
+is passed. -NoProfile and -NonInteractive keep profiles and prompts out.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from collections.abc import Callable
 from typing import Any, Final
 
 from infiniteprep.services.usb._shared import (
+    DEFAULT_COMMAND_TIMEOUT_SECONDS,
     clean_int,
     clean_str,
-    default_command_runner,
 )
 from infiniteprep.services.usb.models import (
     CommandExecutionError,
@@ -28,9 +33,11 @@ from infiniteprep.services.usb.models import (
     SpaceInfo,
 )
 
-# Absolute System32 path pins Windows PowerShell 5.1 so a hostile PATH entry
-# cannot substitute the interpreter (foucault MEDIUM, PR #196).
-POWERSHELL_EXE: Final[str] = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+# The interpreter path is derived from SystemRoot so a relocated system root
+# still resolves, and pinned so a hostile PATH entry cannot substitute the
+# interpreter (review findings M18/M10, PR #196).
+_SYSTEM_ROOT: Final[str] = os.environ.get("SYSTEMROOT") or "C:\\Windows"
+POWERSHELL_EXE: Final[str] = _SYSTEM_ROOT + r"\System32\WindowsPowerShell\v1.0\powershell.exe"
 # Bounded output keeps a malfunctioning storage stack from exhausting memory
 # during parsing (foucault MEDIUM, PR #196).
 MAX_COMMAND_OUTPUT_BYTES: Final[int] = 8 * 1024 * 1024
@@ -48,33 +55,16 @@ VOLUME_COMMAND_TEXT: Final[str] = (
     "Get-Volume | Select-Object DriveLetter, FileSystemLabel, FileSystem, Size, "
     "SizeRemaining, DriveType | ConvertTo-Json -Depth 3"
 )
-DISK_COMMAND: Final[tuple[str, ...]] = (
-    POWERSHELL_EXE,
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy",
-    "Restricted",
-    "-Command",
-    DISK_COMMAND_TEXT,
-)
-PARTITION_COMMAND: Final[tuple[str, ...]] = (
-    POWERSHELL_EXE,
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy",
-    "Restricted",
-    "-Command",
-    PARTITION_COMMAND_TEXT,
-)
-VOLUME_COMMAND: Final[tuple[str, ...]] = (
-    POWERSHELL_EXE,
-    "-NoProfile",
-    "-NonInteractive",
-    "-ExecutionPolicy",
-    "Restricted",
-    "-Command",
-    VOLUME_COMMAND_TEXT,
-)
+
+
+def _powershell_command(script_text: str) -> tuple[str, ...]:
+    """Build the fixed argument array for one PowerShell Storage projection."""
+    return (POWERSHELL_EXE, "-NoProfile", "-NonInteractive", "-Command", script_text)
+
+
+DISK_COMMAND: Final[tuple[str, ...]] = _powershell_command(DISK_COMMAND_TEXT)
+PARTITION_COMMAND: Final[tuple[str, ...]] = _powershell_command(PARTITION_COMMAND_TEXT)
+VOLUME_COMMAND: Final[tuple[str, ...]] = _powershell_command(VOLUME_COMMAND_TEXT)
 _BACKSLASH: Final[str] = chr(92)
 _PHYSICAL_DRIVE_PREFIX: Final[str] = _BACKSLASH * 2 + "." + _BACKSLASH + "PHYSICALDRIVE"
 DISK_TARGET_RE: Final[re.Pattern[str]] = re.compile(r"^disk(\d+)$", re.IGNORECASE)
@@ -203,6 +193,34 @@ def _build_drive_identity(disk: dict[str, Any], number: int, removable: bool) ->
     )
 
 
+def _decode_capped(stdout: bytes, stderr: bytes) -> tuple[str, str]:
+    """Decode raw command output only after enforcing the byte caps."""
+    if len(stdout) > MAX_COMMAND_OUTPUT_BYTES:
+        message = f"command output exceeds the {MAX_COMMAND_OUTPUT_BYTES} byte limit."
+        raise InspectionParseError(message)
+    if len(stderr) > MAX_COMMAND_OUTPUT_BYTES:
+        message = f"command error output exceeds the {MAX_COMMAND_OUTPUT_BYTES} byte limit."
+        raise InspectionParseError(message)
+    return (
+        stdout.decode("utf-8", errors="replace"),
+        stderr.decode("utf-8", errors="replace"),
+    )
+
+
+def _default_windows_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run the fixed command with byte-capped output decoded lossily."""
+    completed = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=False,
+        check=False,
+        timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS,
+        shell=False,
+    )
+    stdout, stderr = _decode_capped(completed.stdout, completed.stderr)
+    return subprocess.CompletedProcess(cmd, completed.returncode, stdout, stderr)
+
+
 class WindowsDriveInspector:
     """Inspects Windows disks, partitions, volumes, and free space in read-only mode."""
 
@@ -211,7 +229,7 @@ class WindowsDriveInspector:
         command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
     ) -> None:
         """Initialize with optional command runner for hermetic testing."""
-        self._command_runner = command_runner or default_command_runner
+        self._command_runner = command_runner or _default_windows_runner
 
     def inspect_all(self) -> tuple[DriveInspection, ...]:
         """Inspect all disks and return DriveInspection records ordered by disk number."""
@@ -229,7 +247,11 @@ class WindowsDriveInspector:
         return tuple(inspections)
 
     def inspect_device(self, device_name_or_path: str) -> DriveInspection:
-        """Inspect a disk by name ('disk5'), number ('5'), or PHYSICALDRIVE path."""
+        """Inspect one disk by name ('disk5'), number ('5'), or PHYSICALDRIVE path.
+
+        The Storage cmdlets are machine-wide, so every call enumerates all
+        disks and returns the matching inspection.
+        """
         target = clean_str(device_name_or_path)
         if not target or ".." in target:
             raise CommandExecutionError(f"Device '{device_name_or_path}' is invalid or unsafe.")
@@ -258,21 +280,22 @@ class WindowsDriveInspector:
         except (subprocess.SubprocessError, OSError) as exc:
             raise CommandExecutionError(f"{label} execution failed: {exc}") from exc
 
-        if completed.returncode != 0:
-            raw_err = completed.stderr.strip()[:MAX_ERROR_TEXT_LEN]
-            err = raw_err or f"exit code {completed.returncode}"
-            raise CommandExecutionError(f"{label} failed with {err}")
-
-        if len(completed.stdout) > MAX_COMMAND_OUTPUT_BYTES:
+        stdout = completed.stdout
+        if len(stdout) > MAX_COMMAND_OUTPUT_BYTES:
             message = f"{label} output exceeds the {MAX_COMMAND_OUTPUT_BYTES} byte limit."
             raise InspectionParseError(message)
 
-        stdout = completed.stdout.strip()
-        if not stdout:
+        if completed.returncode != 0:
+            raw_err = completed.stderr.strip()[:MAX_ERROR_TEXT_LEN]
+            err = raw_err or f"exit code {completed.returncode}"
+            raise CommandExecutionError(f"{label} failed with {err}"[:MAX_ERROR_TEXT_LEN])
+
+        stripped = stdout.strip()
+        if not stripped:
             return []
 
         try:
-            data = json.loads(stdout)
+            data = json.loads(stripped)
         except json.JSONDecodeError as exc:
             raise InspectionParseError(f"{label} returned malformed JSON: {exc}") from exc
 
