@@ -5,9 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.52.0] (2026-11-10)
+## [0.52.1] (2026-11-10)
 
 ### Added
+
+- `docs/decision-register.md` records the owner's project decisions by number, D93 to D371, with the open questions. Task issues cite these numbers.
 
 - `WindowsDriveInspector` in `services/usb/windows.py` performing read-only Windows drive inspection with fixed PowerShell Storage command projections for `Get-Disk`, `Get-Partition`, and `Get-Volume`, executed as fixed argument arrays with `shell=False` and a timeout, and with no drive data in command text (USB-3, #155).
 - The Windows inspector reuses the shared `_shared.py` sanitization helpers established by #195.
