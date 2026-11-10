@@ -5,6 +5,20 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.52.0] (2026-11-10)
+
+### Added
+
+- `WindowsDriveInspector` in `services/usb/windows.py` performing read-only Windows drive inspection with fixed PowerShell Storage command projections for `Get-Disk`, `Get-Partition`, and `Get-Volume`, executed as fixed argument arrays with `shell=False` and a timeout, and with no drive data in command text (USB-3, #155).
+- The Windows inspector reuses the shared `_shared.py` sanitization helpers established by #195.
+- Unit tests in `tests/unit/test_usb_windows_inspection.py` covering recorded outputs for a FAT32 stick, an exFAT stick, and a GPT system disk, plus malformed command replies, fixed command arrays, and untrusted metadata sanitization.
+
+### Changed
+
+- Pin the Windows inspector PowerShell interpreter to the SystemRoot-derived System32 path so a hostile PATH entry cannot substitute it and a relocated system root still resolves.
+- Drop the `-ExecutionPolicy` flag from the fixed Windows command. The `-Command` input is not gated by the execution policy, so the flag provided no protection.
+- Bound Windows inspector command output at 8 MiB in bytes before decoding or parsing and cap the final error message length.
+
 ## [0.51.4] (2026-11-09)
 
 ### Added

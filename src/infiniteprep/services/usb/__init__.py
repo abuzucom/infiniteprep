@@ -1,4 +1,4 @@
-"""USB and removable drive inspection and preflight services (D93, D160, D161, D183)."""
+"""USB and removable drive inspection and preflight services (D93, D160, D161, D181, D183)."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from infiniteprep.services.usb.models import (
     PartitionInfo,
     SpaceInfo,
 )
+from infiniteprep.services.usb.windows import WindowsDriveInspector
 
 __all__ = [
     "CommandExecutionError",
@@ -24,4 +25,5 @@ __all__ = [
     "MacOSDriveInspector",
     "PartitionInfo",
     "SpaceInfo",
+    "WindowsDriveInspector",
 ]
