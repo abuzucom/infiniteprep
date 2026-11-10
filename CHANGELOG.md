@@ -5,9 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.50.0] (2026-11-09)
+## [0.51.0] (2026-11-09)
 
 ### Added
+
+- Each package build creates a CycloneDX SBOM from its locked Python environment. The SBOM tool runs in an isolated temporary environment and uploads a separate artifact for each target OS.
 
 - `WindowsDriveInspector` in `services/usb/windows.py` performing read-only Windows drive inspection with fixed PowerShell Storage command projections for `Get-Disk`, `Get-Partition`, and `Get-Volume`, executed as fixed argument arrays with `shell=False` and a timeout, and with no drive data in command text (USB-3, #155).
 - Shared sanitization helpers in `services/usb/_shared.py` for untrusted drive metadata, used by both the Linux and Windows inspectors.
