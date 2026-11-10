@@ -208,10 +208,11 @@ EXFAT_STICK_VOLUMES_JSON: Final[str] = json.dumps(
 
 def _make_mock_runner(
     disks_stdout: str = "[]",
-    disks_returncode: int = 0,
     partitions_stdout: str = "[]",
-    partitions_returncode: int = 0,
     volumes_stdout: str = "[]",
+    *,
+    disks_returncode: int = 0,
+    partitions_returncode: int = 0,
     volumes_returncode: int = 0,
 ) -> tuple[list[list[str]], WindowsDriveInspector]:
     """Create an inspector with an intercepted command execution list."""
