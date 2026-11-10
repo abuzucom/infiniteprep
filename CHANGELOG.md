@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.51.0] (2026-11-09)
+## [0.51.1] (2026-11-09)
 
 ### Added
 
@@ -23,6 +23,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `bounded_command_runner` in `services/usb/macos.py` bounds the stdout read and every reap wait under a deadline, terminates stuck children with escalating terminate and kill signals, tolerates exit races, caps stderr at `MAX_STDERR_BYTES`, and reaps the child on every failure path (#154).
 - `services/usb/macos.py` caps accepted `diskutil` stdout at `MAX_PLIST_OUTPUT_BYTES` (8 MiB) before `plistlib` parsing and raises `InspectionParseError` on oversized replies (#154).
 - `inspect_device` in `services/usb/macos.py` runs `diskutil info` only for the matching drive and its mounted volumes instead of every disk (#154).
 

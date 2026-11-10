@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 import unittest
 from typing import Final
 from unittest import mock
@@ -19,6 +20,7 @@ from infiniteprep.services.usb.macos import (
     DISKUTIL_LIST_COMMAND,
     MAX_PLIST_OUTPUT_BYTES,
     MacOSDriveInspector,
+    _terminate_process,
     bounded_command_runner,
 )
 from infiniteprep.services.usb.models import (
@@ -1053,6 +1055,51 @@ class TestUsbMacosInspection(unittest.TestCase):
         oversized = f"print('x' * {MAX_PLIST_OUTPUT_BYTES + 100})"
         with self.assertRaisesRegex(InspectionParseError, "byte limit"):
             bounded_command_runner([sys.executable, "-c", oversized], 15.0)
+
+    def test_bounded_runner_kills_stuck_child(self) -> None:
+        """A child that never closes stdout fails within the deadline, not forever."""
+        started = time.monotonic()
+        result = bounded_command_runner([sys.executable, "-c", "import time; time.sleep(60)"], 2.0)
+        elapsed = time.monotonic() - started
+        self.assertNotEqual(result.returncode, 0)
+        self.assertLess(elapsed, 30.0)
+
+    def test_terminate_process_tolerates_exit_race(self) -> None:
+        """Terminate and kill tolerate a child that already exited."""
+
+        class ExitedProcess:
+            def terminate(self) -> None:
+                raise ProcessLookupError
+
+            def kill(self) -> None:
+                raise ProcessLookupError
+
+            def wait(self, timeout: float | None = None) -> int:
+                return 0
+
+        _terminate_process(ExitedProcess(), time.monotonic() + 10.0)
+
+    def test_terminate_process_escalates_to_kill(self) -> None:
+        """A child ignoring terminate escalates to kill with bounded waits."""
+
+        class StubbornProcess:
+            def __init__(self) -> None:
+                self.calls: list[str] = []
+
+            def terminate(self) -> None:
+                self.calls.append("terminate")
+
+            def kill(self) -> None:
+                self.calls.append("kill")
+
+            def wait(self, timeout: float | None = None) -> int:
+                if "kill" not in self.calls:
+                    raise subprocess.TimeoutExpired(cmd=[], timeout=timeout or 0.0)
+                return 0
+
+        process = StubbornProcess()
+        _terminate_process(process, time.monotonic() + 30.0)
+        self.assertEqual(process.calls, ["terminate", "kill"])
 
     def test_oversized_plist_raises_parse_error(self) -> None:
         """Plist output above the byte cap raises before parsing."""

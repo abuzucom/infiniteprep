@@ -2,22 +2,26 @@
 
 This module executes fixed argument arrays without shell interpolation to inspect
 connected storage devices, partition schemes, filesystems, and available space.
-It captures stdout through a bounded pipe read capped at MAX_PLIST_OUTPUT_BYTES,
-parses only plist output, and performs strictly read-only queries (list, info).
-It correlates APFS container entries through APFSPhysicalStores and attaches
+It captures stdout through a bounded pipe read capped at MAX_PLIST_OUTPUT_BYTES
+under a hard deadline, parses only plist output, and performs strictly read-only
+queries (list, info). It correlates APFS container entries
+through APFSPhysicalStores and attaches
 their volumes to every owning physical drive. It treats all USB-supplied
 metadata as untrusted input. Construction requires macOS.
 """
 
 from __future__ import annotations
 
+import contextlib
 import plistlib
 import re
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from collections.abc import Callable
-from typing import Any, Final
+from typing import Any, BinaryIO, Final
 from xml.parsers.expat import ExpatError
 
 from infiniteprep.services.usb._shared import (
@@ -40,18 +44,103 @@ DISKUTIL_LIST_COMMAND: Final[tuple[str, ...]] = ("diskutil", "list", "-plist")
 DISKUTIL_INFO_COMMAND: Final[tuple[str, ...]] = ("diskutil", "info", "-plist")
 MACOS_DEVICE_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"^disk\d+(?:s\d+)*$")
 MAX_PLIST_OUTPUT_BYTES: Final[int] = 8 * 1024 * 1024
+MAX_STDERR_BYTES: Final[int] = 64 * 1024
+REAP_WAIT_SECONDS: Final[float] = 2.0
+WAIT_GRACE_SECONDS: Final[float] = 1.0
+
+
+def _terminate_process(process: subprocess.Popen[bytes], deadline: float) -> None:
+    """Terminate, kill, and reap the child under bounded waits.
+
+    The escalation tolerates a child that already exited (ProcessLookupError)
+    and a child stuck in an uninterruptible state, which reaps when the
+    inspector process exits.
+    """
+    for stop in (process.terminate, process.kill):
+        try:
+            stop()
+        except ProcessLookupError:
+            process.wait(timeout=WAIT_GRACE_SECONDS)
+            return
+        remaining = deadline - time.monotonic()
+        try:
+            process.wait(timeout=remaining if remaining > 0 else WAIT_GRACE_SECONDS)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        process.wait(timeout=REAP_WAIT_SECONDS)
+
+
+def _read_capped_stdout(process: subprocess.Popen[bytes], deadline: float) -> bytes:
+    """Read stdout up to the byte cap under the deadline, killing a stuck child.
+
+    The read runs in a daemon thread joined against the deadline. A child that
+    never writes and never closes stdout gets terminated, which closes the pipe
+    and unblocks the read.
+    """
+    captured: dict[str, Any] = {"stdout": b"", "error": None}
+
+    def read_capped() -> None:
+        try:
+            captured["stdout"] = process.stdout.read(MAX_PLIST_OUTPUT_BYTES + 1)
+        except (OSError, ValueError) as exc:
+            captured["error"] = exc
+
+    reader = threading.Thread(target=read_capped, daemon=True, name="usb-bounded-stdout")
+    reader.start()
+    remaining = deadline - time.monotonic()
+    reader.join(remaining if remaining > 0 else 0.0)
+    if reader.is_alive():
+        _terminate_process(process, deadline)
+        reader.join(REAP_WAIT_SECONDS)
+        if reader.is_alive():
+            raise CommandExecutionError("diskutil stdout reader did not finish after terminate.")
+    if captured["error"] is not None:
+        raise captured["error"]
+    return captured["stdout"]
+
+
+def _capture_bounded(
+    process: subprocess.Popen[bytes],
+    deadline: float,
+    timeout_seconds: float,
+    stderr_file: BinaryIO,
+) -> subprocess.CompletedProcess[str]:
+    """Capture bounded stdout, wait within the deadline, and build the result."""
+    stdout_bytes = _read_capped_stdout(process, deadline)
+    if len(stdout_bytes) > MAX_PLIST_OUTPUT_BYTES:
+        raise InspectionParseError(
+            f"diskutil output exceeds the {MAX_PLIST_OUTPUT_BYTES} byte limit."
+        )
+    remaining = deadline - time.monotonic()
+    try:
+        process.wait(timeout=remaining if remaining > 0 else WAIT_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        raise subprocess.TimeoutExpired(cmd=process.args, timeout=timeout_seconds) from None
+    stderr_file.seek(0)
+    stderr_text = stderr_file.read(MAX_STDERR_BYTES).decode("utf-8", errors="replace")
+    return subprocess.CompletedProcess(
+        process.args,
+        process.returncode,
+        stdout_bytes.decode("utf-8", errors="replace"),
+        stderr_text,
+    )
 
 
 def bounded_command_runner(
     cmd: list[str],
     timeout_seconds: float,
 ) -> subprocess.CompletedProcess[str]:
-    """Execute a fixed command array, capping captured stdout at the byte limit.
+    """Execute a fixed command array with bounded capture and a hard deadline.
 
-    The pipe read stops at MAX_PLIST_OUTPUT_BYTES plus one byte, so oversized
-    replies never fully enter Python memory. Stderr drains through a spooled
-    temporary file, which avoids pipe-buffer deadlocks.
+    The stdout pipe read stops at MAX_PLIST_OUTPUT_BYTES plus one byte and runs
+    under the deadline, so oversized or stuck replies never block the caller or
+    fully enter Python memory. Stderr drains through a spooled temporary file
+    and is capped at MAX_STDERR_BYTES. Every failure path terminates and reaps
+    the child before re-raising.
     """
+    deadline = time.monotonic() + timeout_seconds
     with tempfile.SpooledTemporaryFile() as stderr_file:
         process = subprocess.Popen(
             cmd,
@@ -60,29 +149,12 @@ def bounded_command_runner(
             shell=False,
         )
         try:
-            stdout_bytes = process.stdout.read(MAX_PLIST_OUTPUT_BYTES + 1)
-            if len(stdout_bytes) > MAX_PLIST_OUTPUT_BYTES:
-                process.kill()
-                process.wait()
-                raise InspectionParseError(
-                    f"diskutil output exceeds the {MAX_PLIST_OUTPUT_BYTES} byte limit."
-                )
-            try:
-                process.wait(timeout=timeout_seconds)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-                raise
-            stderr_file.seek(0)
-            stderr_text = stderr_file.read().decode("utf-8", errors="replace")
+            return _capture_bounded(process, deadline, timeout_seconds, stderr_file)
+        except Exception:
+            _terminate_process(process, deadline)
+            raise
         finally:
             process.stdout.close()
-    return subprocess.CompletedProcess(
-        cmd,
-        process.returncode,
-        stdout_bytes.decode("utf-8", errors="replace"),
-        stderr_text,
-    )
 
 
 def _sanitize_diskutil_identifier(val: Any) -> str:
