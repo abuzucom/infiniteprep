@@ -16,6 +16,16 @@ from infiniteprep.domain.enums import KeyDisplayNotation
 
 logger = logging.getLogger(__name__)
 DEFAULT_WAVEFORM_ZOOM_SECONDS: Final[int] = 8
+SUPPORTED_WAVEFORM_ZOOM_SECONDS: Final[tuple[int, ...]] = (
+    2,
+    4,
+    DEFAULT_WAVEFORM_ZOOM_SECONDS,
+    16,
+    32,
+)
+NONNEGATIVE_COUNT_SETTINGS: Final[frozenset[str]] = frozenset(
+    {"file_table_column_count", "detail_table_column_count"}
+)
 
 ALLOWED_LOCAL_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "localhost", "::1"})
 BLOCKED_METADATA_HOSTS: Final[frozenset[str]] = frozenset(
@@ -165,8 +175,26 @@ class SettingsManager:
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
             logger.warning("Failed to parse settings file %s: %s", self.settings_path, exc)
             return AppSettings()
+        if not isinstance(raw, dict):
+            logger.warning(
+                "Settings file %s must contain a JSON object; using defaults.",
+                self.settings_path,
+            )
+            return AppSettings()
         defaults = asdict(AppSettings())
-        merged = {k: raw.get(k, v) for k, v in defaults.items()}
+        merged: dict[str, object] = {}
+        for name, default in defaults.items():
+            value = raw.get(name, default)
+            if type(value) is not type(default):
+                logger.warning("Ignoring setting %s with an invalid type.", name)
+                value = default
+            elif name == "waveform_zoom_seconds" and value not in SUPPORTED_WAVEFORM_ZOOM_SECONDS:
+                logger.warning("Ignoring unsupported waveform zoom setting.")
+                value = default
+            elif name in NONNEGATIVE_COUNT_SETTINGS and value < 0:
+                logger.warning("Ignoring negative table column count setting %s.", name)
+                value = default
+            merged[name] = value
         return AppSettings(**merged)
 
     def save(self, settings: AppSettings) -> None:

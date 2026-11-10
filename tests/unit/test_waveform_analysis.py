@@ -131,6 +131,17 @@ def test_file_size_cap(tmp_path: Path) -> None:
     assert not (tmp_path / "cache").exists()
 
 
+def test_non_file_source_is_rejected_before_hashing(tmp_path: Path) -> None:
+    """A directory cannot be used as a waveform source."""
+    source = tmp_path / "folder"
+    source.mkdir()
+
+    with pytest.raises(ValueError, match="regular audio file"):
+        analyze_waveform(source, tmp_path / "cache")
+
+    assert not (tmp_path / "cache").exists()
+
+
 def test_empty_audio_and_expanded_overview(tmp_path: Path) -> None:
     """Empty tracks produce silent overview columns at the requested width."""
     source = tmp_path / "empty.wav"

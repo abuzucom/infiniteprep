@@ -9,6 +9,7 @@ import logging
 import math
 import os
 import re
+import stat
 import threading
 import uuid
 import zipfile
@@ -255,12 +256,18 @@ def analyze_waveform(
     The default user cache is shared across callers. A zero budget removes owned archives
     and skips new writes. An archive larger than the budget is not stored. Cache failures
     log warnings and preserve the analysis result. Source filesystem errors propagate.
+    The caller supplies a user-selected file path. Library files may live on any mounted
+    volume, so this service accepts regular files outside application-managed directories.
     """
-    source = Path(file_path)
+    _check_cancelled(cancel_event)
+    source = Path(file_path).resolve(strict=True)
     _check_cancelled(cancel_event)
     if max_cache_bytes < 0:
         raise ValueError("Cache size must be nonnegative. Supply a valid byte limit.")
-    if source.stat().st_size > MAX_PREVIEW_FILE_BYTES:
+    source_stat = source.stat()
+    if not stat.S_ISREG(source_stat.st_mode):
+        raise ValueError("Audio source must be a regular audio file.")
+    if source_stat.st_size > MAX_PREVIEW_FILE_BYTES:
         raise ValueError("Audio exceeds 500 MiB. Supply a smaller track.")
     directory = Path(cache_directory or storage_paths.current().cache_dir)
     key = _cache_key(source, cancel_event)

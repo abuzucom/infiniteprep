@@ -14,7 +14,18 @@ from infiniteprep.services.waveform_analysis import (
 )
 
 MAX_WAVEFORM_WORKERS = 2
+UNEXPECTED_FAILURE_MESSAGE = "Spectrum analysis failed unexpectedly. Check the application logs."
+UNREADABLE_SOURCE_MESSAGE = "Unable to read the selected audio file. Check that it exists and is accessible."
 logger = logging.getLogger(__name__)
+
+
+def _failure_message(error: Exception) -> str:
+    """Return a user-safe message while the worker logs full error details."""
+    if isinstance(error, ValueError):
+        return str(error)
+    if isinstance(error, OSError):
+        return UNREADABLE_SOURCE_MESSAGE
+    return UNEXPECTED_FAILURE_MESSAGE
 
 
 class _WorkerSignals(QObject):
@@ -44,13 +55,18 @@ class _AnalysisTask(QRunnable):
 
     def run(self) -> None:
         """Run spectrum decoding outside the Qt UI thread."""
+        if self.cancel_event.is_set():
+            return
         try:
             waveform = analyze_waveform(self.path, cancel_event=self.cancel_event)
         except WaveformAnalysisCancelled:
             return
         except Exception as error:
             logger.exception("Waveform analysis failed for %s", self.path)
-            self.signals.failed.emit(self.file_id, self.generation, str(error))
+            if not self.cancel_event.is_set():
+                self.signals.failed.emit(
+                    self.file_id, self.generation, _failure_message(error)
+                )
         else:
             if not self.cancel_event.is_set():
                 self.signals.completed.emit(self.file_id, self.generation, waveform)

@@ -21,7 +21,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from infiniteprep.config.settings import DEFAULT_WAVEFORM_ZOOM_SECONDS, SettingsManager
+from infiniteprep.config.settings import (
+    DEFAULT_WAVEFORM_ZOOM_SECONDS,
+    SUPPORTED_WAVEFORM_ZOOM_SECONDS,
+    SettingsManager,
+)
 from infiniteprep.ui.time_format import split_time_seconds
 
 logger = logging.getLogger(__name__)
@@ -53,7 +57,7 @@ ZOOM_PLAYHEAD_CENTER_RATIO: Final[float] = 0.5
 SPECTRUM_OVERLAY_ALPHA: Final[int] = 128
 SPECTRUM_DURATION_EPSILON_SEC: Final[float] = 1e-9
 PLAYHEAD_WIDTH_PX: Final[int] = 2
-ZOOM_SECONDS: Final[tuple[int, ...]] = (2, 4, DEFAULT_WAVEFORM_ZOOM_SECONDS, 16, 32)
+ZOOM_SECONDS: Final[tuple[int, ...]] = SUPPORTED_WAVEFORM_ZOOM_SECONDS
 OVERVIEW_MODE: Final[str] = "Overview"
 ZOOM_MODE: Final[str] = "Zoom"
 LAYOUT_MARGIN_PX: Final[int] = 4
@@ -553,7 +557,9 @@ class AudioPreviewWidget(QWidget):
     def _load_zoom_seconds(self) -> int:
         """Load a supported zoom duration, falling back to the D79b default."""
         saved = self.settings_manager.load().waveform_zoom_seconds
-        return saved if saved in ZOOM_SECONDS else DEFAULT_WAVEFORM_ZOOM_SECONDS
+        if type(saved) is int and saved in ZOOM_SECONDS:
+            return saved
+        return DEFAULT_WAVEFORM_ZOOM_SECONDS
 
     def _on_view_changed(self, mode: str) -> None:
         """Switch between the track overview and centered zoom view."""
