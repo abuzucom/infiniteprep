@@ -20,8 +20,13 @@ from infiniteprep.services.usb.models import (
 )
 from infiniteprep.services.usb.windows import (
     DISK_COMMAND,
+    DISK_COMMAND_TEXT,
+    MAX_COMMAND_OUTPUT_BYTES,
+    MAX_ERROR_TEXT_LEN,
     PARTITION_COMMAND,
+    PARTITION_COMMAND_TEXT,
     VOLUME_COMMAND,
+    VOLUME_COMMAND_TEXT,
     WindowsDriveInspector,
 )
 
@@ -415,6 +420,44 @@ class TestUsbWindowsInspection(unittest.TestCase):
             executed,
             [list(DISK_COMMAND), list(PARTITION_COMMAND), list(VOLUME_COMMAND)],
         )
+
+    def test_commands_pin_system_powershell(self) -> None:
+        """Command arrays target the System32 interpreter with a fixed policy flag."""
+        expected_exe = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        for command, text in (
+            (DISK_COMMAND, DISK_COMMAND_TEXT),
+            (PARTITION_COMMAND, PARTITION_COMMAND_TEXT),
+            (VOLUME_COMMAND, VOLUME_COMMAND_TEXT),
+        ):
+            self.assertEqual(
+                command,
+                (
+                    expected_exe,
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-ExecutionPolicy",
+                    "Restricted",
+                    "-Command",
+                    text,
+                ),
+            )
+
+    def test_oversized_output_raises_parse_error(self) -> None:
+        """Output beyond the byte limit raises InspectionParseError before parsing."""
+        _, inspector = _make_mock_runner(disks_stdout="[" + "a" * (MAX_COMMAND_OUTPUT_BYTES) + "]")
+        with self.assertRaises(InspectionParseError):
+            inspector.inspect_all()
+
+    def test_command_failure_message_is_bounded(self) -> None:
+        """A huge stderr reply yields a bounded error message."""
+
+        def loud_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+            return subprocess.CompletedProcess(cmd, 1, "", "E" * (MAX_ERROR_TEXT_LEN * 4))
+
+        noisy = WindowsDriveInspector(command_runner=loud_runner)
+        with self.assertRaises(CommandExecutionError) as ctx:
+            noisy.inspect_all()
+        self.assertLessEqual(len(str(ctx.exception)), MAX_ERROR_TEXT_LEN + 64)
 
     def test_malformed_json_raises_parse_error(self) -> None:
         """Malformed JSON from any command raises InspectionParseError."""

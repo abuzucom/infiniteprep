@@ -28,7 +28,13 @@ from infiniteprep.services.usb.models import (
     SpaceInfo,
 )
 
-POWERSHELL_EXE: Final[str] = "powershell.exe"
+# Absolute System32 path pins Windows PowerShell 5.1 so a hostile PATH entry
+# cannot substitute the interpreter (foucault MEDIUM, PR #196).
+POWERSHELL_EXE: Final[str] = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+# Bounded output keeps a malfunctioning storage stack from exhausting memory
+# during parsing (foucault MEDIUM, PR #196).
+MAX_COMMAND_OUTPUT_BYTES: Final[int] = 8 * 1024 * 1024
+MAX_ERROR_TEXT_LEN: Final[int] = 4096
 DISK_COMMAND_TEXT: Final[str] = (
     "Get-Disk | Select-Object DiskNumber, Model, Manufacturer, "
     "SerialNumber, BusType, Size, PartitionStyle, IsReadOnly "
@@ -46,6 +52,8 @@ DISK_COMMAND: Final[tuple[str, ...]] = (
     POWERSHELL_EXE,
     "-NoProfile",
     "-NonInteractive",
+    "-ExecutionPolicy",
+    "Restricted",
     "-Command",
     DISK_COMMAND_TEXT,
 )
@@ -53,6 +61,8 @@ PARTITION_COMMAND: Final[tuple[str, ...]] = (
     POWERSHELL_EXE,
     "-NoProfile",
     "-NonInteractive",
+    "-ExecutionPolicy",
+    "Restricted",
     "-Command",
     PARTITION_COMMAND_TEXT,
 )
@@ -60,6 +70,8 @@ VOLUME_COMMAND: Final[tuple[str, ...]] = (
     POWERSHELL_EXE,
     "-NoProfile",
     "-NonInteractive",
+    "-ExecutionPolicy",
+    "Restricted",
     "-Command",
     VOLUME_COMMAND_TEXT,
 )
@@ -259,8 +271,13 @@ class WindowsDriveInspector:
             raise CommandExecutionError(f"{label} execution failed: {exc}") from exc
 
         if completed.returncode != 0:
-            err = completed.stderr.strip() or f"exit code {completed.returncode}"
+            raw_err = completed.stderr.strip()[:MAX_ERROR_TEXT_LEN]
+            err = raw_err or f"exit code {completed.returncode}"
             raise CommandExecutionError(f"{label} failed with {err}")
+
+        if len(completed.stdout) > MAX_COMMAND_OUTPUT_BYTES:
+            message = f"{label} output exceeds the {MAX_COMMAND_OUTPUT_BYTES} byte limit."
+            raise InspectionParseError(message)
 
         stdout = completed.stdout.strip()
         if not stdout:
