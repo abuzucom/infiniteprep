@@ -7,6 +7,8 @@ argument arrays reach subprocess.
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 import sys
 import time
@@ -18,6 +20,7 @@ from infiniteprep.services.usb._shared import clean_str
 from infiniteprep.services.usb.macos import (
     DISKUTIL_INFO_COMMAND,
     DISKUTIL_LIST_COMMAND,
+    KILL_SIGNAL,
     MAX_PLIST_OUTPUT_BYTES,
     MAX_STDERR_BYTES,
     MacOSDriveInspector,
@@ -1087,38 +1090,74 @@ class TestUsbMacosInspection(unittest.TestCase):
         """Terminate and kill tolerate a child that already exited."""
 
         class ExitedProcess:
-            def terminate(self) -> None:
-                raise ProcessLookupError
+            pid = 12345
 
-            def kill(self) -> None:
+            def send_signal(self, sig: int) -> None:
                 raise ProcessLookupError
 
             def wait(self, timeout: float | None = None) -> int:
                 return 0
 
-        _terminate_process(ExitedProcess(), time.monotonic() + 10.0)
+        process = ExitedProcess()
+        with mock.patch("os.getpgid", side_effect=ProcessLookupError, create=True):
+            _terminate_process(process, time.monotonic() + 10.0)
 
     def test_terminate_process_escalates_to_kill(self) -> None:
-        """A child ignoring terminate escalates to kill with bounded waits."""
+        """A child ignoring terminate escalates to the kill signal with bounded waits."""
 
         class StubbornProcess:
             def __init__(self) -> None:
-                self.calls: list[str] = []
+                self.signals: list[int] = []
+                self.pid = 12345
 
-            def terminate(self) -> None:
-                self.calls.append("terminate")
-
-            def kill(self) -> None:
-                self.calls.append("kill")
+            def send_signal(self, sig: int) -> None:
+                self.signals.append(sig)
 
             def wait(self, timeout: float | None = None) -> int:
-                if "kill" not in self.calls:
+                if KILL_SIGNAL not in self.signals:
                     raise subprocess.TimeoutExpired(cmd=[], timeout=timeout or 0.0)
                 return 0
 
         process = StubbornProcess()
-        _terminate_process(process, time.monotonic() + 30.0)
-        self.assertEqual(process.calls, ["terminate", "kill"])
+        with mock.patch("os.getpgid", side_effect=ProcessLookupError, create=True):
+            _terminate_process(process, time.monotonic() + 30.0)
+        if hasattr(os, "killpg"):
+            self.assertEqual(process.signals, [signal.SIGTERM, signal.SIGKILL])
+        else:
+            self.assertEqual(process.signals, [signal.SIGTERM])
+
+    @unittest.skipIf(not hasattr(os, "killpg"), "process groups are POSIX-only")
+    def test_terminate_process_signals_process_group(self) -> None:
+        """Terminate targets the process group before process scope."""
+
+        class GroupProcess:
+            pid = 424242
+
+            def __init__(self) -> None:
+                self.signals: list[int] = []
+
+            def send_signal(self, sig: int) -> None:
+                self.signals.append(sig)
+
+            def wait(self, timeout: float | None = None) -> int:
+                return 0
+
+        process = GroupProcess()
+        signaled_groups: list[tuple[int, int]] = []
+
+        def fake_getpgid(pid: int) -> int:
+            return pid
+
+        def fake_killpg(pgid: int, sig: int) -> None:
+            signaled_groups.append((pgid, sig))
+
+        with (
+            mock.patch("os.getpgid", side_effect=fake_getpgid),
+            mock.patch("os.killpg", side_effect=fake_killpg),
+        ):
+            _terminate_process(process, time.monotonic() + 10.0)
+        self.assertEqual(signaled_groups, [(424242, signal.SIGTERM)])
+        self.assertEqual(process.signals, [])
 
     def test_oversized_plist_raises_parse_error(self) -> None:
         """Plist output above the byte cap raises before parsing."""

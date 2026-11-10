@@ -50,20 +50,37 @@ MAX_STDERR_BYTES: Final[int] = 64 * 1024
 CHUNK_BYTES: Final[int] = 64 * 1024
 REAP_WAIT_SECONDS: Final[float] = 2.0
 WAIT_GRACE_SECONDS: Final[float] = 1.0
+KILL_SIGNAL: Final[int] = getattr(signal, "SIGKILL", signal.SIGTERM)
+
+
+def _signal_child(process: subprocess.Popen[bytes], sig: int) -> bool:
+    """Deliver a signal to the child, targeting its process group on POSIX.
+
+    The child runs in its own session, so the group signal reaches descendants
+    as well. The call falls back to process scope when the group is gone and
+    returns False when the child already exited.
+    """
+    if hasattr(os, "killpg"):
+        with contextlib.suppress(OSError):
+            os.killpg(os.getpgid(process.pid), sig)
+            return True
+    try:
+        process.send_signal(sig)
+        return True
+    except ProcessLookupError:
+        return False
 
 
 def _terminate_process(process: subprocess.Popen[bytes], deadline: float) -> None:
     """Terminate, kill, and reap the child under bounded waits.
 
-    The escalation tolerates a child that already exited (ProcessLookupError)
-    and a child stuck in an uninterruptible state, which reaps when the
-    inspector process exits. On POSIX the child runs in its own session, so the
-    final kill targets the whole process group.
+    Both signals target the process group from the start, so spawned
+    grandchildren receive them too. Escalation tolerates a child that already
+    exited (ProcessLookupError) and a child stuck in an uninterruptible state,
+    which reaps when the inspector process exits.
     """
-    for stop in (process.terminate, process.kill):
-        try:
-            stop()
-        except ProcessLookupError:
+    for sig in (signal.SIGTERM, KILL_SIGNAL):
+        if not _signal_child(process, sig):
             with contextlib.suppress(ChildProcessError):
                 process.wait(timeout=WAIT_GRACE_SECONDS)
             return
@@ -73,9 +90,6 @@ def _terminate_process(process: subprocess.Popen[bytes], deadline: float) -> Non
             return
         except subprocess.TimeoutExpired:
             continue
-    if hasattr(os, "killpg"):
-        with contextlib.suppress(OSError, ProcessLookupError):
-            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
     with contextlib.suppress(subprocess.TimeoutExpired):
         process.wait(timeout=REAP_WAIT_SECONDS)
 
@@ -144,7 +158,7 @@ def _capture_bounded(
         reader.join(REAP_WAIT_SECONDS)
     for reader in (stdout_reader, stderr_reader):
         if reader.is_alive():
-            raise CommandExecutionError("diskutil pipe reader did not finish after terminate.")
+            raise CommandExecutionError("command pipe reader did not finish after terminate.")
     for state in (stdout_state, stderr_state):
         if state["error"] is not None:
             raise state["error"]
@@ -412,13 +426,17 @@ class MacOSDriveInspector:
 
         vendor and serial map from the diskutil Vendor, Manufacturer, and
         SerialNumber keys and stay None when the media does not report them.
+        Size candidates fall through only on a missing key, not on a valid zero.
         """
+        raw_size = entry.get("Size")
+        if raw_size is None:
+            raw_size = disk_info.get("DiskSize")
+        if raw_size is None:
+            raw_size = disk_info.get("TotalSize")
         return DriveIdentity(
             name=identifier,
             path=f"/dev/{identifier}",
-            size_bytes=clean_int(entry.get("Size"))
-            or clean_int(disk_info.get("DiskSize"))
-            or clean_int(disk_info.get("TotalSize")),
+            size_bytes=clean_int(raw_size),
             model=clean_str(disk_info.get("DeviceName")) or clean_str(disk_info.get("MediaName")),
             vendor=clean_str(disk_info.get("Vendor")) or clean_str(disk_info.get("Manufacturer")),
             serial=clean_str(disk_info.get("SerialNumber")),
@@ -553,11 +571,13 @@ class MacOSDriveInspector:
             space = self._space_from_volume_info(volume_info)
             if space is not None:
                 space_entries.append((mount_point, space))
+        raw_size = part_dict.get("Size")
+        if raw_size is None and volume_info is not None:
+            raw_size = volume_info.get("TotalSize")
         partition = PartitionInfo(
             name=identifier,
             path=f"/dev/{identifier}",
-            size_bytes=clean_int(part_dict.get("Size"))
-            or (clean_int(volume_info.get("TotalSize")) if volume_info else 0),
+            size_bytes=clean_int(raw_size),
             partition_number=_partition_number_from_identifier(identifier, fallback_index),
             partition_scheme=parent_scheme,
             partition_type=clean_str(part_dict.get("PartitionType"))
