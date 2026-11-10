@@ -157,6 +157,20 @@ class AppSettings:
     waveform_zoom_seconds: int = DEFAULT_WAVEFORM_ZOOM_SECONDS
 
 
+def _validated_setting_value(name: str, value: object, default: object) -> object:
+    """Use a field default when a persisted value has an invalid type or range."""
+    if type(value) is not type(default):
+        logger.warning("Ignoring setting %s with an invalid type.", name)
+        return default
+    if name == "waveform_zoom_seconds" and value not in SUPPORTED_WAVEFORM_ZOOM_SECONDS:
+        logger.warning("Ignoring unsupported waveform zoom setting.")
+        return default
+    if name in NONNEGATIVE_COUNT_SETTINGS and value < 0:
+        logger.warning("Ignoring negative table column count setting %s.", name)
+        return default
+    return value
+
+
 class SettingsManager:
     """Loads and saves non-secret AppSettings to a JSON file."""
 
@@ -184,17 +198,7 @@ class SettingsManager:
         defaults = asdict(AppSettings())
         merged: dict[str, object] = {}
         for name, default in defaults.items():
-            value = raw.get(name, default)
-            if type(value) is not type(default):
-                logger.warning("Ignoring setting %s with an invalid type.", name)
-                value = default
-            elif name == "waveform_zoom_seconds" and value not in SUPPORTED_WAVEFORM_ZOOM_SECONDS:
-                logger.warning("Ignoring unsupported waveform zoom setting.")
-                value = default
-            elif name in NONNEGATIVE_COUNT_SETTINGS and value < 0:
-                logger.warning("Ignoring negative table column count setting %s.", name)
-                value = default
-            merged[name] = value
+            merged[name] = _validated_setting_value(name, raw.get(name, default), default)
         return AppSettings(**merged)
 
     def save(self, settings: AppSettings) -> None:
