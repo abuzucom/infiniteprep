@@ -64,6 +64,8 @@ class _AnalysisTask(QRunnable):
         except WaveformAnalysisCancelled:
             return
         except Exception as error:
+            # Cancellation intentionally derives from BaseException, so it cannot be
+            # consumed by this ordinary analysis-failure boundary.
             logger.exception("Waveform analysis failed for %s", self.path)
             if not self.cancel_event.is_set():
                 self.signals.failed.emit(self.file_id, self.generation, _failure_message(error))

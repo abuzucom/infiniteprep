@@ -6,6 +6,7 @@ import ipaddress
 import json
 import logging
 import socket
+import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final
@@ -179,9 +180,15 @@ class SettingsManager:
         if settings_path is None:
             settings_path = storage_paths.current().config_dir / "settings.json"
         self.settings_path = settings_path
+        self._lock = threading.RLock()
 
     def load(self) -> AppSettings:
         """Load AppSettings from disk or return defaults if not present."""
+        with self._lock:
+            return self._load_unlocked()
+
+    def _load_unlocked(self) -> AppSettings:
+        """Load settings while the manager lock is held."""
         if not self.settings_path.exists():
             return AppSettings()
         try:
@@ -203,6 +210,21 @@ class SettingsManager:
 
     def save(self, settings: AppSettings) -> None:
         """Persist AppSettings to disk as formatted JSON."""
-        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = json.dumps(asdict(settings), indent=2, ensure_ascii=True)
-        self.settings_path.write_text(payload, encoding="utf-8")
+        with self._lock:
+            self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = json.dumps(asdict(settings), indent=2, ensure_ascii=True)
+            self.settings_path.write_text(payload, encoding="utf-8")
+
+    def update(self, **changes: object) -> AppSettings:
+        """Merge selected fields into the latest settings and persist them."""
+        with self._lock:
+            settings = self._load_unlocked()
+            defaults = asdict(AppSettings())
+            for name, value in changes.items():
+                if name not in defaults:
+                    raise ValueError(f"Unknown setting: {name}")
+                setattr(settings, name, _validated_setting_value(name, value, defaults[name]))
+            self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = json.dumps(asdict(settings), indent=2, ensure_ascii=True)
+            self.settings_path.write_text(payload, encoding="utf-8")
+            return settings

@@ -39,3 +39,15 @@ def test_load_replaces_non_object_settings_document(tmp_path: Path) -> None:
     settings_path.write_text("[]", encoding="utf-8")
 
     assert SettingsManager(settings_path).load() == AppSettings()
+
+
+def test_partial_update_preserves_other_persisted_settings(tmp_path: Path) -> None:
+    """Updating zoom must retain settings fields loaded from the same file."""
+    manager = SettingsManager(tmp_path / "settings.json")
+    manager.save(AppSettings(rename_template="{artist} - {title}"))
+
+    manager.update(waveform_zoom_seconds=16)
+
+    loaded = manager.load()
+    assert loaded.waveform_zoom_seconds == 16
+    assert loaded.rename_template == "{artist} - {title}"

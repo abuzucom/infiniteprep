@@ -577,9 +577,7 @@ class AudioPreviewWidget(QWidget):
             return
         self.waveform_zoom_seconds = seconds
         self.waveform_bar.zoom_seconds = seconds
-        settings = self.settings_manager.load()
-        settings.waveform_zoom_seconds = seconds
-        self.settings_manager.save(settings)
+        self.settings_manager.update(waveform_zoom_seconds=seconds)
         self.waveform_bar.update()
 
     def set_spectrum_waveform(self, waveform: object) -> None:

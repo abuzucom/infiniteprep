@@ -252,7 +252,6 @@ class DetailPanel(QWidget):
     def load_file_asset(self, file_id: str) -> None:
         """Populate the detail panel for the specified file_id."""
         if file_id != self.current_file_id:
-            self._analysis_generation += 1
             self._analysis_file_id = None
             self._analysis_path = None
         self.current_file_id = file_id
