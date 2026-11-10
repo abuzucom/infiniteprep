@@ -15,9 +15,10 @@ from collections.abc import Callable
 from typing import Any, Final
 
 from infiniteprep.services.usb._shared import (
-    DEFAULT_COMMAND_TIMEOUT_SECONDS,
     clean_int,
     clean_str,
+    default_command_runner,
+    sanitize_mount_point,
 )
 from infiniteprep.services.usb.models import (
     CommandExecutionError,
@@ -70,14 +71,6 @@ def _sanitize_device_path(raw_path: Any, safe_name: str) -> str:
     return f"/dev/{safe_name}"
 
 
-def _sanitize_mount_point(val: Any) -> str | None:
-    """Sanitize untrusted mountpoint path, preventing traversal and control characters."""
-    cleaned = clean_str(val)
-    if not cleaned or ".." in cleaned or not cleaned.startswith("/"):
-        return None
-    return cleaned
-
-
 def _extract_partition_number(part_dict: dict[str, Any], fallback_index: int) -> int:
     """Determine partition number from PARTN column, name suffix, or fallback index."""
     partn_val = clean_str(part_dict.get("partn"))
@@ -104,19 +97,7 @@ class LinuxDriveInspector:
         command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
     ) -> None:
         """Initialize with optional command runner for hermetic testing."""
-        self._command_runner = command_runner or self._default_runner
-
-    @staticmethod
-    def _default_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-        """Execute a fixed command array safely using subprocess.run with shell=False."""
-        return subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS,
-            shell=False,
-        )
+        self._command_runner = command_runner or default_command_runner
 
     def inspect_all(self) -> tuple[DriveInspection, ...]:
         """Inspect all block devices and return DriveInspection records."""
@@ -201,7 +182,7 @@ class LinuxDriveInspector:
                 continue
 
             raw_mount = " ".join(parts[5:])
-            mount_point = _sanitize_mount_point(_decode_df_mount(raw_mount))
+            mount_point = sanitize_mount_point(_decode_df_mount(raw_mount))
             if not mount_point:
                 continue
 
@@ -358,11 +339,11 @@ class LinuxDriveInspector:
         mounts: list[str] = []
         if isinstance(raw_mounts, list):
             for m in raw_mounts:
-                clean = _sanitize_mount_point(m)
+                clean = sanitize_mount_point(m)
                 if clean:
                     mounts.append(clean)
         elif device_entry.get("mountpoint"):
-            clean = _sanitize_mount_point(device_entry.get("mountpoint"))
+            clean = sanitize_mount_point(device_entry.get("mountpoint"))
             if clean:
                 mounts.append(clean)
         return tuple(dict.fromkeys(mounts))

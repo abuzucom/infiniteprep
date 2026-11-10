@@ -5,15 +5,54 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.51.0] (2026-11-09)
+## [0.52.0] (2026-11-10)
+
+### Added
+
+- `WindowsDriveInspector` in `services/usb/windows.py` performing read-only Windows drive inspection with fixed PowerShell Storage command projections for `Get-Disk`, `Get-Partition`, and `Get-Volume`, executed as fixed argument arrays with `shell=False` and a timeout, and with no drive data in command text (USB-3, #155).
+- The Windows inspector reuses the shared `_shared.py` sanitization helpers and the shared `default_command_runner` established by #195.
+- Unit tests in `tests/unit/test_usb_windows_inspection.py` covering recorded outputs for a FAT32 stick, an exFAT stick, and a GPT system disk, plus malformed command replies, fixed command arrays, and untrusted metadata sanitization.
+
+### Changed
+
+- Pin the Windows inspector PowerShell interpreter to the System32 path with an explicit Restricted execution policy so a hostile PATH entry cannot substitute it.
+- Bound Windows inspector command output at 8 MiB before parsing and cap stderr text in error messages.
+
+## [0.51.4] (2026-11-09)
 
 ### Added
 
 - Each package build creates a CycloneDX SBOM from its locked Python environment. The SBOM tool runs in an isolated temporary environment and uploads a separate artifact for each target OS.
 
-- `WindowsDriveInspector` in `services/usb/windows.py` performing read-only Windows drive inspection with fixed PowerShell Storage command projections for `Get-Disk`, `Get-Partition`, and `Get-Volume`, executed as fixed argument arrays with `shell=False` and a timeout, and with no drive data in command text (USB-3, #155).
-- Shared sanitization helpers in `services/usb/_shared.py` for untrusted drive metadata, used by both the Linux and Windows inspectors.
-- Unit tests in `tests/unit/test_usb_windows_inspection.py` covering recorded outputs for a FAT32 stick, an exFAT stick, and a GPT system disk, plus malformed command replies, fixed command arrays, and untrusted metadata sanitization.
+- `services/usb/macos.py` with read-only macOS drive inspection (`MacOSDriveInspector`), using fixed argument arrays for `diskutil list -plist` and `diskutil info -plist` without shell interpolation and `plistlib` parsing to record the same fields as the Linux inspector (USB-2, #154).
+- Untrusted `diskutil` reply sanitization in `services/usb/macos.py` validating device identifiers and partition structure before any `diskutil info` invocation, filtering traversal mount points, truncating overlong labels, normalizing `MS-DOS FAT32` filesystem names, and deriving partition numbers from `diskNsM` identifiers (#154).
+- APFS container correlation in `services/usb/macos.py` attaching container volumes to every owning physical drive through `APFSPhysicalStores` and skipping synthesized container entries as drives (#154).
+- `MacOSDriveInspector` accepts an optional `timeout_seconds` override and a bounded default runner that discards stdout above `MAX_PLIST_OUTPUT_BYTES` during capture (#154).
+- Unit tests in `tests/unit/test_usb_macos_inspection.py` covering recorded plists for a FAT32 stick, an exFAT stick, an APFS system disk with a synthesized container entry, a legacy APFS volume shape, and malformed replies, plus command failure, timeout, traversal rejection, oversized-reply rejection, targeted device resolution, platform guarding, and fixed-argv guarantees (#154).
+
+### Changed
+
+- Extract shared inspector helpers into `services/usb/_shared.py` (`clean_str`, `clean_int`, `sanitize_mount_point`, `default_command_runner`). The Linux inspector keeps its behavior.
+
+### Fixed
+
+- `bounded_command_runner` in `services/usb/macos.py` closes child pipes through the `_close_pipes` helper to respect the nesting invariant (#154).
+- `_terminate_process` in `services/usb/macos.py` targets the process group with terminate and kill signals on POSIX and falls back to process scope when the group is gone. Spawned descendants receive the signals (#154).
+- `_build_drive_identity` and `_build_partition` in `services/usb/macos.py` fall through size candidates only on a missing key. A valid zero no longer counts as missing (#154).
+- The pipe reader timeout error names the generic command instead of `diskutil` (#154).
+- `MACOS_DEVICE_SAFE_RE` in `services/usb/macos.py` accepts only whole disks and single-suffix partitions. `_partition_number_from_identifier` documents that APFS container volumes keep the container volume index (#154).
+- `bounded_command_runner` in `services/usb/macos.py` reads stdout and stderr through chunked capped pipe readers under one deadline. Replies never buffer beyond the caps. Stderr no longer spools to disk. The runner validates its timeout, runs the child in a POSIX session and kills the group on timeout, clamps every wait to nonnegative values, tolerates child exit races and stuck reaps, and closes pipes with guarded suppression (#154).
+- `_parse_plist_dict` in `services/usb/macos.py` keeps the byte cap for injected command runners and raises `InspectionParseError` instead of `UnicodeEncodeError` on undecodable output (#154).
+- `_build_drive_identity` in `services/usb/macos.py` maps the `Vendor`, `Manufacturer`, and `SerialNumber` info keys onto the drive identity when present (#154).
+- `default_command_runner` in `services/usb/_shared.py` decodes output with `errors="replace"` so invalid UTF-8 no longer raises (#154).
+- `bounded_command_runner` in `services/usb/macos.py` bounds the stdout read and every reap wait under a deadline, terminates stuck children with escalating terminate and kill signals, tolerates exit races, caps stderr at `MAX_STDERR_BYTES`, and reaps the child on every failure path (#154).
+- `services/usb/macos.py` caps accepted `diskutil` stdout at `MAX_PLIST_OUTPUT_BYTES` (8 MiB) before `plistlib` parsing and raises `InspectionParseError` on oversized replies (#154).
+- `inspect_device` in `services/usb/macos.py` runs `diskutil info` only for the matching drive and its mounted volumes instead of every disk (#154).
+
+### Added
+
+- Each package build creates a CycloneDX SBOM from its locked Python environment. The SBOM tool runs in an isolated temporary environment and uploads a separate artifact for each target OS.
+
 - `services/usb/` package with read-only Linux drive inspection (`LinuxDriveInspector`), using fixed argument arrays for `lsblk` and `df` without shell interpolation (`shell=False`) to record drive identity, partition layout, filesystem attributes, and free space (USB-1, #153).
 - Immutable `@dataclass(frozen=True)` models for drive identity, partition metadata, space statistics, and inspection records, with helper properties for FAT32 and exFAT detection.
 - Untrusted USB device metadata sanitization in `services/usb/linux.py` stripping ANSI escape sequences, control characters, and NUL bytes, enforcing path traversal protections, validating mapping types for block devices and partitions, and resolving partition numbers from PARTN columns (#153).

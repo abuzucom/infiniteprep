@@ -1,17 +1,32 @@
-"""Shared sanitization helpers for USB drive inspection (D93, D161, D181, D183, Rule 1).
+"""Shared helpers for USB drive inspectors (USB-1 #153, USB-2 #154).
 
-Every platform inspector treats drive-supplied metadata as untrusted input.
-These helpers normalize that input before it reaches the domain models.
+Untrusted metadata sanitization and safe subprocess execution shared by the
+platform inspectors. Every helper treats external command output as untrusted
+input and never executes reconstructed text.
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
 from typing import Any, Final
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS: Final[float] = 15.0
 MAX_METADATA_STR_LEN: Final[int] = 512
 ANSI_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+
+
+def default_command_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    """Execute a fixed command array safely using subprocess.run with shell=False."""
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        check=False,
+        errors="replace",
+        timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS,
+        shell=False,
+    )
 
 
 def clean_str(val: Any, max_len: int = MAX_METADATA_STR_LEN) -> str | None:
@@ -36,3 +51,11 @@ def clean_int(val: Any, default: int = 0) -> int:
         return max(0, parsed)
     except (ValueError, TypeError):
         return default
+
+
+def sanitize_mount_point(val: Any) -> str | None:
+    """Sanitize untrusted mountpoint path, preventing traversal and control characters."""
+    cleaned = clean_str(val)
+    if not cleaned or ".." in cleaned or not cleaned.startswith("/"):
+        return None
+    return cleaned

@@ -15,9 +15,9 @@ from collections.abc import Callable
 from typing import Any, Final
 
 from infiniteprep.services.usb._shared import (
-    DEFAULT_COMMAND_TIMEOUT_SECONDS,
     clean_int,
     clean_str,
+    default_command_runner,
 )
 from infiniteprep.services.usb.models import (
     CommandExecutionError,
@@ -211,19 +211,7 @@ class WindowsDriveInspector:
         command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
     ) -> None:
         """Initialize with optional command runner for hermetic testing."""
-        self._command_runner = command_runner or self._default_runner
-
-    @staticmethod
-    def _default_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-        """Execute a fixed command array safely using subprocess.run with shell=False."""
-        return subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS,
-            shell=False,
-        )
+        self._command_runner = command_runner or default_command_runner
 
     def inspect_all(self) -> tuple[DriveInspection, ...]:
         """Inspect all disks and return DriveInspection records ordered by disk number."""
