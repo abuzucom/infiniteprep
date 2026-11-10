@@ -1,4 +1,4 @@
-"""Shared helpers for USB drive inspectors (D161, D183, Rule 1).
+"""Shared helpers for USB drive inspectors (USB-1 #153, USB-2 #154).
 
 Untrusted metadata sanitization and safe subprocess execution shared by the
 platform inspectors. Every helper treats external command output as untrusted
@@ -23,6 +23,7 @@ def default_command_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
         capture_output=True,
         text=True,
         check=False,
+        errors="replace",
         timeout=DEFAULT_COMMAND_TIMEOUT_SECONDS,
         shell=False,
     )

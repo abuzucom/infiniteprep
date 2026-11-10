@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.51.1] (2026-11-09)
+## [0.51.2] (2026-11-09)
 
 ### Added
 
@@ -23,6 +23,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `MACOS_DEVICE_SAFE_RE` in `services/usb/macos.py` accepts only whole disks and single-suffix partitions. `_partition_number_from_identifier` documents that APFS container volumes keep the container volume index (#154).
+- `bounded_command_runner` in `services/usb/macos.py` reads stdout and stderr through chunked capped pipe readers under one deadline. Replies never buffer beyond the caps. Stderr no longer spools to disk. The runner validates its timeout, runs the child in a POSIX session and kills the group on timeout, clamps every wait to nonnegative values, tolerates child exit races and stuck reaps, and closes pipes with guarded suppression (#154).
+- `_parse_plist_dict` in `services/usb/macos.py` keeps the byte cap for injected command runners and raises `InspectionParseError` instead of `UnicodeEncodeError` on undecodable output (#154).
+- `_build_drive_identity` in `services/usb/macos.py` maps the `Vendor`, `Manufacturer`, and `SerialNumber` info keys onto the drive identity when present (#154).
+- `default_command_runner` in `services/usb/_shared.py` decodes output with `errors="replace"` so invalid UTF-8 no longer raises (#154).
 - `bounded_command_runner` in `services/usb/macos.py` bounds the stdout read and every reap wait under a deadline, terminates stuck children with escalating terminate and kill signals, tolerates exit races, caps stderr at `MAX_STDERR_BYTES`, and reaps the child on every failure path (#154).
 - `services/usb/macos.py` caps accepted `diskutil` stdout at `MAX_PLIST_OUTPUT_BYTES` (8 MiB) before `plistlib` parsing and raises `InspectionParseError` on oversized replies (#154).
 - `inspect_device` in `services/usb/macos.py` runs `diskutil info` only for the matching drive and its mounted volumes instead of every disk (#154).

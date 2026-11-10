@@ -1,4 +1,4 @@
-"""Unit tests for read-only macOS USB drive and filesystem inspection (D161, D183, D203, Rule 1).
+"""Unit tests for read-only macOS USB drive and filesystem inspection (USB-2, #154).
 
 All diskutil replies are recorded plist fixtures. No test invokes the real
 diskutil binary; the command runner stub records argv to prove that only fixed
@@ -19,6 +19,7 @@ from infiniteprep.services.usb.macos import (
     DISKUTIL_INFO_COMMAND,
     DISKUTIL_LIST_COMMAND,
     MAX_PLIST_OUTPUT_BYTES,
+    MAX_STDERR_BYTES,
     MacOSDriveInspector,
     _terminate_process,
     bounded_command_runner,
@@ -312,6 +313,8 @@ MSDOS_FAT32_DISK_INFO_PLIST: Final[str] = (
     + "\t<key>DeviceIdentifier</key>\n\t<string>disk4</string>\n"
     + "\t<key>DeviceName</key>\n\t<string>Generic Storage</string>\n"
     + "\t<key>DiskSize</key>\n\t<integer>1000</integer>\n"
+    + "\t<key>SerialNumber</key>\n\t<string>SN123456</string>\n"
+    + "\t<key>Vendor</key>\n\t<string>SanDisk</string>\n"
     + "</dict>\n"
     + "</plist>\n"
 )
@@ -1064,6 +1067,22 @@ class TestUsbMacosInspection(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertLess(elapsed, 30.0)
 
+    def test_bounded_runner_survives_stderr_flood(self) -> None:
+        """A child flooding stderr fails within the deadline with bounded storage."""
+        started = time.monotonic()
+        flood = "import sys; sys.stderr.write('e' * 200000); sys.stderr.flush()"
+        result = bounded_command_runner([sys.executable, "-c", flood], 2.0)
+        elapsed = time.monotonic() - started
+        self.assertNotEqual(result.returncode, 0)
+        self.assertLessEqual(len(result.stderr), MAX_STDERR_BYTES)
+        self.assertLess(elapsed, 30.0)
+
+    def test_bounded_runner_rejects_nonpositive_timeout(self) -> None:
+        """The runner validates its timeout argument directly."""
+        for bad_timeout in (0, -1.0):
+            with self.assertRaises(ValueError):
+                bounded_command_runner(["python", "-c", "pass"], bad_timeout)
+
     def test_terminate_process_tolerates_exit_race(self) -> None:
         """Terminate and kill tolerate a child that already exited."""
 
@@ -1103,12 +1122,34 @@ class TestUsbMacosInspection(unittest.TestCase):
 
     def test_oversized_plist_raises_parse_error(self) -> None:
         """Plist output above the byte cap raises before parsing."""
+        oversized = "x" * (MAX_PLIST_OUTPUT_BYTES + 1)
         with self.assertRaisesRegex(InspectionParseError, "byte limit"):
-            MacOSDriveInspector._parse_plist_dict(
-                NON_MAPPING_LIST_PLIST,
-                "diskutil list",
-                max_bytes=4,
-            )
+            MacOSDriveInspector._parse_plist_dict(oversized, "diskutil list")
+
+    def test_parse_plist_dict_rejects_undecodable_output(self) -> None:
+        """Output with lone surrogates raises InspectionParseError, not UnicodeEncodeError."""
+        with self.assertRaises(InspectionParseError):
+            MacOSDriveInspector._parse_plist_dict("\ud800 not a plist", "diskutil list")
+
+    def test_inspect_device_rejects_nested_suffix(self) -> None:
+        """Identifiers with more than one sN suffix fail validation."""
+        inspector = MacOSDriveInspector(command_runner=fat32_stick_runner())
+        for unsafe in ("disk2s1s2", "/dev/disk2s1s2"):
+            with self.assertRaises(CommandExecutionError):
+                inspector.inspect_device(unsafe)
+
+    def test_drive_identity_maps_vendor_and_serial(self) -> None:
+        """Vendor, Manufacturer, and SerialNumber info keys map onto the identity."""
+        runner = FakeRunner(
+            list_plist=MSDOS_FAT32_LIST_PLIST,
+            info_by_device={
+                "disk4": MSDOS_FAT32_DISK_INFO_PLIST,
+                "disk4s1": MSDOS_FAT32_VOLUME_INFO_PLIST,
+            },
+        )
+        inspection = MacOSDriveInspector(command_runner=runner).inspect_all()[0]
+        self.assertEqual(inspection.drive.vendor, "SanDisk")
+        self.assertEqual(inspection.drive.serial, "SN123456")
 
     def test_inspect_device_info_calls_limited_to_target(self) -> None:
         """inspect_device runs info calls only for the matching drive."""

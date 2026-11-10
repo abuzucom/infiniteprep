@@ -1,11 +1,10 @@
-"""Read-only macOS drive and partition inspection using diskutil (D161, D183, D203, Rule 1).
+"""Read-only macOS drive and partition inspection using diskutil (USB-2, #154).
 
 This module executes fixed argument arrays without shell interpolation to inspect
 connected storage devices, partition schemes, filesystems, and available space.
-It captures stdout through a bounded pipe read capped at MAX_PLIST_OUTPUT_BYTES
-under a hard deadline, parses only plist output, and performs strictly read-only
-queries (list, info). It correlates APFS container entries
-through APFSPhysicalStores and attaches
+It captures stdout and stderr through bounded pipe reads under a hard deadline,
+parses only plist output, and performs strictly read-only queries (list, info).
+It correlates APFS container entries through APFSPhysicalStores and attaches
 their volumes to every owning physical drive. It treats all USB-supplied
 metadata as untrusted input. Construction requires macOS.
 """
@@ -13,11 +12,12 @@ metadata as untrusted input. Construction requires macOS.
 from __future__ import annotations
 
 import contextlib
+import os
 import plistlib
 import re
+import signal
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from collections.abc import Callable
@@ -42,9 +42,12 @@ from infiniteprep.services.usb.models import (
 
 DISKUTIL_LIST_COMMAND: Final[tuple[str, ...]] = ("diskutil", "list", "-plist")
 DISKUTIL_INFO_COMMAND: Final[tuple[str, ...]] = ("diskutil", "info", "-plist")
-MACOS_DEVICE_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"^disk\d+(?:s\d+)*$")
+# diskutil emits whole disks (diskN) or single-suffix partitions (diskNsM) in
+# list output; identifiers with deeper sN chains are outside the accepted shape.
+MACOS_DEVICE_SAFE_RE: Final[re.Pattern[str]] = re.compile(r"^disk\d+(?:s\d+)?$")
 MAX_PLIST_OUTPUT_BYTES: Final[int] = 8 * 1024 * 1024
 MAX_STDERR_BYTES: Final[int] = 64 * 1024
+CHUNK_BYTES: Final[int] = 64 * 1024
 REAP_WAIT_SECONDS: Final[float] = 2.0
 WAIT_GRACE_SECONDS: Final[float] = 1.0
 
@@ -54,77 +57,112 @@ def _terminate_process(process: subprocess.Popen[bytes], deadline: float) -> Non
 
     The escalation tolerates a child that already exited (ProcessLookupError)
     and a child stuck in an uninterruptible state, which reaps when the
-    inspector process exits.
+    inspector process exits. On POSIX the child runs in its own session, so the
+    final kill targets the whole process group.
     """
     for stop in (process.terminate, process.kill):
         try:
             stop()
         except ProcessLookupError:
-            process.wait(timeout=WAIT_GRACE_SECONDS)
+            with contextlib.suppress(ChildProcessError):
+                process.wait(timeout=WAIT_GRACE_SECONDS)
             return
-        remaining = deadline - time.monotonic()
+        remaining = max(deadline - time.monotonic(), 0.0)
         try:
             process.wait(timeout=remaining if remaining > 0 else WAIT_GRACE_SECONDS)
             return
         except subprocess.TimeoutExpired:
             continue
+    if hasattr(os, "killpg"):
+        with contextlib.suppress(OSError, ProcessLookupError):
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
     with contextlib.suppress(subprocess.TimeoutExpired):
         process.wait(timeout=REAP_WAIT_SECONDS)
 
 
-def _read_capped_stdout(process: subprocess.Popen[bytes], deadline: float) -> bytes:
-    """Read stdout up to the byte cap under the deadline, killing a stuck child.
+def _read_capped_pipe(
+    pipe: BinaryIO,
+    byte_cap: int,
+    deadline: float,
+    name: str,
+) -> tuple[threading.Thread, dict[str, Any]]:
+    """Read a pipe up to byte_cap under the deadline in a daemon thread.
 
-    The read runs in a daemon thread joined against the deadline. A child that
-    never writes and never closes stdout gets terminated, which closes the pipe
-    and unblocks the read.
+    The read stops as soon as the cap is reached, so oversized replies never
+    buffer beyond the cap. A reader that outlives the deadline gets the pipe
+    closed by the caller, which unblocks and ends the daemon thread.
     """
-    captured: dict[str, Any] = {"stdout": b"", "error": None}
+    captured: dict[str, Any] = {"data": b"", "error": None}
 
     def read_capped() -> None:
-        try:
-            captured["stdout"] = process.stdout.read(MAX_PLIST_OUTPUT_BYTES + 1)
-        except (OSError, ValueError) as exc:
-            captured["error"] = exc
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            remaining = byte_cap - total
+            if remaining <= 0:
+                break
+            try:
+                chunk = pipe.read(min(CHUNK_BYTES, remaining))
+            except (OSError, ValueError) as exc:
+                captured["error"] = exc
+                break
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+        captured["data"] = b"".join(chunks)
 
-    reader = threading.Thread(target=read_capped, daemon=True, name="usb-bounded-stdout")
+    reader = threading.Thread(target=read_capped, daemon=True, name=name)
     reader.start()
-    remaining = deadline - time.monotonic()
-    reader.join(remaining if remaining > 0 else 0.0)
-    if reader.is_alive():
-        _terminate_process(process, deadline)
-        reader.join(REAP_WAIT_SECONDS)
-        if reader.is_alive():
-            raise CommandExecutionError("diskutil stdout reader did not finish after terminate.")
-    if captured["error"] is not None:
-        raise captured["error"]
-    return captured["stdout"]
+    join_wait = max(deadline - time.monotonic(), 0.0)
+    reader.join(join_wait)
+    return reader, captured
 
 
 def _capture_bounded(
     process: subprocess.Popen[bytes],
     deadline: float,
     timeout_seconds: float,
-    stderr_file: BinaryIO,
 ) -> subprocess.CompletedProcess[str]:
-    """Capture bounded stdout, wait within the deadline, and build the result."""
-    stdout_bytes = _read_capped_stdout(process, deadline)
+    """Capture both pipes under the byte caps and deadline, then wait."""
+    stdout_reader, stdout_state = _read_capped_pipe(
+        process.stdout,
+        MAX_PLIST_OUTPUT_BYTES + 1,
+        deadline,
+        "usb-bounded-stdout",
+    )
+    stderr_reader, stderr_state = _read_capped_pipe(
+        process.stderr,
+        MAX_STDERR_BYTES,
+        deadline,
+        "usb-bounded-stderr",
+    )
+    for reader in (stdout_reader, stderr_reader):
+        if reader.is_alive():
+            _terminate_process(process, deadline)
+    for reader in (stdout_reader, stderr_reader):
+        reader.join(REAP_WAIT_SECONDS)
+    for reader in (stdout_reader, stderr_reader):
+        if reader.is_alive():
+            raise CommandExecutionError("diskutil pipe reader did not finish after terminate.")
+    for state in (stdout_state, stderr_state):
+        if state["error"] is not None:
+            raise state["error"]
+    stdout_bytes = stdout_state["data"]
     if len(stdout_bytes) > MAX_PLIST_OUTPUT_BYTES:
         raise InspectionParseError(
             f"diskutil output exceeds the {MAX_PLIST_OUTPUT_BYTES} byte limit."
         )
-    remaining = deadline - time.monotonic()
+    remaining = max(deadline - time.monotonic(), 0.0)
     try:
         process.wait(timeout=remaining if remaining > 0 else WAIT_GRACE_SECONDS)
     except subprocess.TimeoutExpired:
         raise subprocess.TimeoutExpired(cmd=process.args, timeout=timeout_seconds) from None
-    stderr_file.seek(0)
-    stderr_text = stderr_file.read(MAX_STDERR_BYTES).decode("utf-8", errors="replace")
     return subprocess.CompletedProcess(
         process.args,
         process.returncode,
         stdout_bytes.decode("utf-8", errors="replace"),
-        stderr_text,
+        stderr_state["data"].decode("utf-8", errors="replace"),
     )
 
 
@@ -134,27 +172,33 @@ def bounded_command_runner(
 ) -> subprocess.CompletedProcess[str]:
     """Execute a fixed command array with bounded capture and a hard deadline.
 
-    The stdout pipe read stops at MAX_PLIST_OUTPUT_BYTES plus one byte and runs
-    under the deadline, so oversized or stuck replies never block the caller or
-    fully enter Python memory. Stderr drains through a spooled temporary file
-    and is capped at MAX_STDERR_BYTES. Every failure path terminates and reaps
-    the child before re-raising.
+    The stdout pipe read stops at MAX_PLIST_OUTPUT_BYTES plus one byte and the
+    stderr read stops at MAX_STDERR_BYTES, both under the deadline, so oversized
+    or stuck replies never block the caller or fully enter Python memory. Every
+    failure path terminates and reaps the child before re-raising. On POSIX the
+    child runs in its own session and the timeout kill targets the group.
     """
+    if timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be positive.")
     deadline = time.monotonic() + timeout_seconds
-    with tempfile.SpooledTemporaryFile() as stderr_file:
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=stderr_file,
-            shell=False,
-        )
-        try:
-            return _capture_bounded(process, deadline, timeout_seconds, stderr_file)
-        except Exception:
-            _terminate_process(process, deadline)
-            raise
-        finally:
-            process.stdout.close()
+    popen_kwargs: dict[str, Any] = {
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "shell": False,
+    }
+    if sys.platform != "win32":
+        popen_kwargs["start_new_session"] = True
+    process = subprocess.Popen(cmd, **popen_kwargs)
+    try:
+        return _capture_bounded(process, deadline, timeout_seconds)
+    except Exception:
+        _terminate_process(process, deadline)
+        raise
+    finally:
+        for pipe in (process.stdout, process.stderr):
+            if pipe is not None:
+                with contextlib.suppress(OSError, ValueError):
+                    pipe.close()
 
 
 def _sanitize_diskutil_identifier(val: Any) -> str:
@@ -166,10 +210,15 @@ def _sanitize_diskutil_identifier(val: Any) -> str:
 
 
 def _partition_number_from_identifier(identifier: str, fallback_index: int) -> int:
-    """Derive a partition number from a diskNsM identifier suffix, or the fallback index."""
-    groups = re.findall(r"(?:s(\d+))+$", identifier)
-    if groups and groups[-1].isdigit() and int(groups[-1]) > 0:
-        return int(groups[-1])
+    """Derive the partition number from a diskNsM identifier suffix.
+
+    APFS container volumes keep their container volume index as the partition
+    number. Validation guarantees at most one sN suffix per identifier, so the
+    suffix is unambiguous.
+    """
+    match = re.search(r"s(\d+)$", identifier)
+    if match and int(match.group(1)) > 0:
+        return int(match.group(1))
     return fallback_index
 
 
@@ -305,15 +354,21 @@ class MacOSDriveInspector:
         return self._parse_plist_dict(completed.stdout, "diskutil info")
 
     @staticmethod
-    def _parse_plist_dict(
-        stdout: str,
-        source: str,
-        max_bytes: int = MAX_PLIST_OUTPUT_BYTES,
-    ) -> dict[str, Any]:
-        """Parse plist bytes into a mapping, capping accepted output size before parsing."""
-        encoded = stdout.encode("utf-8")
-        if len(encoded) > max_bytes:
-            raise InspectionParseError(f"{source} output exceeds the {max_bytes} byte limit.")
+    def _parse_plist_dict(stdout: str, source: str) -> dict[str, Any]:
+        """Parse plist bytes into a mapping under the module byte cap.
+
+        The cap guards injected command runners; the built-in bounded runner
+        already enforces it during capture. Encoding failures raise
+        InspectionParseError instead of leaking UnicodeEncodeError.
+        """
+        try:
+            encoded = stdout.encode("utf-8")
+        except UnicodeEncodeError as exc:
+            raise InspectionParseError(f"{source} output is not decodable UTF-8: {exc}") from exc
+        if len(encoded) > MAX_PLIST_OUTPUT_BYTES:
+            raise InspectionParseError(
+                f"{source} output exceeds the {MAX_PLIST_OUTPUT_BYTES} byte limit."
+            )
         try:
             data = plistlib.loads(encoded)
         except (ValueError, ExpatError) as exc:
@@ -353,7 +408,11 @@ class MacOSDriveInspector:
         disk_info: dict[str, Any],
         identifier: str,
     ) -> DriveIdentity:
-        """Construct sanitized DriveIdentity from list and info plist dictionaries."""
+        """Construct sanitized DriveIdentity from list and info plist dictionaries.
+
+        vendor and serial map from the diskutil Vendor, Manufacturer, and
+        SerialNumber keys and stay None when the media does not report them.
+        """
         return DriveIdentity(
             name=identifier,
             path=f"/dev/{identifier}",
@@ -361,6 +420,8 @@ class MacOSDriveInspector:
             or clean_int(disk_info.get("DiskSize"))
             or clean_int(disk_info.get("TotalSize")),
             model=clean_str(disk_info.get("DeviceName")) or clean_str(disk_info.get("MediaName")),
+            vendor=clean_str(disk_info.get("Vendor")) or clean_str(disk_info.get("Manufacturer")),
+            serial=clean_str(disk_info.get("SerialNumber")),
             is_removable=_info_flag(disk_info, "RemovableMedia")
             or _info_flag(disk_info, "Ejectable"),
             is_read_only=_info_flag(disk_info, "Read-Only Media"),
