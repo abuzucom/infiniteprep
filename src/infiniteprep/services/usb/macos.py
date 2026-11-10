@@ -180,6 +180,14 @@ def _capture_bounded(
     )
 
 
+def _close_pipes(process: subprocess.Popen[bytes]) -> None:
+    """Close the child pipes, tolerating missing or already closed handles."""
+    for pipe in (process.stdout, process.stderr):
+        if pipe is not None:
+            with contextlib.suppress(OSError, ValueError):
+                pipe.close()
+
+
 def bounded_command_runner(
     cmd: list[str],
     timeout_seconds: float,
@@ -209,10 +217,7 @@ def bounded_command_runner(
         _terminate_process(process, deadline)
         raise
     finally:
-        for pipe in (process.stdout, process.stderr):
-            if pipe is not None:
-                with contextlib.suppress(OSError, ValueError):
-                    pipe.close()
+        _close_pipes(process)
 
 
 def _sanitize_diskutil_identifier(val: Any) -> str:

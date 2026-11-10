@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.51.3] (2026-11-09)
+## [0.51.4] (2026-11-09)
 
 ### Added
 
@@ -23,6 +23,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `bounded_command_runner` in `services/usb/macos.py` closes child pipes through the `_close_pipes` helper to respect the nesting invariant (#154).
 - `_terminate_process` in `services/usb/macos.py` targets the process group with terminate and kill signals on POSIX and falls back to process scope when the group is gone. Spawned descendants receive the signals (#154).
 - `_build_drive_identity` and `_build_partition` in `services/usb/macos.py` fall through size candidates only on a missing key. A valid zero no longer counts as missing (#154).
 - The pipe reader timeout error names the generic command instead of `diskutil` (#154).
