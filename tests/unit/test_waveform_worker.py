@@ -69,10 +69,9 @@ def test_worker_logs_unexpected_failure_and_emits_safe_message(
     assert private_detail not in failures[0]
 
 
-def test_worker_emits_safe_message_for_file_access_failure(
-    qtbot: Any, monkeypatch: Any
-) -> None:
+def test_worker_emits_safe_message_for_file_access_failure(qtbot: Any, monkeypatch: Any) -> None:
     """Filesystem details remain in logs while the UI gets a recovery hint."""
+
     def fail_analysis(_path: Path, *, cancel_event: threading.Event) -> str:
         raise PermissionError("/library/private.wav: permission denied")
 
