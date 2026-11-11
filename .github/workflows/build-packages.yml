@@ -105,6 +105,25 @@ jobs:
       - name: Check installed requirements
         run: python -m pip check
 
+      - name: Generate Python SBOM
+        shell: bash
+        run: |
+          tool_venv="$RUNNER_TEMP/cyclonedx-tool"
+          python -m venv "$tool_venv"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            tool_python="$tool_venv/Scripts/python.exe"
+            cyclonedx_command="$tool_venv/Scripts/cyclonedx-py.exe"
+          else
+            tool_python="$tool_venv/bin/python"
+            cyclonedx_command="$tool_venv/bin/cyclonedx-py"
+          fi
+          "$tool_python" -m pip install --require-hashes --only-binary=:all: \
+            -r requirements-sbom.txt
+          sbom_path="$RUNNER_TEMP/InfinitePrep-python-$RUNNER_OS.cdx.json"
+          app_python="$(python -c 'import sys; print(sys.executable)')"
+          "$cyclonedx_command" environment "$app_python" -E \
+            --output-format JSON --output-file "$sbom_path"
+
       - name: Build bundle
         run: pyinstaller --noconfirm infiniteprep.spec
 
@@ -179,6 +198,14 @@ jobs:
         run: |
           os_name="$(printf '%s' "$RUNNER_OS" | tr '[:upper:]' '[:lower:]')"
           python packaging/check_bundle.py dist/InfinitePrep "$os_name"
+
+      - name: Upload Python SBOM
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: InfinitePrep-python-sbom-${{ matrix.os }}
+          path: ${{ runner.temp }}/InfinitePrep-python-${{ runner.os }}.cdx.json
+          retention-days: 3
+          if-no-files-found: error
 
       - name: Upload bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
@@ -596,6 +623,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           assets="$RUNNER_TEMP/release-assets"
           version="${GITHUB_REF_NAME#v}"
           tag="$GITHUB_REF_NAME"
@@ -606,16 +634,28 @@ jobs:
           cp "${{ steps.attest-linux-tar-gz.outputs.bundle-path }}" "$assets/InfinitePrep-$version-linux-x86_64.tar.gz.sigstore.json"
           cp "${{ steps.attest-linux-portable-tar-gz.outputs.bundle-path }}" "$assets/InfinitePrep-$version-linux-x86_64-portable.tar.gz.sigstore.json"
           cp "${{ steps.attest-macos-dmg.outputs.bundle-path }}" "$assets/InfinitePrep-$version-macos-arm64.dmg.sigstore.json"
-          # On a rerun that reuses a draft release, reuse existing bundles from the draft (D316, D328)
-          # so regenerated bundles with newer timestamps do not trigger a false SHA-256 mismatch.
-          if gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft 2>/dev/null | grep -Fxq "true"; then
-            existing="$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+          # A rerun regenerates each bundle with a newer timestamp. The upload
+          # step rejects a draft asset whose SHA-256 differs (D316). A rerun
+          # therefore reuses each bundle already on the draft (D328).
+          # A draft asset is untrusted input. Each reused bundle must verify
+          # against this build's package and this repository before reuse.
+          if is_draft="$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [ "$is_draft" != "true" ]; then
+              echo "Release $tag is already published. This job only fills drafts."
+              exit 1
+            fi
+            existing="$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name')"
             for bundle in "$assets"/*.sigstore.json; do
               bname="$(basename "$bundle")"
-              if printf '%s\n' "$existing" | grep -Fxq -- "$bname"; then
+              if grep -Fxq -- "$bname" <<<"$existing"; then
                 echo "Reusing existing $bname from draft release."
                 dl_dir="$(mktemp -d "$RUNNER_TEMP/existing-bundle.XXXXXX")"
                 gh release download "$tag" --repo "$repo" --pattern "$bname" --dir "$dl_dir"
+                if [ ! -s "$dl_dir/$bname" ]; then
+                  echo "Downloaded $bname is absent or empty. Delete the draft asset, then rerun."
+                  exit 1
+                fi
+                gh attestation verify "${bundle%.sigstore.json}" --repo "$repo" --bundle "$dl_dir/$bname"
                 cp "$dl_dir/$bname" "$bundle"
               fi
             done
