@@ -5,11 +5,20 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.52.4] (2026-11-11)
+## [0.53.1] (2026-11-11)
 
 ### Added
 
 - `scripts/classify_changed_paths.py` sorts a commit range into the `docs`, `website`, `light`, or `full` change class. A version-only edit to `pyproject.toml` or `src/infiniteprep/__init__.py` keeps a range out of the `full` class.
+- The `release` job in `build-packages.yml` publishes a GitHub build-provenance attestation for each of the six packages and `SHA256SUMS.txt` with `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6` (v4.2.2, D325).
+- The `release` job uploads each package's Sigstore bundle as `<package>.sigstore.json` to the draft release, with its hash recorded in `SHA256SUMS.txt` (D328).
+- `packaging/release.py check-assets` learns the Sigstore bundle names and supports `--require-bundles` to verify that the folder holds all six packages and six Sigstore bundles (D328). Without the flag, a bundle counts as an extra file.
+- `tests/test_release_bundle_flag.py` checks the explicit bundle requirement and the asset count in the `check-assets` success line.
+- The Releases section in `README.md` documents package provenance verification commands with `gh attestation verify`.
+- `tests/test_release_attestation.py` checks workflow permissions, actions/attest commit pinning, subject paths, bundle copying, asset verification, and README verification documentation.
+- The `release` job verifies each Sigstore bundle reused from a draft release against its package with `gh attestation verify --bundle` before reuse. A failed download, an empty bundle, or a failed verification stops the job.
+- `tests/test_release_bundle_reuse.py` checks the strict shell mode and the reuse verification of the bundle-saving step.
+- `scripts/classify_changed_paths.py` sorts a commit range into the `docs`, `website`, `light`, or `full` change class. A version-only edit to `pyproject.toml` or `src/infiniteprep/__init__.py` keeps a range out of the `full` class. No workflow reads the class yet.
 
 ### Changed
 
@@ -17,6 +26,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The `ci` workflow runs on pushes to `main` only. A pull request commit starts one `ci` run instead of two.
 - A newer pull request commit cancels the `ci` run of the older commit. Runs on `main` always complete.
+- The `Save package attestation bundles` step runs under `set -euo pipefail` and stops when the release for the tag is already published.
+- The `release` job in `build-packages.yml` gains `id-token: write`, `attestations: write`, and `artifact-metadata: write` permissions.
+- `tests/test_release_workflow.py` permits `actions/attest@` in the release job and checks the expanded permission set.
+- `tests/test_release_review_fixes.py` tests check-assets with both packages and Sigstore bundles.
 
 ## [0.52.1] (2026-11-10)
 
