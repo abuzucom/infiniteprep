@@ -24,6 +24,11 @@ REQUIRED_PERMISSIONS = {
     "artifact-metadata": "write",
 }
 TEST_VERSION = "0.48.4"
+PACKAGE_COUNT = 6
+BUNDLE_COUNT = 6
+# Six package attestations and one for SHA256SUMS.txt.
+ATTEST_STEP_COUNT = 7
+RELEASE_ASSET_COUNT = 12
 
 
 def _load_release() -> ModuleType:
@@ -65,7 +70,7 @@ class AttestationWorkflowTest(unittest.TestCase):
         attest_steps = [
             step for step in self.steps if step.get("uses", "").startswith("actions/attest@")
         ]
-        self.assertEqual(len(attest_steps), 7)
+        self.assertEqual(len(attest_steps), ATTEST_STEP_COUNT)
         for step in attest_steps:
             self.assertEqual(step["uses"], ATTEST_ACTION)
 
@@ -117,8 +122,8 @@ class AttestationReleaseToolingTest(unittest.TestCase):
         """expected_bundles returns the six .sigstore.json file names."""
         bundles = RELEASE.expected_bundles(TEST_VERSION)
         packages = RELEASE.expected_packages(TEST_VERSION)
-        self.assertEqual(len(bundles), 6)
-        self.assertEqual(len(packages), 6)
+        self.assertEqual(len(bundles), BUNDLE_COUNT)
+        self.assertEqual(len(packages), PACKAGE_COUNT)
         for package in packages:
             self.assertIn(f"{package}.sigstore.json", bundles)
 
@@ -134,7 +139,7 @@ class AttestationReleaseToolingTest(unittest.TestCase):
             dir_path = Path(folder)
             for name in RELEASE.expected_assets(TEST_VERSION):
                 (dir_path / name).write_text("test", encoding="utf-8")
-            problems = RELEASE.asset_problems(dir_path, TEST_VERSION)
+            problems = RELEASE.asset_problems(dir_path, TEST_VERSION, require_bundles=True)
             self.assertEqual(problems, [])
 
     def test_require_bundles_flag_reports_missing_bundles(self) -> None:
@@ -144,7 +149,7 @@ class AttestationReleaseToolingTest(unittest.TestCase):
             for name in RELEASE.expected_packages(TEST_VERSION):
                 (dir_path / name).write_text("test", encoding="utf-8")
             problems = RELEASE.asset_problems(dir_path, TEST_VERSION, require_bundles=True)
-            self.assertEqual(len(problems), 6)
+            self.assertEqual(len(problems), BUNDLE_COUNT)
             for problem in problems:
                 self.assertIn("Bundle", problem)
                 self.assertIn(".sigstore.json", problem)
@@ -157,7 +162,7 @@ class AttestationReleaseToolingTest(unittest.TestCase):
                 (dir_path / name).write_text(f"content-{name}", encoding="utf-8")
             checksum_path = RELEASE.write_checksums(dir_path)
             lines = checksum_path.read_text(encoding="utf-8").splitlines()
-            self.assertEqual(len(lines), 12)
+            self.assertEqual(len(lines), RELEASE_ASSET_COUNT)
             recorded_names = [line.split("  ")[1] for line in lines]
             self.assertEqual(recorded_names, sorted(recorded_names))
             self.assertEqual(set(recorded_names), RELEASE.expected_assets(TEST_VERSION))

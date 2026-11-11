@@ -185,16 +185,17 @@ class AssetNameTest(unittest.TestCase):
         """The six packages and six Sigstore bundles pass (D328)."""
         with tempfile.TemporaryDirectory() as folder:
             _make_assets(Path(folder), TWELVE_ASSETS)
-            self.assertEqual(RELEASE.asset_problems(Path(folder), VERSION), [])
+            problems = RELEASE.asset_problems(Path(folder), VERSION, require_bundles=True)
+            self.assertEqual(problems, [])
             exit_code, _ = _run_main(["check-assets", folder, VERSION, "--require-bundles"])
         self.assertEqual(exit_code, 0)
 
     def test_missing_bundle_fails(self) -> None:
-        """A missing bundle is named and fails when bundles are present or required."""
+        """A missing bundle is named and fails when bundles are required."""
         with tempfile.TemporaryDirectory() as folder:
             _make_assets(Path(folder), (*SIX_ASSETS, *SIX_BUNDLES[1:]))
-            problems = RELEASE.asset_problems(Path(folder), VERSION)
-            exit_code, output = _run_main(["check-assets", folder, VERSION])
+            problems = RELEASE.asset_problems(Path(folder), VERSION, require_bundles=True)
+            exit_code, output = _run_main(["check-assets", folder, VERSION, "--require-bundles"])
         self.assertEqual(len(problems), 1, problems)
         self.assertIn(SIX_BUNDLES[0], problems[0])
         self.assertEqual(exit_code, RELEASE.CHECK_FAILED)

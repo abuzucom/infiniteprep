@@ -11,7 +11,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The `release` job in `build-packages.yml` publishes a GitHub build-provenance attestation for each of the six packages and `SHA256SUMS.txt` with `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6` (v4.2.2, D325).
 - The `release` job uploads each package's Sigstore bundle as `<package>.sigstore.json` to the draft release, with its hash recorded in `SHA256SUMS.txt` (D328).
-- `packaging/release.py check-assets` learns the Sigstore bundle names and supports `--require-bundles` to verify that the folder holds all six packages and six Sigstore bundles (D328).
+- `packaging/release.py check-assets` learns the Sigstore bundle names and supports `--require-bundles` to verify that the folder holds all six packages and six Sigstore bundles (D328). Without the flag, a bundle counts as an extra file.
+- `tests/test_release_bundle_flag.py` checks the explicit bundle requirement and the asset count in the `check-assets` success line.
 - The Releases section in `README.md` documents package provenance verification commands with `gh attestation verify`.
 - `tests/test_release_attestation.py` checks workflow permissions, actions/attest commit pinning, subject paths, bundle copying, asset verification, and README verification documentation.
 - The `release` job verifies each Sigstore bundle reused from a draft release against its package with `gh attestation verify --bundle` before reuse. A failed download, an empty bundle, or a failed verification stops the job.

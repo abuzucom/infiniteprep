@@ -9,8 +9,9 @@ Four subcommands, each run from the repository root:
 
 check-tag fails unless the tag equals "v" plus the version in
 src/infiniteprep/__init__.py, pyproject.toml, and the top CHANGELOG entry (D317).
-check-assets fails unless the folder holds exactly the expected packages and
-attestation bundles of the version (D319, D328).
+check-assets fails unless the folder holds exactly the six packages of the
+version (D319). With --require-bundles, the folder must also hold the six
+attestation bundles (D328).
 checksums writes SHA256SUMS.txt in the sha256sum format, sorted by file name.
 notes writes the CHANGELOG section of one version and a fixed download block (D318).
 """
@@ -129,10 +130,13 @@ def _asset_kind(name: str) -> str:
 
 
 def asset_problems(folder: Path, version: str, *, require_bundles: bool = False) -> list[str]:
-    """Return one line per expected asset that is missing and per extra entry."""
+    """Return one line per expected asset that is missing and per extra entry.
+
+    Only require_bundles makes the Sigstore bundles expected. Without it, a
+    bundle counts as an extra entry.
+    """
     present = {path.name for path in folder.iterdir()}
-    bundles_expected = require_bundles or any(name.endswith(BUNDLE_SUFFIX) for name in present)
-    expected = expected_assets(version, include_bundles=bundles_expected)
+    expected = expected_assets(version, include_bundles=require_bundles)
     missing = [f"{_asset_kind(name)} {name} is missing." for name in sorted(expected - present)]
     extra = [
         f"{name} is not a release asset of version {version}."
@@ -182,7 +186,8 @@ def _report_assets(folder: Path, version: str, *, require_bundles: bool = False)
     if problems:
         print("release: rebuild the packages for this tag, then rerun the release job.")
         return CHECK_FAILED
-    count = len([path for path in folder.iterdir() if path.is_file()])
+    # A folder without problems holds exactly the expected names.
+    count = len(expected_assets(version, include_bundles=require_bundles))
     print(f"release: {folder} holds the {count} release assets of version {version}.")
     return 0
 
