@@ -1,4 +1,4 @@
-"""Behavioral checks for the workflow wiring that skips heavy jobs on light changes."""
+"""Behavioral checks for the workflow wiring that skips heavy work on light changes."""
 
 from __future__ import annotations
 
@@ -15,14 +15,17 @@ BASE_SHA_SOURCE = "${{ github.event.pull_request.base.sha || github.event.before
 HEAD_SHA_SOURCE = "${{ github.event.pull_request.head.sha || github.sha }}"
 LIGHT_OUTPUT = "${{ steps.classify.outputs.light }}"
 NOT_CANCELLED = "!cancelled()"
-NOT_LIGHT = "needs.changes.outputs.light != 'true'"
+JOB_NOT_LIGHT = "needs.changes.outputs.light != 'true'"
+STEP_NOT_LIGHT = "steps.classify.outputs.light != 'true'"
 LINT_SUCCEEDED = "needs.lint-and-style.result == 'success'"
-# Each workflow maps to the jobs that a light change skips.
-SKIPPED_JOBS = {
-    "ci.yml": ("test-matrix",),
-    "security-devops.yml": ("msdo",),
-    "dependency-review.yml": ("dependency-review",),
-}
+# Each entry names a workflow and the job that holds the classify step.
+CLASSIFYING_JOBS = (
+    ("ci.yml", "changes"),
+    ("security-devops.yml", "msdo"),
+    ("dependency-review.yml", "dependency-review"),
+)
+# The scan jobs classify in their own steps, so each keeps a single checkout.
+SCAN_JOBS = CLASSIFYING_JOBS[1:]
 ALWAYS_RUNNING_CI_JOBS = ("changes", "checks", "lint-and-style", "agents-lint")
 
 
@@ -32,39 +35,29 @@ def load_jobs(workflow_name: str) -> dict[str, Any]:
     return dict(yaml.safe_load(text)["jobs"])
 
 
-def list_needs(job: dict[str, Any]) -> list[str]:
-    """Return the needs of a job as a list."""
-    needs = job.get("needs", [])
-    return [needs] if isinstance(needs, str) else list(needs)
+def find_classify_index(steps: list[dict[str, Any]]) -> int:
+    """Return the position of the classify step."""
+    return next(index for index, step in enumerate(steps) if step.get("id") == "classify")
 
 
-class ChangesJobTest(unittest.TestCase):
+class ClassifyStepTest(unittest.TestCase):
     """Each workflow classifies the change with the repository script."""
-
-    def test_changes_job_exports_the_light_flag(self) -> None:
-        """The job output reads the light flag of the classify step."""
-        for workflow_name in SKIPPED_JOBS:
-            with self.subTest(workflow=workflow_name):
-                job = load_jobs(workflow_name)["changes"]
-                self.assertEqual(job["outputs"], {"light": LIGHT_OUTPUT})
-                self.assertNotIn("if", job)
 
     def test_checkout_fetches_the_whole_history(self) -> None:
         """The merge base lookup needs the complete history and no credentials."""
-        for workflow_name in SKIPPED_JOBS:
+        for workflow_name, job_name in CLASSIFYING_JOBS:
             with self.subTest(workflow=workflow_name):
-                steps = load_jobs(workflow_name)["changes"]["steps"]
-                checkout = steps[0]
+                checkout = load_jobs(workflow_name)[job_name]["steps"][0]
                 self.assertTrue(checkout["uses"].startswith("actions/checkout@"))
                 self.assertEqual(checkout["with"]["fetch-depth"], 0)
                 self.assertIs(checkout["with"]["persist-credentials"], False)
 
     def test_classify_step_passes_revisions_through_the_environment(self) -> None:
         """Event data reaches the script as environment values, never as shell text."""
-        for workflow_name in SKIPPED_JOBS:
+        for workflow_name, job_name in CLASSIFYING_JOBS:
             with self.subTest(workflow=workflow_name):
-                steps = load_jobs(workflow_name)["changes"]["steps"]
-                classify = next(step for step in steps if step.get("id") == "classify")
+                steps = load_jobs(workflow_name)[job_name]["steps"]
+                classify = steps[find_classify_index(steps)]
                 self.assertEqual(classify["run"], CLASSIFY_COMMAND)
                 self.assertEqual(
                     classify["env"],
@@ -72,39 +65,63 @@ class ChangesJobTest(unittest.TestCase):
                 )
 
 
-class SkippedJobTest(unittest.TestCase):
-    """Heavy jobs skip on a light change and run in every other case."""
+class TestMatrixSkipTest(unittest.TestCase):
+    """The ci test matrix skips on a light change and runs in every other case."""
 
-    def test_heavy_jobs_wait_for_the_class(self) -> None:
-        """Each heavy job depends on the changes job."""
-        for workflow_name, job_names in SKIPPED_JOBS.items():
-            jobs = load_jobs(workflow_name)
-            for job_name in job_names:
-                with self.subTest(workflow=workflow_name, job=job_name):
-                    self.assertIn("changes", list_needs(jobs[job_name]))
+    def setUp(self) -> None:
+        """Parse the ci jobs."""
+        self.jobs = load_jobs("ci.yml")
 
-    def test_heavy_jobs_run_unless_the_class_is_light(self) -> None:
-        """A failed or skipped changes job yields no flag, and the heavy job runs."""
-        for workflow_name, job_names in SKIPPED_JOBS.items():
-            jobs = load_jobs(workflow_name)
-            for job_name in job_names:
-                with self.subTest(workflow=workflow_name, job=job_name):
-                    condition = jobs[job_name]["if"]
-                    self.assertIn(NOT_CANCELLED, condition)
-                    self.assertIn(NOT_LIGHT, condition)
+    def test_changes_job_exports_the_light_flag(self) -> None:
+        """The job output reads the light flag of the classify step."""
+        self.assertEqual(self.jobs["changes"]["outputs"], {"light": LIGHT_OUTPUT})
+
+    def test_test_matrix_runs_unless_the_class_is_light(self) -> None:
+        """A failed or skipped changes job yields no flag, and the matrix runs."""
+        job = self.jobs["test-matrix"]
+        self.assertEqual(job["needs"], ["changes", "lint-and-style"])
+        self.assertIn(NOT_CANCELLED, job["if"])
+        self.assertIn(JOB_NOT_LIGHT, job["if"])
 
     def test_test_matrix_still_requires_a_clean_lint(self) -> None:
         """The status function replaces the implicit success check, so lint is explicit."""
-        job = load_jobs("ci.yml")["test-matrix"]
-        self.assertIn("lint-and-style", list_needs(job))
-        self.assertIn(LINT_SUCCEEDED, job["if"])
+        self.assertIn(LINT_SUCCEEDED, self.jobs["test-matrix"]["if"])
 
     def test_cheap_ci_jobs_always_run(self) -> None:
         """The classifier, the wiring tests, and both lint jobs carry no condition."""
-        jobs = load_jobs("ci.yml")
         for job_name in ALWAYS_RUNNING_CI_JOBS:
             with self.subTest(job=job_name):
-                self.assertNotIn("if", jobs[job_name])
+                self.assertNotIn("if", self.jobs[job_name])
+
+
+class ScanSkipTest(unittest.TestCase):
+    """Each scan job always reports, and its scan steps skip on a light change."""
+
+    def test_scan_jobs_carry_no_job_condition(self) -> None:
+        """The job runs on every change, so its check always reports a result."""
+        for workflow_name, job_name in SCAN_JOBS:
+            with self.subTest(workflow=workflow_name):
+                job = load_jobs(workflow_name)[job_name]
+                self.assertNotIn("if", job)
+                self.assertNotIn("needs", job)
+
+    def test_failed_classification_does_not_fail_the_scan_job(self) -> None:
+        """A failed classify step yields no flag, and the scan steps then run."""
+        for workflow_name, job_name in SCAN_JOBS:
+            with self.subTest(workflow=workflow_name):
+                steps = load_jobs(workflow_name)[job_name]["steps"]
+                classify = steps[find_classify_index(steps)]
+                self.assertIs(classify["continue-on-error"], True)
+
+    def test_every_step_after_classify_skips_on_a_light_change(self) -> None:
+        """The scan and its upload carry the light condition."""
+        for workflow_name, job_name in SCAN_JOBS:
+            steps = load_jobs(workflow_name)[job_name]["steps"]
+            later_steps = steps[find_classify_index(steps) + 1 :]
+            self.assertTrue(later_steps, workflow_name)
+            for step in later_steps:
+                with self.subTest(workflow=workflow_name, step=step["name"]):
+                    self.assertEqual(step["if"], STEP_NOT_LIGHT)
 
 
 if __name__ == "__main__":
