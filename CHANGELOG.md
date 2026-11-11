@@ -5,13 +5,15 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.52.3] (2026-11-11)
+## [0.52.4] (2026-11-11)
 
 ### Added
 
-- `scripts/classify_changed_paths.py` sorts a commit range into the `docs`, `website`, `light`, or `full` change class. A version-only edit to `pyproject.toml` or `src/infiniteprep/__init__.py` keeps a range out of the `full` class. No workflow reads the class yet.
+- `scripts/classify_changed_paths.py` sorts a commit range into the `docs`, `website`, `light`, or `full` change class. A version-only edit to `pyproject.toml` or `src/infiniteprep/__init__.py` keeps a range out of the `full` class.
 
 ### Changed
+
+- A `changes` job in `ci.yml`, `security-devops.yml`, and `dependency-review.yml` reads the change class. A docs-only or website-only change skips `test-matrix`, the Microsoft Security DevOps scan, and the dependency review. A failed classification runs every job.
 
 - The `ci` workflow runs on pushes to `main` only. A pull request commit starts one `ci` run instead of two.
 - A newer pull request commit cancels the `ci` run of the older commit. Runs on `main` always complete.
