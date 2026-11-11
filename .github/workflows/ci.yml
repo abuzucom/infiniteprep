@@ -1,14 +1,22 @@
 ---
 name: ci
 
-# Runs the repository checks on every pull request and push. The
-# security-review-pr and quality-review-pr callers trigger on completion of
-# this workflow by its name. Renaming it stops both reviews.
+# Runs the repository checks on every pull request and on every push to
+# main. The security-review-pr and quality-review-pr callers trigger on
+# completion of this workflow by its name. Renaming it stops both reviews.
 
+# A push trigger for every branch starts a second run for each pull request
+# commit. The pull_request trigger already covers those commits.
 "on":
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
+
+# A newer pull request commit replaces the run for the older commit. A push
+# to main gets its own group per commit, and its run always completes.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
