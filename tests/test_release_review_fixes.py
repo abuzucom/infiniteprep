@@ -31,6 +31,8 @@ SIX_ASSETS = (
     f"InfinitePrep-{VERSION}-linux-x86_64-portable.tar.gz",
     f"InfinitePrep-{VERSION}-macos-arm64.dmg",
 )
+SIX_BUNDLES = tuple(f"{name}.sigstore.json" for name in SIX_ASSETS)
+TWELVE_ASSETS = SIX_ASSETS + SIX_BUNDLES
 
 
 def _load_release() -> ModuleType:
@@ -178,6 +180,26 @@ class AssetNameTest(unittest.TestCase):
             problems = RELEASE.asset_problems(Path(folder), VERSION)
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("stray.txt", problems[0])
+
+    def test_twelve_expected_names_pass(self) -> None:
+        """The six packages and six Sigstore bundles pass (D328)."""
+        with tempfile.TemporaryDirectory() as folder:
+            _make_assets(Path(folder), TWELVE_ASSETS)
+            problems = RELEASE.asset_problems(Path(folder), VERSION, require_bundles=True)
+            self.assertEqual(problems, [])
+            exit_code, _ = _run_main(["check-assets", folder, VERSION, "--require-bundles"])
+        self.assertEqual(exit_code, 0)
+
+    def test_missing_bundle_fails(self) -> None:
+        """A missing bundle is named and fails when bundles are required."""
+        with tempfile.TemporaryDirectory() as folder:
+            _make_assets(Path(folder), (*SIX_ASSETS, *SIX_BUNDLES[1:]))
+            problems = RELEASE.asset_problems(Path(folder), VERSION, require_bundles=True)
+            exit_code, output = _run_main(["check-assets", folder, VERSION, "--require-bundles"])
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn(SIX_BUNDLES[0], problems[0])
+        self.assertEqual(exit_code, RELEASE.CHECK_FAILED)
+        self.assertIn(SIX_BUNDLES[0], output)
 
 
 class ReleaseJobReviewFixTest(unittest.TestCase):
