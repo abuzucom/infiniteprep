@@ -539,8 +539,9 @@ jobs:
           if-no-files-found: error
 
   # Only this job writes to the repository (D315). It gathers the six packages
-  # from this run, writes SHA256SUMS.txt, and fills a draft release. The owner
-  # publishes the draft by hand (D314).
+  # from this run, attests each package and SHA256SUMS.txt (D325), saves the
+  # Sigstore bundles as release assets (D328), writes SHA256SUMS.txt, and fills
+  # a draft release. The owner publishes the draft by hand (D314).
   release:
     name: release
     needs: bundle
@@ -550,6 +551,9 @@ jobs:
     permissions:
       contents: write
       actions: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -578,11 +582,96 @@ jobs:
           fi
           python packaging/release.py check-assets "$assets" "${GITHUB_REF_NAME#v}"
 
+      # Attest each of the six packages and save its Sigstore bundle (D325, D328).
+      - name: Attest Windows portable zip
+        id: attest-windows-portable-zip
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release-assets/InfinitePrep-*-windows-x64-portable.zip
+
+      - name: Attest Windows setup installer
+        id: attest-windows-setup-exe
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release-assets/InfinitePrep-*-windows-x64-setup.exe
+
+      - name: Attest Linux AppImage
+        id: attest-linux-appimage
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release-assets/InfinitePrep-*-linux-x86_64.AppImage
+
+      - name: Attest Linux tar.gz
+        id: attest-linux-tar-gz
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release-assets/InfinitePrep-*-linux-x86_64.tar.gz
+
+      - name: Attest Linux portable tar.gz
+        id: attest-linux-portable-tar-gz
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release-assets/InfinitePrep-*-linux-x86_64-portable.tar.gz
+
+      - name: Attest macOS DMG
+        id: attest-macos-dmg
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release-assets/InfinitePrep-*-macos-arm64.dmg
+
+      - name: Save package attestation bundles
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          assets="$RUNNER_TEMP/release-assets"
+          version="${GITHUB_REF_NAME#v}"
+          tag="$GITHUB_REF_NAME"
+          repo="$GITHUB_REPOSITORY"
+          cp "${{ steps.attest-windows-portable-zip.outputs.bundle-path }}" "$assets/InfinitePrep-$version-windows-x64-portable.zip.sigstore.json"
+          cp "${{ steps.attest-windows-setup-exe.outputs.bundle-path }}" "$assets/InfinitePrep-$version-windows-x64-setup.exe.sigstore.json"
+          cp "${{ steps.attest-linux-appimage.outputs.bundle-path }}" "$assets/InfinitePrep-$version-linux-x86_64.AppImage.sigstore.json"
+          cp "${{ steps.attest-linux-tar-gz.outputs.bundle-path }}" "$assets/InfinitePrep-$version-linux-x86_64.tar.gz.sigstore.json"
+          cp "${{ steps.attest-linux-portable-tar-gz.outputs.bundle-path }}" "$assets/InfinitePrep-$version-linux-x86_64-portable.tar.gz.sigstore.json"
+          cp "${{ steps.attest-macos-dmg.outputs.bundle-path }}" "$assets/InfinitePrep-$version-macos-arm64.dmg.sigstore.json"
+          # A rerun regenerates each bundle with a newer timestamp. The upload
+          # step rejects a draft asset whose SHA-256 differs (D316). A rerun
+          # therefore reuses each bundle already on the draft (D328).
+          # A draft asset is untrusted input. Each reused bundle must verify
+          # against this build's package and this repository before reuse.
+          if is_draft="$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft 2>/dev/null)"; then
+            if [ "$is_draft" != "true" ]; then
+              echo "Release $tag is already published. This job only fills drafts."
+              exit 1
+            fi
+            existing="$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name')"
+            for bundle in "$assets"/*.sigstore.json; do
+              bname="$(basename "$bundle")"
+              if grep -Fxq -- "$bname" <<<"$existing"; then
+                echo "Reusing existing $bname from draft release."
+                dl_dir="$(mktemp -d "$RUNNER_TEMP/existing-bundle.XXXXXX")"
+                gh release download "$tag" --repo "$repo" --pattern "$bname" --dir "$dl_dir"
+                if [ ! -s "$dl_dir/$bname" ]; then
+                  echo "Downloaded $bname is absent or empty. Delete the draft asset, then rerun."
+                  exit 1
+                fi
+                gh attestation verify "${bundle%.sigstore.json}" --repo "$repo" --bundle "$dl_dir/$bname"
+                cp "$dl_dir/$bname" "$bundle"
+              fi
+            done
+          fi
+          python packaging/release.py check-assets "$assets" "$version" --require-bundles
+
       - name: Write checksums and release notes
         run: |
           python packaging/release.py checksums "$RUNNER_TEMP/release-assets"
           python packaging/release.py notes "${GITHUB_REF_NAME#v}" "$RUNNER_TEMP/release-notes.md"
           cat "$RUNNER_TEMP/release-assets/SHA256SUMS.txt"
+
+      - name: Attest checksums file
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6  # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/release-assets/SHA256SUMS.txt
 
       # A rerun reuses the draft. An asset already on the draft must match this
       # build's SHA-256, and a mismatch stops the job (D316). A published

@@ -483,7 +483,19 @@ A pushed `v*` tag turns a `build-packages` run into a release:
 1. Merge a change that sets the new version in `src/infiniteprep/__init__.py`, `pyproject.toml`, and the top CHANGELOG entry.
 2. Tag that commit on `main` as `v<version>`, for example `v0.48.0`, and push the tag.
 3. The `check-tag` job stops the run when the tag and the version files disagree, or when the commit is not on `main`.
-4. After all three builds pass, the `release` job uploads the six packages and `SHA256SUMS.txt` to a draft release.
+4. After all three builds pass, the `release` job attests each package and `SHA256SUMS.txt` with GitHub build provenance (D325), saves each package's Sigstore bundle as `<package>.sigstore.json` (D328), and uploads all packages, bundles, and `SHA256SUMS.txt` to a draft release.
 5. Review the draft on GitHub, then publish it by hand.
 
 If the release job fails partway, rerun only the failed job. It reuses the draft and skips assets whose SHA-256 already matches. A full rebuild makes new packages that differ from the uploaded ones. Delete the draft before a full rebuild.
+
+To verify a downloaded release package with GitHub CLI:
+
+```bash
+gh attestation verify <package-file> --repo abuzucom/infiniteprep
+```
+
+To verify using the downloaded Sigstore bundle file directly:
+
+```bash
+gh attestation verify <package-file> --bundle <package-file>.sigstore.json --repo abuzucom/infiniteprep
+```
