@@ -14,6 +14,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Conservative space estimate in `services/usb/space.py`. The reserve is the larger of a percentage of the estimate and a fixed byte count. Both start at zero.
 - Pre-write recheck in `services/usb/recheck.py`. A changed drive identity, mount path, or writability aborts the export.
 - Optional preflight facts on the USB inspection models.
+- Read-only preflight probes in `services/usb/linux_probe.py`, `macos_probe.py`, and `windows_probe.py`. The probes add system, active, primary, hardware ID, and filesystem health facts. No probe needs raw device access.
+- The Linux probe infers filesystem health from the kernel mount state. The macOS probe leaves active, primary, and health facts unverified. The Windows probe reads `HealthStatus`.
 - `scripts/classify_changed_paths.py` sorts a commit range into the `docs`, `website`, `light`, or `full` change class. A version-only edit to `pyproject.toml` or `src/infiniteprep/__init__.py` keeps a range out of the `full` class.
 - The `release` job in `build-packages.yml` publishes a GitHub build-provenance attestation for each of the six packages and `SHA256SUMS.txt` with `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6` (v4.2.2, D325).
 - The `release` job uploads each package's Sigstore bundle as `<package>.sigstore.json` to the draft release, with its hash recorded in `SHA256SUMS.txt` (D328).
