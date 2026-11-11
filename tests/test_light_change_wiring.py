@@ -105,13 +105,14 @@ class ScanSkipTest(unittest.TestCase):
                 self.assertNotIn("if", job)
                 self.assertNotIn("needs", job)
 
-    def test_failed_classification_does_not_fail_the_scan_job(self) -> None:
-        """A failed classify step yields no flag, and the scan steps then run."""
+    def test_crashed_classification_fails_the_scan_job(self) -> None:
+        """A crashed classify step stops the job with a failure, never with a silent skip."""
         for workflow_name, job_name in SCAN_JOBS:
             with self.subTest(workflow=workflow_name):
                 steps = load_jobs(workflow_name)[job_name]["steps"]
                 classify = steps[find_classify_index(steps)]
-                self.assertIs(classify["continue-on-error"], True)
+                self.assertNotIn("continue-on-error", classify)
+                self.assertNotIn("if", classify)
 
     def test_every_step_after_classify_skips_on_a_light_change(self) -> None:
         """The scan and its upload carry the light condition."""

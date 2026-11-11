@@ -28,12 +28,12 @@ jobs:
           fetch-depth: 0
 
       # A change to prose or to the landing site alone is light, and the scan
-      # skips it. A failed classification yields no flag, and the scan runs.
+      # skips it. The script selects the full class when it cannot classify,
+      # and the scan then runs. A crashed step fails the job.
       # A push event carries no pull request data, so it compares the pushed
       # commit with the previous one.
       - name: Classify changed paths
         id: classify
-        continue-on-error: true
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

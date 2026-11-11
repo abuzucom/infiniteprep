@@ -25,11 +25,11 @@ jobs:
           fetch-depth: 0
 
       # A change to prose or to the landing site alone is light. It changes
-      # no manifest, and the review skips it. A failed classification yields
-      # no flag, and the review runs.
+      # no manifest, and the review skips it. The script selects the full
+      # class when it cannot classify, and the review then runs. A crashed
+      # step fails the job.
       - name: Classify changed paths
         id: classify
-        continue-on-error: true
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
