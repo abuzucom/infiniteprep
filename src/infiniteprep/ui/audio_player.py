@@ -263,6 +263,8 @@ class WaveformOverviewBar(QWidget):
         rect = self.rect()
         painter.fillRect(rect, QColor("#181c24"))
         if self.view_mode == ZOOM_MODE:
+            # _paint_zoom reads spectrum attributes. Zoom before analysis completes
+            # draws the fallback overview segment instead.
             if self.spectrum is None:
                 self._paint_zoom_overview(painter, rect.width(), rect.height())
             else:
@@ -421,7 +423,12 @@ class AudioPreviewWidget(QWidget):
         *,
         settings_manager: SettingsManager | None = None,
     ) -> None:
-        """Initialize AudioPreviewWidget with waveform overview and cue jump controls."""
+        """Initialize AudioPreviewWidget with waveform overview and cue jump controls.
+
+        A default SettingsManager resolves the application settings path, so every
+        default instance reads and writes the same file. SettingsManager.update merges
+        into the latest file content, and its writes replace the file atomically.
+        """
         super().__init__(parent)
         self.current_file_path: Path | None = None
         self.duration_sec: float = 0.0

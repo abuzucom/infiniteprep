@@ -166,6 +166,10 @@ class DetailPanel(QWidget):
 
         enable_audio_backend creates a real QMediaPlayer for the preview. The desktop app
         passes True. Tests keep the silent default, so no audio device is needed.
+
+        The panel shares one SettingsManager with its audio preview. A default
+        manager resolves the application settings path, the same file every other
+        default instance uses.
         """
         super().__init__(parent)
         self.repo = repository
