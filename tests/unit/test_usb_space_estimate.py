@@ -5,16 +5,16 @@ from __future__ import annotations
 import unittest
 
 from infiniteprep.services.usb.space import (
-    WORST_CASE_CLUSTER_BYTES,
+    UPPER_BOUND_CLUSTER_BYTES,
     ReservePolicy,
     compute_reserve_bytes,
     estimate_export_bytes,
 )
 
-CLUSTER = WORST_CASE_CLUSTER_BYTES
+CLUSTER = UPPER_BOUND_CLUSTER_BYTES
 
 
-class WorstCaseClusterTests(unittest.TestCase):
+class UpperBoundClusterTests(unittest.TestCase):
     """The estimate assumes the largest FAT32 cluster for every volume."""
 
     def test_cluster_constant_is_64_kib(self) -> None:
