@@ -5,7 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.52.2] (2026-11-11)
+## [0.52.3] (2026-11-11)
+
+### Added
+
+- `scripts/classify_changed_paths.py` sorts a commit range into the `docs`, `website`, `light`, or `full` change class. A version-only edit to `pyproject.toml` or `src/infiniteprep/__init__.py` keeps a range out of the `full` class. No workflow reads the class yet.
 
 ### Changed
 
