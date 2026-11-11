@@ -5,6 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.52.2] (2026-11-11)
+
+### Changed
+
+- The `ci` workflow runs on pushes to `main` only. A pull request commit starts one `ci` run instead of two.
+- A newer pull request commit cancels the `ci` run of the older commit. Runs on `main` always complete.
+
 ## [0.52.1] (2026-11-10)
 
 ### Added
