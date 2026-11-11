@@ -16,6 +16,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Closing the detail panel cancels waveform analysis and keeps its worker pool usable when the panel reopens. The panel and application quit wait at most two seconds for workers.
 - The waveform worker extracts the fallback overview before spectrum analysis. The overview shows real peaks while analysis runs and after analysis fails.
 - `SettingsManager.update` raises `ValueError` for an invalid value and writes nothing.
+- `scripts/classify_changed_paths.py` sorts a commit range into the `docs`, `website`, `light`, or `full` change class. A version-only edit to `pyproject.toml` or `src/infiniteprep/__init__.py` keeps a range out of the `full` class.
 - The `release` job in `build-packages.yml` publishes a GitHub build-provenance attestation for each of the six packages and `SHA256SUMS.txt` with `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6` (v4.2.2, D325).
 - The `release` job uploads each package's Sigstore bundle as `<package>.sigstore.json` to the draft release, with its hash recorded in `SHA256SUMS.txt` (D328).
 - `packaging/release.py check-assets` learns the Sigstore bundle names and supports `--require-bundles` to verify that the folder holds all six packages and six Sigstore bundles (D328). Without the flag, a bundle counts as an extra file.
@@ -24,10 +25,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tests/test_release_attestation.py` checks workflow permissions, actions/attest commit pinning, subject paths, bundle copying, asset verification, and README verification documentation.
 - The `release` job verifies each Sigstore bundle reused from a draft release against its package with `gh attestation verify --bundle` before reuse. A failed download, an empty bundle, or a failed verification stops the job.
 - `tests/test_release_bundle_reuse.py` checks the strict shell mode and the reuse verification of the bundle-saving step.
-- `scripts/classify_changed_paths.py` sorts a commit range into the `docs`, `website`, `light`, or `full` change class. A version-only edit to `pyproject.toml` or `src/infiniteprep/__init__.py` keeps a range out of the `full` class. No workflow reads the class yet.
 
 ### Changed
 
+- `ci.yml`, `security-devops.yml`, and `dependency-review.yml` read the change class. A docs-only or website-only change skips `test-matrix`, the Microsoft Security DevOps scan, and the dependency review. A failed classification runs all of them.
 - The `ci` workflow runs on pushes to `main` only. A pull request commit starts one `ci` run instead of two.
 - A newer pull request commit cancels the `ci` run of the older commit. Runs on `main` always complete.
 - The `Save package attestation bundles` step runs under `set -euo pipefail` and stops when the release for the tag is already published.
