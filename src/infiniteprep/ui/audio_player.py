@@ -187,7 +187,8 @@ class WaveformOverviewBar(QWidget):
 
     def set_envelope(self, envelope: list[float]) -> None:
         """Update the waveform envelope values and trigger a repaint."""
-        self.fallback_envelope = envelope or [FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS
+        # The copy keeps a later caller-side mutation out of the stored overview.
+        self.fallback_envelope = list(envelope or [FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS)
         if self.spectrum is None:
             self.envelope = list(self.fallback_envelope)
         else:
