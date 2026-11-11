@@ -239,8 +239,14 @@ class DetailPanel(QWidget):
         root.addWidget(cand_box, stretch=CANDIDATE_BOX_STRETCH)
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        """Stop stale analysis work when this panel is closed independently."""
-        self.waveform_pool.shutdown()
+        """Stop analysis work when this panel is closed independently.
+
+        A closed panel can reopen. The pool stays usable, and the cleared request
+        identity makes the next selection submit a fresh analysis.
+        """
+        self.waveform_pool.cancel_all()
+        self._analysis_file_id = None
+        self._analysis_path = None
         super().closeEvent(event)
 
     def set_key_notation(self, notation: KeyDisplayNotation) -> None:

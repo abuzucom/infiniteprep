@@ -121,11 +121,15 @@ class WaveformAnalysisPool(QObject):
         """Wait for every submitted task to finish."""
         return self._pool.waitForDone(milliseconds)
 
+    def cancel_all(self) -> None:
+        """Cancel queued and active work and wait for it. The pool stays usable."""
+        self._cancel_tasks()
+        self._pool.waitForDone()
+
     @Slot()
     def shutdown(self) -> None:
         """Cancel queued and active work before application shutdown."""
         if self._shutdown:
             return
         self._shutdown = True
-        self._cancel_tasks()
-        self._pool.waitForDone()
+        self.cancel_all()

@@ -443,8 +443,9 @@ class AudioPreviewWidget(QWidget):
         self.view_combo = QComboBox(self)
         self.view_combo.addItems((OVERVIEW_MODE, ZOOM_MODE))
         self.zoom_combo = QComboBox(self)
-        self.zoom_combo.addItems([f"{seconds} seconds" for seconds in ZOOM_SECONDS])
-        self.zoom_combo.setCurrentText(f"{self.waveform_zoom_seconds} seconds")
+        for seconds in ZOOM_SECONDS:
+            self.zoom_combo.addItem(f"{seconds} seconds", seconds)
+        self.zoom_combo.setCurrentIndex(self.zoom_combo.findData(self.waveform_zoom_seconds))
         self.position_slider = QSlider(Qt.Orientation.Horizontal, self)
         self.position_slider.setRange(0, 0)
         self.position_slider.setSingleStep(SLIDER_SINGLE_STEP_MS)
@@ -503,7 +504,7 @@ class AudioPreviewWidget(QWidget):
         self.stop_btn.clicked.connect(self.stop_playback)
         self.position_slider.valueChanged.connect(self._on_slider_value_changed)
         self.view_combo.currentTextChanged.connect(self._on_view_changed)
-        self.zoom_combo.currentTextChanged.connect(self._on_zoom_changed)
+        self.zoom_combo.currentIndexChanged.connect(self._on_zoom_changed)
         if self.player is not None:
             self.player.positionChanged.connect(self._on_media_position_changed)
             self.player.durationChanged.connect(self._on_media_duration_changed)
@@ -567,13 +568,13 @@ class AudioPreviewWidget(QWidget):
         self.waveform_bar.zoom_seconds = self.waveform_zoom_seconds
         self.waveform_bar.set_playback(self.current_position_sec, self.duration_sec)
 
-    def _on_zoom_changed(self, label: str) -> None:
-        """Persist the selected zoom interval across tracks and restarts."""
-        try:
-            seconds = int(label.split(maxsplit=1)[0])
-        except (ValueError, IndexError):
-            return
-        if seconds not in ZOOM_SECONDS:
+    def _on_zoom_changed(self, index: int) -> None:
+        """Persist the selected zoom interval across tracks and restarts.
+
+        The duration comes from item data. Display text stays free to change.
+        """
+        seconds = self.zoom_combo.itemData(index)
+        if type(seconds) is not int or seconds not in ZOOM_SECONDS:
             return
         self.waveform_zoom_seconds = seconds
         self.waveform_bar.zoom_seconds = seconds

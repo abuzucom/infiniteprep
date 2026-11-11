@@ -5,7 +5,9 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
+import os
 import socket
+import tempfile
 import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -211,9 +213,28 @@ class SettingsManager:
     def save(self, settings: AppSettings) -> None:
         """Persist AppSettings to disk as formatted JSON."""
         with self._lock:
-            self.settings_path.parent.mkdir(parents=True, exist_ok=True)
-            payload = json.dumps(asdict(settings), indent=2, ensure_ascii=True)
-            self.settings_path.write_text(payload, encoding="utf-8")
+            self._write_unlocked(settings)
+
+    def _write_unlocked(self, settings: AppSettings) -> None:
+        """Replace the settings file atomically while the manager lock is held.
+
+        A reader in another manager instance or process sees the old file or the
+        new file, never a partial write. A failed write keeps the old file.
+        """
+        directory = self.settings_path.parent
+        directory.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(asdict(settings), indent=2, ensure_ascii=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=directory, prefix=f"{self.settings_path.name}.", suffix=".tmp", text=True
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(payload)
+            os.replace(temporary_path, self.settings_path)
+        except OSError:
+            temporary_path.unlink(missing_ok=True)
+            raise
 
     def update(self, **changes: object) -> AppSettings:
         """Merge selected fields into the latest settings and persist them."""
@@ -224,7 +245,5 @@ class SettingsManager:
                 if name not in defaults:
                     raise ValueError(f"Unknown setting: {name}")
                 setattr(settings, name, _validated_setting_value(name, value, defaults[name]))
-            self.settings_path.parent.mkdir(parents=True, exist_ok=True)
-            payload = json.dumps(asdict(settings), indent=2, ensure_ascii=True)
-            self.settings_path.write_text(payload, encoding="utf-8")
+            self._write_unlocked(settings)
             return settings
