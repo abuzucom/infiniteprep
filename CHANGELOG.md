@@ -16,6 +16,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tests/test_release_attestation.py` checks workflow permissions, actions/attest commit pinning, subject paths, bundle copying, asset verification, and README verification documentation.
 - The `release` job verifies each Sigstore bundle reused from a draft release against its package with `gh attestation verify --bundle` before reuse. A failed download, an empty bundle, or a failed verification stops the job.
 - `tests/test_release_bundle_reuse.py` checks the strict shell mode and the reuse verification of the bundle-saving step.
+- `scripts/classify_changed_paths.py` sorts a commit range into the `docs`, `website`, `light`, or `full` change class. A version-only edit to `pyproject.toml` or `src/infiniteprep/__init__.py` keeps a range out of the `full` class. No workflow reads the class yet.
 
 ### Changed
 
