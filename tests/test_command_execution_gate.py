@@ -115,7 +115,8 @@ class CommandGateModuleTest(unittest.TestCase):
 
     def test_workflow_needs_consent_matches_fixed_invocations(self) -> None:
         self.assertTrue(self.gate.workflow_needs_consent("make lint PYTHON=python", str(REPO_ROOT)))
-        self.assertTrue(self.gate.workflow_needs_consent("rg -n branch README.md", str(REPO_ROOT)))
+        self.assertFalse(self.gate.workflow_needs_consent("rg -n branch README.md", str(REPO_ROOT)))
+        self.assertTrue(self.gate.workflow_needs_consent("rg -n branch /etc/hosts", str(REPO_ROOT)))
         self.assertFalse(self.gate.workflow_needs_consent("make lint SHELL=sh", str(REPO_ROOT)))
         self.assertFalse(self.gate.workflow_needs_consent("python other.py", str(REPO_ROOT)))
 

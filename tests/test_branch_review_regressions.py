@@ -109,16 +109,23 @@ class BranchReviewTest(unittest.TestCase):
                 self.assertIn("metadata", result.stderr)
 
     def test_required_workflows_request_consent(self) -> None:
-        for command in ("python scripts/run_tests.py", "python scripts/read_git_state.py all",
+        for command in ("python scripts/run_tests.py",
                         "python scripts/sync.py --check", "make lint PYTHON=python",
-                        "python -m unittest tests.test_enforce_branch_name -v",
-                        "python scripts/trusted_gh.py run pr list --repo abuzucom/agents",
-                        "rg -n branch README.md"):
+                        "python scripts/trusted_gh.py run pr list --repo abuzucom/agents"):
             with self.subTest(command=command):
                 result = self.run_candidate(command)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 decision = json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"]
                 self.assertEqual(decision, "ask")
+
+    def test_inspecting_workflows_pass_without_consent(self) -> None:
+        for command in ("python scripts/read_git_state.py all",
+                        "python -m unittest tests.test_enforce_branch_name -v",
+                        "rg -n branch README.md"):
+            with self.subTest(command=command):
+                result = self.run_candidate(command)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), "")
 
     def test_workflow_consent_never_clears_opaque_or_chained_commands(self) -> None:
         for command in ("python -c 'print(1)'", "python other.py", "make lint SHELL=sh",

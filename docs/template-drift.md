@@ -1,6 +1,8 @@
 # Template drift
 
-Source template: `abuzucom/agents` at commit `b452348`.
+Source template: `abuzucom/agents` at commit `5dee9a3`.
+
+The earlier record named `b452348`. The copied files matched `59c6d95`.
 
 ## Taken
 
@@ -17,6 +19,7 @@ Source template: `abuzucom/agents` at commit `b452348`.
 - The workflows `agents-compliance.yml`, `agents-md-compliance.yml`,
   `sync-check.yml`, `immutable-conflict-check.yml`, and `gate-integrity.yml`.
 - `CONTRIBUTING.md` and `SECURITY.md` from the template examples.
+- `.github/PULL_REQUEST_TEMPLATE.md` and `.github/ISSUE_TEMPLATE.md`.
 
 ## Declined
 
@@ -29,7 +32,6 @@ Source template: `abuzucom/agents` at commit `b452348`.
   digests.
 - `docs/pr-review.md` and `docs/gate-threat-model.md`. InfinitePrep keeps its
   own review document.
-- `.github/PULL_REQUEST_TEMPLATE.md` and `.github/ISSUE_TEMPLATE.md`.
 
 ## Expected differences
 
@@ -41,3 +43,5 @@ Source template: `abuzucom/agents` at commit `b452348`.
 - `pyproject.toml` excludes the copied gate files from Ruff. The agents lint
   in `ci.yml` covers those files.
 - `docs/project-orientation.md` holds InfinitePrep facts.
+- `hooks/workflow-scripts.txt` ends with nine InfinitePrep entries for
+  `scripts/`, `packaging/`, and `ci/` commands.

@@ -1122,8 +1122,10 @@ def _read_only_shell(payload: dict, project_dir: str, client: str, branch_name: 
             client, payload,
             f"Create a feature branch from {_branch_label(branch_name)} before writing")
     if command_gate.read_only_workflow(command, project_dir):
-        return _request_authorization(client, payload, "Repository workflow requires execution consent",
-                                      command_gate.GATE)
+        decision, reason = command_gate.workflow_decision(command, project_dir)
+        if decision == command_gate.ALLOW:
+            return 0
+        return _request_authorization(client, payload, reason, command_gate.GATE)
     reason = read_only_command_reason(command, project_dir, tool_name)
     if reason:
         return _deny(client, f"{reason}. {_read_only_reason(branch_name)}")
@@ -1271,6 +1273,8 @@ def _handle_pre_tool_use(payload: dict, project_dir: str, client: str) -> int:
     if _valid_bootstrap(command_text, project_dir):
         return 0
     decision, reason = command_gate.workflow_decision(command_text, project_dir)
+    if decision == command_gate.ALLOW:
+        return 0
     if decision == "ask":
         return _request_authorization(client, payload, reason, command_gate.GATE)
     if decision == "deny":

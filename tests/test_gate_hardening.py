@@ -125,9 +125,10 @@ class RepositoryProgramPathTest(TemporaryTree):
             return self.gate.workflow_decision(command, str(self.root))
 
     def test_outside_program_keeps_the_plain_prompt(self) -> None:
-        for command in ("make lint PYTHON=python", "rg -n x README.md", "python scripts/run_tests.py"):
+        for command in ("make lint PYTHON=python", "python scripts/run_tests.py"):
             with self.subTest(command=command):
                 self.assertEqual(self.decide(command, self.outside), ("ask", WORKFLOW_CONSENT))
+        self.assertEqual(self.decide("rg -n x README.md", self.outside), ("allow", ""))
 
     def test_missing_program_keeps_the_plain_prompt(self) -> None:
         self.assertEqual(self.decide("make lint PYTHON=python", self.base / "empty"),
