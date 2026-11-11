@@ -337,13 +337,12 @@ class WaveformOverviewBar(QWidget):
             if time_start >= analyzed_duration:
                 self._paint_zoom_fallback_column(painter, column, (time_start, time_end), height)
             return
-        sample_start = max(
-            0,
-            int(time_start * count / max(analyzed_duration, SPECTRUM_DURATION_EPSILON_SEC)),
-        )
+        # The floor keeps a denormal duration from overflowing the sample indices.
+        bounded_duration = max(analyzed_duration, SPECTRUM_DURATION_EPSILON_SEC)
+        sample_start = max(0, int(time_start * count / bounded_duration))
         sample_end = min(
             count,
-            max(sample_start + 1, int(np.ceil(time_end * count / analyzed_duration))),
+            max(sample_start + 1, int(np.ceil(time_end * count / bounded_duration))),
         )
         for name, color in zip(("low", "mid", "high"), colors, strict=True):
             values = getattr(self.spectrum, name)[sample_start:sample_end]

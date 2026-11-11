@@ -232,7 +232,8 @@ class SettingsManager:
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 handle.write(payload)
             os.replace(temporary_path, self.settings_path)
-        except OSError:
+        except BaseException:
+            # Every failure, including an interrupt, removes the temporary file.
             temporary_path.unlink(missing_ok=True)
             raise
 

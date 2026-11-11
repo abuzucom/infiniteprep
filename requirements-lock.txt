@@ -1,4 +1,4 @@
-# Pinned direct and transitive dependency lockfile for InfinitePrep v0.24.0
+# Pinned direct and transitive dependency lockfile for InfinitePrep v0.53.0
 # Update together with pyproject.toml.
 altgraph==0.17.5
 cffi==2.1.1
