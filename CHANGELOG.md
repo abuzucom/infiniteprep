@@ -5,7 +5,15 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.52.2] (2026-11-11)
+## [0.52.3] (2026-11-11)
+
+### Added
+
+- USB export preflight policy in `services/usb/preflight.py` (USB-4, #156). The policy refuses non-removable drives, system and boot volumes, active partitions, read-only media, filesystem errors, unknown layouts, non-FAT32 filesystems, and unknown database formats.
+- A file of 4 GiB or more blocks the whole export.
+- Conservative space estimate in `services/usb/space.py`. The reserve is the larger of a percentage of the estimate and a fixed byte count. Both start at zero.
+- Pre-write recheck in `services/usb/recheck.py`. A changed drive identity, mount path, or writability aborts the export.
+- Optional preflight facts on the USB inspection models.
 
 ### Changed
 
