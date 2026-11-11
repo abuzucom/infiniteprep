@@ -13,7 +13,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Guard zoom rendering for empty analyses and keep playback errors separate from waveform status messages.
 - Reject non-file waveform sources and validate persisted setting types and supported ranges.
 - `SettingsManager` writes the settings file through a temporary file and an atomic replace. A failed write keeps the previous file intact.
-- Closing the detail panel cancels waveform analysis and keeps its worker pool usable when the panel reopens. The close wait is bounded at two seconds.
+- Closing the detail panel cancels waveform analysis and keeps its worker pool usable when the panel reopens. The panel waits at most two seconds for workers on close.
 - `SettingsManager.update` raises `ValueError` for an invalid value and writes nothing.
 - The `release` job in `build-packages.yml` publishes a GitHub build-provenance attestation for each of the six packages and `SHA256SUMS.txt` with `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6` (v4.2.2, D325).
 - The `release` job uploads each package's Sigstore bundle as `<package>.sigstore.json` to the draft release, with its hash recorded in `SHA256SUMS.txt` (D328).
