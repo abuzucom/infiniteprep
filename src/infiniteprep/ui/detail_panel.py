@@ -37,7 +37,7 @@ from infiniteprep.domain.enums import (
 from infiniteprep.domain.models import ApprovedField, FieldProposal, FileAsset
 from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
 from infiniteprep.ui.audio_player import AudioPreviewWidget
-from infiniteprep.ui.waveform_worker import CLOSE_CANCEL_WAIT_MS, WaveformAnalysisPool
+from infiniteprep.ui.waveform_worker import CANCEL_WAIT_MS, WaveformAnalysisPool
 
 DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = tuple(FieldName)
 FIELDS_TABLE_COLUMN_COUNT: Final[int] = 6
@@ -193,6 +193,7 @@ class DetailPanel(QWidget):
             settings_manager=self.settings_manager,
         )
         self.waveform_pool = WaveformAnalysisPool(self)
+        self.waveform_pool.overview_ready.connect(self._on_overview_ready)
         self.waveform_pool.completed.connect(self._on_waveform_completed)
         self.waveform_pool.failed.connect(self._on_waveform_failed)
         application = QApplication.instance()
@@ -250,7 +251,7 @@ class DetailPanel(QWidget):
         bounded so a read stalled on a slow volume cannot freeze the window. The
         panel still owns the pool, and a late worker emits nothing.
         """
-        self.waveform_pool.cancel_all(CLOSE_CANCEL_WAIT_MS)
+        self.waveform_pool.cancel_all(CANCEL_WAIT_MS)
         self._analysis_file_id = None
         self._analysis_path = None
         super().closeEvent(event)
@@ -304,6 +305,12 @@ class DetailPanel(QWidget):
         self._analysis_path = path
         self.audio_player.show_analysis_pending()
         self.waveform_pool.submit(path, asset.id, self._analysis_generation)
+
+    def _on_overview_ready(self, file_id: str, generation: int, envelope: object) -> None:
+        """Display only a fallback overview that matches the selected track generation."""
+        if file_id != self.current_file_id or generation != self._analysis_generation:
+            return
+        self.audio_player.set_overview_envelope(list(envelope))
 
     def _on_waveform_completed(self, file_id: str, generation: int, waveform: object) -> None:
         """Display only results that still match the selected track generation."""

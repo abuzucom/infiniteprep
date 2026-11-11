@@ -40,6 +40,9 @@ def test_new_stored_path_under_same_id_keeps_playback(
 
     monkeypatch.setattr("infiniteprep.ui.waveform_worker.analyze_waveform", analyze)
     panel.load_file_asset(asset.id)
+    # The worker reads the track for the fallback overview before it calls analyze.
+    # Windows refuses to rename a file that a worker still holds open.
+    qtbot.waitUntil(lambda: track in analyzed_paths, timeout=ANALYSIS_WAIT_TIMEOUT_MS)
     loaded_path = panel.audio_player.current_file_path
     panel.audio_player.seek_to_seconds(SEEK_SECONDS)
     panel.audio_player.toggle_play_pause()

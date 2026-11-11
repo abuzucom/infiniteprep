@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Final
 
@@ -106,8 +107,13 @@ def format_clock(seconds: float) -> str:
     return f"{minutes}:{seconds_part:02d}.{milliseconds:03d}"
 
 
-def _stream_block_peaks(file_path: Path, max_frames: int) -> list[float]:
-    """Read audio in fixed-size blocks up to max_frames and collect per-block peak values."""
+def _stream_block_peaks(
+    file_path: Path, max_frames: int, cancel_event: threading.Event | None = None
+) -> list[float]:
+    """Read audio in fixed-size blocks up to max_frames and collect per-block peak values.
+
+    A set cancel event stops the read between blocks. The caller discards the partial result.
+    """
     block_peaks: list[float] = []
     frames_seen = 0
     for block in sf.blocks(
@@ -115,14 +121,24 @@ def _stream_block_peaks(file_path: Path, max_frames: int) -> list[float]:
     ):
         if block.size == 0 or frames_seen >= max_frames:
             break
+        if cancel_event is not None and cancel_event.is_set():
+            break
         mono = np.abs(np.mean(block, axis=1))
         block_peaks.append(float(np.max(mono)))
         frames_seen += int(block.shape[0])
     return block_peaks
 
 
-def extract_waveform_envelope(file_path: Path, bins: int = DEFAULT_ENVELOPE_BINS) -> list[float]:
-    """Extract normalized peak amplitude envelope bins using bounded streaming blocks."""
+def extract_waveform_envelope(
+    file_path: Path,
+    bins: int = DEFAULT_ENVELOPE_BINS,
+    cancel_event: threading.Event | None = None,
+) -> list[float]:
+    """Extract normalized peak amplitude envelope bins using bounded streaming blocks.
+
+    The waveform worker calls this off the UI thread for the fallback overview. A set
+    cancel event ends the read early. The caller then discards the returned bins.
+    """
     if bins <= 0 or not file_path.exists():
         return [FALLBACK_ENVELOPE_EMPTY] * max(1, bins)
     try:
@@ -132,7 +148,7 @@ def extract_waveform_envelope(file_path: Path, bins: int = DEFAULT_ENVELOPE_BINS
             return [FALLBACK_ENVELOPE_ERROR] * bins
         info = sf.info(str(file_path))
         max_frames = max(1, round(max(1, int(info.samplerate)) * MAX_PREVIEW_DURATION_SEC))
-        raw_peaks = _stream_block_peaks(file_path, max_frames)
+        raw_peaks = _stream_block_peaks(file_path, max_frames, cancel_event)
     except (OSError, ValueError, RuntimeError) as exc:
         logger.warning("Waveform extraction failed for %s: %s", file_path, exc)
         return [FALLBACK_ENVELOPE_ERROR] * bins
@@ -577,6 +593,10 @@ class AudioPreviewWidget(QWidget):
         self.waveform_bar.spectrum = waveform
         peaks = np.asarray(waveform.overall, dtype=np.float32)
         self.waveform_bar.set_spectrum_envelope(peaks, float(waveform.duration_sec))
+
+    def set_overview_envelope(self, envelope: list[float]) -> None:
+        """Show the worker-extracted fallback overview for the loaded track."""
+        self.waveform_bar.set_envelope(envelope)
 
     def show_analysis_pending(self) -> None:
         """Show analysis progress without hiding the current overview."""

@@ -12,9 +12,10 @@ from infiniteprep.services.waveform_analysis import (
     WaveformAnalysisCancelled,
     analyze_waveform,
 )
+from infiniteprep.ui.audio_player import extract_waveform_envelope
 
 MAX_WAVEFORM_WORKERS = 2
-CLOSE_CANCEL_WAIT_MS = 2_000
+CANCEL_WAIT_MS = 2_000
 UNEXPECTED_FAILURE_MESSAGE = "Spectrum analysis failed unexpectedly. Check the application logs."
 UNREADABLE_SOURCE_MESSAGE = (
     "Unable to read the selected audio file. Check that it exists and is accessible."
@@ -34,6 +35,7 @@ def _failure_message(error: Exception) -> str:
 class _WorkerSignals(QObject):
     """Signals emitted by one analysis task."""
 
+    overview_ready = Signal(str, int, object)
     completed = Signal(str, int, object)
     failed = Signal(str, int, str)
 
@@ -60,6 +62,12 @@ class _AnalysisTask(QRunnable):
         """Run spectrum decoding outside the Qt UI thread."""
         if self.cancel_event.is_set():
             return
+        # The cheap overview pass runs first. The overview stays meaningful while the
+        # spectrum pass runs and after a spectrum failure.
+        envelope = extract_waveform_envelope(self.path, cancel_event=self.cancel_event)
+        if self.cancel_event.is_set():
+            return
+        self.signals.overview_ready.emit(self.file_id, self.generation, envelope)
         try:
             waveform = analyze_waveform(self.path, cancel_event=self.cancel_event)
         except WaveformAnalysisCancelled:
@@ -78,6 +86,7 @@ class _AnalysisTask(QRunnable):
 class WaveformAnalysisPool(QObject):
     """Schedule only current analyses on an instance-local two-job pool."""
 
+    overview_ready = Signal(str, int, object)
     completed = Signal(str, int, object)
     failed = Signal(str, int, str)
 
@@ -96,6 +105,9 @@ class WaveformAnalysisPool(QObject):
         self._cancel_tasks()
         cancel_event = threading.Event()
         task = _AnalysisTask(file_id, generation, Path(path), cancel_event)
+        task.signals.overview_ready.connect(
+            self._forward_overview_ready, Qt.ConnectionType.QueuedConnection
+        )
         task.signals.completed.connect(self._forward_completed, Qt.ConnectionType.QueuedConnection)
         task.signals.failed.connect(self._forward_failed, Qt.ConnectionType.QueuedConnection)
         self._cancel_events.append(cancel_event)
@@ -107,6 +119,11 @@ class WaveformAnalysisPool(QObject):
             cancel_event.set()
         self._pool.clear()
         self._cancel_events.clear()
+
+    @Slot(str, int, object)
+    def _forward_overview_ready(self, file_id: str, generation: int, envelope: object) -> None:
+        """Forward a fallback overview on the pool object's thread."""
+        self.overview_ready.emit(file_id, generation, envelope)
 
     @Slot(str, int, object)
     def _forward_completed(self, file_id: str, generation: int, waveform: object) -> None:
@@ -142,10 +159,11 @@ class WaveformAnalysisPool(QObject):
     def shutdown(self) -> None:
         """Cancel queued and active work before application shutdown.
 
-        The wait is unbounded. Application teardown destroys the Qt objects a
-        running task uses, so shutdown returns only after every task has ended.
+        The wait is bounded so a read stalled on a slow volume cannot hang quit.
+        A worker that outlives the wait emits nothing, because its cancel event
+        stays set.
         """
         if self._shutdown:
             return
         self._shutdown = True
-        self.cancel_all()
+        self.cancel_all(CANCEL_WAIT_MS)
