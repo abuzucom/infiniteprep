@@ -37,7 +37,7 @@ from infiniteprep.domain.enums import (
 from infiniteprep.domain.models import ApprovedField, FieldProposal, FileAsset
 from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
 from infiniteprep.ui.audio_player import AudioPreviewWidget
-from infiniteprep.ui.waveform_worker import WaveformAnalysisPool
+from infiniteprep.ui.waveform_worker import CLOSE_CANCEL_WAIT_MS, WaveformAnalysisPool
 
 DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = tuple(FieldName)
 FIELDS_TABLE_COLUMN_COUNT: Final[int] = 6
@@ -246,9 +246,11 @@ class DetailPanel(QWidget):
         """Stop analysis work when this panel is closed independently.
 
         A closed panel can reopen. The pool stays usable, and the cleared request
-        identity makes the next selection submit a fresh analysis.
+        identity makes the next selection submit a fresh analysis. The wait is
+        bounded so a read stalled on a slow volume cannot freeze the window. The
+        panel still owns the pool, and a late worker emits nothing.
         """
-        self.waveform_pool.cancel_all()
+        self.waveform_pool.cancel_all(CLOSE_CANCEL_WAIT_MS)
         self._analysis_file_id = None
         self._analysis_path = None
         super().closeEvent(event)

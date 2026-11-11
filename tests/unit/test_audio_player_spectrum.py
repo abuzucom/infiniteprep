@@ -39,6 +39,8 @@ UPPER_FALLBACK_INDEX = 90
 ANALYZED_PEAK_INDEX = 10
 PIXEL_MID_Y = PAINT_HEIGHT_PX // 2
 PIXEL_FALLBACK_X = 1
+PIXEL_PLAYHEAD_X = PAINT_WIDTH_PX // 2
+PLAYHEAD_COLOR = "#f59e0b"
 SPECTRUM_PEAK_SAMPLE_COUNT = 300
 ANALYSIS_COLUMN_COUNT = SPECTRUM_PEAK_SAMPLE_COUNT
 OVERVIEW_ENVELOPE_BIN_COUNT = 120
@@ -78,8 +80,8 @@ def test_zoom_click_and_drag_seek_with_centered_playhead(qtbot: Any, tmp_path: P
     widget = AudioPreviewWidget(settings_manager=manager)
     qtbot.addWidget(widget)
     widget.resize(WIDGET_WIDTH_PX, WIDGET_HEIGHT_PX)
-    widget.show()
-    qtbot.wait(20)
+    with qtbot.waitExposed(widget):
+        widget.show()
     widget.duration_sec = TRACK_DURATION_SEC
     widget.set_spectrum_waveform(make_waveform())
     qtbot.mouseClick(
@@ -181,11 +183,15 @@ def test_zero_duration_spectrum_can_render_in_zoom(qtbot: Any) -> None:
     widget.view_combo.setCurrentText("Zoom")
     widget.waveform_bar.set_playback(ZERO_DURATION_PLAYHEAD_SECONDS, ZERO_DURATION_FALLBACK_SECONDS)
     image = QPixmap(PAINT_WIDTH_PX, PAINT_HEIGHT_PX)
+    image.fill(Qt.GlobalColor.transparent)
     painter = QPainter(image)
 
     widget.waveform_bar._paint_zoom(painter, PAINT_WIDTH_PX, PAINT_HEIGHT_PX)
 
     painter.end()
+    rendered = image.toImage()
+    assert rendered.pixelColor(PIXEL_PLAYHEAD_X, PIXEL_MID_Y).name() == PLAYHEAD_COLOR
+    assert rendered.pixelColor(PIXEL_FALLBACK_X, PIXEL_MID_Y).alpha() == 0
     assert widget.waveform_bar.duration_sec == ZERO_DURATION_FALLBACK_SECONDS
 
 
@@ -195,6 +201,7 @@ def test_zero_duration_zoom_fallback_paths_are_safe(qtbot: Any) -> None:
     qtbot.addWidget(widget)
     widget.waveform_bar.view_mode = "Zoom"
     image = QPixmap(PAINT_WIDTH_PX, PAINT_HEIGHT_PX)
+    image.fill(Qt.GlobalColor.transparent)
     painter = QPainter(image)
 
     widget.waveform_bar._paint_zoom_overview(painter, PAINT_WIDTH_PX, PAINT_HEIGHT_PX)
@@ -206,6 +213,10 @@ def test_zero_duration_zoom_fallback_paths_are_safe(qtbot: Any) -> None:
     )
 
     painter.end()
+    rendered = image.toImage()
+    # An unknown duration draws the playhead only. No waveform column appears.
+    assert rendered.pixelColor(PIXEL_PLAYHEAD_X, PIXEL_MID_Y).name() == PLAYHEAD_COLOR
+    assert rendered.pixelColor(PIXEL_FALLBACK_X, PIXEL_MID_Y).alpha() == 0
     assert widget.waveform_bar.duration_sec == 0.0
 
 

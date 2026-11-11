@@ -14,6 +14,7 @@ from infiniteprep.services.waveform_analysis import (
 )
 
 MAX_WAVEFORM_WORKERS = 2
+CLOSE_CANCEL_WAIT_MS = 2_000
 UNEXPECTED_FAILURE_MESSAGE = "Spectrum analysis failed unexpectedly. Check the application logs."
 UNREADABLE_SOURCE_MESSAGE = (
     "Unable to read the selected audio file. Check that it exists and is accessible."
@@ -121,14 +122,29 @@ class WaveformAnalysisPool(QObject):
         """Wait for every submitted task to finish."""
         return self._pool.waitForDone(milliseconds)
 
-    def cancel_all(self) -> None:
-        """Cancel queued and active work and wait for it. The pool stays usable."""
+    def cancel_all(self, timeout_ms: int = -1) -> bool:
+        """Cancel queued and active work and wait for it. The pool stays usable.
+
+        A nonnegative timeout bounds the wait. The return value is False when a
+        worker is still inside a blocking read. Its cancel event stays set, so the
+        worker emits nothing when it finishes.
+        """
         self._cancel_tasks()
-        self._pool.waitForDone()
+        finished = self._pool.waitForDone(timeout_ms)
+        if not finished:
+            logger.warning(
+                "Waveform workers still run after %d ms. Their results are discarded.",
+                timeout_ms,
+            )
+        return finished
 
     @Slot()
     def shutdown(self) -> None:
-        """Cancel queued and active work before application shutdown."""
+        """Cancel queued and active work before application shutdown.
+
+        The wait is unbounded. Application teardown destroys the Qt objects a
+        running task uses, so shutdown returns only after every task has ended.
+        """
         if self._shutdown:
             return
         self._shutdown = True

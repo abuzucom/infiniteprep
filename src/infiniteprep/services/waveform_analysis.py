@@ -46,6 +46,7 @@ class WaveformAnalysisCancelled(BaseException):
 
 
 def _check_cancelled(cancel_event: threading.Event | None) -> None:
+    """Raise WaveformAnalysisCancelled when the caller has set the cancel event."""
     if cancel_event is not None and cancel_event.is_set():
         raise WaveformAnalysisCancelled
 

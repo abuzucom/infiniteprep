@@ -57,6 +57,8 @@ ZOOM_PLAYHEAD_CENTER_RATIO: Final[float] = 0.5
 SPECTRUM_OVERLAY_ALPHA: Final[int] = 128
 SPECTRUM_DURATION_EPSILON_SEC: Final[float] = 1e-9
 PLAYHEAD_WIDTH_PX: Final[int] = 2
+ZOOM_FALLBACK_COLOR: Final[str] = "#6b7280"
+ZOOM_OVERVIEW_COLOR: Final[str] = "#4b82e8"
 ZOOM_SECONDS: Final[tuple[int, ...]] = SUPPORTED_WAVEFORM_ZOOM_SECONDS
 OVERVIEW_MODE: Final[str] = "Overview"
 ZOOM_MODE: Final[str] = "Zoom"
@@ -246,12 +248,7 @@ class WaveformOverviewBar(QWidget):
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         """Allow drag scrubbing in zoom mode."""
         if self.view_mode == ZOOM_MODE and self._dragging and self.duration_sec > 0:
-            start, end = self._drag_window
-            ratio = event.position().x() / float(max(1, self.width()))
-            target = start + ratio * (end - start)
-            self.set_playhead_ratio(ZOOM_PLAYHEAD_CENTER_RATIO)
-            if callable(self.on_seek_ratio):
-                self.on_seek_ratio(target / self.duration_sec)
+            self._seek_from_x(event.position().x())
 
     def mouseReleaseEvent(self, _event: QMouseEvent) -> None:
         """Finish a zoom scrub gesture."""
@@ -357,8 +354,12 @@ class WaveformOverviewBar(QWidget):
         column: int,
         interval: tuple[float, float],
         height: int,
+        color: str = ZOOM_FALLBACK_COLOR,
     ) -> None:
-        """Draw fallback envelope data for a zoom interval beyond the analysis cap."""
+        """Draw overview envelope data for one zoom column.
+
+        The default color marks a zoom interval beyond the analysis cap.
+        """
         count = len(self.envelope)
         if self.duration_sec <= 0.0 or count == 0:
             return
@@ -373,7 +374,7 @@ class WaveformOverviewBar(QWidget):
             top,
             1,
             int(half_height * WAVEFORM_FULL_HEIGHT_SCALE),
-            QColor("#6b7280"),
+            QColor(color),
         )
 
     def _paint_zoom_overview(self, painter: QPainter, width: int, height: int) -> None:
@@ -394,18 +395,8 @@ class WaveformOverviewBar(QWidget):
             time_end = start + (column + 1) * (end - start) / max(width, 1)
             if time_end <= 0.0 or time_start >= self.duration_sec:
                 continue
-            duration = max(self.duration_sec, SPECTRUM_DURATION_EPSILON_SEC)
-            first = max(0, int(time_start * count / duration))
-            last = min(count, max(first + 1, int(np.ceil(time_end * count / duration))))
-            peak = max(self.envelope[first:last], default=FALLBACK_ENVELOPE_EMPTY)
-            half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * WAVEFORM_HALF_HEIGHT_SCALE)
-            top = int((height - half_height * WAVEFORM_FULL_HEIGHT_SCALE) / WAVEFORM_CENTER_DIVISOR)
-            painter.fillRect(
-                column,
-                top,
-                1,
-                int(half_height * WAVEFORM_FULL_HEIGHT_SCALE),
-                QColor("#4b82e8"),
+            self._paint_zoom_fallback_column(
+                painter, column, (time_start, time_end), height, ZOOM_OVERVIEW_COLOR
             )
         painter.fillRect(
             int(width * ZOOM_PLAYHEAD_CENTER_RATIO), 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b")
@@ -435,7 +426,8 @@ class AudioPreviewWidget(QWidget):
         self.cue_positions: dict[str, float] = compute_cue_jump_positions(0.0)
         self.enable_multimedia_backend = enable_multimedia_backend
         self.settings_manager = settings_manager or SettingsManager()
-        self.waveform_zoom_seconds = self._load_zoom_seconds()
+        # SettingsManager.load returns only supported zoom durations.
+        self.waveform_zoom_seconds = self.settings_manager.load().waveform_zoom_seconds
 
         self.player: QMediaPlayer | None = None
         self.audio_output: QAudioOutput | None = None
@@ -560,13 +552,6 @@ class AudioPreviewWidget(QWidget):
         if self.player is not None:
             self.player.setSource(QUrl.fromLocalFile(str(file_path)))
         self._update_time_label()
-
-    def _load_zoom_seconds(self) -> int:
-        """Load a supported zoom duration, falling back to the D79b default."""
-        saved = self.settings_manager.load().waveform_zoom_seconds
-        if type(saved) is int and saved in ZOOM_SECONDS:
-            return saved
-        return DEFAULT_WAVEFORM_ZOOM_SECONDS
 
     def _on_view_changed(self, mode: str) -> None:
         """Switch between the track overview and centered zoom view."""

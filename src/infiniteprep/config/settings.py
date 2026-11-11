@@ -160,18 +160,24 @@ class AppSettings:
     waveform_zoom_seconds: int = DEFAULT_WAVEFORM_ZOOM_SECONDS
 
 
+def _find_setting_value_problem(name: str, value: object, default: object) -> str | None:
+    """Return why a value is invalid for a setting, or None for a valid value."""
+    if type(value) is not type(default):
+        return "an invalid type"
+    if name == "waveform_zoom_seconds" and value not in SUPPORTED_WAVEFORM_ZOOM_SECONDS:
+        return "an unsupported waveform zoom duration"
+    if name in NONNEGATIVE_COUNT_SETTINGS and value < 0:
+        return "a negative count"
+    return None
+
+
 def _validated_setting_value(name: str, value: object, default: object) -> object:
     """Use a field default when a persisted value has an invalid type or range."""
-    if type(value) is not type(default):
-        logger.warning("Ignoring setting %s with an invalid type.", name)
-        return default
-    if name == "waveform_zoom_seconds" and value not in SUPPORTED_WAVEFORM_ZOOM_SECONDS:
-        logger.warning("Ignoring unsupported waveform zoom setting.")
-        return default
-    if name in NONNEGATIVE_COUNT_SETTINGS and value < 0:
-        logger.warning("Ignoring negative table column count setting %s.", name)
-        return default
-    return value
+    problem = _find_setting_value_problem(name, value, default)
+    if problem is None:
+        return value
+    logger.warning("Ignoring setting %s with %s.", name, problem)
+    return default
 
 
 class SettingsManager:
@@ -238,13 +244,20 @@ class SettingsManager:
             raise
 
     def update(self, **changes: object) -> AppSettings:
-        """Merge selected fields into the latest settings and persist them."""
+        """Merge selected fields into the latest settings and persist them.
+
+        An unknown name or an invalid value raises ValueError and writes nothing.
+        The default fallback applies only to values read from disk.
+        """
         with self._lock:
             settings = self._load_unlocked()
             defaults = asdict(AppSettings())
             for name, value in changes.items():
                 if name not in defaults:
                     raise ValueError(f"Unknown setting: {name}")
-                setattr(settings, name, _validated_setting_value(name, value, defaults[name]))
+                problem = _find_setting_value_problem(name, value, defaults[name])
+                if problem is not None:
+                    raise ValueError(f"Setting {name} has {problem}. Supply a supported value.")
+                setattr(settings, name, value)
             self._write_unlocked(settings)
             return settings
