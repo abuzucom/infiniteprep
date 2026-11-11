@@ -22,10 +22,11 @@ from infiniteprep.data_cleanup import CleanupChoice, run_cleanup
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName, SourceType
+from infiniteprep.domain.ports import FileWritePlan
 from infiniteprep.hashing import compute_sha256
 from infiniteprep.qt_logging import silence_ffmpeg_logs
 from infiniteprep.services.import_service import ImportService, discover_files_bounded
-from infiniteprep.services.job_orchestrator import JobOrchestrator
+from infiniteprep.services.job_orchestrator import BatchKind, JobOrchestrator
 from infiniteprep.services.playlist_exporter import PlaylistExporter
 from infiniteprep.services.reconciliation import ReconciliationService
 from infiniteprep.services.review_service import ReviewService
@@ -37,9 +38,10 @@ from infiniteprep.ui.action_handlers import (
     export_playlist_with_feedback,
     run_transcode_with_confirmation,
 )
+from infiniteprep.ui.batch_queue import CancelCheck, ProgressReport
 from infiniteprep.ui.cleanup_dialog import build_cleanup_blocked_box, build_cleanup_result_box
 from infiniteprep.ui.journal_dialog import JournalDialog
-from infiniteprep.ui.main_window import MainWindow
+from infiniteprep.ui.main_window import AnalyzeRunner, MainWindow
 from infiniteprep.ui.recovery_dialog import RecoveryDialog
 from infiniteprep.ui.settings_dialog import SettingsDialog
 from infiniteprep.ui.storage_prompt import confirm_storage_fallback, show_storage_error
@@ -94,7 +96,13 @@ def run_evaluation_sample(input_dir: Path) -> dict[str, Any]:
 
 def open_settings_dialog(window: MainWindow, repo: Repository) -> None:
     """Show Settings, then run the cleanup when the person confirmed one there."""
-    dialog = SettingsDialog(SettingsManager(), CredentialStore(), parent=window)
+    dialog = SettingsDialog(
+        SettingsManager(),
+        CredentialStore(),
+        parent=window,
+        # Deleting the data under a running or waiting batch would pull files from it.
+        cleanup_enabled=not window.batch_queue.is_busy(),
+    )
     dialog.exec()
     if dialog.cleanup_choice is not None:
         delete_data_and_quit(window, repo, dialog.cleanup_choice)
@@ -126,6 +134,50 @@ def delete_data_and_quit(window: MainWindow, repo: Repository, choice: CleanupCh
             app.quit()
 
 
+def stop_on_first_failure() -> bool:
+    """Read the saved setting that ends an Analyze or write batch at its first failed file."""
+    return SettingsManager().load().stop_batch_on_first_failure
+
+
+def build_analyze_runner(
+    orchestrator: JobOrchestrator, reconciler: ReconciliationService
+) -> AnalyzeRunner:
+    """Return the body of a queued Identify & Analyze batch.
+
+    Each file is processed and then reconciled into field proposals. The setting is
+    read when the batch starts, so a change applies to batches that start later.
+    """
+
+    def run_analyze_batch(
+        file_ids: list[str], should_cancel: CancelCheck, progress: ProgressReport
+    ) -> object:
+        return orchestrator.process_files_continuing(
+            file_ids,
+            post_process=reconciler.reconcile_file,
+            should_cancel=should_cancel,
+            stop_on_failure=stop_on_first_failure(),
+            progress=progress,
+        )
+
+    return run_analyze_batch
+
+
+def queue_safe_writes(
+    window: MainWindow, write_svc: WriteService, plans: list[FileWritePlan]
+) -> None:
+    """Add the previewed safe plans to the batch queue as one write batch."""
+
+    def run_write_batch(should_cancel: CancelCheck, progress: ProgressReport) -> object:
+        return write_svc.apply_batch_continuing(
+            plans,
+            should_cancel=should_cancel,
+            stop_on_failure=stop_on_first_failure(),
+            progress=progress,
+        )
+
+    window.queue_batch(BatchKind.WRITE, f"Apply writes to {len(plans)} file(s)", run_write_batch)
+
+
 def launch_desktop_app() -> int:
     """Launch the PySide6 desktop GUI application."""
     # Qt reads the logging rules when QApplication starts.
@@ -150,17 +202,17 @@ def launch_desktop_app() -> int:
     saved_theme = SettingsManager().load().theme
     apply_application_theme(qt_app, saved_theme)
 
-    def handle_analyze_batch(file_ids: list[str]) -> None:
-        orchestrator.process_files(file_ids)
-        for fid in file_ids:
-            reconciler.reconcile_file(fid)
-
     window = MainWindow(
         repository=repo,
         import_service=ImportService(repo),
         review_service=ReviewService(repo),
-        on_analyze_batch=handle_analyze_batch,
-        on_open_write_dialog=lambda fids: WritePlanDialog(write_svc, fids, parent=window).exec(),
+        analyze_runner=build_analyze_runner(orchestrator, reconciler),
+        on_open_write_dialog=lambda fids: WritePlanDialog(
+            write_svc,
+            fids,
+            parent=window,
+            submit_plans=lambda plans: queue_safe_writes(window, write_svc, plans),
+        ).exec(),
         on_open_journal_dialog=lambda: JournalDialog(repo, write_svc, parent=window).exec(),
         on_open_settings_dialog=lambda: open_settings_dialog(window, repo),
         on_transcode_batch=lambda fids: run_transcode_with_confirmation(

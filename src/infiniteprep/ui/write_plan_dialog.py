@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Final
 
 from PySide6.QtWidgets import (
@@ -36,11 +37,17 @@ class WritePlanDialog(QDialog):
         file_ids: list[str],
         default_template: str = "{artist} - {title} ({mix_name})",
         parent: QWidget | None = None,
+        submit_plans: Callable[[list[FileWritePlan]], None] | None = None,
     ) -> None:
-        """Initialize WritePlanDialog and generate initial preview plans."""
+        """Initialize WritePlanDialog and generate initial preview plans.
+
+        submit_plans receives the safe plans when the person applies them, for a caller
+        that queues the write. Without it, the dialog applies the plans itself.
+        """
         super().__init__(parent)
         self.write_service = write_service
         self.file_ids = file_ids
+        self.submit_plans = submit_plans
         self.current_plans: list[FileWritePlan] = []
 
         self.setWindowTitle("Preview & Apply Metadata Writes")
@@ -124,12 +131,23 @@ class WritePlanDialog(QDialog):
         for col_idx, val in enumerate(cells):
             self.table.setItem(row_idx, col_idx, QTableWidgetItem(val))
 
+    def _apply_or_submit(self, safe_plans: list[FileWritePlan]) -> None:
+        """Hand the plans to submit_plans, or apply them here without one.
+
+        Either path raises PendingRecoveryError before any file changes.
+        """
+        if self.submit_plans is None:
+            self.write_service.apply_batch(safe_plans)
+            return
+        self.write_service.ensure_no_pending_recovery()
+        self.submit_plans(safe_plans)
+
     def execute_safe_writes(self) -> None:
-        """Apply all safe plans in current_plans and accept the dialog."""
+        """Apply or submit all safe plans in current_plans and accept the dialog."""
         safe_plans = [p for p in self.current_plans if p.is_safe_to_apply]
         if safe_plans:
             try:
-                self.write_service.apply_batch(safe_plans)
+                self._apply_or_submit(safe_plans)
             except PendingRecoveryError as exc:
                 # The dialog stays open, because no file changed.
                 QMessageBox.warning(self, "Writes Blocked", str(exc))

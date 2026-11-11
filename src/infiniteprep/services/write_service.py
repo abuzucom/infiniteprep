@@ -6,6 +6,8 @@ import logging
 import os
 import shutil
 import uuid
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -31,6 +33,17 @@ class PendingRecoveryError(RuntimeError):
 
 class RestoreConflictError(ValueError):
     """Raised when a restore would overwrite a file that changed after the recorded write."""
+
+
+@dataclass
+class WriteBatchResult:
+    """Outcome of a queued write batch that continues past failed files."""
+
+    records: list[ChangeRecord] = field(default_factory=list)
+    # One (source path, error text) pair per failed file.
+    failures: list[tuple[str, str]] = field(default_factory=list)
+    # True when a cancel request or the stop-on-failure rule ended the batch early.
+    stopped_early: bool = False
 
 
 class WriteService:
@@ -136,6 +149,56 @@ class WriteService:
             record = self.apply_single_plan(plan, batch_operation_id=batch_op_id)
             records.append(record)
         return records
+
+    def ensure_no_pending_recovery(self) -> None:
+        """Raise PendingRecoveryError while an interrupted write waits for recovery."""
+        self._ensure_no_pending_recovery()
+
+    def apply_batch_continuing(
+        self,
+        write_plans: list[FileWritePlan],
+        *,
+        should_cancel: Callable[[], bool] | None = None,
+        stop_on_failure: bool = False,
+        progress: Callable[[int, int, str], None] | None = None,
+    ) -> WriteBatchResult:
+        """Apply each plan for a queued batch, recording a failed file and moving on.
+
+        A true should_cancel stops before the next file and keeps the finished writes.
+        stop_on_failure ends the batch after the first failed file. progress receives
+        (file number, total, path) before each file. PendingRecoveryError propagates
+        before any file changes.
+        """
+        self._ensure_no_pending_recovery()
+        batch_op_id = str(uuid.uuid4())
+        result = WriteBatchResult()
+        total = len(write_plans)
+        for index, plan in enumerate(write_plans):
+            if should_cancel is not None and should_cancel():
+                result.stopped_early = True
+                return result
+            if progress is not None:
+                progress(index + 1, total, str(plan.source_path))
+            succeeded = self._apply_plan_recording_failure(plan, batch_op_id, result)
+            if not succeeded and stop_on_failure:
+                result.stopped_early = True
+                return result
+        return result
+
+    def _apply_plan_recording_failure(
+        self, plan: FileWritePlan, batch_operation_id: str, result: WriteBatchResult
+    ) -> bool:
+        """Apply one plan. Record its ChangeRecord or its failure in result. Return success."""
+        try:
+            record = self.apply_single_plan(plan, batch_operation_id=batch_operation_id)
+        # apply_single_plan already rolled the file back and journaled the failure. Any
+        # error type counts as one failed file, so the rest of the batch still runs.
+        except Exception as exc:
+            logger.warning("Queued write failed for one file after %s.", type(exc).__name__)
+            result.failures.append((str(plan.source_path), f"{type(exc).__name__}: {exc}"))
+            return False
+        result.records.append(record)
+        return True
 
     def apply_single_plan(
         self, plan: FileWritePlan, batch_operation_id: str | None = None

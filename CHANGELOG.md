@@ -5,9 +5,28 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.52.2] (2026-11-11)
+## [0.53.0] (2026-11-11)
+
+### Added
+
+- A batch queue runs one library-changing batch at a time (INFRA-1, #109). Identify & Analyze, folder import, and Apply Safe Writes join the queue. Each batch runs on its own worker thread, and later batches wait in order. The queue lives in memory. Waiting batches end with the app.
+- The **Batch Queue** dock lists the running, waiting, and finished batches with progress. **Move Up**, **Move Down**, and drag and drop reorder waiting batches. **Cancel Batch** removes a waiting batch. On a running Analyze or write batch it stops after the current file and keeps the finished files. On a running import it rolls back the whole import.
+- A finished batch stays in the dock with counts. **View Result** opens the report. **Clear Finished** empties the list.
+- **Settings & Providers** adds **Stop an Analyze or write batch at its first failed file**, off by default. Imports ignore the setting. `settings.json` stores it as `stop_batch_on_first_failure`.
+- `BatchQueue`, `QueuedBatch`, `BatchKind`, and `BatchState` in `services/job_orchestrator.py`. `JobOrchestrator.process_files_continuing` treats any error type as one failed file. `BatchJobSummary` adds `stopped_early`.
+- `WriteService.apply_batch_continuing` continues past a failed write and returns a `WriteBatchResult`. `WriteService.ensure_no_pending_recovery` exposes the recovery check.
+- `ui/batch_queue.py` holds `BatchQueueController` and `BatchWorker`. `ui/batch_queue_dock.py` holds `BatchQueueDock`.
+- `MainWindow` accepts an optional `analyze_runner` and adds `queue_batch` and `show_batch_result`. `WritePlanDialog` accepts an optional `submit_plans`. `SettingsDialog` accepts an optional `cleanup_enabled`. `FolderImportController` accepts an optional `show_progress_dialog` and adds a `progress` signal.
+- Added `tests/unit/test_batch_queue.py`, `tests/unit/test_batch_queue_analyze.py`, `tests/unit/test_write_batch_continue.py`, `tests/unit/test_batch_failure_setting.py`, `tests/unit/test_ui_batch_queue_dock.py`, `tests/unit/test_ui_batch_queue_window.py`, and `tests/unit/test_ui_queued_writes.py`.
 
 ### Changed
+
+- Identify & Analyze and Apply Safe Writes no longer block the window. A queued batch continues past a failed file by default.
+- The main window shows import progress in the dock. The modal import progress dialog no longer opens there. The stuck-file prompt stays.
+- No report opens when a batch ends. The import report and the import failure message open from **View Result**.
+- Closing the window while a batch runs or waits offers **Keep Working** or **Cancel and Exit**. The earlier wait-then-close choice is gone. `MainWindow.ask_close_during_import` now returns only `cancel` or `stay`.
+- `MainWindow.start_folder_import` queues the import and always returns `True`.
+- While a batch runs or waits, Transcode to XDJ, Change Journal & Restore, Bulk Approve, field edits, and Delete InfinitePrep Data stay disabled.
 
 - The `ci` workflow runs on pushes to `main` only. A pull request commit starts one `ci` run instead of two.
 - A newer pull request commit cancels the `ci` run of the older commit. Runs on `main` always complete.

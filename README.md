@@ -239,10 +239,25 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
    or warning text. The status menu narrows the table to `Has Warnings
    (XDJ-RX3 / Rip)`, `Unprocessed`, `Proposed`, `Partially Approved`,
    `Ready to Write`, `Written`, or `Error`.
-3. **Identify and analyze.** Click **Identify & Analyze All**. The batch runs
-   on every visible row. `LocalDspAnalyzer` computes BPM, key, the waveform
-   overview, and rip warnings. Reconciliation turns the results into field
-   proposals.
+3. **Identify and analyze.** Click **Identify & Analyze All**. The batch joins
+   the queue and covers every visible row. `LocalDspAnalyzer` computes BPM,
+   key, the waveform overview, and rip warnings. Reconciliation turns the
+   results into field proposals.
+   - **Batch queue.** Imports, Identify & Analyze, and Apply Safe Writes run
+     one at a time on a worker thread. Later batches wait in order. The
+     **Batch Queue** dock at the bottom lists each batch with its progress.
+   - **Move Up**, **Move Down**, and drag and drop reorder waiting batches.
+   - **Cancel Batch** removes a waiting batch. A running Analyze or write
+     batch stops after the current file and keeps the finished files. A
+     running import rolls back.
+   - A failed file never stops a batch by default. Check **Stop an Analyze
+     or write batch at its first failed file** in **Settings & Providers**
+     to change that. Imports ignore the setting.
+   - A finished batch stays in the dock. **View Result** opens its report.
+   - While a batch runs or waits, transcode, journal restore, Bulk Approve,
+     field edits, and data deletion stay disabled.
+   - Closing the window during a batch offers **Keep Working** or **Cancel
+     and Exit**. Waiting batches do not survive an exit.
 4. **Pick the key notation.** The **Key Notation** menu switches the table and
    detail panel between Standard, Camelot, and Open Key.
 5. **Review one track.** Select a row. The detail panel shows hardware
@@ -265,7 +280,8 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
      template is `{artist} - {title} ({mix_name})`. Click **Refresh
      Preview** after an edit.
    - A `BLOCKED` row names its validation errors or filename collisions.
-   - **Apply Safe Writes** writes only the `READY` rows. Each write first
+   - **Apply Safe Writes** queues only the `READY` rows as one write batch.
+     The batch applies the previewed plans when its turn comes. Each write first
      records an in-progress journal entry, then takes a verified backup.
      Each write keeps its own backup, named with its operation id.
    - The tags go to a copy next to the file. The copy replaces the original
@@ -326,8 +342,10 @@ Identification:
 
 Analysis:
 
-- Analysis runs on the GUI thread. A large batch blocks the window until it
-  finishes. No control cancels a running batch.
+- Analysis runs one file at a time on a single worker thread. No process
+  pool exists.
+- The batch queue lives in memory. Transcode to XDJ runs outside the queue
+  and blocks the window.
 - Key detection reads only the first 30 seconds of each track. A track with
   no clear pitch content reports A minor.
 - BPM detection searches 80 to 175 BPM. Tracks outside that range report a

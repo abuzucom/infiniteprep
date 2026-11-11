@@ -173,6 +173,8 @@ class FolderImportController(QObject):
     """
 
     completed = Signal(object)
+    # (file number, total, path) before each file, for a caller that shows its own progress.
+    progress = Signal(int, int, str)
 
     def __init__(
         self,
@@ -181,15 +183,19 @@ class FolderImportController(QObject):
         *,
         stuck_timeout_ms: int = STUCK_FILE_TIMEOUT_MS,
         exit_process: Callable[[int], object] = os._exit,
+        show_progress_dialog: bool = True,
     ) -> None:
         """Keep the service and the window that owns the progress dialog.
 
         A file that runs past stuck_timeout_ms raises the stuck prompt. Quit Now calls
         exit_process, which ends the process at once. SQLite discards the open batch.
+        A false show_progress_dialog leaves out the modal dialog. The batch queue passes
+        False and shows progress in its dock.
         """
         super().__init__(parent)
         self.import_service = import_service
         self.parent_widget = parent
+        self._show_progress_dialog = show_progress_dialog
         self._thread: QThread | None = None
         self._worker: ImportWorker | None = None
         self._dialog: QProgressDialog | None = None
@@ -214,13 +220,15 @@ class FolderImportController(QObject):
         self._worker = ImportWorker(self.import_service, paths)
         self._thread = QThread(self)
         self._worker.moveToThread(self._thread)
-        self._dialog = self._build_progress_dialog()
+        if self._show_progress_dialog:
+            self._dialog = self._build_progress_dialog()
         self._thread.started.connect(self._worker.run)
         self._worker.progress.connect(self._on_progress)
         self._worker.finished.connect(self._on_finished)
         self._worker.failed.connect(self._on_failed)
         self._thread.start()
-        self._dialog.show()
+        if self._dialog is not None:
+            self._dialog.show()
         self._stuck_timer.start()
         return True
 
@@ -249,6 +257,7 @@ class FolderImportController(QObject):
     def _on_progress(self, done: int, total: int, path: str) -> None:
         """Show the current file and its number in the batch, and restart the stuck timer."""
         self._stuck_timer.start()
+        self.progress.emit(done, total, path)
         dialog = self._dialog
         if dialog is None or dialog.wasCanceled():
             return
