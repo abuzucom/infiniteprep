@@ -22,6 +22,15 @@ from tests.unit.usb_preflight_support import (
 )
 
 
+REDUCED_FREE_BYTES = 15_000_000_000
+OTHER_DRIVE_BYTES = 64_000_000_000
+OTHER_PARTITION_BYTES = 31_000_000_000
+OTHER_PARTITION_NUMBER = 2
+FIXED_RESERVE_BYTES = 100
+# One byte less than the fixed reserve.
+SHORT_HEADROOM_BYTES = FIXED_RESERVE_BYTES - 1
+
+
 def report_writable(_path: str) -> bool:
     """Report every mount path as writable."""
     return True
@@ -71,7 +80,8 @@ class UnchangedTargetTests(unittest.TestCase):
         self.assertTrue(recheck_against(fresh).may_write)
 
     def test_harmless_free_space_change_does_not_abort(self) -> None:
-        self.assertTrue(recheck_against(build_inspection(available_bytes=15_000_000_000)).may_write)
+        fresh = build_inspection(available_bytes=REDUCED_FREE_BYTES)
+        self.assertTrue(recheck_against(fresh).may_write)
 
 
 class ChangedIdentityTests(unittest.TestCase):
@@ -90,7 +100,7 @@ class ChangedIdentityTests(unittest.TestCase):
             "hardware_id": "0951:1666",
             "model": "DataTraveler",
             "vendor": "Kingston",
-            "size_bytes": 64_000_000_000,
+            "size_bytes": OTHER_DRIVE_BYTES,
         }
         for field_name, value in changes.items():
             with self.subTest(field_name=field_name):
@@ -101,8 +111,8 @@ class ChangedIdentityTests(unittest.TestCase):
         changes = {
             "uuid": "9999-0000",
             "label": "OTHER",
-            "size_bytes": 31_000_000_000,
-            "partition_number": 2,
+            "size_bytes": OTHER_PARTITION_BYTES,
+            "partition_number": OTHER_PARTITION_NUMBER,
             "partition_type": "0xb",
         }
         for field_name, value in changes.items():
@@ -162,12 +172,12 @@ class ChangedStateTests(unittest.TestCase):
             request.file_sizes, request.directory_count, request.database_allowance_bytes
         )
         snapshot = capture_target_snapshot(build_inspection())
-        fresh = build_inspection(available_bytes=estimate + 99)
+        fresh = build_inspection(available_bytes=estimate + SHORT_HEADROOM_BYTES)
         result = recheck_target(
             snapshot,
             fresh,
             request,
-            ReservePolicy(fixed_bytes=100),
+            ReservePolicy(fixed_bytes=FIXED_RESERVE_BYTES),
             is_path_writable=report_writable,
         )
         self.assertEqual(abort_codes(result), (AbortCode.PREFLIGHT_REFUSED,))

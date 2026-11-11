@@ -21,7 +21,9 @@ from infiniteprep.services.usb.space import (
 )
 
 # FAT32 stores a file size in 32 bits. The largest file holds 4 GiB minus one byte.
-FAT32_BLOCKED_FILE_BYTES: Final[int] = 4 * 1024**3
+# A file of 4 GiB or more is blocked.
+FAT32_FILE_SIZE_BITS: Final[int] = 32
+FAT32_BLOCKED_FILE_BYTES: Final[int] = 2**FAT32_FILE_SIZE_BITS
 REQUIRED_PARTITION_COUNT: Final[int] = 1
 REMOVABLE_BUS_TYPES: Final[frozenset[str]] = frozenset({"usb", "sd", "mmc", "secure digital"})
 MBR_SCHEME_NAMES: Final[frozenset[str]] = frozenset(
@@ -153,6 +155,8 @@ def _collect_safety_refusals(inspection: DriveInspection) -> list[Refusal]:
                 "The system and boot state of the drive is unknown.",
             )
         )
+    # A probe without raw device access cannot read the flag on every OS. An
+    # absent flag passes here and reaches the result as an unverified fact.
     if any(partition.is_active for partition in inspection.partitions):
         refusals.append(
             Refusal(RefusalCode.ACTIVE_PARTITION, "The drive holds an active boot partition.")
@@ -299,7 +303,16 @@ def evaluate_preflight(
 ) -> PreflightResult:
     """Evaluate every preflight rule for one target and one export request.
 
-    Safety refusals return alone. Otherwise the result lists every refusal.
+    Safety refusals return alone. They hide the media, layout, request, and
+    space rules, because a drive that must never receive an export shows no
+    further detail. Without a safety refusal the result lists every refusal.
+
+    An unmounted partition yields NOT_MOUNTED only. The space rule needs a
+    mount path and does not run without one.
+
+    An absent active, primary, or health fact does not refuse. The fact name
+    appears in unverified_facts for display. An absent system state refuses.
+
     Raises ValueError for a negative size, count, or reserve value.
     """
     estimate = estimate_export_bytes(

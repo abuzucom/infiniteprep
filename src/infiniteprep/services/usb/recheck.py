@@ -142,7 +142,11 @@ def recheck_target(
     """Compare a fresh inspection with the confirmed snapshot and rerun the policy.
 
     Identity, mount path, writability, and every preflight rule are checked.
+    Each check runs on every call. A changed mount path does not skip the
+    writability check of the fresh path.
     A free-space change aborts only when the space rule no longer passes.
+    The drive state can still change after this call. The writer must treat
+    every write error as an abort.
     Abort messages name changed fields and omit their values.
     """
     reasons: list[AbortReason] = []
@@ -155,8 +159,14 @@ def recheck_target(
     mount_path = _read_mount_path(fresh_inspection)
     if mount_path != snapshot.mount_path:
         reasons.append(AbortReason(AbortCode.MOUNT_PATH_CHANGED, "The mount path changed."))
-    elif not is_path_writable(snapshot.mount_path):
-        reasons.append(AbortReason(AbortCode.NOT_WRITABLE, "The mount path is not writable."))
+    # Writability is read from the fresh mount path. An unmounted target is not writable.
+    if mount_path is None or not is_path_writable(mount_path):
+        reasons.append(
+            AbortReason(
+                AbortCode.NOT_WRITABLE,
+                "The drive is not mounted or the mount path is not writable.",
+            )
+        )
     preflight = evaluate_preflight(fresh_inspection, request, reserve)
     if not preflight.passed:
         reasons.append(

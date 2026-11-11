@@ -9,7 +9,9 @@ from typing import Final
 
 # FAT32 clusters never exceed 64 KiB. Rounding every file to that size keeps the
 # estimate an upper bound for any volume without reading the real cluster size.
-UPPER_BOUND_CLUSTER_BYTES: Final[int] = 64 * 1024
+BYTES_PER_KIB: Final[int] = 1024
+FAT32_MAX_CLUSTER_KIB: Final[int] = 64
+UPPER_BOUND_CLUSTER_BYTES: Final[int] = FAT32_MAX_CLUSTER_KIB * BYTES_PER_KIB
 PERCENT_DIVISOR: Final[int] = 100
 
 

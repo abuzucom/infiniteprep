@@ -31,6 +31,15 @@ from tests.unit.usb_preflight_support import (
 )
 
 
+KNOWN_FREE_BYTES = 10**9
+SECOND_PARTITION_NUMBER = 2
+EXPECTED_BLOCKED_FILE_BYTES = 4 * 1024**3
+# One oversized file between two small files.
+OVERSIZED_PLAN_FILE_SIZES = (1, FAT32_BLOCKED_FILE_BYTES, 2)
+TEN_PERCENT = 10.0
+FIXED_RESERVE_BYTES = 50_000_000
+
+
 def refusal_codes(result: PreflightResult) -> tuple[RefusalCode, ...]:
     """Return the refusal codes of a result in order."""
     return tuple(refusal.code for refusal in result.refusals)
@@ -52,13 +61,14 @@ class PassingTargetTests(unittest.TestCase):
 
     def test_result_reports_space_figures_and_mount_path(self) -> None:
         request = build_request()
-        result = evaluate_preflight(build_inspection(available_bytes=10**9), request)
+        inspection = build_inspection(available_bytes=KNOWN_FREE_BYTES)
+        result = evaluate_preflight(inspection, request)
         expected = estimate_export_bytes(
             request.file_sizes, request.directory_count, request.database_allowance_bytes
         )
         self.assertEqual(result.estimate_bytes, expected)
         self.assertEqual(result.reserve_bytes, 0)
-        self.assertEqual(result.available_bytes, 10**9)
+        self.assertEqual(result.available_bytes, KNOWN_FREE_BYTES)
         self.assertEqual(result.mount_path, MOUNT_PATH)
 
     def test_scheme_and_filesystem_names_from_each_platform_pass(self) -> None:
@@ -171,7 +181,12 @@ class MediaAndLayoutRefusalTests(unittest.TestCase):
         self.assert_single_refusal(build_inspection(partitions=()), RefusalCode.PARTITION_COUNT)
 
     def test_drive_with_two_partitions_is_refused(self) -> None:
-        second = build_partition(name="sdb2", path="/dev/sdb2", partition_number=2, mount_points=())
+        second = build_partition(
+            name="sdb2",
+            path="/dev/sdb2",
+            partition_number=SECOND_PARTITION_NUMBER,
+            mount_points=(),
+        )
         inspection = build_inspection(partitions=(build_partition(), second))
         self.assert_single_refusal(inspection, RefusalCode.PARTITION_COUNT)
 
@@ -244,7 +259,7 @@ class RequestRefusalTests(unittest.TestCase):
                 self.assertIn("Unknown player", result.refusals[0].message)
 
     def test_blocked_file_size_is_exactly_4_gib(self) -> None:
-        self.assertEqual(FAT32_BLOCKED_FILE_BYTES, 4 * 1024**3)
+        self.assertEqual(FAT32_BLOCKED_FILE_BYTES, EXPECTED_BLOCKED_FILE_BYTES)
 
     def test_largest_fat32_file_passes(self) -> None:
         request = build_request(file_sizes=(FAT32_BLOCKED_FILE_BYTES - 1,))
@@ -252,7 +267,7 @@ class RequestRefusalTests(unittest.TestCase):
         self.assertTrue(result.passed)
 
     def test_one_4_gib_file_blocks_the_whole_export(self) -> None:
-        request = build_request(file_sizes=(1, FAT32_BLOCKED_FILE_BYTES, 2))
+        request = build_request(file_sizes=OVERSIZED_PLAN_FILE_SIZES)
         result = evaluate_preflight(build_inspection(), request)
         self.assertEqual(refusal_codes(result), (RefusalCode.FILE_TOO_LARGE,))
         self.assertFalse(result.passed)
@@ -286,7 +301,7 @@ class SpaceRefusalTests(unittest.TestCase):
         self.assertEqual(refusal_codes(result), (RefusalCode.INSUFFICIENT_SPACE,))
 
     def test_percentage_reserve_blocks_and_passes_at_the_boundary(self) -> None:
-        reserve = ReservePolicy(percent=10.0)
+        reserve = ReservePolicy(percent=TEN_PERCENT)
         needed = self.estimate + compute_reserve_bytes(self.estimate, reserve)
         self.assertGreater(needed, self.estimate)
         blocked = self.evaluate_with(needed - 1, reserve)
@@ -296,15 +311,16 @@ class SpaceRefusalTests(unittest.TestCase):
         self.assertEqual(passing.reserve_bytes, needed - self.estimate)
 
     def test_fixed_byte_reserve_blocks_and_passes_at_the_boundary(self) -> None:
-        reserve = ReservePolicy(fixed_bytes=50_000_000)
-        needed = self.estimate + 50_000_000
+        reserve = ReservePolicy(fixed_bytes=FIXED_RESERVE_BYTES)
+        needed = self.estimate + FIXED_RESERVE_BYTES
         blocked = self.evaluate_with(needed - 1, reserve)
         self.assertEqual(refusal_codes(blocked), (RefusalCode.INSUFFICIENT_SPACE,))
         self.assertTrue(self.evaluate_with(needed, reserve).passed)
 
     def test_larger_reserve_kind_decides(self) -> None:
-        reserve = ReservePolicy(percent=10.0, fixed_bytes=1)
-        needed = self.estimate + compute_reserve_bytes(self.estimate, ReservePolicy(percent=10.0))
+        reserve = ReservePolicy(percent=TEN_PERCENT, fixed_bytes=1)
+        percent_only = ReservePolicy(percent=TEN_PERCENT)
+        needed = self.estimate + compute_reserve_bytes(self.estimate, percent_only)
         blocked = self.evaluate_with(needed - 1, reserve)
         self.assertEqual(refusal_codes(blocked), (RefusalCode.INSUFFICIENT_SPACE,))
 

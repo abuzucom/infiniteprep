@@ -36,11 +36,24 @@ PARTITION_FACTS_COMMAND: Final[tuple[str, ...]] = _powershell_command(
 VOLUME_HEALTH_COMMAND: Final[tuple[str, ...]] = _powershell_command(
     "Get-Volume | Select-Object DriveLetter, HealthStatus | ConvertTo-Json -Depth 3"
 )
-DISK_NAME_RE: Final[re.Pattern[str]] = re.compile(r"^disk(\d{1,6})$")
+# Bounds the disk number that a drive name may carry.
+MAX_DISK_NUMBER_DIGITS: Final[int] = 6
+DISK_NAME_RE: Final[re.Pattern[str]] = re.compile(rf"^disk(\d{{1,{MAX_DISK_NUMBER_DIGITS}}})$")
 # Get-Volume reports HealthStatus as text or as the MSFT_Volume numeric code.
-HEALTHY_STATUS_VALUES: Final[frozenset[str]] = frozenset({"healthy", "0"})
+HEALTH_CODE_HEALTHY: Final[str] = "0"
+HEALTH_CODE_SCAN_NEEDED: Final[str] = "1"
+HEALTH_CODE_SPOT_FIX_NEEDED: Final[str] = "2"
+HEALTH_CODE_FULL_REPAIR_NEEDED: Final[str] = "3"
+HEALTHY_STATUS_VALUES: Final[frozenset[str]] = frozenset({"healthy", HEALTH_CODE_HEALTHY})
 ERROR_STATUS_VALUES: Final[frozenset[str]] = frozenset(
-    {"scan needed", "spot fix needed", "full repair needed", "1", "2", "3"}
+    {
+        "scan needed",
+        "spot fix needed",
+        "full repair needed",
+        HEALTH_CODE_SCAN_NEEDED,
+        HEALTH_CODE_SPOT_FIX_NEEDED,
+        HEALTH_CODE_FULL_REPAIR_NEEDED,
+    }
 )
 
 

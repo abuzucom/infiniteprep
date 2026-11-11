@@ -14,7 +14,12 @@ from infiniteprep.services.usb.models import DriveInspection, FilesystemHealth
 
 # MBR type codes of extended containers. A container holds logical partitions
 # and never holds a filesystem.
-MBR_EXTENDED_TYPE_CODES: Final[frozenset[int]] = frozenset({0x05, 0x0F, 0x85})
+MBR_TYPE_EXTENDED_CHS: Final[int] = 0x05
+MBR_TYPE_EXTENDED_LBA: Final[int] = 0x0F
+MBR_TYPE_EXTENDED_LINUX: Final[int] = 0x85
+MBR_EXTENDED_TYPE_CODES: Final[frozenset[int]] = frozenset(
+    {MBR_TYPE_EXTENDED_CHS, MBR_TYPE_EXTENDED_LBA, MBR_TYPE_EXTENDED_LINUX}
+)
 MBR_PRIMARY_SLOT_COUNT: Final[int] = 4
 MBR_ACTIVE_FLAG: Final[int] = 0x80
 

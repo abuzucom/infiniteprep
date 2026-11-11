@@ -17,6 +17,9 @@ from infiniteprep.services.usb.preflight import DjProfileRequest, PreflightReque
 MOUNT_PATH = "/media/dj/STICK"
 STICK_BYTES = 32_000_000_000
 FREE_BYTES = 16_000_000_000
+REQUEST_FILE_SIZES = (10_000_000, 20_000_000)
+REQUEST_DIRECTORY_COUNT = 2
+REQUEST_DATABASE_ALLOWANCE_BYTES = 1_000_000
 
 
 def build_partition(**changes: Any) -> PartitionInfo:
@@ -88,9 +91,9 @@ def build_request(**changes: Any) -> PreflightRequest:
     """Return a small passing export request with the given fields replaced."""
     request = PreflightRequest(
         profiles=(DjProfileRequest(name="CDJ-3000", database_format_supported=True),),
-        file_sizes=(10_000_000, 20_000_000),
-        directory_count=2,
-        database_allowance_bytes=1_000_000,
+        file_sizes=REQUEST_FILE_SIZES,
+        directory_count=REQUEST_DIRECTORY_COUNT,
+        database_allowance_bytes=REQUEST_DATABASE_ALLOWANCE_BYTES,
         planned_changes=("Add 2 tracks", "Update 1 playlist"),
     )
     return replace(request, **changes)

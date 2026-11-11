@@ -52,8 +52,14 @@ MAX_DEVICE_TREE_NODES: Final[int] = 4096
 MOUNT_TABLE_FIELD_COUNT: Final[int] = 4
 READ_ONLY_MOUNT_OPTION: Final[str] = "ro"
 HEX_BASE: Final[int] = 16
-DEVICE_PATH_RE: Final[re.Pattern[str]] = re.compile(r"^/dev/[A-Za-z0-9_\-./]{1,255}$")
-USB_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{4}$")
+# Linux limits one path component to 255 bytes.
+MAX_DEVICE_PATH_SUFFIX_LENGTH: Final[int] = 255
+# A USB vendor or product ID holds four hexadecimal digits.
+USB_ID_HEX_DIGITS: Final[int] = 4
+DEVICE_PATH_RE: Final[re.Pattern[str]] = re.compile(
+    rf"^/dev/[A-Za-z0-9_\-./]{{1,{MAX_DEVICE_PATH_SUFFIX_LENGTH}}}$"
+)
+USB_ID_RE: Final[re.Pattern[str]] = re.compile(rf"^[0-9a-fA-F]{{{USB_ID_HEX_DIGITS}}}$")
 
 CommandRunner = Callable[[list[str]], subprocess.CompletedProcess[str]]
 
