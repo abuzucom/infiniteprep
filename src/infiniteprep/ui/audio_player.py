@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from pathlib import Path
 from typing import Final
 
@@ -12,6 +13,7 @@ from PySide6.QtCore import QSignalBlocker, Qt, QUrl
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -20,6 +22,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from infiniteprep.config.settings import (
+    DEFAULT_WAVEFORM_ZOOM_SECONDS,
+    SUPPORTED_WAVEFORM_ZOOM_SECONDS,
+    SettingsManager,
+)
 from infiniteprep.ui.time_format import split_time_seconds
 
 logger = logging.getLogger(__name__)
@@ -45,7 +52,17 @@ FALLBACK_ENVELOPE_SILENT: Final[float] = 0.05
 WAVEFORM_MIN_HEIGHT_PX: Final[int] = 44
 WAVEFORM_HALF_HEIGHT_SCALE: Final[float] = 0.45
 WAVEFORM_MIN_HALF_BAR_PX: Final[float] = 2.0
+WAVEFORM_FULL_HEIGHT_SCALE: Final[float] = 2.0
+WAVEFORM_CENTER_DIVISOR: Final[float] = 2.0
+ZOOM_PLAYHEAD_CENTER_RATIO: Final[float] = 0.5
+SPECTRUM_OVERLAY_ALPHA: Final[int] = 128
+SPECTRUM_DURATION_EPSILON_SEC: Final[float] = 1e-9
 PLAYHEAD_WIDTH_PX: Final[int] = 2
+ZOOM_FALLBACK_COLOR: Final[str] = "#6b7280"
+ZOOM_OVERVIEW_COLOR: Final[str] = "#4b82e8"
+ZOOM_SECONDS: Final[tuple[int, ...]] = SUPPORTED_WAVEFORM_ZOOM_SECONDS
+OVERVIEW_MODE: Final[str] = "Overview"
+ZOOM_MODE: Final[str] = "Zoom"
 LAYOUT_MARGIN_PX: Final[int] = 4
 MS_PER_SECOND: Final[float] = 1000.0
 SECONDS_PER_MINUTE: Final[float] = 60.0
@@ -90,8 +107,13 @@ def format_clock(seconds: float) -> str:
     return f"{minutes}:{seconds_part:02d}.{milliseconds:03d}"
 
 
-def _stream_block_peaks(file_path: Path, max_frames: int) -> list[float]:
-    """Read audio in fixed-size blocks up to max_frames and collect per-block peak values."""
+def _stream_block_peaks(
+    file_path: Path, max_frames: int, cancel_event: threading.Event | None = None
+) -> list[float]:
+    """Read audio in fixed-size blocks up to max_frames and collect per-block peak values.
+
+    A set cancel event stops the read between blocks. The caller discards the partial result.
+    """
     block_peaks: list[float] = []
     frames_seen = 0
     for block in sf.blocks(
@@ -99,15 +121,26 @@ def _stream_block_peaks(file_path: Path, max_frames: int) -> list[float]:
     ):
         if block.size == 0 or frames_seen >= max_frames:
             break
+        if cancel_event is not None and cancel_event.is_set():
+            break
         mono = np.abs(np.mean(block, axis=1))
         block_peaks.append(float(np.max(mono)))
         frames_seen += int(block.shape[0])
     return block_peaks
 
 
-def extract_waveform_envelope(file_path: Path, bins: int = DEFAULT_ENVELOPE_BINS) -> list[float]:
-    """Extract normalized peak amplitude envelope bins using bounded streaming blocks."""
-    if bins <= 0 or not file_path.exists():
+def extract_waveform_envelope(
+    file_path: Path,
+    bins: int = DEFAULT_ENVELOPE_BINS,
+    cancel_event: threading.Event | None = None,
+) -> list[float]:
+    """Extract normalized peak amplitude envelope bins using bounded streaming blocks.
+
+    The waveform worker calls this off the UI thread for the fallback overview. A set
+    cancel event ends the read early. The caller then discards the returned bins.
+    """
+    # Only a regular file reaches the decoder. A FIFO or device could block the read.
+    if bins <= 0 or not file_path.is_file():
         return [FALLBACK_ENVELOPE_EMPTY] * max(1, bins)
     try:
         size_bytes = file_path.stat().st_size
@@ -116,7 +149,7 @@ def extract_waveform_envelope(file_path: Path, bins: int = DEFAULT_ENVELOPE_BINS
             return [FALLBACK_ENVELOPE_ERROR] * bins
         info = sf.info(str(file_path))
         max_frames = max(1, round(max(1, int(info.samplerate)) * MAX_PREVIEW_DURATION_SEC))
-        raw_peaks = _stream_block_peaks(file_path, max_frames)
+        raw_peaks = _stream_block_peaks(file_path, max_frames, cancel_event)
     except (OSError, ValueError, RuntimeError) as exc:
         logger.warning("Waveform extraction failed for %s: %s", file_path, exc)
         return [FALLBACK_ENVELOPE_ERROR] * bins
@@ -141,12 +174,50 @@ class WaveformOverviewBar(QWidget):
         super().__init__(parent)
         self.setMinimumHeight(WAVEFORM_MIN_HEIGHT_PX)
         self.envelope: list[float] = [FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS
+        self.fallback_envelope = list(self.envelope)
         self.playhead_ratio: float = 0.0
+        self.duration_sec = 0.0
+        self.position_sec = 0.0
+        self.zoom_seconds = DEFAULT_WAVEFORM_ZOOM_SECONDS
+        self.view_mode = OVERVIEW_MODE
+        self.spectrum: object | None = None
+        self._dragging = False
+        self._drag_window = (0.0, 0.0)
         self.on_seek_ratio = None
+        self.setMouseTracking(True)
 
     def set_envelope(self, envelope: list[float]) -> None:
         """Update the waveform envelope values and trigger a repaint."""
-        self.envelope = envelope or [FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS
+        # The copy keeps a later caller-side mutation out of the stored overview.
+        self.fallback_envelope = list(envelope or [FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS)
+        if self.spectrum is None:
+            self.envelope = list(self.fallback_envelope)
+        else:
+            self.set_spectrum_envelope(
+                np.asarray(self.spectrum.overall, dtype=np.float32),
+                float(self.spectrum.duration_sec),
+            )
+        self.update()
+
+    def set_spectrum_envelope(self, peaks: np.ndarray, analyzed_duration: float) -> None:
+        """Overlay analyzed peaks and retain fallback coverage beyond the analysis cap."""
+        self.envelope = list(self.fallback_envelope)
+        if not peaks.size or analyzed_duration <= 0.0 or self.duration_sec <= 0.0:
+            self.update()
+            return
+        covered = min(
+            len(self.envelope),
+            max(
+                1,
+                int(np.ceil(len(self.envelope) * min(1.0, analyzed_duration / self.duration_sec))),
+            ),
+        )
+        groups = np.array_split(peaks, covered)
+        max_peak = max((float(group.max()) for group in groups if group.size), default=0.0)
+        if max_peak:
+            self.envelope[:covered] = [
+                float(group.max()) / max_peak if group.size else 0.0 for group in groups
+            ]
         self.update()
 
     def set_playhead_ratio(self, ratio: float) -> None:
@@ -154,22 +225,70 @@ class WaveformOverviewBar(QWidget):
         self.playhead_ratio = max(0.0, min(1.0, float(ratio)))
         self.update()
 
+    def set_playback(self, position_sec: float, duration_sec: float) -> None:
+        """Update playback time while keeping the zoom viewport centered."""
+        self.position_sec = max(0.0, float(position_sec))
+        self.duration_sec = max(0.0, float(duration_sec))
+        ratio = self.position_sec / self.duration_sec if self.duration_sec else 0.0
+        self.set_playhead_ratio(
+            ZOOM_PLAYHEAD_CENTER_RATIO if self.view_mode == ZOOM_MODE else ratio
+        )
+
+    def zoom_window(self) -> tuple[float, float]:
+        """Return the time interval centered around the playhead."""
+        width = min(float(self.zoom_seconds), self.duration_sec)
+        return (
+            self.position_sec - width / WAVEFORM_CENTER_DIVISOR,
+            self.position_sec + width / WAVEFORM_CENTER_DIVISOR,
+        )
+
+    def _seek_from_x(self, x: float) -> None:
+        """Map a canvas coordinate to the overview or zoom time interval."""
+        ratio = max(0.0, min(1.0, x / float(max(1, self.width()))))
+        if self.view_mode == ZOOM_MODE:
+            start, end = self._drag_window if self._dragging else self.zoom_window()
+            target = start + ratio * (end - start)
+            seek_ratio = target / self.duration_sec if self.duration_sec > 0 else 0.0
+        else:
+            seek_ratio = ratio
+        self.set_playhead_ratio(
+            ratio if self.view_mode == OVERVIEW_MODE else ZOOM_PLAYHEAD_CENTER_RATIO
+        )
+        if callable(self.on_seek_ratio):
+            self.on_seek_ratio(seek_ratio)
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Allow clicking on the waveform bar to seek to that ratio."""
-        width = max(1, self.width())
-        ratio = max(0.0, min(1.0, event.position().x() / float(width)))
-        self.set_playhead_ratio(ratio)
-        if callable(self.on_seek_ratio):
-            self.on_seek_ratio(ratio)
+        self._dragging = True
+        self._drag_window = self.zoom_window()
+        self._seek_from_x(event.position().x())
+
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        """Allow drag scrubbing in zoom mode."""
+        if self.view_mode == ZOOM_MODE and self._dragging and self.duration_sec > 0:
+            self._seek_from_x(event.position().x())
+
+    def mouseReleaseEvent(self, _event: QMouseEvent) -> None:
+        """Finish a zoom scrub gesture."""
+        self._dragging = False
 
     def paintEvent(self, event: QPaintEvent) -> None:
         """Render waveform vertical bars and the current playhead indicator."""
         painter = QPainter(self)
         rect = self.rect()
         painter.fillRect(rect, QColor("#181c24"))
+        if self.view_mode == ZOOM_MODE:
+            # _paint_zoom reads spectrum attributes. Zoom before analysis completes
+            # draws the fallback overview segment instead.
+            if self.spectrum is None:
+                self._paint_zoom_overview(painter, rect.width(), rect.height())
+            else:
+                self._paint_zoom(painter, rect.width(), rect.height())
+            painter.end()
+            return
         count = max(1, len(self.envelope))
         bar_w = max(1.0, rect.width() / float(count))
-        mid_y = rect.height() / 2.0
+        mid_y = rect.height() * ZOOM_PLAYHEAD_CENTER_RATIO
         for idx, amp in enumerate(self.envelope):
             half_h = max(
                 WAVEFORM_MIN_HALF_BAR_PX, amp * (rect.height() * WAVEFORM_HALF_HEIGHT_SCALE)
@@ -183,27 +302,150 @@ class WaveformOverviewBar(QWidget):
                 int(idx * bar_w),
                 int(mid_y - half_h),
                 max(1, int(bar_w - 1)),
-                int(half_h * 2),
+                int(half_h * WAVEFORM_FULL_HEIGHT_SCALE),
                 color,
             )
         play_x = int(self.playhead_ratio * rect.width())
         painter.fillRect(play_x, 0, PLAYHEAD_WIDTH_PX, rect.height(), QColor("#f59e0b"))
         painter.end()
 
+    def _paint_zoom(self, painter: QPainter, width: int, height: int) -> None:
+        """Draw low, mid, and high spectrum peaks over the zoom time window."""
+        start, end = self.zoom_window()
+        count = len(self.spectrum.overall)
+        analyzed_duration = float(self.spectrum.duration_sec)
+        if count == 0 or analyzed_duration <= 0.0:
+            painter.fillRect(
+                int(width * ZOOM_PLAYHEAD_CENTER_RATIO),
+                0,
+                PLAYHEAD_WIDTH_PX,
+                height,
+                QColor("#f59e0b"),
+            )
+            return
+        colors = (QColor("#22c55e"), QColor("#3b82f6"), QColor("#ef4444"))
+        for color in colors:
+            color.setAlpha(SPECTRUM_OVERLAY_ALPHA)
+        dimensions = (width, height)
+        analysis = (start, end, count, analyzed_duration, colors)
+        for column in range(width):
+            self._paint_zoom_column(painter, column, dimensions, analysis)
+        painter.fillRect(
+            int(width * ZOOM_PLAYHEAD_CENTER_RATIO), 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b")
+        )
+
+    def _paint_zoom_column(
+        self,
+        painter: QPainter,
+        column: int,
+        dimensions: tuple[int, int],
+        analysis: tuple[float, float, int, float, tuple[QColor, ...]],
+    ) -> None:
+        """Draw one spectrum column, skipping regions outside analyzed audio."""
+        width, height = dimensions
+        start, end, count, analyzed_duration, colors = analysis
+        time_start = start + column * (end - start) / max(width, 1)
+        time_end = start + (column + 1) * (end - start) / max(width, 1)
+        if self.duration_sec <= 0.0:
+            return
+        if time_end <= 0.0 or time_start >= analyzed_duration:
+            if time_start >= analyzed_duration:
+                self._paint_zoom_fallback_column(painter, column, (time_start, time_end), height)
+            return
+        # The floor keeps a denormal duration from overflowing the sample indices.
+        bounded_duration = max(analyzed_duration, SPECTRUM_DURATION_EPSILON_SEC)
+        sample_start = max(0, int(time_start * count / bounded_duration))
+        sample_end = min(
+            count,
+            max(sample_start + 1, int(np.ceil(time_end * count / bounded_duration))),
+        )
+        for name, color in zip(("low", "mid", "high"), colors, strict=True):
+            values = getattr(self.spectrum, name)[sample_start:sample_end]
+            peak = float(values.max()) if len(values) else 0.0
+            half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * WAVEFORM_HALF_HEIGHT_SCALE)
+            top = int((height - half_height * WAVEFORM_FULL_HEIGHT_SCALE) / WAVEFORM_CENTER_DIVISOR)
+            painter.fillRect(column, top, 1, int(half_height * WAVEFORM_FULL_HEIGHT_SCALE), color)
+
+    def _paint_zoom_fallback_column(
+        self,
+        painter: QPainter,
+        column: int,
+        interval: tuple[float, float],
+        height: int,
+        color: str = ZOOM_FALLBACK_COLOR,
+    ) -> None:
+        """Draw overview envelope data for one zoom column.
+
+        The default color marks a zoom interval beyond the analysis cap.
+        """
+        count = len(self.envelope)
+        if self.duration_sec <= 0.0 or count == 0:
+            return
+        duration = max(self.duration_sec, SPECTRUM_DURATION_EPSILON_SEC)
+        first = max(0, int(interval[0] * count / duration))
+        last = min(count, max(first + 1, int(np.ceil(interval[1] * count / duration))))
+        peak = max(self.envelope[first:last], default=FALLBACK_ENVELOPE_EMPTY)
+        half_height = max(WAVEFORM_MIN_HALF_BAR_PX, peak * height * WAVEFORM_HALF_HEIGHT_SCALE)
+        top = int((height - half_height * WAVEFORM_FULL_HEIGHT_SCALE) / WAVEFORM_CENTER_DIVISOR)
+        painter.fillRect(
+            column,
+            top,
+            1,
+            int(half_height * WAVEFORM_FULL_HEIGHT_SCALE),
+            QColor(color),
+        )
+
+    def _paint_zoom_overview(self, painter: QPainter, width: int, height: int) -> None:
+        """Show the selected overview segment until spectrum analysis completes."""
+        start, end = self.zoom_window()
+        count = len(self.envelope)
+        if self.duration_sec <= 0.0 or count == 0:
+            painter.fillRect(
+                int(width * ZOOM_PLAYHEAD_CENTER_RATIO),
+                0,
+                PLAYHEAD_WIDTH_PX,
+                height,
+                QColor("#f59e0b"),
+            )
+            return
+        for column in range(width):
+            time_start = start + column * (end - start) / max(width, 1)
+            time_end = start + (column + 1) * (end - start) / max(width, 1)
+            if time_end <= 0.0 or time_start >= self.duration_sec:
+                continue
+            self._paint_zoom_fallback_column(
+                painter, column, (time_start, time_end), height, ZOOM_OVERVIEW_COLOR
+            )
+        painter.fillRect(
+            int(width * ZOOM_PLAYHEAD_CENTER_RATIO), 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b")
+        )
+
 
 class AudioPreviewWidget(QWidget):
     """Audio preview transport with waveform overview and needle-drop cue buttons."""
 
     def __init__(
-        self, parent: QWidget | None = None, enable_multimedia_backend: bool = False
+        self,
+        parent: QWidget | None = None,
+        enable_multimedia_backend: bool = False,
+        *,
+        settings_manager: SettingsManager | None = None,
     ) -> None:
-        """Initialize AudioPreviewWidget with waveform overview and cue jump controls."""
+        """Initialize AudioPreviewWidget with waveform overview and cue jump controls.
+
+        A default SettingsManager resolves the application settings path, so every
+        default instance reads and writes the same file. SettingsManager.update merges
+        into the latest file content, and its writes replace the file atomically.
+        """
         super().__init__(parent)
         self.current_file_path: Path | None = None
         self.duration_sec: float = 0.0
         self.current_position_sec: float = 0.0
         self.cue_positions: dict[str, float] = compute_cue_jump_positions(0.0)
         self.enable_multimedia_backend = enable_multimedia_backend
+        self.settings_manager = settings_manager or SettingsManager()
+        # SettingsManager.load returns only supported zoom durations.
+        self.waveform_zoom_seconds = self.settings_manager.load().waveform_zoom_seconds
 
         self.player: QMediaPlayer | None = None
         self.audio_output: QAudioOutput | None = None
@@ -214,6 +456,12 @@ class AudioPreviewWidget(QWidget):
 
         self.waveform_bar = WaveformOverviewBar(self)
         self.waveform_bar.on_seek_ratio = self._seek_by_ratio
+        self.view_combo = QComboBox(self)
+        self.view_combo.addItems((OVERVIEW_MODE, ZOOM_MODE))
+        self.zoom_combo = QComboBox(self)
+        for seconds in ZOOM_SECONDS:
+            self.zoom_combo.addItem(f"{seconds} seconds", seconds)
+        self.zoom_combo.setCurrentIndex(self.zoom_combo.findData(self.waveform_zoom_seconds))
         self.position_slider = QSlider(Qt.Orientation.Horizontal, self)
         self.position_slider.setRange(0, 0)
         self.position_slider.setSingleStep(SLIDER_SINGLE_STEP_MS)
@@ -223,6 +471,9 @@ class AudioPreviewWidget(QWidget):
         self.status_label = QLabel("", self)
         self.status_label.setTextFormat(Qt.TextFormat.PlainText)
         self.status_label.setWordWrap(True)
+        self.analysis_status_label = QLabel("", self)
+        self.analysis_status_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.analysis_status_label.setWordWrap(True)
         self.time_label = QLabel("00:00.0 / 00:00.0", self)
         self.play_btn = QPushButton("Play", self)
         self.stop_btn = QPushButton("Stop", self)
@@ -240,6 +491,13 @@ class AudioPreviewWidget(QWidget):
             LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX
         )
         root.addWidget(self.waveform_bar)
+        view_controls = QHBoxLayout()
+        view_controls.addWidget(QLabel("Waveform view", self))
+        view_controls.addWidget(self.view_combo)
+        view_controls.addWidget(QLabel("Zoom", self))
+        view_controls.addWidget(self.zoom_combo)
+        view_controls.addStretch()
+        root.addLayout(view_controls)
         root.addWidget(self.position_slider)
 
         controls = QHBoxLayout()
@@ -254,12 +512,15 @@ class AudioPreviewWidget(QWidget):
         controls.addWidget(self.time_label)
         root.addLayout(controls)
         root.addWidget(self.status_label)
+        root.addWidget(self.analysis_status_label)
 
     def _connect_signals(self) -> None:
         """Connect QMediaPlayer, slider, and button signals."""
         self.play_btn.clicked.connect(self.toggle_play_pause)
         self.stop_btn.clicked.connect(self.stop_playback)
         self.position_slider.valueChanged.connect(self._on_slider_value_changed)
+        self.view_combo.currentTextChanged.connect(self._on_view_changed)
+        self.zoom_combo.currentIndexChanged.connect(self._on_zoom_changed)
         if self.player is not None:
             self.player.positionChanged.connect(self._on_media_position_changed)
             self.player.durationChanged.connect(self._on_media_duration_changed)
@@ -296,18 +557,60 @@ class AudioPreviewWidget(QWidget):
         self.position_slider.setAccessibleDescription(format_clock(self.current_position_sec))
 
     def load_file(self, file_path: Path, fallback_duration_sec: float | None = None) -> None:
-        """Load an audio file, compute its waveform envelope, and update cue positions."""
+        """Load a track without decoding its overview on the UI thread."""
         self.current_file_path = file_path
         self.current_position_sec = 0.0
         probed = self._probe_duration(file_path)
         self.duration_sec = probed if probed > 0.0 else float(fallback_duration_sec or 0.0)
         self.cue_positions = compute_cue_jump_positions(self.duration_sec)
-        self.waveform_bar.set_envelope(extract_waveform_envelope(file_path))
-        self.waveform_bar.set_playhead_ratio(0.0)
+        self.waveform_bar.spectrum = None
+        self.waveform_bar.set_envelope([FALLBACK_ENVELOPE_EMPTY] * DEFAULT_ENVELOPE_BINS)
+        self.waveform_bar.set_playback(0.0, self.duration_sec)
         self.show_status("")
         if self.player is not None:
             self.player.setSource(QUrl.fromLocalFile(str(file_path)))
         self._update_time_label()
+
+    def _on_view_changed(self, mode: str) -> None:
+        """Switch between the track overview and centered zoom view."""
+        self.waveform_bar.view_mode = mode
+        self.waveform_bar.zoom_seconds = self.waveform_zoom_seconds
+        self.waveform_bar.set_playback(self.current_position_sec, self.duration_sec)
+
+    def _on_zoom_changed(self, index: int) -> None:
+        """Persist the selected zoom interval across tracks and restarts.
+
+        The duration comes from item data. Display text stays free to change.
+        """
+        seconds = self.zoom_combo.itemData(index)
+        if type(seconds) is not int or seconds not in ZOOM_SECONDS:
+            return
+        self.waveform_zoom_seconds = seconds
+        self.waveform_bar.zoom_seconds = seconds
+        self.settings_manager.update(waveform_zoom_seconds=seconds)
+        self.waveform_bar.update()
+
+    def set_spectrum_waveform(self, waveform: object) -> None:
+        """Attach analyzed bands and overlay covered overview peaks."""
+        self.waveform_bar.spectrum = waveform
+        peaks = np.asarray(waveform.overall, dtype=np.float32)
+        self.waveform_bar.set_spectrum_envelope(peaks, float(waveform.duration_sec))
+
+    def set_overview_envelope(self, envelope: list[float]) -> None:
+        """Show the worker-extracted fallback overview for the loaded track."""
+        self.waveform_bar.set_envelope(envelope)
+
+    def show_analysis_pending(self) -> None:
+        """Show analysis progress without hiding the current overview."""
+        self.analysis_status_label.setText("Analyzing waveform...")
+
+    def show_analysis_failure(self, message: str) -> None:
+        """Report analysis failure while retaining the current overview."""
+        self.analysis_status_label.setText(f"Spectrum analysis failed: {message}")
+
+    def show_analysis_complete(self) -> None:
+        """Clear analysis progress without changing playback status."""
+        self.analysis_status_label.clear()
 
     def _probe_duration(self, file_path: Path) -> float:
         """Probe audio duration in seconds via soundfile, logging and returning 0.0 on error."""
@@ -350,8 +653,7 @@ class AudioPreviewWidget(QWidget):
         self.current_position_sec = clamped
         if self.player is not None:
             self.player.setPosition(int(clamped * MS_PER_SECOND))
-        ratio = clamped / self.duration_sec if self.duration_sec > 0.0 else 0.0
-        self.waveform_bar.set_playhead_ratio(ratio)
+        self.waveform_bar.set_playback(clamped, self.duration_sec)
         self._update_time_label()
 
     def _seek_by_ratio(self, ratio: float) -> None:
@@ -362,18 +664,18 @@ class AudioPreviewWidget(QWidget):
         """Handle positionChanged signal from QMediaPlayer."""
         if position_ms > 0:
             self.current_position_sec = position_ms / MS_PER_SECOND
-            ratio = (
-                self.current_position_sec / self.duration_sec if self.duration_sec > 0.0 else 0.0
-            )
-            self.waveform_bar.set_playhead_ratio(ratio)
+            self.waveform_bar.set_playback(self.current_position_sec, self.duration_sec)
             self._update_time_label()
 
     def _on_media_duration_changed(self, duration_ms: int) -> None:
         """Handle durationChanged signal from QMediaPlayer."""
-        if duration_ms > 0 and self.duration_sec <= 0.0:
+        if duration_ms <= 0:
+            return
+        if self.duration_sec <= 0.0:
             self.duration_sec = duration_ms / MS_PER_SECOND
             self.cue_positions = compute_cue_jump_positions(self.duration_sec)
-            self._update_time_label()
+        self.waveform_bar.set_playback(self.current_position_sec, self.duration_sec)
+        self._update_time_label()
 
     def _update_time_label(self) -> None:
         """Show the current and total time, and mirror the position on the slider."""

@@ -9,8 +9,10 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
 
+from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
@@ -24,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from infiniteprep.config.settings import SettingsManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
     FieldName,
@@ -34,6 +37,7 @@ from infiniteprep.domain.enums import (
 from infiniteprep.domain.models import ApprovedField, FieldProposal, FileAsset
 from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
 from infiniteprep.ui.audio_player import AudioPreviewWidget
+from infiniteprep.ui.waveform_worker import CANCEL_WAIT_MS, WaveformAnalysisPool
 
 DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = tuple(FieldName)
 FIELDS_TABLE_COLUMN_COUNT: Final[int] = 6
@@ -156,11 +160,16 @@ class DetailPanel(QWidget):
         parent: QWidget | None = None,
         *,
         enable_audio_backend: bool = False,
+        settings_manager: SettingsManager | None = None,
     ) -> None:
         """Initialize DetailPanel with Repository, ReviewService, and AudioPreviewWidget.
 
         enable_audio_backend creates a real QMediaPlayer for the preview. The desktop app
         passes True. Tests keep the silent default, so no audio device is needed.
+
+        The panel shares one SettingsManager with its audio preview. A default
+        manager resolves the application settings path, the same file every other
+        default instance uses.
         """
         super().__init__(parent)
         self.repo = repository
@@ -169,12 +178,27 @@ class DetailPanel(QWidget):
         self.current_file_id: str | None = None
         # The file ID in the player. A refresh of the same file ID keeps playback (D246).
         self._loaded_audio_id: str | None = None
+        self._analysis_generation = 0
+        self._analysis_file_id: str | None = None
+        self._analysis_path: Path | None = None
         self.key_notation: KeyDisplayNotation = KeyDisplayNotation.CAMELOT
 
         self.header_label = QLabel("Select a track to inspect metadata and proposals.", self)
         self.warnings_label = QLabel("", self)
         self.warnings_label.setStyleSheet("color: #d97706; font-weight: bold;")
-        self.audio_player = AudioPreviewWidget(self, enable_multimedia_backend=enable_audio_backend)
+        self.settings_manager = settings_manager or SettingsManager()
+        self.audio_player = AudioPreviewWidget(
+            self,
+            enable_multimedia_backend=enable_audio_backend,
+            settings_manager=self.settings_manager,
+        )
+        self.waveform_pool = WaveformAnalysisPool(self)
+        self.waveform_pool.overview_ready.connect(self._on_overview_ready)
+        self.waveform_pool.completed.connect(self._on_waveform_completed)
+        self.waveform_pool.failed.connect(self._on_waveform_failed)
+        application = QApplication.instance()
+        if application is not None:
+            application.aboutToQuit.connect(self.waveform_pool.shutdown)
         self.fields_table = QTableWidget(0, FIELDS_TABLE_COLUMN_COUNT, self)
         self.other_tags_table = QTableWidget(0, OTHER_TAGS_COLUMN_COUNT, self)
         self.candidates_list = QListWidget(self)
@@ -219,6 +243,19 @@ class DetailPanel(QWidget):
         cand_layout.addWidget(self.candidates_list)
         root.addWidget(cand_box, stretch=CANDIDATE_BOX_STRETCH)
 
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Stop analysis work when this panel is closed independently.
+
+        A closed panel can reopen. The pool stays usable, and the cleared request
+        identity makes the next selection submit a fresh analysis. The wait is
+        bounded so a read stalled on a slow volume cannot freeze the window. The
+        panel still owns the pool, and a late worker emits nothing.
+        """
+        self.waveform_pool.cancel_all(CANCEL_WAIT_MS)
+        self._analysis_file_id = None
+        self._analysis_path = None
+        super().closeEvent(event)
+
     def set_key_notation(self, notation: KeyDisplayNotation) -> None:
         """Change key display notation and refresh the current file view."""
         self.key_notation = notation
@@ -227,6 +264,9 @@ class DetailPanel(QWidget):
 
     def load_file_asset(self, file_id: str) -> None:
         """Populate the detail panel for the specified file_id."""
+        if file_id != self.current_file_id:
+            self._analysis_file_id = None
+            self._analysis_path = None
         self.current_file_id = file_id
         asset = self.repo.get_file_by_id(file_id)
         if asset is None:
@@ -238,6 +278,7 @@ class DetailPanel(QWidget):
         )
         self._populate_warnings(asset)
         self._load_audio_if_changed(asset)
+        self._request_waveform_analysis(asset)
         self._populate_fields_table(asset)
         self._populate_other_tags(asset)
         self._populate_candidates_list(file_id)
@@ -253,6 +294,36 @@ class DetailPanel(QWidget):
             return
         self._loaded_audio_id = asset.id
         self.audio_player.load_file(Path(asset.current_path), fallback_duration_sec=asset.duration)
+
+    def _request_waveform_analysis(self, asset: FileAsset) -> None:
+        """Submit one job for the selected track and retain a fallback overview."""
+        path = Path(asset.current_path)
+        if asset.id == self._analysis_file_id and path == self._analysis_path:
+            return
+        self._analysis_generation += 1
+        self._analysis_file_id = asset.id
+        self._analysis_path = path
+        self.audio_player.show_analysis_pending()
+        self.waveform_pool.submit(path, asset.id, self._analysis_generation)
+
+    def _on_overview_ready(self, file_id: str, generation: int, envelope: object) -> None:
+        """Display only a fallback overview that matches the selected track generation."""
+        if file_id != self.current_file_id or generation != self._analysis_generation:
+            return
+        self.audio_player.set_overview_envelope(list(envelope))
+
+    def _on_waveform_completed(self, file_id: str, generation: int, waveform: object) -> None:
+        """Display only results that still match the selected track generation."""
+        if file_id != self.current_file_id or generation != self._analysis_generation:
+            return
+        self.audio_player.set_spectrum_waveform(waveform)
+        self.audio_player.show_analysis_complete()
+
+    def _on_waveform_failed(self, file_id: str, generation: int, message: str) -> None:
+        """Display current analysis failures without clearing the overview."""
+        if file_id != self.current_file_id or generation != self._analysis_generation:
+            return
+        self.audio_player.show_analysis_failure(message)
 
     def _populate_other_tags(self, asset: FileAsset) -> None:
         """Fill the read-only Other Tags table from the file's raw custom tags."""

@@ -5,14 +5,22 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.55.2] (2026-11-12)
+## [0.56.1] (2026-11-12)
 
 ### Added
 
 - USB export confirm dialog in `ui/usb_preflight_dialog.py` (USB-4, #156). The dialog names the target drive, the DJ profiles, the planned changes, and the space figures. A refusal disables the confirm button. A safety refusal hides the drive identity and the space figures. Facts without a source show as not verified.
 - USB export drive picker in `ui/usb_drive_picker_dialog.py`. The picker lists removable-class drives only. A refused drive shows its first reason. The picker disables a drive with a failed probe and shows fixed text.
 - `services/usb/targets.py` selects the inspector and the probe for the current platform and loads the removable-class drives.
-- USB export reserve settings `usb_reserve_percent` and `usb_reserve_bytes` with two inputs in the Settings dialog. An invalid stored value loads as zero.
+- USB export reserve settings `usb_reserve_percent` and `usb_reserve_bytes` with two inputs in the Settings dialog. An invalid stored value loads as zero. `SettingsManager.update` rejects an out-of-range reserve.
+- Selected-track spectrum analysis runs in a two-worker background pool. The waveform view adds persistent zoom windows and keeps the current overview visible while analysis runs or fails.
+- Guard zoom rendering for empty analyses and keep playback errors separate from waveform status messages.
+- Reject non-file waveform sources and validate persisted setting types and supported ranges.
+- `SettingsManager` writes the settings file through a temporary file and an atomic replace. A failed write keeps the previous file intact.
+- Closing the detail panel cancels waveform analysis and keeps its worker pool usable when the panel reopens. The panel and application quit wait at most two seconds for workers.
+- The waveform worker extracts the fallback overview before spectrum analysis. The overview shows real peaks while analysis runs and after analysis fails.
+- `SettingsManager.update` raises `ValueError` for an invalid value and writes nothing.
+- The overview extractor decodes regular files only.
 - USB export preflight policy in `services/usb/preflight.py` (USB-4, #156). The policy refuses non-removable drives, system and boot volumes, active partitions, read-only media, filesystem errors, unknown layouts, non-FAT32 filesystems, and unknown database formats.
 - A file of 4 GiB or more blocks the whole export.
 - Conservative space estimate in `services/usb/space.py`. The reserve is the larger of a percentage of the estimate and a fixed byte count. Both start at zero.
