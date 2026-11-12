@@ -9,6 +9,8 @@ import logging
 import math
 import os
 import re
+import stat
+import threading
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -36,6 +38,17 @@ HASH_BLOCK_BYTES = 1024 * 1024
 FIELDS = ("low", "mid", "high", "overall")
 CACHE_NAME = re.compile(r"spectrum-[0-9a-f]{64}\.npz")
 logger = logging.getLogger(__name__)
+_CACHE_UPDATE_LOCK = threading.Lock()
+
+
+class WaveformAnalysisCancelled(BaseException):
+    """Raised when a caller no longer needs an in-progress analysis."""
+
+
+def _check_cancelled(cancel_event: threading.Event | None) -> None:
+    """Raise WaveformAnalysisCancelled when the caller has set the cancel event."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise WaveformAnalysisCancelled
 
 
 @dataclass(frozen=True)
@@ -59,12 +72,13 @@ class SpectrumWaveform:
             object.__setattr__(self, name, immutable)
 
 
-def _cache_key(source: Path) -> str:
+def _cache_key(source: Path, cancel_event: threading.Event | None = None) -> str:
     """Hash complete content on every call to detect same-size source changes."""
     digest = hashlib.sha256()
     bytes_seen = 0
     with source.open("rb") as stream:
         for block in iter(lambda: stream.read(HASH_BLOCK_BYTES), b""):
+            _check_cancelled(cancel_event)
             bytes_seen += len(block)
             # The source can grow after the public entry point checks its size.
             if bytes_seen > MAX_PREVIEW_FILE_BYTES:
@@ -99,7 +113,7 @@ def _filter_bank(sample_rate: int, channels: int) -> list[tuple[np.ndarray, np.n
     return filters
 
 
-def _decode_waveform(source: Path) -> SpectrumWaveform:
+def _decode_waveform(source: Path, cancel_event: threading.Event | None = None) -> SpectrumWaveform:
     """Decode capped blocks while retaining filter state across boundaries."""
     with sf.SoundFile(source) as audio:
         if audio.samplerate <= MIN_SAMPLE_RATE_HZ:
@@ -111,6 +125,7 @@ def _decode_waveform(source: Path) -> SpectrumWaveform:
         filters = _filter_bank(audio.samplerate, audio.channels)
         position = 0
         while position < frame_count:
+            _check_cancelled(cancel_event)
             block = audio.read(
                 min(STREAM_BLOCK_FRAMES, frame_count - position),
                 dtype="float32",
@@ -216,17 +231,18 @@ def _update_cache(
     write_entry: bool,
 ) -> None:
     """Stop publishing archives if budget enforcement fails."""
-    try:
-        if write_entry and size_limit > 0:
-            _store_cache(directory, entry, waveform, size_limit)
-        else:
-            _evict_cache(directory, size_limit)
-    except OSError as error:
-        logger.warning(
-            "Spectrum cache update failed (%s, errno=%s). Check cache directory permissions.",
-            type(error).__name__,
-            error.errno,
-        )
+    with _CACHE_UPDATE_LOCK:
+        try:
+            if write_entry and size_limit > 0:
+                _store_cache(directory, entry, waveform, size_limit)
+            else:
+                _evict_cache(directory, size_limit)
+        except OSError as error:
+            logger.warning(
+                "Spectrum cache update failed (%s, errno=%s). Check cache directory permissions.",
+                type(error).__name__,
+                error.errno,
+            )
 
 
 def analyze_waveform(
@@ -234,25 +250,35 @@ def analyze_waveform(
     cache_directory: Path | None = None,
     *,
     max_cache_bytes: int = DEFAULT_CACHE_BYTES,
+    cancel_event: threading.Event | None = None,
 ) -> SpectrumWaveform:
     """Return causal band envelope peaks with at most 30 minutes of decoded audio.
 
     The default user cache is shared across callers. A zero budget removes owned archives
     and skips new writes. An archive larger than the budget is not stored. Cache failures
     log warnings and preserve the analysis result. Source filesystem errors propagate.
+    The caller supplies a user-selected file path. Library files may live on any mounted
+    volume, so this service accepts regular files outside application-managed directories.
     """
-    source = Path(file_path)
+    _check_cancelled(cancel_event)
+    source = Path(file_path).resolve(strict=True)
+    _check_cancelled(cancel_event)
     if max_cache_bytes < 0:
         raise ValueError("Cache size must be nonnegative. Supply a valid byte limit.")
-    if source.stat().st_size > MAX_PREVIEW_FILE_BYTES:
+    source_stat = source.stat()
+    if not stat.S_ISREG(source_stat.st_mode):
+        raise ValueError("Audio source must be a regular audio file.")
+    if source_stat.st_size > MAX_PREVIEW_FILE_BYTES:
         raise ValueError("Audio exceeds 500 MiB. Supply a smaller track.")
     directory = Path(cache_directory or storage_paths.current().cache_dir)
-    key = _cache_key(source)
+    key = _cache_key(source, cancel_event)
     entry = directory / f"spectrum-{key}.npz"
     waveform = _load_cache(entry)
+    _check_cancelled(cancel_event)
     cache_miss = waveform is None
     if waveform is None:
-        waveform = _decode_waveform(source)
+        waveform = _decode_waveform(source, cancel_event)
+    _check_cancelled(cancel_event)
     _update_cache(directory, entry, waveform, max_cache_bytes, cache_miss)
     return waveform
 
