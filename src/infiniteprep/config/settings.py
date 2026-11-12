@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
+import math
 import socket
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -28,6 +29,35 @@ BLOCKED_METADATA_HOSTS: Final[frozenset[str]] = frozenset(
     }
 )
 CGNAT_NETWORK: Final[ipaddress.IPv4Network] = ipaddress.IPv4Network("100.64.0.0/10")
+BYTES_PER_MIB: Final[int] = 1024 * 1024
+# The USB export reserve is the larger of a percentage of the estimated export
+# size and a fixed byte count (D97 to D99, D199).
+MAX_USB_RESERVE_PERCENT: Final[float] = 100.0
+# One TiB. No FAT32 volume holds more than 2 TiB.
+MAX_USB_RESERVE_MIB: Final[int] = 1024 * 1024
+MAX_USB_RESERVE_BYTES: Final[int] = MAX_USB_RESERVE_MIB * BYTES_PER_MIB
+
+
+def _read_usb_reserve_percent(value: object) -> float:
+    """Return a stored reserve percentage, or zero for an invalid value."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        logger.warning("Stored usb_reserve_percent is not a number. Using zero.")
+        return 0.0
+    if not math.isfinite(value) or not 0 <= value <= MAX_USB_RESERVE_PERCENT:
+        logger.warning("Stored usb_reserve_percent is out of range. Using zero.")
+        return 0.0
+    return float(value)
+
+
+def _read_usb_reserve_bytes(value: object) -> int:
+    """Return a stored reserve byte count, or zero for an invalid value."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        logger.warning("Stored usb_reserve_bytes is not a whole number. Using zero.")
+        return 0
+    if not 0 <= value <= MAX_USB_RESERVE_BYTES:
+        logger.warning("Stored usb_reserve_bytes is out of range. Using zero.")
+        return 0
+    return value
 
 
 def _is_disallowed_ip(ip_text: str) -> bool:
@@ -143,6 +173,8 @@ class AppSettings:
     file_table_column_count: int = 0  # Column count when the layout was saved.
     detail_table_layout: str = ""  # Base64-encoded QHeaderView state.
     detail_table_column_count: int = 0  # Column count when the layout was saved.
+    usb_reserve_percent: float = 0.0  # Percent of the estimated export size.
+    usb_reserve_bytes: int = 0
 
 
 class SettingsManager:
@@ -165,6 +197,8 @@ class SettingsManager:
             return AppSettings()
         defaults = asdict(AppSettings())
         merged = {k: raw.get(k, v) for k, v in defaults.items()}
+        merged["usb_reserve_percent"] = _read_usb_reserve_percent(merged["usb_reserve_percent"])
+        merged["usb_reserve_bytes"] = _read_usb_reserve_bytes(merged["usb_reserve_bytes"])
         return AppSettings(**merged)
 
     def save(self, settings: AppSettings) -> None:

@@ -5,9 +5,14 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.55.0] (2026-11-12)
+## [0.55.1] (2026-11-12)
 
 ### Added
+
+- USB export confirm dialog in `ui/usb_preflight_dialog.py` (USB-4, #156). The dialog names the target drive, the DJ profiles, the planned changes, and the space figures. A refusal disables the confirm button. A safety refusal hides the drive identity and the space figures. Facts without a source show as not verified.
+- USB export drive picker in `ui/usb_drive_picker_dialog.py`. The picker lists removable-class drives only. A refused drive shows its first reason. The picker disables a drive with a failed probe and shows fixed text.
+- `services/usb/targets.py` selects the inspector and the probe for the current platform and loads the removable-class drives.
+- USB export reserve settings `usb_reserve_percent` and `usb_reserve_bytes` with two inputs in the Settings dialog. An invalid stored value loads as zero.
 
 - USB export preflight policy in `services/usb/preflight.py` (USB-4, #156). The policy refuses non-removable drives, system and boot volumes, active partitions, read-only media, filesystem errors, unknown layouts, non-FAT32 filesystems, and unknown database formats.
 - A file of 4 GiB or more blocks the whole export.
