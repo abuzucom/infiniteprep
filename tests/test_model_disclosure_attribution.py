@@ -15,6 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CHECKER_PATH = ROOT / "scripts" / "check_commit_attribution.py"
+SHA_HEX_LENGTH = 40
+CHECKER_TIMEOUT_SECONDS = 30
 
 
 def load_checker():
@@ -29,7 +31,7 @@ def load_checker():
 
 def commit(body: str) -> dict:
     """Return the bounded commit shape consumed by trailer validation."""
-    return {"sha": "b" * 40, "body": body}
+    return {"sha": "b" * SHA_HEX_LENGTH, "body": body}
 
 
 class UnversionedModelTest(unittest.TestCase):
@@ -111,7 +113,7 @@ class CommandLineTest(unittest.TestCase):
             message.write_text(body, encoding="utf-8")
             return subprocess.run(
                 [sys.executable, str(CHECKER_PATH), "--message-file", str(message)],
-                capture_output=True, text=True, timeout=30,
+                capture_output=True, text=True, timeout=CHECKER_TIMEOUT_SECONDS,
                 cwd=str(ROOT), env=dict(os.environ),
             )
 

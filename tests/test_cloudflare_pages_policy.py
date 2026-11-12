@@ -7,6 +7,8 @@ from pathlib import Path
 from hooks import _gate_core
 from tests import gate_corpus
 
+BLOCKING_EXIT_CODE = 2
+
 
 class CloudflarePagesPolicyTest(unittest.TestCase):
     """Verify the allowlist and its denial boundaries."""
@@ -77,7 +79,7 @@ class CloudflarePagesPolicyTest(unittest.TestCase):
                 )
                 denied = self.hook_verdict(tool_name, "wrangler deploy hooks")
                 self.assertEqual(allowed, (0, ""))
-                self.assertEqual(denied, (2, "deny"))
+                self.assertEqual(denied, (BLOCKING_EXIT_CODE, "deny"))
 
                 protected_file = self.output_path / ".env.production"
                 protected_file.write_text("TOKEN=secret\n")
@@ -98,7 +100,8 @@ class CloudflarePagesPolicyTest(unittest.TestCase):
                 )
                 for command in cases:
                     with self.subTest(tool_name=tool_name, command=command):
-                        self.assertEqual(self.hook_verdict(tool_name, command)[0], 2)
+                        exit_code, _decision = self.hook_verdict(tool_name, command)
+                        self.assertEqual(exit_code, BLOCKING_EXIT_CODE)
                 protected_file.unlink()
 
     def test_allows_named_pages_deployment(self) -> None:

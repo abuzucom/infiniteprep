@@ -25,6 +25,8 @@ INSPECTABLE_PROGRAMS = frozenset({
 # The script list sits beside this module, so every adopted copy carries it.
 WORKFLOW_SCRIPT_LIST = "workflow-scripts.txt"
 WORKFLOW_SCRIPT_LIST_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), WORKFLOW_SCRIPT_LIST)
+# The shipped list holds under 3 KiB. The cap bounds the read of a repository-controlled file
+# and leaves room for adopter entries.
 MAX_WORKFLOW_SCRIPT_LIST_BYTES = 64 * 1024
 ALLOW = "allow"
 ASK = "ask"
@@ -48,6 +50,8 @@ SEARCH_FLAGS = frozenset({
     "-n", "--line-number", "-l", "--files-with-matches", "-i", "--ignore-case",
     "-F", "--fixed-strings", "--files", "--hidden", "-g", "--glob", "-e", "--regexp", "--",
 })
+# The cap bounds token matching for one command part. Listed script shapes hold at most six
+# tokens. The room above that serves path lists.
 MAX_WORKFLOW_ARGUMENTS = 64
 MAKE_TARGETS = ("lint", "test", "check", "sync", "identity")
 MAKE_ARGUMENTS = ([], ["PYTHON=python"], ["PYTHON=python3"])
@@ -63,6 +67,8 @@ TRUSTED_GIT_MINIMUM_ARGUMENTS = {"clone": 3, "fetch": 2}
 SHELL_OPERATORS = (";", "&", "&&", "|", "||", "(", ")")
 OPERATOR_CHARACTERS = frozenset(bash_parser.PUNCTUATION_CHARS)
 CHAIN_OPERATOR = "&&"
+# Eight parts cover a lint, format, and test chain with room to spare. The cap bounds the
+# verdict work for one command.
 MAX_CHAIN_PARTS = 8
 # shlex ends a word at `#` and Bash does not. A command holding `#` could run text the tokens omit.
 COMMENT_CHARACTER = "#"
@@ -103,6 +109,16 @@ MAX_PACKAGE_MANIFEST_BYTES = 1024 * 1024
 # Real manifests nest under 10 levels. The bound keeps json.loads recursion shallow.
 MAX_PACKAGE_MANIFEST_DEPTH = 32
 MAX_TEST_PATH_COMPONENTS = 32
+# `-m <module>` takes two arguments after the interpreter token.
+MODULE_LAUNCH_ARGUMENTS = 2
+MODULE_LAUNCH_END = 1 + MODULE_LAUNCH_ARGUMENTS
+# A script list line holds a verdict and a script before its argument pattern.
+SCRIPT_LINE_REQUIRED_FIELDS = 2
+# Arguments start after the program token and its subcommand or target.
+SUBCOMMAND_ARGUMENTS_INDEX = 2
+NPM_TEST_TOKEN_COUNT = 2
+NPM_TEST_FILES_INDEX = 3
+NPM_RUN_TOKEN_COUNT = 3
 # npm joins test arguments into a shell string, so only inert characters pass.
 TEST_PATH_PATTERN = re.compile(r"[A-Za-z0-9._@+/-]+")
 # One alternation per match keeps the scan linear. A lone quote marks an
@@ -142,9 +158,9 @@ def _accepted_forms_hint(program: str, arguments: list) -> str:
         return RUFF_HINT
     if not _python_program(program):
         return ""
-    if arguments[:2] == ["-m", RUFF_PROGRAM]:
+    if arguments[:MODULE_LAUNCH_ARGUMENTS] == ["-m", RUFF_PROGRAM]:
         return RUFF_HINT
-    if arguments[:2] == ["-m", "unittest"]:
+    if arguments[:MODULE_LAUNCH_ARGUMENTS] == ["-m", "unittest"]:
         return UNITTEST_HINT
     if any(argument.endswith(".py") for argument in arguments):
         return SCRIPT_HINT
@@ -185,10 +201,10 @@ def _trusted_git_workflow(arguments: tuple) -> bool:
 
 def _parse_script_line(fields: list, line_number: int) -> tuple:
     """Return (script, argument pattern, verdict) for one list line, or raise ValueError."""
-    if len(fields) < 2 or fields[0] not in SCRIPT_VERDICTS:
+    if len(fields) < SCRIPT_LINE_REQUIRED_FIELDS or fields[0] not in SCRIPT_VERDICTS:
         raise ValueError(f"line {line_number} needs a verdict and a script")
     script = fields[1]
-    pattern = tuple(fields[2:])
+    pattern = tuple(fields[SCRIPT_LINE_REQUIRED_FIELDS:])
     if not LISTED_SCRIPT_PATTERN.fullmatch(script) or PARENT_DIRECTORY in script.split("/"):
         raise ValueError(f"line {line_number} names no repository-relative Python script")
     for position, field in enumerate(pattern, 1):
@@ -377,11 +393,11 @@ def _trusted_wrapper_accepted(script: str, arguments: tuple, project_dir: str) -
 
 def _python_verdict(tokens: list, project_dir: str) -> tuple:
     """Return (decision, reason, read-only) for one Python interpreter invocation."""
-    if tokens[1:3] == ["-m", "unittest"]:
-        accepted = _unittest_accepted(tokens[3:], project_dir)
+    if tokens[1:MODULE_LAUNCH_END] == ["-m", "unittest"]:
+        accepted = _unittest_accepted(tokens[MODULE_LAUNCH_END:], project_dir)
         return (ALLOW if accepted else ""), "", accepted
-    if tokens[1:3] == ["-m", RUFF_PROGRAM]:
-        return _ruff_verdict(tokens[3:], project_dir, RUFF_MODULE_LAUNCHER)
+    if tokens[1:MODULE_LAUNCH_END] == ["-m", RUFF_PROGRAM]:
+        return _ruff_verdict(tokens[MODULE_LAUNCH_END:], project_dir, RUFF_MODULE_LAUNCHER)
     script, arguments = _python_script_call(tokens, project_dir)
     if not script:
         return "", "", False
@@ -645,10 +661,11 @@ def _npm_shape(tokens: list):
     """Return (main script, executed script names, test files) for an accepted form, else None."""
     if tokens == ["npm", "ci"]:
         return "", NPM_CI_LIFECYCLE, None
-    if tokens[1] == "test" and (len(tokens) == 2 or tokens[2] == "--"):
-        return "test", ("pretest", "test", "posttest"), tokens[3:] if len(tokens) > 2 else None
-    if len(tokens) == 3 and tokens[1] == "run" and tokens[2] in NPM_RUN_SCRIPTS:
-        name = tokens[2]
+    bare_test = len(tokens) == NPM_TEST_TOKEN_COUNT
+    if tokens[1] == "test" and (bare_test or tokens[SUBCOMMAND_ARGUMENTS_INDEX] == "--"):
+        return "test", ("pretest", "test", "posttest"), None if bare_test else tokens[NPM_TEST_FILES_INDEX:]
+    if len(tokens) == NPM_RUN_TOKEN_COUNT and tokens[1] == "run" and tokens[-1] in NPM_RUN_SCRIPTS:
+        name = tokens[-1]
         return name, (f"pre{name}", name, f"post{name}"), None
     return None
 
@@ -720,7 +737,7 @@ def _program_verdict(tokens: list, project_dir: str) -> tuple:
     if _python_program(program):
         return _python_verdict(tokens, project_dir)
     if program == "make":
-        matched = tokens[1] in MAKE_TARGETS and tokens[2:] in MAKE_ARGUMENTS
+        matched = tokens[1] in MAKE_TARGETS and tokens[SUBCOMMAND_ARGUMENTS_INDEX:] in MAKE_ARGUMENTS
         return (ASK if matched else ""), "", False
     if program == "rg":
         return _search_verdict(tokens)
@@ -749,7 +766,7 @@ def _workflow_verdict(command: str, project_dir: str) -> tuple:
         return verdicts[decisions.index(DENY)]
     if "" in decisions:
         return "", "", False
-    read_only = all(verdict[2] for verdict in verdicts)
+    read_only = all(part_read_only for _decision, _reason, part_read_only in verdicts)
     if ASK in decisions:
         reasons = dict.fromkeys(verdict[1] for verdict in verdicts if verdict[0] == ASK)
         return ASK, " ".join(reasons), read_only

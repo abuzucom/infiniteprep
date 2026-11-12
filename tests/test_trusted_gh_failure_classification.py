@@ -18,6 +18,8 @@ import trusted_gh
 
 PROXY_SECRET = "http://user:proxy-secret@proxy.example.test:8080"
 STDERR_SECRET = "stderr-secret-value"
+GH_AUTH_REQUIRED_EXIT_CODE = 4
+UNCLASSIFIED_EXIT_CODE = 7
 
 
 def completed(returncode: int, stderr: str) -> subprocess.CompletedProcess:
@@ -46,7 +48,7 @@ class FailureClassificationTest(unittest.TestCase):
         return context.exception
 
     def test_auth_required_exit_code_is_authentication(self):
-        error = self.classify(completed(4, "To get started with GitHub CLI"))
+        error = self.classify(completed(GH_AUTH_REQUIRED_EXIT_CODE, "To get started with GitHub CLI"))
         self.assertEqual(error.category, "authentication")
 
     def test_http_401_is_authentication(self):
@@ -91,11 +93,13 @@ class FailureMessageTest(unittest.TestCase):
         self.assertNotIn("no authenticated account", message)
 
     def test_authentication_message_is_specific(self):
-        message = self.message_for(trusted_gh.GitHubAccessError("authentication", 4))
+        error = trusted_gh.GitHubAccessError("authentication", GH_AUTH_REQUIRED_EXIT_CODE)
+        message = self.message_for(error)
         self.assertIn("no authenticated account", message)
 
     def test_unclassified_message_disclaims_authentication(self):
-        message = self.message_for(trusted_gh.GitHubAccessError("unclassified", 7))
+        error = trusted_gh.GitHubAccessError("unclassified", UNCLASSIFIED_EXIT_CODE)
+        message = self.message_for(error)
         self.assertIn("exit 7", message)
         self.assertIn("does not prove missing authentication", message)
 

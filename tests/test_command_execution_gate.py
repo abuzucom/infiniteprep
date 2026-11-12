@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests.test_enforce_branch_name import HOOK_PATH, REPO_ROOT
+from tests.test_enforce_branch_name import BLOCKING_EXIT_CODE, HOOK_PATH, REPO_ROOT
 
 GATE_PATH = REPO_ROOT / "hooks" / "_command_execution_gate.py"
 GATE_NAME = "hooks/_command_execution_gate.py"
@@ -61,7 +61,7 @@ class CommandGateHookTest(unittest.TestCase):
         for command in ("node script.js", "python -c 'print(1)'", "npx vitest"):
             with self.subTest(command=command):
                 result = self.run_candidate(command)
-                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertIn(f"blocked by {GATE_NAME}: Opaque command execution", result.stderr)
                 self.assertNotIn(BRANCH_GATE_NAME, result.stderr)
 
@@ -69,7 +69,7 @@ class CommandGateHookTest(unittest.TestCase):
         for command, reason in (("sudo git status", "wrapper"), ("echo $value", "unresolved")):
             with self.subTest(command=command):
                 result = self.run_candidate(command)
-                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertIn(f"blocked by {GATE_NAME}:", result.stderr)
                 self.assertIn(reason, result.stderr)
 
@@ -82,13 +82,13 @@ class CommandGateHookTest(unittest.TestCase):
 
     def test_codex_workflow_denial_names_the_command_gate(self) -> None:
         result = self.run_candidate("python scripts/run_tests.py", client="codex")
-        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
         self.assertIn(f"blocked by {GATE_NAME}:", result.stderr)
         self.assertIn("execution consent", result.stderr)
 
     def test_branch_target_denial_still_names_the_branch_gate(self) -> None:
         result = self.run_candidate("git push origin HEAD:claude/x")
-        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
         self.assertIn(f"blocked by {BRANCH_GATE_NAME}:", result.stderr)
         self.assertNotIn(GATE_NAME, result.stderr)
 

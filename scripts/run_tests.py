@@ -12,6 +12,7 @@ except ImportError:
     import check_hook_coverage as shard_runner
 
 DIAGNOSTIC_LIMIT = 4000
+USAGE_ERROR_EXIT_CODE = 2
 
 
 def _ensure_import_root(root: str) -> None:
@@ -81,7 +82,7 @@ def _test_module_names(root: str) -> set[str]:
         package = [] if relative == "." else relative.split(os.sep)
         for filename in files:
             if filename.startswith("test_") and filename.endswith(".py"):
-                stem = filename[:-3]
+                stem = filename.removesuffix(".py")
                 names.add(".".join(package + [stem]))
                 names.add(".".join(["tests"] + package + [stem]))
     return names
@@ -156,7 +157,7 @@ def main(argv: list[str]) -> int:
             file=sys.stderr,
             flush=True,
         )
-        return 2
+        return USAGE_ERROR_EXIT_CODE
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     started = time.monotonic()
     result = run_suite(

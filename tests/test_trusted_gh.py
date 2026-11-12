@@ -16,6 +16,10 @@ sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 
 import trusted_gh
 
+PARSED_ACCOUNT_ID = 1234567
+OVERSIZED_LOGIN_LENGTH = 300
+EXECUTABLE_FILE_MODE = 0o755
+BLOCKING_EXIT_CODE = 2
 _PRIOR_TEMP_ROOT = None
 
 
@@ -41,7 +45,7 @@ class AccountParsingTest(unittest.TestCase):
 
     def test_numeric_id_and_login_parse(self):
         account = trusted_gh.parse_account("1234567\toctocat\n")
-        self.assertEqual(account, {"id": 1234567, "login": "octocat"})
+        self.assertEqual(account, {"id": PARSED_ACCOUNT_ID, "login": "octocat"})
 
     def test_malformed_account_output_fails(self):
         values = ("", "id\toctocat", "1\tbad/login", "1\toctocat\textra")
@@ -52,7 +56,7 @@ class AccountParsingTest(unittest.TestCase):
 
     def test_account_output_has_a_bound(self):
         with self.assertRaises(ValueError):
-            trusted_gh.parse_account("1\t" + "a" * 300)
+            trusted_gh.parse_account("1\t" + "a" * OVERSIZED_LOGIN_LENGTH)
 
 
 class ExecutableLookupTest(unittest.TestCase):
@@ -63,7 +67,7 @@ class ExecutableLookupTest(unittest.TestCase):
             repository = Path(temporary)
             executable = repository / ("gh.exe" if os.name == "nt" else "gh")
             executable.write_text("untrusted executable\n", encoding="utf-8")
-            executable.chmod(0o755)
+            executable.chmod(EXECUTABLE_FILE_MODE)
             environment = {"PATH": str(repository)}
             with patch.dict(os.environ, environment, clear=False):
                 with self.assertRaises(FileNotFoundError):
@@ -82,7 +86,7 @@ class TrustedRunnerSafetyTest(unittest.TestCase):
             text=True,
             check=False,
         )
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("denied by policy", result.stderr)
 
     def test_failure_message_does_not_expose_exception_text(self):
@@ -104,7 +108,7 @@ class TrustedRunnerSafetyTest(unittest.TestCase):
             text=True,
             check=False,
         )
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("literal escape text", result.stderr)
 
     def test_managed_proxy_placeholder_is_removed(self):

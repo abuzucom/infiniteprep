@@ -9,6 +9,9 @@ from pathlib import Path
 
 from tests.test_enforce_branch_name import HOOK_PATH, REPO_ROOT
 
+BLOCKING_EXIT_CODE = 2
+HOOK_TIMEOUT_SECONDS = 15
+
 
 class BranchReviewTest(unittest.TestCase):
     """Send candidate commands to the real hook without executing candidates."""
@@ -38,7 +41,7 @@ class BranchReviewTest(unittest.TestCase):
                    "tool_name": "Bash", "tool_input": {"command": command}}
         return subprocess.run(
             [sys.executable, str(HOOK_PATH)], input=json.dumps(payload),
-            env=self.environment, capture_output=True, text=True, timeout=15, check=False,
+            env=self.environment, capture_output=True, text=True, timeout=HOOK_TIMEOUT_SECONDS, check=False,
         )
 
     def test_rejected_commands_cannot_write_trace_or_redirect_files(self) -> None:
@@ -49,7 +52,7 @@ class BranchReviewTest(unittest.TestCase):
                 destination.write_text("unchanged", encoding="utf-8")
                 command = f"{variable}='{destination.as_posix()}' git branch claude/x"
                 result = self.run_candidate(command)
-                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertEqual(destination.read_text(encoding="utf-8"), "unchanged")
 
     def test_configuration_trace_targets_cannot_create_files(self) -> None:
@@ -59,7 +62,7 @@ class BranchReviewTest(unittest.TestCase):
                 self.global_config.write_text(
                     f'[trace2]\n{setting} = "{destination.as_posix()}"\n', encoding="utf-8")
                 result = self.run_candidate("git branch claude/x")
-                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertFalse(destination.exists())
 
     def test_safe_aliases_still_resolve_without_trace_side_effects(self) -> None:
@@ -75,7 +78,7 @@ class BranchReviewTest(unittest.TestCase):
                         "cp -r payload .git/worktrees", "cp payload .git"):
             with self.subTest(command=command):
                 result = self.run_candidate(command)
-                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertIn("metadata", result.stderr)
         result = self.run_candidate("cp notes.txt docs")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -89,14 +92,14 @@ class BranchReviewTest(unittest.TestCase):
         (linked / ".git").write_text("gitdir: ../administration\n", encoding="utf-8")
         self.environment["CLAUDE_PROJECT_DIR"] = str(linked)
         result = self.run_candidate("cp -r payload ../administration")
-        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
 
     def test_named_copy_destinations_protect_metadata(self) -> None:
         for command in ("cp -rt .git/refs/heads claude/", "cp -t.git/refs/heads claude/",
                         "cp --target-directory=.git/refs/heads claude/",
                         "mv --target-dir .git/refs/heads claude/"):
             with self.subTest(command=command):
-                self.assertEqual(self.run_candidate(command).returncode, 2)
+                self.assertEqual(self.run_candidate(command).returncode, BLOCKING_EXIT_CODE)
         result = self.run_candidate("cp -t docs .git/HEAD")
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -105,7 +108,7 @@ class BranchReviewTest(unittest.TestCase):
                         "cp -rt .. payload", "Copy-Item payload . -Recurse"):
             with self.subTest(command=command):
                 result = self.run_candidate(command)
-                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertIn("metadata", result.stderr)
 
     def test_required_workflows_request_consent(self) -> None:
@@ -135,8 +138,9 @@ class BranchReviewTest(unittest.TestCase):
                         "python scripts/sync.py --unknown", "rg pattern README%EXPANSION%.md",
                         "rg pattern README!EXPANSION!.md"):
             with self.subTest(command=command):
-                self.assertEqual(self.run_candidate(command).returncode, 2)
-        self.assertEqual(self.run_candidate("python scripts/run_tests.py", mode="dontAsk").returncode, 2)
+                self.assertEqual(self.run_candidate(command).returncode, BLOCKING_EXIT_CODE)
+        result = self.run_candidate("python scripts/run_tests.py", mode="dontAsk")
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
 
     def test_workflow_consent_uses_each_client_response(self) -> None:
         command = "python scripts/run_tests.py"
@@ -147,9 +151,9 @@ class BranchReviewTest(unittest.TestCase):
                            "toolCall": {"name": "run_command", "args": {"CommandLine": command}}}
                 result = subprocess.run(
                     [sys.executable, str(HOOK_PATH), "--client", client], input=json.dumps(payload),
-                    env=self.environment, capture_output=True, text=True, timeout=15, check=False)
+                    env=self.environment, capture_output=True, text=True, timeout=HOOK_TIMEOUT_SECONDS, check=False)
                 if client == "codex":
-                    self.assertEqual(result.returncode, 2, result.stdout)
+                    self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                     self.assertIn("execution consent", result.stderr)
                 else:
                     self.assertEqual(result.returncode, 0, result.stderr)

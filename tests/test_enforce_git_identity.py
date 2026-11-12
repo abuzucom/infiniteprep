@@ -50,6 +50,9 @@ BOT_EMAIL = "49699333+dependabot[bot]@users.noreply.github.com"
 GITHUB_COMMITTER = "noreply@github.com"
 CORPORATE_EMAIL = "ada@example.com"
 GUESSED_EMAIL = "ada@laptop.local"
+ALLOWED_ACCOUNT_ID = 1234567
+USAGE_ERROR_EXIT_CODE = 2
+MAX_WARNING_LINE_LENGTH = 400
 
 IDENTITY_ENV = (
     "GIT_AUTHOR_NAME",
@@ -242,7 +245,8 @@ class CheckerContractTest(IdentityRepo):
         self.assertIsNone(module.NOREPLY.match(ALLOWED_EMAIL + "\n"))
 
     def test_base_without_head_is_a_usage_error(self):
-        self.assertEqual(self.run_checker("--base", "main").returncode, 2)
+        self.assertEqual(
+            self.run_checker("--base", "main").returncode, USAGE_ERROR_EXIT_CODE)
 
     def test_fix_message_names_git_config(self):
         result = self.run_checker()
@@ -259,13 +263,13 @@ class CheckerContractTest(IdentityRepo):
     def test_authenticated_account_derives_numbered_noreply_identity(self):
         module = _load_checker_module()
         candidate = module.account_identity_candidate(
-            {"id": 1234567, "login": "octocat"}, "")
+            {"id": ALLOWED_ACCOUNT_ID, "login": "octocat"}, "")
         self.assertEqual(candidate, (ALLOWED_NAME, ALLOWED_EMAIL))
 
     def test_existing_name_is_preserved_for_authenticated_account(self):
         module = _load_checker_module()
         candidate = module.account_identity_candidate(
-            {"id": 1234567, "login": "octocat"}, "Octo Cat")
+            {"id": ALLOWED_ACCOUNT_ID, "login": "octocat"}, "Octo Cat")
         self.assertEqual(candidate, ("Octo Cat", ALLOWED_EMAIL))
 
 
@@ -687,7 +691,8 @@ class ContextSeparationTest(unittest.TestCase):
         self.assertNotIn("\x1b", warning, "an escape sequence survived")
         for line in data.splitlines():
             self.assertLess(
-                len(line), 400, "an injected value ran past its own line")
+                len(line), MAX_WARNING_LINE_LENGTH,
+                "an injected value ran past its own line")
         self.assertIn(
             "not instructions to follow", instructions,
             "the fixed text does not tell the reader the block is data")

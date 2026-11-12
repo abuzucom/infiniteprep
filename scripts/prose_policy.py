@@ -170,7 +170,7 @@ def _normalize_path(path: str | Path) -> str:
             pass
     normalized = str(candidate).replace("\\", "/")
     while normalized.startswith("./"):
-        normalized = normalized[2:]
+        normalized = normalized.removeprefix("./")
     return normalized
 
 

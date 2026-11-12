@@ -19,6 +19,8 @@ import check_policy_size
 import reinject_agents_policy
 import trusted_gh
 
+GH_AUTH_REQUIRED_EXIT_CODE = 4
+
 
 class ConnectivityClassificationTest(unittest.TestCase):
     """Classify network transport failures separately from auth failures."""
@@ -64,7 +66,7 @@ class ConnectivityClassificationTest(unittest.TestCase):
     def test_authenticated_account_raises_oserror_on_auth_failure(self) -> None:
         failed_process = subprocess.CompletedProcess(
             ["gh", "api", "user"],
-            4,
+            GH_AUTH_REQUIRED_EXIT_CODE,
             "",
             "HTTP 401: Bad credentials\n",
         )

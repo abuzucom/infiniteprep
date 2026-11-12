@@ -13,6 +13,7 @@ import yaml
 from tests.test_enforce_branch_name import HOOK_PATH, REPO_ROOT, hook
 
 TIMEOUT_SECONDS = 10
+BLOCKING_EXIT_CODE = 2
 
 
 class BranchContextTest(unittest.TestCase):
@@ -63,7 +64,7 @@ class BranchContextTest(unittest.TestCase):
             "git push origin HEAD:$target", "git unknown-operation",
         ):
             with self.subTest(command=command):
-                self.assertEqual(self.run_command(command).returncode, 2)
+                self.assertEqual(self.run_command(command).returncode, BLOCKING_EXIT_CODE)
 
     def test_opaque_commands_do_not_execute(self):
         for command in (
@@ -73,7 +74,7 @@ class BranchContextTest(unittest.TestCase):
         ):
             with self.subTest(command=command):
                 result = self.run_command(command)
-                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
                 self.assertFalse((self.root / "unexpected").exists())
 
     def test_effective_aliases_and_precedence(self):
@@ -81,7 +82,7 @@ class BranchContextTest(unittest.TestCase):
             "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "alias.x",
             "GIT_CONFIG_VALUE_0": "push origin claude/x",
         })
-        self.assertEqual(self.run_command("git x").returncode, 2)
+        self.assertEqual(self.run_command("git x").returncode, BLOCKING_EXIT_CODE)
         result = self.run_command('git -c alias.x="status --short" x')
         self.assertEqual(result.returncode, 0, result.stderr)
 
@@ -98,7 +99,7 @@ class BranchContextTest(unittest.TestCase):
         result = self.run_command("git x")
         self.assertEqual(result.returncode, 0, result.stderr)
         included.write_text('[alias]\nx = push origin claude/x\n', encoding="utf-8")
-        self.assertEqual(self.run_command("git x").returncode, 2)
+        self.assertEqual(self.run_command("git x").returncode, BLOCKING_EXIT_CODE)
 
     def test_alias_cycles_shell_aliases_and_missing_aliases(self):
         for command in (
@@ -106,13 +107,13 @@ class BranchContextTest(unittest.TestCase):
             "git -c alias.x='!echo hidden' x", "git absent-alias",
         ):
             with self.subTest(command=command):
-                self.assertEqual(self.run_command(command).returncode, 2)
+                self.assertEqual(self.run_command(command).returncode, BLOCKING_EXIT_CODE)
 
     def test_local_head_overrides_forged_environment(self):
         (self.git_directory / "HEAD").write_text(
             "ref: refs/heads/claude/x\n", encoding="utf-8")
         self.environment["GITHUB_HEAD_REF"] = "fix/example"
-        self.assertEqual(self.run_command("git status").returncode, 2)
+        self.assertEqual(self.run_command("git status").returncode, BLOCKING_EXIT_CODE)
         result = self.run_command("git branch -m fix/recovered")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"], "ask")
@@ -125,7 +126,7 @@ class BranchContextTest(unittest.TestCase):
             "git branch -m fix/recovered > output",
         ):
             with self.subTest(command=command):
-                self.assertEqual(self.run_command(command).returncode, 2)
+                self.assertEqual(self.run_command(command).returncode, BLOCKING_EXIT_CODE)
 
     def test_metadata_read_and_document_write(self):
         result = self.run_command('printf "%s" ".git/HEAD claude/x"')
@@ -135,14 +136,14 @@ class BranchContextTest(unittest.TestCase):
             "touch .git/refs/heads/claude/x", "cp input .git/HEAD",
         ):
             with self.subTest(command=command):
-                self.assertEqual(self.run_command(command).returncode, 2)
+                self.assertEqual(self.run_command(command).returncode, BLOCKING_EXIT_CODE)
 
     def test_parse_bounds_and_incomplete_reason(self):
         result = self.run_command('printf "claude/x')
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertNotIn("Git", result.stderr)
         result = self.run_command("echo " + "x" * hook.bash_parser.MAX_COMMAND_CHARACTERS)
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
 
     def test_environment_conflict_is_explicit_for_ci_reader(self):
         with patch.dict(os.environ, {"GITHUB_HEAD_REF": "feat/different"}):

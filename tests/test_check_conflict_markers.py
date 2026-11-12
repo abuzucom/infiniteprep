@@ -34,6 +34,17 @@ PRE_COMMIT_CONFIG_PATH = REPO_ROOT / ".pre-commit-config.yaml"
 AGENTS_PATH = REPO_ROOT / "AGENTS.md"
 HANDOFF_PATH = REPO_ROOT / "plan" / "HANDOFF.md.example"
 README_PATH = REPO_ROOT / "README.md"
+LARGE_MARKER_SIZE = 10
+SHORT_MARKER_SIZE = 3
+NESTED_CONFLICT_VIOLATION_COUNT = 2
+SEPARATOR_AND_BLOCK_VIOLATION_COUNT = 2
+NARROW_OPENER_WIDTHS = (1, 2)
+SAFE_READ_LIMIT_BYTES = 1024
+GIT_FATAL_EXIT_CODE = 128
+GIT_USAGE_EXIT_CODE = 129
+OVERSIZE_MARGIN_BYTES = 100
+SHA_HEX_LENGTH = 40
+REPEATED_COMMAND_COUNT = 5
 _CHECKER_WORKER = None
 
 
@@ -183,7 +194,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
         """Size-2 block detected even when configured size is 10."""
         content = "<< HEAD\nleft\n==\nright\n>> branch\n"
         violations = checker.check_content(
-            content, "test.py", configured_marker_size=10
+            content, "test.py", configured_marker_size=LARGE_MARKER_SIZE
         )
         self.assertEqual(len(violations), 1)
         self.assertIn(
@@ -194,7 +205,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
     def test_configurable_marker_size_detected_exact(self):
         content = "<<< HEAD\nleft\n===\nright\n>>> branch\n"
         violations = checker.check_content(
-            content, "custom.py", configured_marker_size=3
+            content, "custom.py", configured_marker_size=SHORT_MARKER_SIZE
         )
         self.assertEqual(len(violations), 1)
         self.assertIn(
@@ -208,7 +219,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             "==========\nright\n>>>>>>>>>> branch\n"
         )
         violations = checker.check_content(
-            content, "large.py", configured_marker_size=10
+            content, "large.py", configured_marker_size=LARGE_MARKER_SIZE
         )
         self.assertEqual(len(violations), 1)
         self.assertIn(
@@ -223,7 +234,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             "right\n>>>>>>> branch\n"
         )
         violations = checker.check_content(
-            content, "test.py", configured_marker_size=10
+            content, "test.py", configured_marker_size=LARGE_MARKER_SIZE
         )
         self.assertEqual(len(violations), 1)
         self.assertIn("unresolved conflict block", violations[0])
@@ -235,7 +246,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             "right\n>>>>>>> branch\n"
         )
         violations = checker.check_content(
-            content, "test.md", configured_marker_size=10
+            content, "test.md", configured_marker_size=LARGE_MARKER_SIZE
         )
         self.assertEqual(len(violations), 1)
         self.assertIn("unresolved conflict block", violations[0])
@@ -322,7 +333,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
         violations = checker.check_content(
             content, "nested.py"
         )
-        self.assertEqual(len(violations), 2)
+        self.assertEqual(len(violations), NESTED_CONFLICT_VIOLATION_COUNT)
         self.assertIn(
             "nested.py:1: unclosed conflict marker opener",
             violations[0],
@@ -333,7 +344,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
         )
 
     def test_narrow_openers_do_not_hide_reportable_diff3_separators(self):
-        for width in (1, 2):
+        for width in NARROW_OPENER_WIDTHS:
             narrow = "<" * width
             content = (
                 f"{narrow} HEAD\n||||||| base\n"
@@ -342,7 +353,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             )
             with self.subTest(width=width):
                 violations = checker.check_content(content, "hidden.py")
-                self.assertEqual(len(violations), 2)
+                self.assertEqual(len(violations), SEPARATOR_AND_BLOCK_VIOLATION_COUNT)
                 self.assertIn(
                     "hidden.py:2: orphan conflict marker separator",
                     violations[0],
@@ -353,7 +364,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
                 )
 
     def test_narrow_openers_do_not_hide_reportable_separators(self):
-        for width in (1, 2):
+        for width in NARROW_OPENER_WIDTHS:
             narrow = "<" * width
             content = (
                 f"{narrow} HEAD\n=======\n"
@@ -362,7 +373,7 @@ class ConflictMarkerDetectionTest(unittest.TestCase):
             )
             with self.subTest(width=width):
                 violations = checker.check_content(content, "hidden.py")
-                self.assertEqual(len(violations), 2)
+                self.assertEqual(len(violations), SEPARATOR_AND_BLOCK_VIOLATION_COUNT)
                 self.assertIn(
                     "hidden.py:2: orphan conflict marker separator",
                     violations[0],
@@ -476,7 +487,7 @@ class FileCheckingTest(unittest.TestCase):
             tmp.write(b"hello world")
             tmp_path = tmp.name
         try:
-            data, err = checker._safe_read(tmp_path, 1024)
+            data, err = checker._safe_read(tmp_path, SAFE_READ_LIMIT_BYTES)
             self.assertIsNone(err)
             self.assertEqual(data, b"hello world")
         finally:
@@ -484,7 +495,7 @@ class FileCheckingTest(unittest.TestCase):
 
     def test_safe_read_nonexistent(self):
         data, err = checker._safe_read(
-            "no_such_file_xyz.tmp", 1024
+            "no_such_file_xyz.tmp", SAFE_READ_LIMIT_BYTES
         )
         self.assertIsNone(data)
         self.assertIn("file not found", err)
@@ -496,7 +507,7 @@ class FileCheckingTest(unittest.TestCase):
             link = Path(tmp_dir) / "link.txt"
             try:
                 os.symlink(target, link)
-                data, err = checker._safe_read(str(link), 1024)
+                data, err = checker._safe_read(str(link), SAFE_READ_LIMIT_BYTES)
                 self.assertIsNone(data)
                 self.assertIsNone(err)
             except (OSError, NotImplementedError):
@@ -506,7 +517,7 @@ class FileCheckingTest(unittest.TestCase):
         """get_git_attributes fails closed on non-zero git exit."""
         with patch("subprocess.run") as mock_run:
             mock_proc = MagicMock()
-            mock_proc.returncode = 128
+            mock_proc.returncode = GIT_FATAL_EXIT_CODE
             mock_proc.stderr = b"fatal: git check-attr error"
             mock_run.return_value = mock_proc
             with self.assertRaises(RuntimeError) as ctx:
@@ -549,7 +560,7 @@ class FileCheckingTest(unittest.TestCase):
                 ("huge.bin", "fake_sha_huge", "0", "100644")
             ]
             mock_attrs.return_value = {}
-            mock_size.return_value = checker.MAX_FILE_SIZE + 100
+            mock_size.return_value = checker.MAX_FILE_SIZE + OVERSIZE_MARGIN_BYTES
             violations = checker._check_staged(".")
             self.assertEqual(len(violations), 1)
             self.assertIn("blob size", violations[0])
@@ -897,9 +908,9 @@ class SecurityHardeningTest(unittest.TestCase):
 
     def test_tree_parser_rejects_truncated_and_malformed_entries(self):
         malformed_outputs = (
-            b"100644 blob " + (b"a" * 40) + b"\tfile.txt",
+            b"100644 blob " + (b"a" * SHA_HEX_LENGTH) + b"\tfile.txt",
             b"100644 blob\x00",
-            b"100644 tree " + (b"a" * 40) + b"\tfile.txt\x00",
+            b"100644 tree " + (b"a" * SHA_HEX_LENGTH) + b"\tfile.txt\x00",
         )
         for raw in malformed_outputs:
             with self.subTest(raw=raw):
@@ -1111,8 +1122,8 @@ class GitOptionSupportTest(unittest.TestCase):
     @staticmethod
     def _probe(stderr: bytes):
         """Return a subprocess.run stub answering the support probe."""
-        return MagicMock(returncode=129 if stderr else 0, stderr=stderr,
-                         stdout=b"")
+        return MagicMock(returncode=GIT_USAGE_EXIT_CODE if stderr else 0,
+                         stderr=stderr, stdout=b"")
 
     def test_unknown_option_is_read_as_no_support(self):
         """Git 2.43 rejects the option; Ubuntu 24.04 LTS ships 2.43."""
@@ -1143,7 +1154,7 @@ class GitOptionSupportTest(unittest.TestCase):
         stub = self._probe(b"unknown option: --no-lazy-fetch\n")
         with patch("subprocess.run", return_value=stub), \
              patch("sys.stderr", new_callable=io.StringIO) as captured:
-            for _ in range(5):
+            for _ in range(REPEATED_COMMAND_COUNT):
                 checker._object_command(".", "cat-file", "-s", "--", "abc")
             warnings = captured.getvalue()
         self.assertEqual(warnings.count("--no-lazy-fetch"), 1)

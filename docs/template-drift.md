@@ -1,6 +1,6 @@
 # Template drift
 
-Source template: `abuzucom/agents` at commit `5dee9a3`.
+Source template: `abuzucom/agents` at commit `88f58b5`.
 
 The earlier record named `b452348`. The copied files matched `59c6d95`.
 

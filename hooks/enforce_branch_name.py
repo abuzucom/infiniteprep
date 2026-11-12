@@ -15,6 +15,8 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+POLICY_DENIAL_EXIT_CODE = 2
+
 try:
     import _gate_core as core
     import _bash_parser as bash_parser
@@ -23,7 +25,7 @@ try:
 except ImportError as error:  # pragma: no cover (exercised by the adoption test)
     print(f"shared hook parser, core, or command gate import failed ({error}). "
           "Restore the missing file.", file=sys.stderr)
-    sys.exit(2)
+    sys.exit(POLICY_DENIAL_EXIT_CODE)
 
 CHECKER_PATH = os.path.join("scripts", "check_branch_name.py")
 ALLOWED_PREFIXES = "feat/, fix/, chore/, docs/, test/"
@@ -35,6 +37,18 @@ CHECKER_TIMEOUT_SECONDS = 10
 PROHIBITED_AGENT_PREFIX = "claude/"
 REBASE_DIRECTORIES = ("rebase-merge", "rebase-apply")
 REBASE_RECOVERY_COMMANDS = frozenset(("--abort", "--continue", "--skip"))
+# `git rebase <option>` holds three tokens.
+REBASE_RECOVERY_TOKEN_COUNT = 3
+# `git switch <branch>` holds three tokens.
+BRANCH_SWITCH_TOKEN_COUNT = 3
+# `git <subcommand> <flag> <branch>` holds four tokens.
+BRANCH_CREATION_TOKEN_COUNT = 4
+# `git -C <path>` holds three tokens, with the path last.
+GIT_CONTEXT_PREFIX_LENGTH = 3
+GIT_CONTEXT_PATH_INDEX = 2
+SHORT_OPTION_LENGTH = 2
+MIN_CHILD_PATH_PARTS = 2
+MIN_GEMINI_PLAN_PATH_PARTS = 3
 QUESTION_TOOLS = frozenset({"AskUserQuestion", "ask_question"})
 SHELL_TOOLS = frozenset({
     "Bash", "CMD", "Cmd", "CommandPrompt", "PowerShell",
@@ -471,7 +485,7 @@ def arguments_name_prohibited_branch(arguments: list) -> bool:
     for argument in arguments:
         option_value = argument.split("=", 1)[-1]
         if argument.startswith(("-b", "-B", "-c", "-C", "-m", "-M")):
-            option_value = argument[2:]
+            option_value = argument[SHORT_OPTION_LENGTH:]
         for refspec_component in option_value.split(":"):
             branch_name = normalize_branch_candidate(refspec_component)
             if is_prohibited_agent_branch(branch_name):
@@ -677,7 +691,8 @@ def _powershell_array_targets(program: str, groups: list) -> list:
             if not separator and index + 1 < len(groups):
                 index += 1
                 values = groups[index]
-            if parameter[2]:
+            _canonical, _minimum, names_target = parameter
+            if names_target:
                 targets.extend(values)
         elif not group[0].startswith("-"):
             operands.append(group)
@@ -729,11 +744,11 @@ def _command_text(tool_name: str, tool_input: dict) -> str:
 
 def _recovery_tokens(tokens: list, project_dir: str) -> list:
     """Remove one verified current-repository Git context prefix."""
-    if len(tokens) < 3 or tokens[1] != "-C":
+    if len(tokens) < GIT_CONTEXT_PREFIX_LENGTH or tokens[1] != "-C":
         return tokens
-    if os.path.realpath(tokens[2]) != os.path.realpath(project_dir):
+    if os.path.realpath(tokens[GIT_CONTEXT_PATH_INDEX]) != os.path.realpath(project_dir):
         return []
-    return [tokens[0], *tokens[3:]]
+    return [tokens[0], *tokens[GIT_CONTEXT_PREFIX_LENGTH:]]
 
 
 def _valid_recovery(
@@ -753,15 +768,16 @@ def _valid_recovery(
     if not tokens or tokens[0] != "git":
         return False
     if rebase_active:
-        return len(tokens) == 3 and tokens[1] == "rebase" and tokens[2] in REBASE_RECOVERY_COMMANDS
-    if len(tokens) != 4:
+        return (len(tokens) == REBASE_RECOVERY_TOKEN_COUNT and tokens[1] == "rebase"
+                and tokens[-1] in REBASE_RECOVERY_COMMANDS)
+    if len(tokens) != BRANCH_CREATION_TOKEN_COUNT:
         return False
-    target = tokens[3]
+    _program, *operation, target = tokens
     if check_branch(target, strict=True):
         return False
     if branch in ("main", "master", "HEAD"):
-        return tokens[1:3] == ["switch", "-c"]
-    return tokens[1:3] == ["branch", "-m"]
+        return operation == ["switch", "-c"]
+    return operation == ["branch", "-m"]
 
 
 def _valid_bootstrap(command: str, project_dir: str) -> bool:
@@ -805,7 +821,7 @@ def _deny(client: str, reason: str, gate: str = GATE) -> int:
         print(json.dumps({"decision": "deny", "reason": message}))
         return 0
     print(message, file=sys.stderr)
-    return 2
+    return POLICY_DENIAL_EXIT_CODE
 
 
 def request_recovery_authorization(
@@ -934,9 +950,9 @@ def _spec_matches(path: str, spec: tuple, pathmod) -> bool:
     if kind == "tree":
         return True
     if kind == "child":
-        return len(parts) >= 2
+        return len(parts) >= MIN_CHILD_PATH_PARTS
     if kind == "gemini_plans":
-        return len(parts) >= 3 and parts[1] == "plans"
+        return len(parts) >= MIN_GEMINI_PLAN_PATH_PARTS and parts[1] == "plans"
     if kind == "scratchpad":
         return parts[0].startswith("claude-") and "scratchpad" in parts[1:-1]
     return False
@@ -1099,16 +1115,17 @@ def _git_tokens(command: str, project_dir: str) -> list:
 def _topic_branch_creation(command: str, project_dir: str) -> bool:
     """Return whether a command creates one compliant feature branch."""
     tokens = _git_tokens(command, project_dir)
-    return (len(tokens) == 4 and tokens[1:3] in (["switch", "-c"], ["checkout", "-b"])
-            and not check_branch(tokens[3], strict=True))
+    return (len(tokens) == BRANCH_CREATION_TOKEN_COUNT
+            and tokens[1:-1] in (["switch", "-c"], ["checkout", "-b"])
+            and not check_branch(tokens[-1], strict=True))
 
 
 def _existing_branch_switch(command: str, project_dir: str) -> bool:
     """Return whether a command switches to one existing local branch."""
     tokens = _git_tokens(command, project_dir)
-    return (len(tokens) == 3 and tokens[1] == "switch"
-            and not is_prohibited_agent_branch(tokens[2])
-            and _local_branch_exists(project_dir, tokens[2]))
+    return (len(tokens) == BRANCH_SWITCH_TOKEN_COUNT and tokens[1] == "switch"
+            and not is_prohibited_agent_branch(tokens[-1])
+            and _local_branch_exists(project_dir, tokens[-1]))
 
 
 def _read_only_shell(payload: dict, project_dir: str, client: str, branch_name: str,

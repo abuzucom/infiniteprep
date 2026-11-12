@@ -24,6 +24,7 @@ PRE_COMMIT_PATH = REPO_ROOT / ".pre-commit-config.yaml"
 OWNER = "abuzucom"
 EXTERNAL_REFERENCE = "evanpurkhiser/prolink-go#16"
 EXTERNAL_URL = "https://github.com/evanpurkhiser/prolink-go/pull/16"
+SHA_HEX_LENGTH = 40
 
 
 def build_event(title: str, body: str, owner: str = OWNER,
@@ -254,30 +255,30 @@ class CommitRangeTest(unittest.TestCase):
 
     def test_external_reference_in_subject_blocks(self):
         status, output = self.check(
-            [("a" * 40, f"fix: port {EXTERNAL_REFERENCE}", "")])
+            [("a" * SHA_HEX_LENGTH, f"fix: port {EXTERNAL_REFERENCE}", "")])
         self.assertEqual(status, 1)
         self.assertIn("subject", output)
         self.assertIn("aaaaaaaaaaaa", output)
 
     def test_external_reference_in_body_blocks(self):
         status, output = self.check(
-            [("b" * 40, "fix: port upstream patch", f"Ports {EXTERNAL_URL}.")])
+            [("b" * SHA_HEX_LENGTH, "fix: port upstream patch", f"Ports {EXTERNAL_URL}.")])
         self.assertEqual(status, 1)
         self.assertIn("body", output)
 
     def test_same_owner_reference_passes(self):
         status, output = self.check(
-            [("c" * 40, "fix: follow up", "Closes abuzucom/agents#6.")])
+            [("c" * SHA_HEX_LENGTH, "fix: follow up", "Closes abuzucom/agents#6.")])
         self.assertEqual(status, 0, output)
 
     def test_backticked_reference_passes(self):
         status, output = self.check(
-            [("d" * 40, "fix: port upstream patch",
+            [("d" * SHA_HEX_LENGTH, "fix: port upstream patch",
               f"Ports `{EXTERNAL_REFERENCE}`.")])
         self.assertEqual(status, 0, output)
 
     def test_clean_range_passes(self):
-        status, output = self.check([("e" * 40, "docs: tidy", "No refs here.")])
+        status, output = self.check([("e" * SHA_HEX_LENGTH, "docs: tidy", "No refs here.")])
         self.assertEqual(status, 0, output)
 
     def test_empty_range_passes(self):

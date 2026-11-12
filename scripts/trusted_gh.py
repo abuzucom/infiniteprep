@@ -73,6 +73,14 @@ GLOBAL_VALUE_OPTIONS = frozenset(("-R", "--repo", "--hostname"))
 PRIVATE_TEMP_PREFIX = "trusted-gh-"
 TEMP_VARIABLES = ("TMPDIR", "TMP", "TEMP")
 MAX_REPORTED_PATH = 200
+USAGE_ERROR_EXIT_CODE = 2
+POLICY_DENIAL_EXIT_CODE = 2
+HTTPS_PORT = 443
+SSH_PORT = 22
+REMOTE_PATH_PART_COUNT = 2
+ACCOUNT_FIELD_COUNT = 2
+# A repository command path holds a command and one subcommand.
+COMMAND_PATH_LENGTH = 2
 
 
 def is_connectivity_failure(stderr: str) -> bool:
@@ -162,8 +170,7 @@ def _remote_url_from_config(config_path: Path, remote_name: str) -> str:
 def parse_repository_target(url: str) -> str:
     """Extract owner/repo from a GitHub remote URL."""
     cleaned = url.strip()
-    if cleaned.endswith(".git"):
-        cleaned = cleaned[:-4]
+    cleaned = cleaned.removesuffix(".git")
     if cleaned.startswith("git@github.com:"):
         path = cleaned[len("git@github.com:"):]
     else:
@@ -178,11 +185,11 @@ def parse_repository_target(url: str) -> str:
             raise ValueError("repository remote SSH URL must use git user")
         if parsed.password is not None:
             raise ValueError("repository remote URL cannot contain a password")
-        if parsed.port not in (None, 443 if parsed.scheme == "https" else 22):
+        if parsed.port not in (None, HTTPS_PORT if parsed.scheme == "https" else SSH_PORT):
             raise ValueError("repository remote uses an invalid port")
         path = parsed.path.lstrip("/")
     parts = path.strip("/").split("/")
-    if len(parts) != 2:
+    if len(parts) != REMOTE_PATH_PART_COUNT:
         raise ValueError("repository remote path must be owner/repo")
     owner, repo = parts
     if not REPOSITORY_NAME.fullmatch(owner) or not REPOSITORY_NAME.fullmatch(repo):
@@ -226,7 +233,7 @@ def _has_repository_option(arguments: list[str]) -> bool:
     for index, argument in enumerate(option_tokens):
         if argument in ("-R", "--repo") and index + 1 < len(option_tokens):
             return True
-        if argument.startswith("--repo=") or (argument.startswith("-R") and len(argument) > 2):
+        if argument.startswith("--repo=") or (argument.startswith("-R") and len(argument) > len("-R")):
             return True
     return False
 
@@ -249,7 +256,7 @@ def with_repository_context(repository: Path, arguments: list[str]) -> list[str]
     delimiter = arguments.index("--") if "--" in arguments else len(arguments)
     option_tokens = arguments[:delimiter]
     context = [*option_tokens, "--repo", target, *arguments[delimiter:]]
-    command = option_tokens[position:position + 2]
+    command = option_tokens[position:position + COMMAND_PATH_LENGTH]
     has_head = any(argument == "--head" or argument.startswith("--head=")
                    for argument in option_tokens)
     if command == ["pr", "create"] and not has_head:
@@ -482,7 +489,7 @@ def parse_account(output: str) -> dict:
     if len(output.encode("utf-8")) > ACCOUNT_OUTPUT_LIMIT:
         raise ValueError("GitHub account output exceeds the bound")
     fields = output.strip().split("\t")
-    if len(fields) != 2 or not fields[0].isdigit() or int(fields[0]) < 1:
+    if len(fields) != ACCOUNT_FIELD_COUNT or not fields[0].isdigit() or int(fields[0]) < 1:
         raise ValueError("GitHub account output has an invalid account ID")
     if not LOGIN.fullmatch(fields[1]):
         raise ValueError("GitHub account output has an invalid login")
@@ -530,29 +537,29 @@ def _run_requested_command(repo_root, arguments: list[str]) -> int:
     """Run one authenticated GitHub CLI command with bounded output."""
     if not arguments:
         print("error: run requires GitHub CLI arguments", file=sys.stderr)
-        return 2
+        return USAGE_ERROR_EXIT_CODE
     if find_literal_escape_sequences(arguments):
         print(
             "error: an argument contains literal escape text; use real newlines "
             "or --body-file",
             file=sys.stderr,
         )
-        return 2
+        return POLICY_DENIAL_EXIT_CODE
     try:
         gate_core = _load_gate_core()
     except ImportError:
         print("error: GitHub safety policy is unavailable; repair adoption", file=sys.stderr)
-        return 2
+        return POLICY_DENIAL_EXIT_CODE
     decision, _reason = gate_core.forge_verdict("gh", arguments)
     if decision == "deny":
         print("error: GitHub command denied by policy; review the command", file=sys.stderr)
-        return 2
+        return POLICY_DENIAL_EXIT_CODE
     try:
         effective_arguments = with_repository_context(Path(repo_root), arguments)
         decision, _reason = gate_core.forge_verdict("gh", effective_arguments)
         if decision == "deny":
             print("error: GitHub command denied by policy; review the command", file=sys.stderr)
-            return 2
+            return POLICY_DENIAL_EXIT_CODE
         verify_account(repo_root)
         result = run_gh(repo_root, effective_arguments)
     except subprocess.TimeoutExpired:
@@ -604,10 +611,11 @@ def _run_requested_command(repo_root, arguments: list[str]) -> int:
 def main() -> int:
     """Print bounded authenticated account metadata as JSON."""
     if len(sys.argv) > 1:
-        if sys.argv[1] != "run":
+        _program, operation, *gh_arguments = sys.argv
+        if operation != "run":
             print("error: expected 'run' or no arguments", file=sys.stderr)
-            return 2
-        return _run_requested_command(os.getcwd(), sys.argv[2:])
+            return USAGE_ERROR_EXIT_CODE
+        return _run_requested_command(os.getcwd(), gh_arguments)
     try:
         account = authenticated_account(os.getcwd())
     except subprocess.TimeoutExpired:

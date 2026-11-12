@@ -8,6 +8,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 REDOS_TIMEOUT_SECONDS = 5
 REDOS_TOKEN_COUNT = 28
+PRONOUN_FINDING_COUNT = 3
+NEWLINE_ESCAPE_FINDING_COUNT = 2
+CARRIAGE_RETURN_AND_TAB_FINDING_COUNT = 2
 
 sys.path.insert(0, str(ROOT / "scripts"))
 import prose_policy
@@ -75,7 +78,7 @@ class VoiceTest(unittest.TestCase):
 
     def test_personal_pronouns_share_one_category(self):
         found = findings("I sent your report after they approved it.\n")
-        self.assertEqual(len(found), 3)
+        self.assertEqual(len(found), PRONOUN_FINDING_COUNT)
         self.assertTrue(all("personal pronoun" in item for item in found))
 
     def test_neutral_object_pronouns_pass(self):
@@ -193,12 +196,12 @@ class LiteralEscapeTest(unittest.TestCase):
 
     def test_literal_newline_escape_warns(self):
         found = findings("Summary\\n- Allow rebase recovery.\\n")
-        self.assertEqual(len(found), 2)
+        self.assertEqual(len(found), NEWLINE_ESCAPE_FINDING_COUNT)
         self.assertTrue(all("literal escape sequence" in item for item in found))
 
     def test_literal_carriage_return_and_tab_warn(self):
         found = findings("Header\\r\\tDetails.\n")
-        self.assertEqual(len(found), 2)
+        self.assertEqual(len(found), CARRIAGE_RETURN_AND_TAB_FINDING_COUNT)
         self.assertTrue(all("literal escape sequence" in item for item in found))
 
     def test_code_span_skips_escape_sequences(self):

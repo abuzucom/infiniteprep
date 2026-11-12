@@ -55,6 +55,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 GATE = "require_consent.py"
+POLICY_DENIAL_EXIT_CODE = 2
 
 try:
     import _gate_core as core
@@ -70,7 +71,7 @@ except ImportError as error:  # pragma: no cover (exercised by the adoption test
         "permissionDecisionReason": _REASON,
     }}))
     print(_REASON, file=sys.stderr)
-    sys.exit(2)
+    sys.exit(POLICY_DENIAL_EXIT_CODE)
 
 GATED_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 PATH_KEYS = ("file_path", "notebook_path")
@@ -320,7 +321,7 @@ def emit(decision: str, reason: str) -> int:
     }))
     if decision == "deny":
         print(message, file=sys.stderr)
-        return 2
+        return POLICY_DENIAL_EXIT_CODE
     return 0
 
 

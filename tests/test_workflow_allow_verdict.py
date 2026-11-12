@@ -15,6 +15,8 @@ from tests.test_enforce_branch_name import HOOK_PATH, REPO_ROOT
 PROJECT_DIR = str(REPO_ROOT)
 SCRIPT_LIST_NAME = "workflow-scripts.txt"
 TIMEOUT_SECONDS = 15
+BLOCKING_EXIT_CODE = 2
+EXECUTABLE_FILE_MODE = 0o755
 MAX_CHAIN_PARTS = 8
 MAX_SCRIPT_LIST_BYTES = 64 * 1024
 OPAQUE_REASON = "Opaque command execution requires an inspectable operation"
@@ -230,7 +232,7 @@ class RuffLookupTest(unittest.TestCase):
         binaries.mkdir()
         program = binaries / "ruff"
         program.write_text("#!/bin/sh\n", encoding="utf-8")
-        program.chmod(0o755)
+        program.chmod(EXECUTABLE_FILE_MODE)
         with patch.dict(os.environ, {"PATH": str(binaries)}):
             decision, reason = self.gate.workflow_decision("ruff check src", str(self.root))
         self.assertEqual(decision, "deny")
@@ -410,7 +412,7 @@ class AllowVerdictHookTest(unittest.TestCase):
         for client, mode in (("claude", ""), ("codex", "")):
             with self.subTest(client=client):
                 result = self.run_candidate("ruff format src", client, mode)
-                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertIn(f"blocked by {GATE_NAME}:", result.stderr)
                 self.assertIn("execution consent", result.stderr)
 
@@ -418,13 +420,13 @@ class AllowVerdictHookTest(unittest.TestCase):
         for client in ("claude", "codex"):
             with self.subTest(client=client):
                 result = self.run_candidate("ruff check --config other.toml src", client)
-                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertIn(f"blocked by {GATE_NAME}: {OPAQUE_REASON}", result.stderr)
                 self.assertIn("ruff format", result.stderr)
 
     def test_mixed_chain_is_denied(self) -> None:
         result = self.run_candidate("ruff check src && node script.js", "claude")
-        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
         self.assertIn(OPAQUE_REASON, result.stderr)
 
     def test_primary_branch_allows_inspection_and_denies_writes(self) -> None:
@@ -435,7 +437,7 @@ class AllowVerdictHookTest(unittest.TestCase):
                 self.assertEqual(allowed.returncode, 0, allowed.stderr)
                 self.assertEqual(allowed.stdout.strip(), "")
                 denied = self.run_candidate("ruff format src", client)
-                self.assertEqual(denied.returncode, 2, denied.stdout)
+                self.assertEqual(denied.returncode, BLOCKING_EXIT_CODE, denied.stdout)
 
 
 if __name__ == "__main__":

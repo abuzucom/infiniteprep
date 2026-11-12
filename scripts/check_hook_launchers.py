@@ -13,6 +13,7 @@ GATE_PROBES = (
     ("block_destructive_cmd.py", "Cmd", 2, ()),
     ("enforce_gate_adoption.py", "Bash", 0, ("--client", "claude")),
 )
+DIAGNOSTIC_LIMIT = 160
 
 
 def _deny_payload(tool_name: str) -> str:
@@ -70,7 +71,7 @@ def _gate_paths(root: Path) -> list[tuple[Path, str, int, tuple[str, ...]]]:
 def _diagnostic(value: str) -> str:
     """Return bounded printable launcher diagnostic text."""
     normalized = value.strip().replace("\r", " ").replace("\n", " ")
-    return normalized.encode("ascii", "backslashreplace").decode("ascii")[:160]
+    return normalized.encode("ascii", "backslashreplace").decode("ascii")[:DIAGNOSTIC_LIMIT]
 
 
 def main() -> int:
