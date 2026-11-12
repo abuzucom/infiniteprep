@@ -338,10 +338,11 @@ issue 158. That brief numbers them D1 to D12. The register numbers apply.
 | D370 | Brief D11: the research delivers separate DeviceSQL and OneLibrary reports in one handoff. |
 | D371 | Brief D12: the device writer split comes from research evidence. The owner approves it before any implementation issue exists. |
 
-## D372 to D389: drive class rule and batch queue (2026-11-11, 2026-11-12)
+## D372 to D387: drive class rule and batch queue (2026-11-11, 2026-11-12)
 
-D372 comes from issue 207. D373 to D389 come from the owner decisions in the
-comment on issue 109, in the same order.
+D372 comes from issue 207. D373 to D387 come from the owner decisions in the
+comment on issue 109, in the same order. The last two answers in that comment
+name the PR count and the branch of PR 202. They carry no register number.
 
 | ID | Decision |
 | --- | --- |
@@ -361,9 +362,6 @@ comment on issue 109, in the same order.
 | D385 | A queued write batch applies the previewed plans. The per-file preflight still runs. |
 | D386 | Close during a running or waiting batch offers Keep Working, or Cancel and Exit. This replaces D241. |
 | D387 | While any batch runs or waits, transcode, journal restore, data deletion, review edits, and Bulk Approve stay disabled. Browsing, playback, filtering, playlist export, and queue controls stay available. |
-| D388 | One draft PR carried the full batch queue scope. |
-| D389 | The batch queue branch was `feat/add-batch-queue`. |
-
 ## Open questions
 
 | Source | Question |
