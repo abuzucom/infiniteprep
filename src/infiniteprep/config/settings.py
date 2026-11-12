@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import json
 import logging
+import os
 import socket
+import tempfile
+import threading
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final
@@ -15,6 +19,17 @@ from infiniteprep import storage_paths
 from infiniteprep.domain.enums import KeyDisplayNotation
 
 logger = logging.getLogger(__name__)
+DEFAULT_WAVEFORM_ZOOM_SECONDS: Final[int] = 8
+SUPPORTED_WAVEFORM_ZOOM_SECONDS: Final[tuple[int, ...]] = (
+    2,
+    4,
+    DEFAULT_WAVEFORM_ZOOM_SECONDS,
+    16,
+    32,
+)
+NONNEGATIVE_COUNT_SETTINGS: Final[frozenset[str]] = frozenset(
+    {"file_table_column_count", "detail_table_column_count"}
+)
 
 ALLOWED_LOCAL_HOSTS: Final[frozenset[str]] = frozenset({"127.0.0.1", "localhost", "::1"})
 BLOCKED_METADATA_HOSTS: Final[frozenset[str]] = frozenset(
@@ -145,6 +160,27 @@ class AppSettings:
     file_table_column_count: int = 0  # Column count when the layout was saved.
     detail_table_layout: str = ""  # Base64-encoded QHeaderView state.
     detail_table_column_count: int = 0  # Column count when the layout was saved.
+    waveform_zoom_seconds: int = DEFAULT_WAVEFORM_ZOOM_SECONDS
+
+
+def _find_setting_value_problem(name: str, value: object, default: object) -> str | None:
+    """Return why a value is invalid for a setting, or None for a valid value."""
+    if type(value) is not type(default):
+        return "an invalid type"
+    if name == "waveform_zoom_seconds" and value not in SUPPORTED_WAVEFORM_ZOOM_SECONDS:
+        return "an unsupported waveform zoom duration"
+    if name in NONNEGATIVE_COUNT_SETTINGS and value < 0:
+        return "a negative count"
+    return None
+
+
+def _validated_setting_value(name: str, value: object, default: object) -> object:
+    """Use a field default when a persisted value has an invalid type or range."""
+    problem = _find_setting_value_problem(name, value, default)
+    if problem is None:
+        return value
+    logger.warning("Ignoring setting %s with %s.", name, problem)
+    return default
 
 
 class SettingsManager:
@@ -155,9 +191,15 @@ class SettingsManager:
         if settings_path is None:
             settings_path = storage_paths.current().config_dir / "settings.json"
         self.settings_path = settings_path
+        self._lock = threading.RLock()
 
     def load(self) -> AppSettings:
         """Load AppSettings from disk or return defaults if not present."""
+        with self._lock:
+            return self._load_unlocked()
+
+    def _load_unlocked(self) -> AppSettings:
+        """Load settings while the manager lock is held."""
         if not self.settings_path.exists():
             return AppSettings()
         try:
@@ -165,12 +207,64 @@ class SettingsManager:
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
             logger.warning("Failed to parse settings file %s: %s", self.settings_path, exc)
             return AppSettings()
+        if not isinstance(raw, dict):
+            logger.warning(
+                "Settings file %s must contain a JSON object; using defaults.",
+                self.settings_path,
+            )
+            return AppSettings()
         defaults = asdict(AppSettings())
-        merged = {k: raw.get(k, v) for k, v in defaults.items()}
+        merged: dict[str, object] = {}
+        for name, default in defaults.items():
+            merged[name] = _validated_setting_value(name, raw.get(name, default), default)
         return AppSettings(**merged)
 
     def save(self, settings: AppSettings) -> None:
         """Persist AppSettings to disk as formatted JSON."""
-        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+        with self._lock:
+            self._write_unlocked(settings)
+
+    def _write_unlocked(self, settings: AppSettings) -> None:
+        """Replace the settings file atomically while the manager lock is held.
+
+        A reader in another manager instance or process sees the old file or the
+        new file, never a partial write. A failed write keeps the old file.
+        """
+        directory = self.settings_path.parent
+        directory.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(asdict(settings), indent=2, ensure_ascii=True)
-        self.settings_path.write_text(payload, encoding="utf-8")
+        descriptor, temporary_name = tempfile.mkstemp(
+            dir=directory, prefix=f"{self.settings_path.name}.", suffix=".tmp", text=True
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(payload)
+            os.replace(temporary_path, self.settings_path)
+        except BaseException:
+            # Every failure, including an interrupt, removes the temporary file.
+            # A failed removal must not replace the original error.
+            with contextlib.suppress(OSError):
+                temporary_path.unlink(missing_ok=True)
+            raise
+
+    def update(self, **changes: object) -> AppSettings:
+        """Merge selected fields into the latest settings and persist them.
+
+        An unknown name or an invalid value raises ValueError and writes nothing.
+        The default fallback applies only to values read from disk. The write
+        stores the sanitized settings, so a stored value that failed validation
+        on load becomes its default on disk, as with load followed by save.
+        """
+        with self._lock:
+            settings = self._load_unlocked()
+            defaults = asdict(AppSettings())
+            for name, value in changes.items():
+                if name not in defaults:
+                    raise ValueError(f"Unknown setting: {name}")
+                problem = _find_setting_value_problem(name, value, defaults[name])
+                if problem is not None:
+                    raise ValueError(f"Setting {name} has {problem}. Supply a supported value.")
+                setattr(settings, name, value)
+            self._write_unlocked(settings)
+            return settings
