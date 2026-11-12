@@ -29,6 +29,7 @@ BASH_HOOK = REPO_ROOT / "hooks" / "block_destructive_bash.py"
 POWERSHELL_HOOK = REPO_ROOT / "hooks" / "block_destructive_powershell.py"
 CMD_HOOK = REPO_ROOT / "hooks" / "block_destructive_cmd.py"
 CORE_PATH = REPO_ROOT / "hooks" / "_gate_core.py"
+NON_STRING_COMMANDS = (None, 5, ["rm"], {"a": 1})
 _HOOK_WORKERS = {}
 
 
@@ -130,7 +131,7 @@ class MalformedParityTest(unittest.TestCase):
     """All gates must fail closed on the same malformed inputs."""
 
     def test_non_string_commands_agree(self):
-        for value in (None, 5, ["rm"], {"a": 1}):
+        for value in NON_STRING_COMMANDS:
             with self.subTest(value=value):
                 self.assertEqual(bash(value), powershell(value))
                 self.assertEqual(bash(value), cmd(value))

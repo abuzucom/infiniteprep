@@ -16,6 +16,9 @@ from tests.test_enforce_branch_name import HOOK_PATH, REPO_ROOT
 DETACHED_HEAD = "HEAD"
 BLOCKING_EXIT_CODE = 2
 HOOK_TIMEOUT_SECONDS = 30
+# Each fixture owns a repository root, a home directory, and a temporary directory.
+ISOLATED_DIRECTORY_COUNT = 3
+ZERO_OBJECT_ID = "0" * 40
 COPIED_SCRIPTS = (
     "run_tests.py", "read_git_state.py", "sync.py", "trusted_gh.py",
     "check_action_pins.py", "check_gate_adoption.py",
@@ -26,7 +29,7 @@ class BranchFixture:
     """Build one repository fixture and send payloads to the installed hook."""
 
     def __init__(self, test_case, branch: str):
-        directories = [tempfile.TemporaryDirectory() for _ in range(3)]
+        directories = [tempfile.TemporaryDirectory() for _ in range(ISOLATED_DIRECTORY_COUNT)]
         for directory in directories:
             test_case.addCleanup(directory.cleanup)
         self.root, self.home, self.temp = (
@@ -60,14 +63,14 @@ class BranchFixture:
 
     def set_branch(self, branch: str) -> None:
         """Point HEAD at a named branch or detach it."""
-        head = "0" * 40 if branch == DETACHED_HEAD else "ref: refs/heads/" + branch
+        head = ZERO_OBJECT_ID if branch == DETACHED_HEAD else "ref: refs/heads/" + branch
         (self.admin / "HEAD").write_text(head + "\n", encoding="utf-8")
 
     def add_local_branch(self, branch: str) -> None:
         """Create one loose local branch reference."""
         reference = self.admin / "refs" / "heads" / Path(*branch.split("/"))
         reference.parent.mkdir(parents=True, exist_ok=True)
-        reference.write_text("0" * 40 + "\n", encoding="utf-8")
+        reference.write_text(ZERO_OBJECT_ID + "\n", encoding="utf-8")
 
     def write_override(self, content: bytes) -> None:
         """Write hooks/primary-branch.txt with exact bytes."""

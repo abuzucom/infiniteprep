@@ -18,6 +18,9 @@ from tests.test_command_execution_gate import GATE_NAME, _load_gate_module
 from tests.test_enforce_branch_name import HOOK_PATH
 
 TIMEOUT_SECONDS = 15
+BLOCKING_EXIT_CODE = 2
+PERMISSION_DENIED_ERRNO = 13
+OVERSIZED_NUMBER_DIGIT_COUNT = 5000
 MANIFEST_LIMIT_BYTES = 1024 * 1024
 DISPLAY_LIMIT = 160
 NESTING_LIMIT = 32
@@ -212,7 +215,7 @@ class NpmManifestTest(NpmFixture):
         self.assert_deny("npm test", "unterminated string")
 
     def test_oversized_number_returns_a_decision(self) -> None:
-        self.write_manifest(text='{"scripts": {"test": "x"}, "n": ' + "9" * 5000 + "}")
+        self.write_manifest(text='{"scripts": {"test": "x"}, "n": ' + "9" * OVERSIZED_NUMBER_DIGIT_COUNT + "}")
         decision, reason = self.decide("npm test")
         self.assertIn(decision, ("ask", "deny"))
         if decision == "deny":
@@ -233,7 +236,8 @@ class NpmManifestTest(NpmFixture):
 
     def test_manifest_open_failure_names_its_cause(self) -> None:
         self.write_manifest(DEFAULT_SCRIPTS)
-        with patch.object(self.gate.os, "open", side_effect=PermissionError(13, "Permission denied")):
+        error = PermissionError(PERMISSION_DENIED_ERRNO, "Permission denied")
+        with patch.object(self.gate.os, "open", side_effect=error):
             self.assert_deny("npm test", "PermissionError", "Permission denied", "retry")
 
     @unittest.skipUnless(hasattr(os, "mkfifo"), "FIFOs need POSIX")
@@ -384,19 +388,19 @@ class NpmHookTest(unittest.TestCase):
             with self.subTest(head=head):
                 self.set_head(head)
                 result = self.run_candidate("npm test")
-                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertIn("npm is not an inspection command", result.stderr)
                 self.assertNotIn('"ask"', result.stdout)
 
     def test_codex_denies_consent_routes(self) -> None:
         result = self.run_candidate("npm test", client="codex")
-        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
         self.assertIn("execution consent", result.stderr)
 
     def test_missing_script_names_its_cause(self) -> None:
         (self.root / "package.json").write_text(json.dumps({"scripts": {}}), encoding="utf-8")
         result = self.run_candidate("npm test")
-        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
         self.assertIn(f"blocked by {GATE_NAME}:", result.stderr)
         self.assertIn("defines no `test` script", result.stderr)
         self.assertNotIn("Opaque command execution", result.stderr)

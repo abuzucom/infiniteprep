@@ -12,6 +12,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 CHECKER_PATH = ROOT / "scripts" / "check_agent_prose_gate.py"
 SYNC_CHECK_PATH = ROOT / ".github" / "workflows" / "sync-check.yml"
+COMMIT_SHA_HEX_LENGTH = 40
 
 
 def load_checker():
@@ -26,7 +27,7 @@ def load_checker():
 
 def commit(body: str) -> dict:
     """Return the bounded commit shape consumed by attribution detection."""
-    return {"sha": "a" * 40, "body": body}
+    return {"sha": "a" * COMMIT_SHA_HEX_LENGTH, "body": body}
 
 
 def write_event(

@@ -17,6 +17,7 @@ VERSION_PATTERN = re.compile(r"^## \[(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?\]
 HEADING_PATTERN = re.compile(r"^## \[.+\](?: .*)?$")
 UNRELEASED_PATTERN = re.compile(r"^## \[Unreleased\]$")
 REVISION_PATTERN = re.compile(r"^(?:[0-9A-Fa-f]{7,40}|[A-Za-z0-9_./~^\-]+)$")
+RELEASE_DATE_GROUP = 5
 
 
 class ReleaseHeading(NamedTuple):
@@ -46,13 +47,13 @@ def valid_revision(value: str) -> bool:
 
 def _version_key(match: re.Match[str]) -> tuple:
     """Return the numeric ordering key for a version heading."""
-    prerelease = match.group(4)
+    *release_numbers, prerelease, _release_date = match.groups()
     if prerelease is None:
-        return (*[int(match.group(index)) for index in range(1, 4)], 1, ())
+        return (*[int(number) for number in release_numbers], 1, ())
     tokens = tuple(
         (0, int(token)) if token.isdigit() else (1, token)
         for token in prerelease.split("."))
-    return (*[int(match.group(index)) for index in range(1, 4)], 0, tokens)
+    return (*[int(number) for number in release_numbers], 0, tokens)
 
 
 def _parse_release_date(raw_date: str) -> date | None:
@@ -78,9 +79,10 @@ def _collect_headings(lines: list[str]) -> tuple[list[str], list[ReleaseHeading]
             if HEADING_PATTERN.fullmatch(line):
                 findings.append(f"line {line_number}: invalid version heading")
             continue
-        release_date = _parse_release_date(match.group(5))
+        release_date_text = match.group(RELEASE_DATE_GROUP)
+        release_date = _parse_release_date(release_date_text)
         if release_date is None:
-            findings.append(f"line {line_number}: invalid release date {match.group(5)}; "
+            findings.append(f"line {line_number}: invalid release date {release_date_text}; "
                             "use a real UTC calendar date as YYYY-MM-DD")
         release_headings.append(ReleaseHeading(line_number, _version_key(match), release_date))
     return findings, release_headings

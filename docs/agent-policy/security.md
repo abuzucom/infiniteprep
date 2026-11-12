@@ -37,11 +37,9 @@ practices.
 Report vulnerabilities through the process in `SECURITY.md.example`. Do not
 use public issues or pull requests for private vulnerability details.
 
-Avoid nested quantifiers such as `(x+)+` and overlapping patterns. Use atomic
-groups, possessive quantifiers, or simpler expressions.
+Avoid nested quantifiers such as `(x+)+` and overlapping patterns.
 
-Git transport over SSH is allowed through Git commands. Direct SSH client
-execution remains denied. Shell gates deny protected commands and paths. The
+Shell gates deny protected commands and paths. The
 Claude file-tool gate denies protected file operations and broad searches.
 Other clients may lack equivalent file-tool coverage. External controls remain
 necessary for tamper resistance.

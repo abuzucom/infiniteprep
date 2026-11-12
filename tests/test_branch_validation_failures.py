@@ -11,6 +11,8 @@ from unittest.mock import patch
 from tests.test_enforce_branch_name import REPO_ROOT, hook
 
 core = hook.core
+BLOCKING_EXIT_CODE = 2
+PROCESS_EXIT_TIMEOUT_SECONDS = 5
 
 
 class BranchFailureTest(unittest.TestCase):
@@ -25,9 +27,10 @@ class BranchFailureTest(unittest.TestCase):
         for value in ([], {}, None):
             with self.subTest(value=value):
                 payload = {"tool_name": value, "tool_input": {}}
-                self.assertEqual(hook._handle_pre_tool_use(payload, str(REPO_ROOT), "claude"), 2)
+                self.assertEqual(
+                    hook._handle_pre_tool_use(payload, str(REPO_ROOT), "claude"), BLOCKING_EXIT_CODE)
                 self.assertEqual(hook._handle_invalid_branch(
-                    payload, str(REPO_ROOT), "claude", "invalid", "claude/x"), 2)
+                    payload, str(REPO_ROOT), "claude", "invalid", "claude/x"), BLOCKING_EXIT_CODE)
 
     def test_invalid_recovery_and_wrapper_paths(self):
         for command in ("git branch -m 'unfinished", "git branch -m fix/x\n", "git branch -m main"):
@@ -81,7 +84,7 @@ class BranchFailureTest(unittest.TestCase):
 
     def test_config_reader_reports_a_closed_descriptor(self):
         with subprocess.Popen([sys.executable, "-c", "print('config')"], stdout=subprocess.PIPE) as process:
-            process.wait(timeout=5)
+            process.wait(timeout=PROCESS_EXIT_TIMEOUT_SECONDS)
             os.close(process.stdout.fileno())
             result = []
             core._collect_config_output(process, result)

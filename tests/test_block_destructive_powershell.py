@@ -21,6 +21,11 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HOOK_PATH = REPO_ROOT / "hooks" / "block_destructive_powershell.py"
 BLOCKING_EXIT_CODE = 2
+NUMERIC_COMMAND_VALUE = 5
+# The second byte opens a UTF-16 surrogate pair that the payload never completes.
+UNPAIRED_SURROGATE_BYTES = bytes((0, 216))
+# The nesting exceeds the depth that the hook decodes.
+EXCESSIVE_ENCODING_DEPTH = 6
 _HOOK_WORKER = None
 
 
@@ -145,7 +150,7 @@ class EncodedCommandTest(unittest.TestCase):
                 self.assertEqual(decision, "deny")
 
     def test_malformed_encoded_payloads_deny(self):
-        invalid_utf16 = base64.b64encode(bytes((0, 216))).decode("ascii")
+        invalid_utf16 = base64.b64encode(UNPAIRED_SURROGATE_BYTES).decode("ascii")
         malformed = (
             "pwsh -enc",
             "pwsh -enc !!!",
@@ -160,7 +165,7 @@ class EncodedCommandTest(unittest.TestCase):
 
     def test_encoded_recursion_exhaustion_denies(self):
         command = "Get-ChildItem"
-        for _ in range(6):
+        for _ in range(EXCESSIVE_ENCODING_DEPTH):
             command = f"pwsh -enc {encoded(command)}"
         code, decision = run_hook(command)
         self.assertEqual(code, BLOCKING_EXIT_CODE)
@@ -595,7 +600,7 @@ class FailClosedTest(unittest.TestCase):
                 self.assertEqual(decision, "deny")
 
     def test_non_string_command_denies(self):
-        for value in (None, 5, ["Remove-Item"], {"a": 1}):
+        for value in (None, NUMERIC_COMMAND_VALUE, ["Remove-Item"], {"a": 1}):
             with self.subTest(value=value):
                 code, decision = run_hook(value)
                 self.assertEqual(code, BLOCKING_EXIT_CODE)

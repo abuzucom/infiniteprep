@@ -12,6 +12,10 @@ GROUPING = frozenset({"(", ")", "{", "}", "`", "\n"})
 # into its own tokens instead of arriving glued to the words beside it.
 PUNCTUATION_CHARS = "();<>|&`"
 MAX_COMMAND_CHARACTERS = 65536
+# A redirection operator and its target occupy two tokens.
+REDIRECTION_WITH_TARGET_TOKEN_COUNT = 2
+# An option and its separate value occupy two tokens.
+OPTION_WITH_VALUE_TOKEN_COUNT = 2
 REDIRECTION_CHARS = frozenset("<>&0123456789")
 PROCESS_SUBSTITUTION_CHARS = frozenset("<>")
 WRAPPERS = frozenset({
@@ -54,7 +58,7 @@ def redirect_targets(tokens: list) -> list:
         if is_redirection(token) and index + 1 < len(tokens):
             targets.append(tokens[index + 1])
         elif ">" in token and not is_redirection(token):
-            tail = token.partition(">")[2]
+            tail = token.partition(">")[-1]
             if tail:
                 targets.append(tail)
     return targets
@@ -96,7 +100,7 @@ def strip_prefixes(tokens: list) -> tuple:
     while index < len(tokens):
         token = tokens[index]
         if is_redirection(token):
-            index += 2
+            index += REDIRECTION_WITH_TARGET_TOKEN_COUNT
             continue
         if is_env_assignment(token):
             assignments.append(token.split("=", 1))
@@ -120,7 +124,7 @@ def strip_prefixes(tokens: list) -> tuple:
         if wrapper and token.startswith("-"):
             takes_value = ("=" not in token
                            and token in WRAPPER_VALUE_OPTIONS.get(wrapper, frozenset()))
-            index += 2 if takes_value else 1
+            index += OPTION_WITH_VALUE_TOKEN_COUNT if takes_value else 1
             continue
         break
     if index >= len(tokens) and wrapper_index >= 0:

@@ -52,6 +52,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+POLICY_DENIAL_EXIT_CODE = 2
+
 try:
     import _gate_core as core
     import _bash_parser as bash_parser
@@ -69,7 +71,7 @@ except ImportError as error:  # pragma: no cover
         "permissionDecisionReason": _REASON,
     }}))
     print(_REASON, file=sys.stderr)
-    sys.exit(2)
+    sys.exit(POLICY_DENIAL_EXIT_CODE)
 
 _CWD = [""]
 GATE = "block_destructive_bash.py"

@@ -11,6 +11,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import check_gate_pr_integrity as integrity
 
+SHA_HEX_LENGTH = 40
+
 
 class ProtectedPathTest(unittest.TestCase):
     """Protected paths require out-of-band human approval."""
@@ -33,8 +35,8 @@ class ProtectedPathTest(unittest.TestCase):
             with patch.object(integrity, "_fetch_head") as fetch_head:
                 with patch.object(integrity, "_changed_paths", return_value=[]):
                     result = integrity.main([
-                        "--base", "a" * 40,
-                        "--head", "b" * 40,
+                        "--base", "a" * SHA_HEX_LENGTH,
+                        "--head", "b" * SHA_HEX_LENGTH,
                         "--pr-number", "1",
                         "--labels-json", "[]",
                     ])

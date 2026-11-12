@@ -16,6 +16,7 @@ import _gate_core
 
 OWNER = "abuzucom"
 EXTERNAL = "evanpurkhiser/prolink-go"
+REPO_CLONE_ARGS = ["repo", "clone"]
 
 
 def repo_with_remote(directory: str, url: str) -> str:
@@ -267,7 +268,8 @@ class CrossOwnerVerdictTest(unittest.TestCase):
                 ["repo", "clone", EXTERNAL],
         ):
             with self.subTest(args=args):
-                expected = "deny" if args[:2] == ["repo", "clone"] else ""
+                is_clone = args[:len(REPO_CLONE_ARGS)] == REPO_CLONE_ARGS
+                expected = "deny" if is_clone else ""
                 self.assertEqual(self.verdict(args), expected)
 
     def test_existing_deny_paths_keep_priority(self):

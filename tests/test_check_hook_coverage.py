@@ -24,13 +24,21 @@ import check_hook_coverage as gate
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BASELINE = REPO_ROOT / "hook-coverage-baseline.json"
+UNREACHED_COUNT = 2
+HIGHER_UNREACHED_COUNT = 3
+STATEMENT_LINES_AFTER_DOCSTRING = [3]
+STATEMENT_LINES_AFTER_MODULE_CODE = [5]
+FUNCTION_BODY_STATEMENT_LINES = [2, 3]
+DISAGREEMENT_COUNT = 2
+FIRST_TRACED_LINE = 7
+SECOND_TRACED_LINE = 11
 
 
 class CompareTest(unittest.TestCase):
     """Both directions of disagreement have to fail."""
 
     def test_a_matching_run_reports_nothing(self):
-        counts = {"a.py::f": 2, "b.py::g": 1}
+        counts = {"a.py::f": UNREACHED_COUNT, "b.py::g": 1}
         self.assertEqual(gate.compare(counts, dict(counts)), [])
 
     def test_an_unrecorded_function_fails(self):
@@ -40,24 +48,24 @@ class CompareTest(unittest.TestCase):
         self.assertIn("a.py::f", problems[0])
 
     def test_more_unreached_than_recorded_fails(self):
-        problems = gate.compare({"a.py::f": 3}, {"a.py::f": 1})
+        problems = gate.compare({"a.py::f": HIGHER_UNREACHED_COUNT}, {"a.py::f": 1})
         self.assertEqual(len(problems), 1)
         self.assertIn("New code no test reaches", problems[0])
 
     def test_fewer_unreached_than_recorded_fails_as_stale(self):
         """A baseline nobody updates stops meaning anything."""
-        problems = gate.compare({"a.py::f": 1}, {"a.py::f": 3})
+        problems = gate.compare({"a.py::f": 1}, {"a.py::f": HIGHER_UNREACHED_COUNT})
         self.assertEqual(len(problems), 1)
         self.assertIn("stale", problems[0])
 
     def test_a_function_that_became_covered_fails_as_stale(self):
-        problems = gate.compare({}, {"a.py::f": 2})
+        problems = gate.compare({}, {"a.py::f": UNREACHED_COUNT})
         self.assertEqual(len(problems), 1)
         self.assertIn("stale", problems[0])
 
     def test_every_disagreement_is_reported_not_just_the_first(self):
-        problems = gate.compare({"a.py::f": 2}, {"b.py::g": 1})
-        self.assertEqual(len(problems), 2)
+        problems = gate.compare({"a.py::f": UNREACHED_COUNT}, {"b.py::g": 1})
+        self.assertEqual(len(problems), DISAGREEMENT_COUNT)
 
 
 class StatementAccountingTest(unittest.TestCase):
@@ -75,23 +83,23 @@ class StatementAccountingTest(unittest.TestCase):
     def test_a_docstring_is_not_a_statement(self):
         path = self.write('def f():\n    """Doc."""\n    return 1\n')
         owned = gate.function_statements(path)
-        self.assertEqual(sorted(owned), [3])
+        self.assertEqual(sorted(owned), STATEMENT_LINES_AFTER_DOCSTRING)
 
     def test_module_level_code_is_not_counted(self):
         path = self.write("CONSTANT = 1\n\n\ndef f():\n    return CONSTANT\n")
         owned = gate.function_statements(path)
-        self.assertEqual(sorted(owned), [5])
+        self.assertEqual(sorted(owned), STATEMENT_LINES_AFTER_MODULE_CODE)
 
     def test_nested_statements_belong_to_their_function(self):
         path = self.write("def f():\n    for x in (1,):\n        print(x)\n")
         owned = gate.function_statements(path)
         self.assertEqual(set(owned.values()), {"f"})
-        self.assertEqual(sorted(owned), [2, 3])
+        self.assertEqual(sorted(owned), FUNCTION_BODY_STATEMENT_LINES)
 
     def test_a_string_that_is_not_first_is_a_statement(self):
         path = self.write('def f():\n    x = 1\n    "not a docstring"\n')
         owned = gate.function_statements(path)
-        self.assertEqual(sorted(owned), [2, 3])
+        self.assertEqual(sorted(owned), FUNCTION_BODY_STATEMENT_LINES)
 
 
 class TracedLineFileTest(unittest.TestCase):
@@ -102,10 +110,12 @@ class TracedLineFileTest(unittest.TestCase):
             path = str(REPO_ROOT / "hooks" / "example.py")
             trace_file = Path(out_dir) / "trace.json"
             trace_file.write_text(
-                json.dumps([[path, 7], [path, 11]]), encoding="utf-8")
+                json.dumps([[path, FIRST_TRACED_LINE], [path, SECOND_TRACED_LINE]]),
+                encoding="utf-8")
 
             self.assertEqual(
-                gate.traced_lines(out_dir), {(path, 7), (path, 11)})
+                gate.traced_lines(out_dir),
+                {(path, FIRST_TRACED_LINE), (path, SECOND_TRACED_LINE)})
 
 
 class TracerScopeTest(unittest.TestCase):

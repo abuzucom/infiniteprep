@@ -4,6 +4,7 @@ The branch hook imports this module for every shell command it inspects.
 Denials and consent prompts from this module name this file, so a blocked
 program points at the command allowlist rather than at branch naming.
 """
+import functools
 import json
 import os
 import re
@@ -21,24 +22,36 @@ INSPECTABLE_PROGRAMS = frozenset({
     "touch", "tee", "cp", "mv", "set-content", "add-content", "out-file",
     "copy-item", "move-item", "copy", "move", "type", "true", "false",
 })
-WORKFLOW_SCRIPT_ARGUMENTS = {
-    "scripts/run_tests.py": ((),),
-    "scripts/read_git_state.py": tuple((mode,) for mode in ("branch", "status", "remote", "revision", "all")),
-    "scripts/sync.py": ((), ("--check",), ("--check-shared",), ("--write-shared",), ("--print-adoptable",)),
-    "scripts/check_action_pins.py": ((),),
-    "scripts/check_gate_adoption.py": ((),),
-}
-READ_ONLY_WORKFLOW_ARGUMENTS = {
-    "scripts/run_tests.py": ((),),
-    "scripts/read_git_state.py": WORKFLOW_SCRIPT_ARGUMENTS["scripts/read_git_state.py"],
-    "scripts/sync.py": (("--check",), ("--check-shared",), ("--print-adoptable",)),
-    "scripts/check_action_pins.py": ((),),
-    "scripts/check_gate_adoption.py": ((),),
-}
+# The script list sits beside this module, so every adopted copy carries it.
+WORKFLOW_SCRIPT_LIST = "workflow-scripts.txt"
+WORKFLOW_SCRIPT_LIST_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), WORKFLOW_SCRIPT_LIST)
+# The shipped list holds under 3 KiB. The cap bounds the read of a repository-controlled file
+# and leaves room for adopter entries.
+MAX_WORKFLOW_SCRIPT_LIST_BYTES = 64 * 1024
+ALLOW = "allow"
+ASK = "ask"
+DENY = "deny"
+ALLOW_VERDICT = "allow"
+CONSENT_READ_VERDICT = "consent-read"
+CONSENT_WRITE_VERDICT = "consent-write"
+SCRIPT_VERDICTS = frozenset({ALLOW_VERDICT, CONSENT_READ_VERDICT, CONSENT_WRITE_VERDICT})
+INSPECTING_SCRIPT_VERDICTS = frozenset({ALLOW_VERDICT, CONSENT_READ_VERDICT})
+REVISION_PLACEHOLDER = "<revision>"
+PATH_PLACEHOLDER = "<path>"
+PATHS_PLACEHOLDER = "<paths>"
+SCRIPT_PLACEHOLDERS = frozenset({REVISION_PLACEHOLDER, PATH_PLACEHOLDER, PATHS_PLACEHOLDER})
+LISTED_SCRIPT_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._/-]{0,199}\.py")
+# A leading letter or digit keeps a revision from reading as an option.
+REVISION_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/~-]{0,199}")
+# `*` lets the shell expand a glob. Expansion of a relative pattern stays below the working directory.
+WORKFLOW_PATH_PATTERN = re.compile(r"[A-Za-z0-9._@+/*-]{1,512}")
+PARENT_DIRECTORY = ".."
 SEARCH_FLAGS = frozenset({
     "-n", "--line-number", "-l", "--files-with-matches", "-i", "--ignore-case",
     "-F", "--fixed-strings", "--files", "--hidden", "-g", "--glob", "-e", "--regexp", "--",
 })
+# The cap bounds token matching for one command part. Listed script shapes hold at most six
+# tokens. The room above that serves path lists.
 MAX_WORKFLOW_ARGUMENTS = 64
 MAKE_TARGETS = ("lint", "test", "check", "sync", "identity")
 MAKE_ARGUMENTS = ([], ["PYTHON=python"], ["PYTHON=python3"])
@@ -52,7 +65,36 @@ TRUSTED_GIT_SCRIPT = "scripts/trusted_git.py"
 # trusted_git.py validates the full argument shape itself and exits 2 otherwise.
 TRUSTED_GIT_MINIMUM_ARGUMENTS = {"clone": 3, "fetch": 2}
 SHELL_OPERATORS = (";", "&", "&&", "|", "||", "(", ")")
+OPERATOR_CHARACTERS = frozenset(bash_parser.PUNCTUATION_CHARS)
+CHAIN_OPERATOR = "&&"
+# Eight parts cover a lint, format, and test chain with room to spare. The cap bounds the
+# verdict work for one command.
+MAX_CHAIN_PARTS = 8
+# shlex ends a word at `#` and Bash does not. A command holding `#` could run text the tokens omit.
+COMMENT_CHARACTER = "#"
 WORKFLOW_FORBIDDEN_CHARACTERS = "<>%!^\0"
+RUFF_PROGRAM = "ruff"
+RUFF_MODULE_LAUNCHER = "python -m ruff"
+RUFF_FLAGS = {
+    "check": frozenset({"--fix", "--no-fix", "--diff", "--statistics", "--show-fixes", "--no-cache",
+                        "--quiet", "-q"}),
+    "format": frozenset({"--check", "--diff", "--no-cache", "--quiet", "-q"}),
+}
+# `python -m` imports from the working directory first, so either name replaces Ruff.
+RUFF_SHADOW_NAMES = ("ruff.py", "ruff")
+UNITTEST_VERBOSITY_OPTIONS = ("-v", "-q")
+UNITTEST_DIRECTORY_OPTIONS = frozenset({"-s", "--start-directory", "-t", "--top-level-directory"})
+UNITTEST_PATTERN_OPTIONS = frozenset({"-p", "--pattern"})
+UNITTEST_PATTERN = re.compile(r"[A-Za-z0-9._*][A-Za-z0-9._*-]{0,127}")
+OPAQUE_REASON = "Opaque command execution requires an inspectable operation"
+CHAIN_HINT = "Run one accepted form per command, or join accepted forms with &&."
+RUFF_HINT = ("Accepted Ruff forms: ruff check [--fix|--no-fix|--diff|--statistics|--show-fixes|--no-cache|-q] "
+             "[paths], ruff format [--check|--diff|--no-cache|-q] [paths], and the same after python -m ruff. "
+             "Paths stay repository-relative. " + CHAIN_HINT)
+UNITTEST_HINT = ("Accepted unittest forms: python -m unittest [-v|-q] tests.<module>, and "
+                 "python -m unittest discover [-v|-q] [-s <directory>] [-t <directory>] [-p <pattern>]. "
+                 + CHAIN_HINT)
+SCRIPT_HINT = (f"hooks/{WORKFLOW_SCRIPT_LIST} lists the accepted repository script forms. " + CHAIN_HINT)
 # Prefix wrappers that only adjust the environment or skip shell lookup.
 TRANSPARENT_WRAPPERS = ("env", "command", "exec")
 WORKFLOW_CONSENT = "Repository workflow requires execution consent"
@@ -67,6 +109,16 @@ MAX_PACKAGE_MANIFEST_BYTES = 1024 * 1024
 # Real manifests nest under 10 levels. The bound keeps json.loads recursion shallow.
 MAX_PACKAGE_MANIFEST_DEPTH = 32
 MAX_TEST_PATH_COMPONENTS = 32
+# `-m <module>` takes two arguments after the interpreter token.
+MODULE_LAUNCH_ARGUMENTS = 2
+MODULE_LAUNCH_END = 1 + MODULE_LAUNCH_ARGUMENTS
+# A script list line holds a verdict and a script before its argument pattern.
+SCRIPT_LINE_REQUIRED_FIELDS = 2
+# Arguments start after the program token and its subcommand or target.
+SUBCOMMAND_ARGUMENTS_INDEX = 2
+NPM_TEST_TOKEN_COUNT = 2
+NPM_TEST_FILES_INDEX = 3
+NPM_RUN_TOKEN_COUNT = 3
 # npm joins test arguments into a shell string, so only inert characters pass.
 TEST_PATH_PATTERN = re.compile(r"[A-Za-z0-9._@+/-]+")
 # One alternation per match keeps the scan linear. A lone quote marks an
@@ -95,7 +147,23 @@ def segment_program_reason(segment: list) -> str:
     if any(token.startswith("-") for token in segment[:prefix_count]):
         return "Command wrapper changes unresolved execution settings"
     if program != "git" and program not in INSPECTABLE_PROGRAMS:
-        return "Opaque command execution requires an inspectable operation"
+        hint = _accepted_forms_hint(program, executable[1:])
+        return f"{OPAQUE_REASON}. {hint}" if hint else OPAQUE_REASON
+    return ""
+
+
+def _accepted_forms_hint(program: str, arguments: list) -> str:
+    """Return the accepted forms for a known tool, or "" for another program."""
+    if program == RUFF_PROGRAM:
+        return RUFF_HINT
+    if not _python_program(program):
+        return ""
+    if arguments[:MODULE_LAUNCH_ARGUMENTS] == ["-m", RUFF_PROGRAM]:
+        return RUFF_HINT
+    if arguments[:MODULE_LAUNCH_ARGUMENTS] == ["-m", "unittest"]:
+        return UNITTEST_HINT
+    if any(argument.endswith(".py") for argument in arguments):
+        return SCRIPT_HINT
     return ""
 
 
@@ -131,36 +199,257 @@ def _trusted_git_workflow(arguments: tuple) -> bool:
     return minimum is not None and len(arguments) >= minimum
 
 
-def _python_workflow(tokens: list, project_dir: str) -> bool:
-    """Recognize bounded repository scripts and unittest module invocations."""
-    if tokens[1:3] == ["-m", "unittest"]:
-        modules = [token for token in tokens[3:] if token not in ("-v", "-q")]
-        return bool(modules) and all(
-            token.startswith("tests.") and all(part.isidentifier() for part in token.split("."))
-            for token in modules)
-    script, arguments = _python_script_call(tokens, project_dir)
-    if script == TRUSTED_GH_SCRIPT and arguments[:1] == ("run",):
-        if len(arguments) <= 1:
+def _parse_script_line(fields: list, line_number: int) -> tuple:
+    """Return (script, argument pattern, verdict) for one list line, or raise ValueError."""
+    if len(fields) < SCRIPT_LINE_REQUIRED_FIELDS or fields[0] not in SCRIPT_VERDICTS:
+        raise ValueError(f"line {line_number} needs a verdict and a script")
+    script = fields[1]
+    pattern = tuple(fields[SCRIPT_LINE_REQUIRED_FIELDS:])
+    if not LISTED_SCRIPT_PATTERN.fullmatch(script) or PARENT_DIRECTORY in script.split("/"):
+        raise ValueError(f"line {line_number} names no repository-relative Python script")
+    for position, field in enumerate(pattern, 1):
+        if field.startswith("<") and field not in SCRIPT_PLACEHOLDERS:
+            raise ValueError(f"line {line_number} uses an unknown placeholder")
+        if field == PATHS_PLACEHOLDER and position != len(pattern):
+            raise ValueError(f"line {line_number} puts {PATHS_PLACEHOLDER} before the last position")
+    return script, pattern, fields[0]
+
+
+def _parse_workflow_scripts(text: str) -> tuple:
+    """Return every (script, argument pattern, verdict) entry, or raise ValueError."""
+    entries = []
+    for line_number, line in enumerate(text.splitlines(), 1):
+        fields = line.split()
+        if fields and not fields[0].startswith("#"):
+            entries.append(_parse_script_line(fields, line_number))
+    return tuple(entries)
+
+
+@functools.lru_cache(maxsize=1)
+def _load_workflow_scripts() -> tuple:
+    """Return the parsed script list, or raise ValueError naming the repair."""
+    try:
+        with open(WORKFLOW_SCRIPT_LIST_PATH, "rb") as handle:
+            content = handle.read(MAX_WORKFLOW_SCRIPT_LIST_BYTES + 1)
+        if len(content) > MAX_WORKFLOW_SCRIPT_LIST_BYTES:
+            raise ValueError("the file exceeds 64 KiB")
+        return _parse_workflow_scripts(content.decode("ascii"))
+    except OSError as error:
+        detail = _os_error_text(error)
+    except UnicodeDecodeError:
+        detail = "the file holds non-ASCII bytes"
+    except ValueError as error:
+        detail = str(error)
+    raise ValueError(f"hooks/{WORKFLOW_SCRIPT_LIST} cannot be used ({detail}). "
+                     "Restore the file from the policy source, then retry.")
+
+
+def _literal_script_arguments(verdicts: frozenset) -> dict:
+    """Return {script: argument tuples} for listed shapes without placeholders."""
+    try:
+        entries = _load_workflow_scripts()
+    except ValueError:
+        # An unusable list leaves the tables empty. Every script call then denies with the cause.
+        return {}
+    table = {}
+    for script, pattern, verdict in entries:
+        if verdict in verdicts and not SCRIPT_PLACEHOLDERS.intersection(pattern):
+            table.setdefault(script, []).append(pattern)
+    return {script: tuple(shapes) for script, shapes in table.items()}
+
+
+def _is_workflow_path(argument: str) -> bool:
+    """Return whether an argument is an inert repository-relative path."""
+    return (bool(WORKFLOW_PATH_PATTERN.fullmatch(argument))
+            and not argument.startswith(("-", "/"))
+            and PARENT_DIRECTORY not in argument.split("/"))
+
+
+def _is_revision(argument: str) -> bool:
+    """Return whether an argument names one Git revision and no range."""
+    return bool(REVISION_PATTERN.fullmatch(argument)) and PARENT_DIRECTORY not in argument
+
+
+def _argument_matches(field: str, argument: str) -> bool:
+    """Match one argument against a literal or a single-value placeholder."""
+    if field == REVISION_PLACEHOLDER:
+        return _is_revision(argument)
+    if field == PATH_PLACEHOLDER:
+        return _is_workflow_path(argument)
+    return field == argument
+
+
+def _pattern_matches(pattern: tuple, arguments: tuple) -> bool:
+    """Match script arguments against one listed shape."""
+    open_ended = pattern[-1:] == (PATHS_PLACEHOLDER,)
+    fixed = pattern[:-1] if open_ended else pattern
+    if len(arguments) < len(fixed) or (not open_ended and len(arguments) != len(fixed)):
+        return False
+    return (all(_argument_matches(field, argument) for field, argument in zip(fixed, arguments))
+            and all(_is_workflow_path(argument) for argument in arguments[len(fixed):]))
+
+
+def _script_verdict(script: str, arguments: tuple) -> tuple:
+    """Return (list verdict, "") for a listed shape, ("", "") otherwise, or ("", load error)."""
+    try:
+        entries = _load_workflow_scripts()
+    except ValueError as error:
+        return "", str(error)
+    for listed, pattern, verdict in entries:
+        if listed == script and _pattern_matches(pattern, arguments):
+            return verdict, ""
+    return "", ""
+
+
+def _unittest_modules_accepted(arguments: list) -> bool:
+    """Accept dotted module names below the tests package."""
+    modules = [token for token in arguments if token not in UNITTEST_VERBOSITY_OPTIONS]
+    return bool(modules) and all(
+        token.startswith("tests.") and all(part.isidentifier() for part in token.split("."))
+        for token in modules)
+
+
+def _unittest_discover_accepted(arguments: list, project_dir: str) -> bool:
+    """Accept discovery options whose directories stay inside the repository."""
+    index = 0
+    while index < len(arguments):
+        option = arguments[index]
+        index += 1
+        if option in UNITTEST_VERBOSITY_OPTIONS:
+            continue
+        if index >= len(arguments):
             return False
-        decision, _reason = core.forge_verdict("gh", list(arguments[1:]), project_dir)
-        return decision != "deny"
+        value = arguments[index]
+        index += 1
+        if option in UNITTEST_DIRECTORY_OPTIONS:
+            accepted = (_is_workflow_path(value) and "*" not in value
+                        and core.resolved_under(project_dir, value) is not None)
+        else:
+            accepted = option in UNITTEST_PATTERN_OPTIONS and bool(UNITTEST_PATTERN.fullmatch(value))
+        if not accepted:
+            return False
+    return True
+
+
+def _unittest_accepted(arguments: list, project_dir: str) -> bool:
+    """Recognize unittest module runs and bounded discovery."""
+    if arguments[:1] == ["discover"]:
+        return _unittest_discover_accepted(arguments[1:], project_dir)
+    return _unittest_modules_accepted(arguments)
+
+
+def _ruff_lookup_error(launcher: str, project_dir: str) -> str:
+    """Deny a Ruff launch that repository content can replace."""
+    if launcher == RUFF_PROGRAM:
+        relative = _repository_program_path(RUFF_PROGRAM, project_dir)
+        if not relative:
+            return ""
+        return (f"PATH resolves ruff to `{relative}` inside the repository. "
+                "Remove that directory from PATH, then retry.")
+    shadow = next((name for name in RUFF_SHADOW_NAMES
+                   if os.path.lexists(os.path.join(project_dir, name))), "")
+    if not shadow:
+        return ""
+    return (f"`{shadow}` at the repository root shadows the ruff module under python -m. "
+            "Run the ruff executable instead, then retry.")
+
+
+def _ruff_writes(subcommand: str, flags: list) -> bool:
+    """Return whether one accepted Ruff invocation rewrites files."""
+    if "--diff" in flags:
+        return False
+    if subcommand == "check":
+        return "--fix" in flags
+    return "--check" not in flags
+
+
+def _ruff_verdict(arguments: list, project_dir: str, launcher: str) -> tuple:
+    """Return (decision, reason, read-only) for ruff check and ruff format."""
+    if not arguments or arguments[0] not in RUFF_FLAGS:
+        return "", "", False
+    subcommand = arguments[0]
+    flags = [argument for argument in arguments[1:] if argument.startswith("-")]
+    paths = [argument for argument in arguments[1:] if not argument.startswith("-")]
+    if (any(flag not in RUFF_FLAGS[subcommand] for flag in flags)
+            or not all(_is_workflow_path(path) for path in paths)):
+        return "", "", False
+    error = _ruff_lookup_error(launcher, project_dir)
+    if error:
+        return DENY, error, False
+    if _ruff_writes(subcommand, flags):
+        return ASK, f"{WORKFLOW_CONSENT}. ruff {subcommand} rewrites files in the working tree.", False
+    return ALLOW, "", True
+
+
+def _trusted_wrapper_accepted(script: str, arguments: tuple, project_dir: str) -> bool:
+    """Recognize the trusted GitHub and Git wrapper operations."""
     if script == TRUSTED_GIT_SCRIPT:
         return _trusted_git_workflow(arguments)
-    return arguments in WORKFLOW_SCRIPT_ARGUMENTS.get(script, ())
+    if arguments[:1] != ("run",) or len(arguments) <= 1:
+        return False
+    decision, _reason = core.forge_verdict("gh", list(arguments[1:]), project_dir)
+    return decision != DENY
+
+
+def _python_verdict(tokens: list, project_dir: str) -> tuple:
+    """Return (decision, reason, read-only) for one Python interpreter invocation."""
+    if tokens[1:MODULE_LAUNCH_END] == ["-m", "unittest"]:
+        accepted = _unittest_accepted(tokens[MODULE_LAUNCH_END:], project_dir)
+        return (ALLOW if accepted else ""), "", accepted
+    if tokens[1:MODULE_LAUNCH_END] == ["-m", RUFF_PROGRAM]:
+        return _ruff_verdict(tokens[MODULE_LAUNCH_END:], project_dir, RUFF_MODULE_LAUNCHER)
+    script, arguments = _python_script_call(tokens, project_dir)
+    if not script:
+        return "", "", False
+    if script in (TRUSTED_GH_SCRIPT, TRUSTED_GIT_SCRIPT):
+        accepted = _trusted_wrapper_accepted(script, arguments, project_dir)
+        return (ASK if accepted else ""), "", False
+    verdict, error = _script_verdict(script, arguments)
+    if error:
+        return DENY, error, False
+    if verdict == ALLOW_VERDICT:
+        return ALLOW, "", True
+    return (ASK if verdict else ""), "", verdict in INSPECTING_SCRIPT_VERDICTS
+
+
+def _python_workflow(tokens: list, project_dir: str) -> bool:
+    """Recognize bounded repository scripts, unittest, and Ruff module invocations."""
+    return _python_verdict(tokens, project_dir)[0] in (ALLOW, ASK)
+
+
+def _literal_part(tokens: list) -> bool:
+    """Return whether tokens form one invocation without operators or expansion."""
+    if not 1 < len(tokens) <= MAX_WORKFLOW_ARGUMENTS:
+        return False
+    return not any(
+        core.is_ambiguous(token) or (token and OPERATOR_CHARACTERS.issuperset(token))
+        or any(character in token for character in WORKFLOW_FORBIDDEN_CHARACTERS)
+        for token in tokens)
+
+
+def _command_parts(command: str) -> list:
+    """Return the token list of each && chain part, or [] for any other syntax."""
+    if ("\n" in command or "\r" in command or COMMENT_CHARACTER in command
+            or len(command) > bash_parser.MAX_COMMAND_CHARACTERS):
+        return []
+    tokens, complete = bash_parser._tokenize_line(command)
+    if not complete:
+        return []
+    parts = [[]]
+    for token in tokens:
+        if token == CHAIN_OPERATOR:
+            parts.append([])
+        else:
+            parts[-1].append(token)
+    if len(parts) > MAX_CHAIN_PARTS or not all(_literal_part(part) for part in parts):
+        return []
+    return parts
 
 
 def _literal_tokens(command: str) -> list:
     """Return the tokens of one literal invocation without wrappers or redirection."""
-    if "\n" in command or "\r" in command or len(command) > bash_parser.MAX_COMMAND_CHARACTERS:
-        return []
-    tokens, complete = bash_parser._tokenize_line(command)
-    if not complete or not 1 < len(tokens) <= MAX_WORKFLOW_ARGUMENTS:
-        return []
-    if any(core.is_ambiguous(token) or token in SHELL_OPERATORS
-           or any(character in token for character in WORKFLOW_FORBIDDEN_CHARACTERS)
-           for token in tokens):
-        return []
-    return tokens
+    parts = _command_parts(command)
+    return parts[0] if len(parts) == 1 else []
 
 
 def _os_error_text(error: OSError) -> str:
@@ -372,10 +661,11 @@ def _npm_shape(tokens: list):
     """Return (main script, executed script names, test files) for an accepted form, else None."""
     if tokens == ["npm", "ci"]:
         return "", NPM_CI_LIFECYCLE, None
-    if tokens[1] == "test" and (len(tokens) == 2 or tokens[2] == "--"):
-        return "test", ("pretest", "test", "posttest"), tokens[3:] if len(tokens) > 2 else None
-    if len(tokens) == 3 and tokens[1] == "run" and tokens[2] in NPM_RUN_SCRIPTS:
-        name = tokens[2]
+    bare_test = len(tokens) == NPM_TEST_TOKEN_COUNT
+    if tokens[1] == "test" and (bare_test or tokens[SUBCOMMAND_ARGUMENTS_INDEX] == "--"):
+        return "test", ("pretest", "test", "posttest"), None if bare_test else tokens[NPM_TEST_FILES_INDEX:]
+    if len(tokens) == NPM_RUN_TOKEN_COUNT and tokens[1] == "run" and tokens[-1] in NPM_RUN_SCRIPTS:
+        name = tokens[-1]
         return name, (f"pre{name}", name, f"post{name}"), None
     return None
 
@@ -422,42 +712,91 @@ def _npm_decision(tokens: list, project_dir: str) -> tuple:
     return "ask", f"{WORKFLOW_CONSENT}. {UNTRUSTED_SCRIPTS_LABEL}: {listed}. {UNSHOWN_CODE_NOTE}"
 
 
+def _search_stays_in_repository(arguments: list) -> bool:
+    """Return whether no search operand can name a path outside the repository."""
+    return not any(argument.startswith(("/", "~")) or PARENT_DIRECTORY in argument.split("/")
+                   for argument in arguments)
+
+
+def _search_verdict(tokens: list) -> tuple:
+    """Return (decision, reason, read-only) for one rg search."""
+    if not all(not token.startswith("-") or token in SEARCH_FLAGS for token in tokens[1:]):
+        return "", "", False
+    # A pattern and a path look alike, so any operand that can leave the repository asks.
+    return (ALLOW if _search_stays_in_repository(tokens[1:]) else ASK), "", True
+
+
+def _program_verdict(tokens: list, project_dir: str) -> tuple:
+    """Return (decision, reason, read-only) for one literal invocation by program."""
+    program = tokens[0]
+    if program == "npm":
+        decision, reason = _npm_decision(tokens, project_dir)
+        return decision, reason, False
+    if program == RUFF_PROGRAM:
+        return _ruff_verdict(tokens[1:], project_dir, RUFF_PROGRAM)
+    if _python_program(program):
+        return _python_verdict(tokens, project_dir)
+    if program == "make":
+        matched = tokens[1] in MAKE_TARGETS and tokens[SUBCOMMAND_ARGUMENTS_INDEX:] in MAKE_ARGUMENTS
+        return (ASK if matched else ""), "", False
+    if program == "rg":
+        return _search_verdict(tokens)
+    return "", "", False
+
+
+def _part_verdict(tokens: list, project_dir: str) -> tuple:
+    """Return (decision, reason, read-only) with consent text and PATH disclosure applied."""
+    decision, reason, read_only = _program_verdict(tokens, project_dir)
+    # Repository writers control a program that PATH resolves inside the repository.
+    if decision == ALLOW and _repository_program_path(tokens[0], project_dir):
+        decision = ASK
+    if decision == ASK and not reason:
+        reason = _workflow_consent_text(tokens[0], project_dir)
+    return decision, reason, read_only
+
+
+def _workflow_verdict(command: str, project_dir: str) -> tuple:
+    """Return (decision, reason, read-only) for one invocation or an && chain."""
+    parts = _command_parts(command)
+    verdicts = [_part_verdict(part, project_dir) for part in parts]
+    decisions = [verdict[0] for verdict in verdicts]
+    if not verdicts:
+        return "", "", False
+    if DENY in decisions:
+        return verdicts[decisions.index(DENY)]
+    if "" in decisions:
+        return "", "", False
+    read_only = all(part_read_only for _decision, _reason, part_read_only in verdicts)
+    if ASK in decisions:
+        reasons = dict.fromkeys(verdict[1] for verdict in verdicts if verdict[0] == ASK)
+        return ASK, " ".join(reasons), read_only
+    return ALLOW, "", read_only
+
+
 def workflow_decision(command: str, project_dir: str) -> tuple:
-    """Return ("ask", prompt), ("deny", reason), or ("", "") for one literal workflow."""
-    tokens = _literal_tokens(command)
-    if not tokens:
-        return "", ""
-    if tokens[0] == "npm":
-        return _npm_decision(tokens, project_dir)
-    if _python_program(tokens[0]):
-        matched = _python_workflow(tokens, project_dir)
-    elif tokens[0] == "make":
-        matched = tokens[1] in MAKE_TARGETS and tokens[2:] in MAKE_ARGUMENTS
-    elif tokens[0] == "rg":
-        matched = all(not token.startswith("-") or token in SEARCH_FLAGS for token in tokens[1:])
-    else:
-        matched = False
-    if not matched:
-        return "", ""
-    return "ask", _workflow_consent_text(tokens[0], project_dir)
+    """Return ("allow", ""), ("ask", prompt), ("deny", reason), or ("", "").
+
+    The command holds one literal workflow or an && chain of them. A chain
+    takes the strictest decision of its parts.
+    """
+    decision, reason, _read_only = _workflow_verdict(command, project_dir)
+    return decision, reason
 
 
 def workflow_needs_consent(command: str, project_dir: str) -> bool:
-    """Limit workflow consent to one literal invocation without wrappers or redirection."""
-    return workflow_decision(command, project_dir)[0] == "ask"
+    """Return whether a recognized workflow routes to consent."""
+    return workflow_decision(command, project_dir)[0] == ASK
 
 
 def read_only_workflow(command: str, project_dir: str) -> bool:
-    """Return whether a consent-routed workflow only inspects the repository."""
+    """Return whether a recognized workflow only inspects the repository."""
     # npm always executes repository code, so skip the manifest read entirely.
-    if _literal_tokens(command)[:1] == ["npm"]:
+    if any(part[0] == "npm" for part in _command_parts(command)):
         return False
-    if not workflow_needs_consent(command, project_dir):
-        return False
-    tokens = _literal_tokens(command)
-    if tokens[0] == "rg" or tokens[1:3] == ["-m", "unittest"]:
-        return True
-    if not _python_program(tokens[0]):
-        return False
-    script, arguments = _python_script_call(tokens, project_dir)
-    return arguments in READ_ONLY_WORKFLOW_ARGUMENTS.get(script, ())
+    decision, _reason, read_only = _workflow_verdict(command, project_dir)
+    return decision in (ALLOW, ASK) and read_only
+
+
+# Literal shapes stay importable under these names for existing callers.
+WORKFLOW_SCRIPT_ARGUMENTS = _literal_script_arguments(SCRIPT_VERDICTS)
+READ_ONLY_WORKFLOW_ARGUMENTS = _literal_script_arguments(INSPECTING_SCRIPT_VERDICTS)
