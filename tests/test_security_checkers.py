@@ -11,6 +11,14 @@ from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS_ROOT = REPO_ROOT / "scripts"
+SHA_HEX_LENGTH = 40
+ROOT_CONTAINER_VIOLATION_COUNT = 2
+WEAK_HASH_VIOLATION_COUNT = 2
+OVERSIZED_BANNED_MODELS_BYTES = 64 * 1024 + 1
+AUTHOR_AND_COMMITTER_VIOLATION_COUNT = 2
+TOKEN_BODY_LENGTH = 36
+GIT_FATAL_EXIT_CODE = 128
+EXECUTABLE_FILE_MODE = 0o755
 
 
 def _load_checker(name: str):
@@ -35,7 +43,7 @@ branch_name = _load_checker("check_branch_name")
 def _commit(body: str) -> dict:
     """Return clean commit metadata with the supplied message body."""
     return {
-        "sha": "a" * 40,
+        "sha": "a" * SHA_HEX_LENGTH,
         "author_name": "Human Author",
         "author_email": "author@example.invalid",
         "committer_name": "Human Committer",
@@ -193,7 +201,7 @@ class ContainerRootTest(unittest.TestCase):
 
         violations = dockerfile_root.find_violations(text, "pod.yml")
 
-        self.assertEqual(len(violations), 2)
+        self.assertEqual(len(violations), ROOT_CONTAINER_VIOLATION_COUNT)
         messages = "\n".join(violations)
         self.assertIn("missing", messages)
         self.assertIn("disabled", messages)
@@ -290,7 +298,8 @@ class WeakHashingTest(unittest.TestCase):
             "second = legacy_digest(payload)\n"
         )
 
-        self.assertEqual(len(weak_hashing.find_violations(text, "hashes.py")), 2)
+        self.assertEqual(
+            len(weak_hashing.find_violations(text, "hashes.py")), WEAK_HASH_VIOLATION_COUNT)
 
     def test_assignment_alias_fails(self):
         text = (
@@ -463,7 +472,7 @@ class BannedAgentsTest(unittest.TestCase):
 
     def test_oversized_banned_models_fails_closed(self):
         with tempfile.NamedTemporaryFile("wb", delete=False) as temp:
-            temp.write(b"a" * (64 * 1024 + 1))
+            temp.write(b"a" * OVERSIZED_BANNED_MODELS_BYTES)
             temp_path = temp.name
         try:
             with self.assertRaises(ValueError):
@@ -478,7 +487,7 @@ class BannedAgentsTest(unittest.TestCase):
         try:
             # Human author Philip should not trigger exact model ban 'phi'
             human_commit = {
-                "sha": "a" * 40,
+                "sha": "a" * SHA_HEX_LENGTH,
                 "author_name": "Philip Morris",
                 "author_email": "philip@example.com",
                 "committer_name": "Philip Morris",
@@ -492,7 +501,7 @@ class BannedAgentsTest(unittest.TestCase):
 
             # Bot claiming exact model should be blocked
             bot_commit = {
-                "sha": "b" * 40,
+                "sha": "b" * SHA_HEX_LENGTH,
                 "author_name": "phi[bot]",
                 "author_email": "phi@users.noreply.github.com",
                 "committer_name": "phi[bot]",
@@ -502,11 +511,11 @@ class BannedAgentsTest(unittest.TestCase):
             bot_violations = banned_agents.find_violations(
                 [bot_commit], banned_models_file=temp_path
             )
-            self.assertEqual(len(bot_violations), 2)  # author and committer
+            self.assertEqual(len(bot_violations), AUTHOR_AND_COMMITTER_VIOLATION_COUNT)
 
             # Model disclosure of 'phi' should be blocked
             disclosure_commit = {
-                "sha": "c" * 40,
+                "sha": "c" * SHA_HEX_LENGTH,
                 "author_name": "Human Author",
                 "author_email": "human@example.com",
                 "committer_name": "Human Author",
@@ -564,7 +573,7 @@ class SecretsHeuristicTest(unittest.TestCase):
     def test_github_user_and_refresh_tokens_fail(self):
         for prefix in ("ghu_", "ghr_"):
             with self.subTest(prefix=prefix):
-                token = prefix + ("A" * 36)
+                token = prefix + ("A" * TOKEN_BODY_LENGTH)
                 violations = secrets_heuristic.find_violations(
                     f"TOKEN={token}\n", "config.txt"
                 )
@@ -587,7 +596,7 @@ class BranchNameTest(unittest.TestCase):
             return branch_name.main()
 
     def test_git_lookup_failure_fails(self):
-        result = self._run_main(128, "", "fatal: not a git repository")
+        result = self._run_main(GIT_FATAL_EXIT_CODE, "", "fatal: not a git repository")
 
         self.assertEqual(result, 1)
 
@@ -638,7 +647,7 @@ class TrustedGitTest(unittest.TestCase):
             repo = Path(temporary)
             executable = repo / ("git.exe" if os.name == "nt" else "git")
             executable.write_text("malicious executable\n", encoding="utf-8")
-            executable.chmod(0o755)
+            executable.chmod(EXECUTABLE_FILE_MODE)
             old_path = os.environ.get("PATH", "")
             environment = {"PATH": os.pathsep.join((str(repo), old_path))}
 

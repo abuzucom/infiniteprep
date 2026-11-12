@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 HOOK_PATH = REPOSITORY_ROOT / "hooks" / "enforce_gate_adoption.py"
+BLOCKING_EXIT_CODE = 2
 PROCESS_RUNNER = (
     "import os\n"
     "import sys\n"
@@ -95,7 +96,7 @@ class GateAdoptionHookTest(unittest.TestCase):
             result = self.run_process(
                 {"tool_name": "Bash", "tool_input": None}, root, "claude"
             )
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
         self.assertIn("gate-adoption checker rejected", result.stderr)
 
     def test_process_denies_missing_checker(self) -> None:
@@ -105,7 +106,7 @@ class GateAdoptionHookTest(unittest.TestCase):
                 Path(temporary),
                 "claude",
             )
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
         self.assertIn("checker is missing", result.stderr)
 
     def test_process_denies_empty_tool_input(self) -> None:
@@ -117,7 +118,7 @@ class GateAdoptionHookTest(unittest.TestCase):
             result = self.run_process(
                 {"tool_name": "Bash", "tool_input": {}}, root, "claude"
             )
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
         self.assertIn("checker rejected", result.stderr)
 
     def test_process_denies_checker_error(self) -> None:
@@ -132,7 +133,7 @@ class GateAdoptionHookTest(unittest.TestCase):
                 "claude",
                 checker_error=True,
             )
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
         self.assertIn("test checker error", result.stderr)
 
     def test_process_denies_antigravity_incomplete_set(self) -> None:
@@ -232,7 +233,7 @@ class GateAdoptionHookTest(unittest.TestCase):
 
     def test_process_denies_missing_payload(self) -> None:
         result = self.run_process(None, REPOSITORY_ROOT, "claude")
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
         self.assertIn("payload cannot be inspected", result.stderr)
 
     def test_complete_set_allows_ordinary_tool(self) -> None:
@@ -293,7 +294,7 @@ class GateAdoptionHookTest(unittest.TestCase):
             "codex registration is absent",
         )
         self.assertEqual(allowed, 0, output)
-        self.assertEqual(blocked, 2)
+        self.assertEqual(blocked, BLOCKING_EXIT_CODE)
         self.assertIn("codex registration is absent", blocked_output)
 
     def test_incomplete_set_rejects_staging_path_escape(self) -> None:
@@ -307,7 +308,7 @@ class GateAdoptionHookTest(unittest.TestCase):
             },
             "codex registration is absent",
         )
-        self.assertEqual(result, 2)
+        self.assertEqual(result, BLOCKING_EXIT_CODE)
         self.assertIn("codex registration is absent", output)
 
     def test_antigravity_allows_native_recovery_tools(self) -> None:
@@ -352,7 +353,7 @@ class GateAdoptionHookTest(unittest.TestCase):
             },
             "codex registration is absent",
         )
-        self.assertEqual(result, 2)
+        self.assertEqual(result, BLOCKING_EXIT_CODE)
         self.assertIn("codex registration is absent", output)
 
     def test_incomplete_set_denies_ordinary_tool(self) -> None:
@@ -360,7 +361,7 @@ class GateAdoptionHookTest(unittest.TestCase):
             {"tool_name": "Bash", "tool_input": {"command": "git status"}},
             "codex registration is absent",
         )
-        self.assertEqual(result, 2)
+        self.assertEqual(result, BLOCKING_EXIT_CODE)
         self.assertIn("codex registration is absent", output)
 
 

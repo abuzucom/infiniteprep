@@ -7,6 +7,10 @@ from pathlib import Path
 from scripts import run_tests
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+EXPECTED_SHARD_COUNT = 2
+PARALLEL_WORKER_COUNT = 2
+SUITE_TIMEOUT_SECONDS = 30
+WORKFLOW_RUN_STEP_COUNT = 2
 
 
 class ParallelTestRunnerTest(unittest.TestCase):
@@ -33,7 +37,7 @@ class ParallelTestRunnerTest(unittest.TestCase):
             "    def test_three(self):\n        self.assertTrue(True)\n",
         )
         shards = run_tests.validated_test_shards(str(self.root))
-        self.assertEqual(len(shards), 2)
+        self.assertEqual(len(shards), EXPECTED_SHARD_COUNT)
 
     def test_parallel_runner_executes_every_class(self):
         first_marker = self.root / "first-ran"
@@ -46,7 +50,7 @@ class ParallelTestRunnerTest(unittest.TestCase):
             "class Second(unittest.TestCase):\n"
             f"    def test_marker(self):\n        pathlib.Path({str(second_marker)!r}).touch()\n",
         )
-        result = run_tests.run_suite(str(self.root), workers=2, timeout=30)
+        result = run_tests.run_suite(str(self.root), workers=PARALLEL_WORKER_COUNT, timeout=SUITE_TIMEOUT_SECONDS)
         self.assertEqual(result, 0)
         self.assertTrue(first_marker.is_file())
         self.assertTrue(second_marker.is_file())
@@ -58,7 +62,7 @@ class ParallelTestRunnerTest(unittest.TestCase):
             "class Failure(unittest.TestCase):\n"
             "    def test_failure(self):\n        self.fail('expected failure')\n",
         )
-        result = run_tests.run_suite(str(self.root), workers=1, timeout=30)
+        result = run_tests.run_suite(str(self.root), workers=1, timeout=SUITE_TIMEOUT_SECONDS)
         self.assertEqual(result, 1)
 
     def test_repository_commands_use_parallel_runner(self):
@@ -71,7 +75,7 @@ class ParallelTestRunnerTest(unittest.TestCase):
         command = "python scripts/run_tests.py"
         self.assertIn("$(PYTHON) scripts/run_tests.py", makefile)
         self.assertIn(f"entry: {command}", pre_commit)
-        self.assertEqual(workflow.count(f"run: {command}"), 2)
+        self.assertEqual(workflow.count(f"run: {command}"), WORKFLOW_RUN_STEP_COUNT)
         self.assertEqual(
             workflow.count("run: python scripts/check_hook_coverage.py"),
             1,

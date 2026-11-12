@@ -7,6 +7,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CHECKER_PATH = ROOT / "scripts" / "check_commit_attribution.py"
+COMMIT_SHA_HEX_LENGTH = 40
+RESOLVED_ACCOUNT_ID = 123
+EMAIL_AND_NON_TRAILER_VIOLATION_COUNT = 2
 
 
 def load_checker():
@@ -21,7 +24,7 @@ def load_checker():
 
 def commit(body: str) -> dict:
     """Return the bounded commit shape consumed by trailer validation."""
-    return {"sha": "a" * 40, "body": body}
+    return {"sha": "a" * COMMIT_SHA_HEX_LENGTH, "body": body}
 
 
 class TrailerTest(unittest.TestCase):
@@ -93,7 +96,7 @@ class TrailerTest(unittest.TestCase):
         checker = load_checker()
         body = "change\n\nAssisted-by: Claude Sonnet 5 <agent@example.com>\nPlain text evasion\n"
         violations = checker.trailer_violations([commit(body)])
-        self.assertEqual(len(violations), 2)
+        self.assertEqual(len(violations), EMAIL_AND_NON_TRAILER_VIOLATION_COUNT)
         self.assertTrue(any("must not include an email" in v for v in violations))
         self.assertTrue(any("non-trailer text in terminal trailer paragraph" in v for v in violations))
 
@@ -103,7 +106,7 @@ class IdentityTest(unittest.TestCase):
 
     def test_matching_numbered_noreply_identity_passes(self):
         checker = load_checker()
-        sha = "b" * 40
+        sha = "b" * COMMIT_SHA_HEX_LENGTH
         document = {
             "sha": sha,
             "commit": {
@@ -111,7 +114,7 @@ class IdentityTest(unittest.TestCase):
                 "committer": {"email": "123+octocat@users.noreply.github.com"},
             },
         }
-        identity = {"id": 123, "login": "octocat"}
+        identity = {"id": RESOLVED_ACCOUNT_ID, "login": "octocat"}
         commit_record = {"sha": sha}
         self.assertIsNone(checker._identity_violation("author", document, identity))
         self.assertIsNone(
@@ -122,56 +125,56 @@ class IdentityTest(unittest.TestCase):
     def test_mismatched_numbered_noreply_id_fails(self):
         checker = load_checker()
         document = {
-            "sha": "c" * 40,
+            "sha": "c" * COMMIT_SHA_HEX_LENGTH,
             "commit": {
                 "author": {"email": "999+octocat@users.noreply.github.com"},
             },
         }
-        identity = {"id": 123, "login": "octocat"}
+        identity = {"id": RESOLVED_ACCOUNT_ID, "login": "octocat"}
         violation = checker._identity_violation("author", document, identity)
         self.assertIn("account ID", violation)
 
     def test_mismatched_numbered_noreply_login_fails(self):
         checker = load_checker()
         document = {
-            "sha": "d" * 40,
+            "sha": "d" * COMMIT_SHA_HEX_LENGTH,
             "commit": {
                 "author": {"email": "123+other@users.noreply.github.com"},
             },
         }
-        identity = {"id": 123, "login": "octocat"}
+        identity = {"id": RESOLVED_ACCOUNT_ID, "login": "octocat"}
         violation = checker._identity_violation("author", document, identity)
         self.assertIn("login", violation)
 
     def test_verified_custom_email_passes(self):
         checker = load_checker()
         document = {
-            "sha": "e" * 40,
+            "sha": "e" * COMMIT_SHA_HEX_LENGTH,
             "commit": {"author": {"email": "author@example.com"}},
         }
-        identity = {"id": 123, "login": "octocat"}
+        identity = {"id": RESOLVED_ACCOUNT_ID, "login": "octocat"}
         self.assertIsNone(checker._identity_violation("author", document, identity))
 
     def test_verified_unnumbered_noreply_passes(self):
         checker = load_checker()
         document = {
-            "sha": "f" * 40,
+            "sha": "f" * COMMIT_SHA_HEX_LENGTH,
             "commit": {
                 "author": {"email": "octocat@users.noreply.github.com"},
             },
         }
-        identity = {"id": 123, "login": "octocat"}
+        identity = {"id": RESOLVED_ACCOUNT_ID, "login": "octocat"}
         self.assertIsNone(checker._identity_violation("author", document, identity))
 
     def test_unnumbered_noreply_agent_identity_fails(self):
         checker = load_checker()
         document = {
-            "sha": "g" * 40,
+            "sha": "g" * COMMIT_SHA_HEX_LENGTH,
             "commit": {
                 "author": {"email": "octocat@users.noreply.github.com"},
             },
         }
-        identity = {"id": 123, "login": "octocat"}
+        identity = {"id": RESOLVED_ACCOUNT_ID, "login": "octocat"}
         violation = checker._identity_violation(
             "author", document, identity, require_noreply=True
         )

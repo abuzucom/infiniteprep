@@ -11,6 +11,10 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import check_hook_launchers
 
+BLOCKING_EXIT_CODE = 2
+# Two launchers each probe two gates.
+EXPECTED_PROBE_COUNT = 4
+
 
 class HookLauncherTest(unittest.TestCase):
     """The launcher probe fails closed across supported configurations."""
@@ -51,10 +55,11 @@ class HookLauncherTest(unittest.TestCase):
 
     def test_probe_checks_every_launcher_and_gate(self):
         gates = [
-            (Path("bash.py"), "Bash", 2, ()),
+            (Path("bash.py"), "Bash", BLOCKING_EXIT_CODE, ()),
             (Path("codex.py"), "Bash", 0, ("--client", "claude")),
         ]
-        destructive_result = type("Completed", (), {"returncode": 2})()
+        destructive_result = type(
+            "Completed", (), {"returncode": BLOCKING_EXIT_CODE})()
         transaction_result = type("Completed", (), {"returncode": 0})()
         with patch.object(check_hook_launchers.Path, "cwd", return_value=Path("root")):
             with patch.object(check_hook_launchers, "_config_paths", return_value=[Path("config")]):
@@ -76,7 +81,7 @@ class HookLauncherTest(unittest.TestCase):
                             ) as run:
                                 result = check_hook_launchers.main()
         self.assertEqual(result, 0)
-        self.assertEqual(run.call_count, 4)
+        self.assertEqual(run.call_count, EXPECTED_PROBE_COUNT)
 
 
 if __name__ == "__main__":

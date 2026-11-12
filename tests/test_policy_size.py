@@ -4,6 +4,8 @@ from pathlib import Path
 
 from scripts.check_policy_size import find_violations
 
+OVERSIZED_POLICY_BYTES = 32 * 1024 + 1
+
 
 class PolicySizeTests(unittest.TestCase):
     def test_canonical_policy_has_required_size_and_rules(self):
@@ -31,7 +33,7 @@ class PolicySizeTests(unittest.TestCase):
     def test_oversized_policy_reports_violation(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "AGENTS.md"
-            path.write_bytes(b"x" * (32 * 1024 + 1))
+            path.write_bytes(b"x" * OVERSIZED_POLICY_BYTES)
             self.assertTrue(any("exceeds" in item for item in find_violations(path)))
 
     def test_non_ascii_policy_reports_violation(self):

@@ -13,6 +13,8 @@ from scripts import check_commit_attribution
 from scripts import check_compliance_tree
 from scripts import check_conflict_markers
 
+IDENTITY_ACCOUNT_ID = 12345
+
 
 class TestLogicConsistency(unittest.TestCase):
     """Test resolution of contradictory logic and precondition checks."""
@@ -70,7 +72,7 @@ class TestLogicConsistency(unittest.TestCase):
     def test_identity_violation_guard_ordering(self) -> None:
         """Verify _identity_violation returns expected status with and without match."""
         role = "author"
-        identity = {"login": "correctuser", "id": 12345}
+        identity = {"login": "correctuser", "id": IDENTITY_ACCOUNT_ID}
         sha = "0123456789abcdef0123456789abcdef01234567"
 
         commit_mismatch = {

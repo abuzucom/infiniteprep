@@ -19,6 +19,9 @@ CLAUDE_SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 CODEX_HOOKS = REPO_ROOT / ".codex" / "hooks.json"
 GEMINI_SETTINGS = REPO_ROOT / ".gemini" / "settings.json"
 ANTIGRAVITY_HOOKS = REPO_ROOT / ".agents" / "hooks.json"
+BLOCKING_EXIT_CODE = 2
+CHUNK_FILLING_LINE_LENGTH = 5000
+CHUNK_FILLING_LINE_COUNT = 2
 
 
 def load_hook_module():
@@ -201,7 +204,7 @@ class PolicyValidationTest(unittest.TestCase):
         long_line = "x" * (self.hook.MAX_CHUNK_CHARS + 1)
         with self.assertRaises(ValueError):
             self.hook.split_policy(long_line, self.hook.CLAUDE_CHUNK_COUNT)
-        two_chunks = ("x" * 5000 + "\n") * 2
+        two_chunks = ("x" * CHUNK_FILLING_LINE_LENGTH + "\n") * CHUNK_FILLING_LINE_COUNT
         with self.assertRaises(ValueError):
             self.hook.split_policy(two_chunks, 1)
 
@@ -225,20 +228,20 @@ class PolicyValidationTest(unittest.TestCase):
         result = subprocess.run(
             [sys.executable, str(HOOK_PATH), "--client", "codex"],
             input="{", capture_output=True, text=True, check=False)
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("Restore readable AGENTS.md", result.stderr)
 
     def test_cli_rejects_non_object_payload(self):
         result = subprocess.run(
             [sys.executable, str(HOOK_PATH), "--client", "codex"],
             input="[]", capture_output=True, text=True, check=False)
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("payload is not an object", result.stderr)
 
     def test_claude_rejects_an_invalid_chunk_index(self):
         payload = {"hook_event_name": "SubagentStart"}
         result = run_hook("claude", payload, "--chunk-index", "8")
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("chunk index is outside", result.stderr)
 
     def test_gemini_rejects_malformed_model_messages(self):
@@ -248,7 +251,7 @@ class PolicyValidationTest(unittest.TestCase):
             "llm_request": {"messages": "invalid"},
         }
         result = run_hook("gemini", payload)
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("malformed messages", result.stderr)
 
 

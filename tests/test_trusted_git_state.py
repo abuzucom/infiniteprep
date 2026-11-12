@@ -15,6 +15,10 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import read_git_state
 import trusted_git
 
+CONTROL_TEXT_LIMIT = 64
+LONG_VALUE_LENGTH = 20
+SHORT_TEXT_LIMIT = 8
+
 
 class TrustedGitRunnerTest(unittest.TestCase):
     """Git subprocess output uses resilient UTF-8 decoding."""
@@ -106,11 +110,11 @@ class GitStateTextTest(unittest.TestCase):
     """Untrusted Git values become bounded printable ASCII."""
 
     def test_control_characters_are_rendered(self):
-        rendered = read_git_state.sanitize_text("safe\x1b[31m\n", limit=64)
+        rendered = read_git_state.sanitize_text("safe\x1b[31m\n", limit=CONTROL_TEXT_LIMIT)
         self.assertEqual(rendered, r"safe\x1b[31m\n")
 
     def test_long_values_are_bounded(self):
-        rendered = read_git_state.sanitize_text("x" * 20, limit=8)
+        rendered = read_git_state.sanitize_text("x" * LONG_VALUE_LENGTH, limit=SHORT_TEXT_LIMIT)
         self.assertEqual(rendered, "xxxxx...")
 
     def test_url_credentials_are_redacted(self):

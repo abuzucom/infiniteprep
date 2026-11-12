@@ -11,6 +11,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import check_hook_coverage as gate
 
+SHARD_WORKER_COUNT = 2
+SHARD_TIMEOUT_SECONDS = 30
+EXPIRING_TIMEOUT_SECONDS = 0.1
+
 
 class TestShardRunnerTest(unittest.TestCase):
     """Coverage workers execute real test classes and report progress."""
@@ -37,7 +41,8 @@ class TestShardRunnerTest(unittest.TestCase):
         diagnostics = io.StringIO()
         with contextlib.redirect_stderr(diagnostics):
             problems = gate.run_test_shards(
-                str(root), dict(os.environ), workers=2, timeout=30)
+                str(root), dict(os.environ), workers=SHARD_WORKER_COUNT,
+                timeout=SHARD_TIMEOUT_SECONDS)
 
         self.assertEqual(problems, [])
         output = diagnostics.getvalue()
@@ -54,7 +59,7 @@ class TestShardRunnerTest(unittest.TestCase):
         diagnostics = io.StringIO()
         with contextlib.redirect_stderr(diagnostics):
             problems = gate.run_test_shards(
-                str(root), dict(os.environ), workers=1, timeout=0.1)
+                str(root), dict(os.environ), workers=1, timeout=EXPIRING_TIMEOUT_SECONDS)
 
         self.assertEqual(len(problems), 1)
         self.assertIn("test_slow.py", problems[0])
@@ -79,7 +84,7 @@ class TestShardRunnerTest(unittest.TestCase):
                 str(root),
                 dict(os.environ),
                 workers=1,
-                timeout=30,
+                timeout=SHARD_TIMEOUT_SECONDS,
             )
 
         self.assertEqual(len(problems), 1)
@@ -97,7 +102,7 @@ class TestShardRunnerTest(unittest.TestCase):
                 str(root),
                 dict(os.environ),
                 workers=0,
-                timeout=30,
+                timeout=SHARD_TIMEOUT_SECONDS,
             )
 
 

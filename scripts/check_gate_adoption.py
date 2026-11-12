@@ -33,6 +33,8 @@ CLIENT_HOOKS = (
     "hooks/enforce_branch_name.py",
     "hooks/enforce_git_identity.py",
     f"hooks/{TRANSACTION_HOOK}",
+    # The command execution gate denies every repository script without its list.
+    "hooks/workflow-scripts.txt",
 )
 REQUIRED_CHECKERS = (
     "scripts/check_banned_agents.py",

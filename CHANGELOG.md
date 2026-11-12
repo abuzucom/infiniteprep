@@ -5,10 +5,14 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.53.1] (2026-11-11)
+## [0.54.0] (2026-11-11)
 
 ### Added
 
+- The command execution gate returns an allow verdict for inspecting workflows. The verdict covers unittest runs, Ruff checking forms, repository-bound `rg` searches, and allow entries in `hooks/workflow-scripts.txt`. The files follow `abuzucom/agents` at commit `88f58b5`.
+- `hooks/workflow-scripts.txt` lists the repository scripts the gate recognizes. Nine InfinitePrep entries cover `scripts/check_action_versions.py`, `scripts/classify_changed_paths.py`, `packaging/release.py`, `packaging/check_bundle.py`, and `ci/call_model.py`.
+- `tests/test_workflow_allow_verdict.py`, `tests/test_compaction_disclosure_form.py`, and `tests/test_trusted_gh_connectivity.py` arrive from the template.
+- `.github/PULL_REQUEST_TEMPLATE.md` and `.github/ISSUE_TEMPLATE.md` arrive from the template.
 - `scripts/classify_changed_paths.py` sorts a commit range into the `docs`, `website`, `light`, or `full` change class. A version-only edit to `pyproject.toml` or `src/infiniteprep/__init__.py` keeps a range out of the `full` class.
 - The `release` job in `build-packages.yml` publishes a GitHub build-provenance attestation for each of the six packages and `SHA256SUMS.txt` with `actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6` (v4.2.2, D325).
 - The `release` job uploads each package's Sigstore bundle as `<package>.sigstore.json` to the draft release, with its hash recorded in `SHA256SUMS.txt` (D328).
@@ -21,6 +25,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `AGENTS.md`, the five documents under `docs/agent-policy/`, and the eight generated copies follow the trimmed template policy text.
+- `scripts/check_gate_adoption.py`, `scripts/check_hook_coverage.py`, `scripts/run_tests.py`, `scripts/trusted_gh.py`, and `scripts/trusted_git.py` follow the template.
+- Six gate tests follow the template. Each edit received active-human sign-off.
+- `docs/template-drift.md` records template commit `88f58b5`.
+- The copied hooks, scripts, and tests name their numeric literals. The template made that change for the Euler M11 prescan. No behavior changes.
 - `ci.yml`, `security-devops.yml`, and `dependency-review.yml` read the change class. A docs-only or website-only change skips `test-matrix`, the Microsoft Security DevOps scan, and the dependency review. A failed classification runs all of them.
 - The `ci` workflow runs on pushes to `main` only. A pull request commit starts one `ci` run instead of two.
 - A newer pull request commit cancels the `ci` run of the older commit. Runs on `main` always complete.

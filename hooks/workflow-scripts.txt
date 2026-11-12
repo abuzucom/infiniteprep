@@ -1,0 +1,76 @@
+# Repository scripts the command execution gate recognizes.
+#
+# Line format: <verdict> <script> [argument ...]
+#
+# Verdicts:
+#   allow          runs without a prompt and only inspects the repository
+#   consent-read   routes to consent and only inspects the repository
+#   consent-write  routes to consent and writes files
+#
+# Arguments match literally except these placeholders:
+#   <revision>  one Git revision name
+#   <path>      one repository-relative path
+#   <paths>     zero or more repository-relative paths, in the last position only
+#
+# The shapes mirror the Makefile, .pre-commit-config.yaml, and CI workflows,
+# plus the local-only report and advice flags.
+
+allow scripts/read_git_state.py branch
+allow scripts/read_git_state.py status
+allow scripts/read_git_state.py remote
+allow scripts/read_git_state.py revision
+allow scripts/read_git_state.py all
+
+consent-read scripts/run_tests.py
+consent-read scripts/sync.py --check
+consent-read scripts/sync.py --check-shared
+consent-read scripts/sync.py --print-adoptable
+consent-write scripts/sync.py
+consent-write scripts/sync.py --write-shared
+
+allow scripts/check_action_pins.py
+allow scripts/check_agent_prose_gate.py --base <revision> --head <revision>
+allow scripts/check_ascii.py <paths>
+allow scripts/check_banned_agents.py --base <revision> --head <revision>
+allow scripts/check_branch_name.py
+allow scripts/check_branch_name.py --strict-agent-preflight
+allow scripts/check_changelog.py
+allow scripts/check_changelog.py --staged
+allow scripts/check_changelog.py --base <revision> --head <revision>
+allow scripts/check_commit_message.py --base <revision> --head <revision>
+allow scripts/check_conflict_markers.py
+allow scripts/check_conflict_markers.py --staged
+allow scripts/check_dockerfile_root.py <paths>
+allow scripts/check_english_only.py <paths>
+allow scripts/check_external_pr_refs.py
+allow scripts/check_external_pr_refs.py --unpushed
+allow scripts/check_external_pr_refs.py --base <revision> --head <revision>
+allow scripts/check_gate_adoption.py
+allow scripts/check_git_identity.py --strict
+allow scripts/check_git_identity.py --strict --unpushed
+allow scripts/check_git_identity.py --advise
+allow scripts/check_git_identity.py --base <revision> --head <revision>
+allow scripts/check_hedging.py <paths>
+allow scripts/check_hook_coverage.py
+allow scripts/check_hook_launchers.py
+allow scripts/check_local_paths.py <paths>
+allow scripts/check_local_paths.py --unpushed
+allow scripts/check_local_paths.py --report
+allow scripts/check_persist_credentials.py <paths>
+allow scripts/check_policy_size.py
+allow scripts/check_pull_request_message.py
+allow scripts/check_secrets_heuristic.py <paths>
+allow scripts/check_test_first.py
+allow scripts/check_test_first.py --base <revision> --head <revision>
+allow scripts/check_us_spelling.py <paths>
+allow scripts/check_weak_hashing.py <paths>
+allow scripts/lint_style.py
+allow scripts/check_action_versions.py
+allow scripts/classify_changed_paths.py --base <revision> --head <revision>
+consent-read packaging/release.py check-tag <revision>
+consent-read packaging/release.py check-assets <path> <revision>
+consent-read packaging/release.py check-assets <path> <revision> --require-bundles
+consent-read packaging/check_bundle.py <path> <path>
+consent-write packaging/release.py checksums <path>
+consent-write packaging/release.py notes <revision> <path>
+consent-write ci/call_model.py

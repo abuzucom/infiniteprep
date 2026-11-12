@@ -58,6 +58,32 @@ GIT_CONFIG_SUBSECTION_PARTS = 3
 MAX_LATIN1_CODEPOINT = 0xFF
 # A forge delete reads as "<noun> delete <target>", so two words minimum.
 FORGE_DELETE_MIN_WORDS = 2
+# Only the leading words of a forge command can name the delete action.
+FORGE_DELETE_SEARCH_WORDS = 3
+POLICY_DENIAL_EXIT_CODE = 2
+# An option and its separate value occupy two argument tokens.
+OPTION_WITH_VALUE_TOKEN_COUNT = 2
+# A short option is a dash and one letter, such as -R.
+SHORT_OPTION_LENGTH = 2
+# The deployment path follows the "pages deploy" words.
+PAGES_DEPLOY_PATH_INDEX = 2
+SLASH_DRIVE_PREFIX_LENGTH = len("/c:")
+WINDOWS_DRIVE_PREFIX_LENGTH = len("c:/")
+UTF16_CODE_UNIT_BYTES = 2
+DOUBLE_QUOTE = '"'
+# Each pair holds a parameter name and its shortest unambiguous prefix length.
+INVOKE_COMMAND_REMOTE_PARAMETERS = (("computername", 3), ("session", 4),
+                                    ("connectionuri", 4), ("hostname", 2))
+TRANSFERTYPE_MIN_PREFIX_LENGTH = 9
+# A denylist family line reads "family <name>".
+DENYLIST_FAMILY_FIELD_COUNT = 2
+# A GitHub CLI command path is a noun and an action.
+GH_COMMAND_PATH_WORDS = 2
+# A repository target reads owner/name, optionally after a host segment.
+REPOSITORY_SEGMENT_COUNT = 2
+HOSTED_REPOSITORY_SEGMENT_COUNT = 3
+# The gh arguments follow the wrapper script path and the "run" word.
+TRUSTED_GH_ARGUMENT_OFFSET = 2
 # Directories whose removal takes the machine with them. These deny rather
 # than ask: putting "delete /etc?" in front of a person is not consent, it
 # is an invitation to a mistake nobody can undo.
@@ -182,7 +208,7 @@ def git_subcommand(args: list) -> tuple:
         if not token.startswith("-"):
             return token, args[index + 1:]
         if token.split("=", 1)[0] in GIT_VALUE_OPTIONS and "=" not in token:
-            index += 2
+            index += OPTION_WITH_VALUE_TOKEN_COUNT
         else:
             index += 1
     return "", []
@@ -404,7 +430,7 @@ def emit(gate: str, decision: str, reason: str) -> int:
     print(json.dumps(output))
     if decision == "deny":
         print(message, file=sys.stderr)
-        return 2
+        return POLICY_DENIAL_EXIT_CODE
     return 0
 
 
@@ -717,10 +743,10 @@ def cloudflare_pages_verdict(program: str, args: list, cwd: str = "") -> tuple:
     if name != "wrangler":
         return "", ""
     lowered = [token.casefold() for token in args]
-    if len(args) < 3 or lowered[0:2] != ["pages", "deploy"]:
+    if len(args) <= PAGES_DEPLOY_PATH_INDEX or lowered[0:PAGES_DEPLOY_PATH_INDEX] != ["pages", "deploy"]:
         return "deny", "only Wrangler Pages deployment is allowed"
 
-    deploy_path = args[2]
+    deploy_path = args[PAGES_DEPLOY_PATH_INDEX]
     if deploy_path.startswith("-") or is_ambiguous(deploy_path):
         return "deny", "Pages deployment path must be a literal workspace path"
     root = os.path.realpath(os.path.abspath(cwd or os.getcwd()))
@@ -734,7 +760,7 @@ def cloudflare_pages_verdict(program: str, args: list, cwd: str = "") -> tuple:
 
     project_name = ""
     seen_options = set()
-    index = 3
+    index = PAGES_DEPLOY_PATH_INDEX + 1
     while index < len(args):
         option = args[index]
         lowered_option = option.casefold()
@@ -804,10 +830,10 @@ def strip_windows_drive(normalized: str) -> str:
     On Windows, os.path.abspath roots "/proc/1/environ" on the current
     drive, so POSIX-only checks such as /proc must ignore that segment.
     """
-    has_drive = (len(normalized) > 3 and normalized[0] == "/"
-                 and normalized[1].isalpha() and normalized[2] == ":"
-                 and normalized[3] == "/")
-    return normalized[3:] if has_drive else normalized
+    has_drive = (len(normalized) > SLASH_DRIVE_PREFIX_LENGTH and normalized[0] == "/"
+                 and normalized[1].isalpha() and normalized[SLASH_DRIVE_PREFIX_LENGTH - 1] == ":"
+                 and normalized[SLASH_DRIVE_PREFIX_LENGTH] == "/")
+    return normalized[SLASH_DRIVE_PREFIX_LENGTH:] if has_drive else normalized
 
 
 def is_protected_infrastructure_path(path: str, cwd: str = "", content: str = "") -> bool:
@@ -895,7 +921,7 @@ def decode_powershell_command(value: str) -> tuple:
         raw = base64.b64decode(value, validate=True)
     except (binascii.Error, ValueError):
         return None, "PowerShell EncodedCommand is not strict Base64"
-    if len(raw) % 2:
+    if len(raw) % UTF16_CODE_UNIT_BYTES:
         return None, "PowerShell EncodedCommand has an odd UTF-16LE byte length"
     try:
         return raw.decode("utf-16le", errors="strict"), ""
@@ -1168,11 +1194,11 @@ def _powershell_path_policy(name: str, args: list, redirects: list) -> tuple:
 
 def is_protected_windows_path(normalized_path: str) -> bool:
     """Return whether a normalized path enters a protected Windows tree."""
-    if len(normalized_path) < 4:
+    if len(normalized_path) <= WINDOWS_DRIVE_PREFIX_LENGTH:
         return False
-    if not normalized_path[0].isalpha() or normalized_path[1:3] != ":/":
+    if not normalized_path[0].isalpha() or normalized_path[1:WINDOWS_DRIVE_PREFIX_LENGTH] != ":/":
         return False
-    first_component = normalized_path[3:].split("/", 1)[0]
+    first_component = normalized_path[WINDOWS_DRIVE_PREFIX_LENGTH:].split("/", 1)[0]
     return first_component in {"program files", "programdata", "windows"}
 
 
@@ -1197,8 +1223,7 @@ def _powershell_indirect_policy(name: str, text: str, args: list) -> tuple:
             return "deny", "a COM object enables indirect process or script execution"
         return "ask", "New-Object constructs a type outside static inspection"
     if name == "invoke-command":
-        remote = (("computername", 3), ("session", 4),
-                  ("connectionuri", 4), ("hostname", 2))
+        remote = INVOKE_COMMAND_REMOTE_PARAMETERS
         if any(_powershell_parameter(token, parameter, minimum)
                for token in args for parameter, minimum in remote):
             return "deny", "Invoke-Command executes on a remote session"
@@ -1234,7 +1259,7 @@ def _powershell_web_policy(name: str, args: list) -> tuple:
         for index, value in enumerate(args):
             flag, separator, attached = value.lower().partition(":")
             if (name == "start-bitstransfer"
-                    and _powershell_parameter(flag, "transfertype", 9)):
+                    and _powershell_parameter(flag, "transfertype", TRANSFERTYPE_MIN_PREFIX_LENGTH)):
                 transfer_type = attached if separator else ""
                 if not transfer_type and index + 1 < len(args):
                     transfer_type = args[index + 1].lower()
@@ -1389,7 +1414,7 @@ def strip_windows_decorations(name: str) -> str:
     An NTFS alternate data stream (`test_x.py:evil`) writes into the same
     file, and Windows discards a trailing dot or space.
     """
-    base = name.split(":", 1)[0] if ":" in name[2:] else name
+    base = name.split(":", 1)[0] if ":" in name[DRIVE_ROOT_LENGTH:] else name
     return base.rstrip(". ")
 
 
@@ -1439,7 +1464,8 @@ def _powershell_write_operands(name: str, args: list) -> tuple:
             if not separator and index + 1 < len(args):
                 index += 1
                 value = args[index]
-            if parameter[2] and value:
+            _canonical, _minimum, names_target = parameter
+            if names_target and value:
                 targets.append(value)
         elif not token.startswith("-"):
             operands.append(token)
@@ -1544,7 +1570,7 @@ def _section_name(header: str) -> str:
     name, _, subsection = header.partition(" ")
     if not subsection:
         return name.lower()
-    return f"{name.lower()}.{subsection.strip().strip(chr(34))}"
+    return f"{name.lower()}.{subsection.strip().strip(DOUBLE_QUOTE)}"
 
 
 def _parse_git_config_path(path: str):
@@ -1581,8 +1607,17 @@ def _parse_git_config_path(path: str):
 
 def parse_git_config(cwd: str):
     """Return normalized entries from the repository config under `cwd`."""
-    path = os.path.join(cwd or ".", ".git", "config")
-    return _parse_git_config_path(path)
+    state = {
+        "common_dir": "",
+        "git_dir": "",
+        "explicit_git_dir": False,
+        "cwd": os.path.realpath(cwd or "."),
+    }
+    paths, _reason = _repo_config_paths(state)
+    entries = {}
+    for path, _required in paths or ():
+        entries.update(_parse_git_config_path(path) or {})
+    return entries
 
 
 def _exec_capable_key(entries: dict) -> str:
@@ -1597,7 +1632,7 @@ def _exec_capable_key(entries: dict) -> str:
             return name
         parts = name.split(".")
         if (len(parts) == GIT_CONFIG_SUBSECTION_PARTS
-                and parts[2] in EXEC_CAPABLE_SUBSECTIONS.get(parts[0], ())
+                and parts[-1] in EXEC_CAPABLE_SUBSECTIONS.get(parts[0], ())
                 and value.lower() not in ("", "false", "0")):
             return name
     return ""
@@ -2180,7 +2215,7 @@ def _branch_global_arguments(args: list, environment: dict) -> tuple:
                 return None, "Git config environment value is missing"
             normalized.extend(["-c", key + "=" + environment[variable]])
         elif token.startswith("-C") and token != "-C":
-            normalized.extend(["-C", token[2:]])
+            normalized.extend(["-C", token[len("-C"):]])
         else:
             normalized.append(token)
             if name in GIT_VALUE_OPTIONS and not separator:
@@ -2382,7 +2417,7 @@ def _mentions_device(args: list) -> bool:
     """Return True if any operand names a raw device rather than a file."""
     for token in args:
         lowered = token.lower()
-        value = lowered.partition("=")[2] if "=" in lowered else lowered
+        value = lowered.partition("=")[-1] if "=" in lowered else lowered
         if any(marker in value for marker in DEVICE_PATH_MARKERS):
             # /dev/zero and /dev/urandom are sources, not targets.
             if value.rstrip("0123456789").endswith(("/zero", "/urandom",
@@ -2602,6 +2637,7 @@ GROUP_CLOSERS = frozenset({")", "}"})
 MAX_GROUP_DEPTH = 32
 FUSED_OPERATOR_CHARACTERS = frozenset("();|&")
 TWO_CHARACTER_OPERATORS = frozenset({"&&", "||", "|&"})
+LONG_OPERATOR_LENGTH = 2
 
 
 def operator_parts(token: str) -> list:
@@ -2610,12 +2646,13 @@ def operator_parts(token: str) -> list:
     shlex joins adjacent punctuation, so `curl x |(bash)` arrives as `|(`.
     The walk splits it so the pipe stays visible.
     """
-    if len(token) < 2 or not set(token) <= FUSED_OPERATOR_CHARACTERS:
+    if len(token) <= 1 or not set(token) <= FUSED_OPERATOR_CHARACTERS:
         return [token]
     parts = []
     index = 0
     while index < len(token):
-        step = 2 if token[index:index + 2] in TWO_CHARACTER_OPERATORS else 1
+        is_long = token[index:index + LONG_OPERATOR_LENGTH] in TWO_CHARACTER_OPERATORS
+        step = LONG_OPERATOR_LENGTH if is_long else 1
         parts.append(token[index:index + step])
         index += step
     return parts
@@ -2759,7 +2796,7 @@ def su_target_verdict(arguments: list) -> tuple:
     while argument_index < len(arguments):
         argument = arguments[argument_index]
         if argument in SU_VALUE_OPTIONS:
-            argument_index += 2
+            argument_index += OPTION_WITH_VALUE_TOKEN_COUNT
             continue
         if argument in ("-", "-l", "--login", "-m", "-p", "--preserve-environment"):
             argument_index += 1
@@ -2857,7 +2894,7 @@ def _git_config_positionals(args: list) -> list:
     while index < len(args):
         token = args[index]
         if token in GIT_CONFIG_VALUE_OPTIONS:
-            index += 2
+            index += OPTION_WITH_VALUE_TOKEN_COUNT
             continue
         if not token.startswith("-"):
             positionals.append(token)
@@ -3009,7 +3046,7 @@ def _load_github_command_denylist() -> tuple[frozenset, frozenset]:
         fields = line.split()
         if not fields or fields[0].startswith("#"):
             continue
-        if fields[0] == "family" and len(fields) == 2:
+        if fields[0] == "family" and len(fields) == DENYLIST_FAMILY_FIELD_COUNT:
             families.add((fields[1],))
         elif fields[0] == "path" and len(fields) > 1:
             paths.add(tuple(fields[1:]))
@@ -3043,13 +3080,13 @@ def _github_command_path(command: list) -> tuple:
     """Return the noun and action after consuming option values."""
     command_path = []
     index = 0
-    while index < len(command) and len(command_path) < 2:
+    while index < len(command) and len(command_path) < GH_COMMAND_PATH_WORDS:
         token = command[index]
         if token == "--":
             index += 1
             continue
         if token in GH_COMMAND_VALUE_OPTIONS:
-            index += 2
+            index += OPTION_WITH_VALUE_TOKEN_COUNT
             continue
         lowered = token.casefold()
         if any(lowered.startswith(option.casefold() + "=")
@@ -3059,7 +3096,7 @@ def _github_command_path(command: list) -> tuple:
         if any(token.casefold().startswith(option.casefold())
                and len(token) > len(option)
                for option in GH_COMMAND_VALUE_OPTIONS
-               if len(option) == 2):
+               if len(option) == SHORT_OPTION_LENGTH):
             index += 1
             continue
         if token.startswith("-"):
@@ -3077,7 +3114,7 @@ def _github_command_args(args: list) -> list:
         token = args[index]
         lowered = token.lower()
         if token in GH_GLOBAL_VALUE_OPTIONS:
-            index += 2
+            index += OPTION_WITH_VALUE_TOKEN_COUNT
             continue
         if any(lowered.startswith(option.lower() + "=")
                for option in GH_GLOBAL_VALUE_OPTIONS):
@@ -3097,7 +3134,7 @@ def _option_value(args: list, names: frozenset) -> str:
     for index, token in enumerate(args):
         lowered = token.lower()
         for name in names:
-            is_short = len(name) == 2 and name.startswith("-") and not name.startswith("--")
+            is_short = len(name) == SHORT_OPTION_LENGTH and name.startswith("-") and not name.startswith("--")
             target = token if is_short else lowered
             option_name = name if is_short else name.lower()
             if target == option_name:
@@ -3105,8 +3142,8 @@ def _option_value(args: list, names: frozenset) -> str:
             prefix = option_name + "="
             if target.startswith(prefix):
                 return token[len(prefix):]
-            if is_short and target.startswith(option_name) and len(token) > 2:
-                return token[2:]
+            if is_short and target.startswith(option_name) and len(token) > SHORT_OPTION_LENGTH:
+                return token[SHORT_OPTION_LENGTH:]
     return ""
 
 
@@ -3115,15 +3152,15 @@ def _option_values(args: list, names: frozenset) -> list:
     values = []
     for index, token in enumerate(args):
         for name in names:
-            is_short = len(name) == 2 and name.startswith("-") and not name.startswith("--")
+            is_short = len(name) == SHORT_OPTION_LENGTH and name.startswith("-") and not name.startswith("--")
             target = token if is_short else token.lower()
             option_name = name if is_short else name.lower()
             if target == option_name:
                 values.append(args[index + 1] if index + 1 < len(args) else "")
             elif target.startswith(option_name + "="):
                 values.append(token[len(option_name) + 1:])
-            elif is_short and target.startswith(option_name) and len(token) > 2:
-                values.append(token[2:])
+            elif is_short and target.startswith(option_name) and len(token) > SHORT_OPTION_LENGTH:
+                values.append(token[SHORT_OPTION_LENGTH:])
     return values
 
 
@@ -3177,12 +3214,12 @@ def _repository_target_owner(token: str) -> str:
     """
     if not token or token.startswith("-") or is_ambiguous(token):
         return ""
-    value = token.partition("://")[2] or token
-    value = value.rpartition("@")[2]
+    value = token.partition("://")[-1] or token
+    value = value.rpartition("@")[-1]
     segments = [segment for segment in value.split("/") if segment]
-    if len(segments) == 3 and _is_github_host(segments[0]):
+    if len(segments) == HOSTED_REPOSITORY_SEGMENT_COUNT and _is_github_host(segments[0]):
         segments = segments[1:]
-    if len(segments) != 2:
+    if len(segments) != REPOSITORY_SEGMENT_COUNT:
         return ""
     # Splitting dropped empty segments, so the owner is never empty here.
     # A separator left inside it means the token was never owner/name.
@@ -3204,8 +3241,8 @@ def _origin_owner(cwd: str) -> str:
     url = entries.get("remote.origin.url", "").strip()
     if not url:
         return ""
-    url = url.partition("://")[2] or url
-    url = url.rpartition("@")[2]
+    url = url.partition("://")[-1] or url
+    url = url.rpartition("@")[-1]
     # The SCP-like form is host:owner/name, so the colon can precede the
     # first slash. Split on whichever separator comes first.
     colon = url.find(":")
@@ -3255,7 +3292,7 @@ def _external_target_verdict(args: list, command: list, noun: str,
         while index < len(command):
             token = command[index]
             if token in GH_SUBCOMMAND_VALUE_OPTIONS:
-                index += 2
+                index += OPTION_WITH_VALUE_TOKEN_COUNT
                 continue
             if token.startswith("-"):
                 index += 1
@@ -3331,9 +3368,10 @@ def trusted_gh_arguments(program: str, args: list, cwd: str) -> list:
     script = args[script_index]
     candidate = script if os.path.isabs(script) else os.path.join(cwd, script)
     parts = os.path.abspath(candidate).replace("\\", "/").split("/")
-    if [part.casefold() for part in parts[-2:]] != ["scripts", "trusted_gh.py"]:
+    wrapper_tail = ["scripts", "trusted_gh.py"]
+    if [part.casefold() for part in parts[-len(wrapper_tail):]] != wrapper_tail:
         return []
-    return args[script_index + 2:]
+    return args[script_index + TRUSTED_GH_ARGUMENT_OFFSET:]
 
 
 def _git_subcommand(args: list) -> tuple:
@@ -3343,7 +3381,7 @@ def _git_subcommand(args: list) -> tuple:
         token = args[index]
         lowered = token.lower()
         if lowered in {"-c", "--git-dir", "--work-tree"}:
-            index += 2
+            index += OPTION_WITH_VALUE_TOKEN_COUNT
             continue
         if lowered.startswith(("-c", "--git-dir=", "--work-tree=")):
             index += 1
@@ -3447,7 +3485,7 @@ def forge_verdict(program: str, args: list, cwd: str = "") -> tuple:
             return decision, reason
     command = _github_command_args(args) if name == "gh" else args
     words = [token.lower() for token in command if not token.startswith("-")]
-    if len(words) < FORGE_DELETE_MIN_WORDS or "delete" not in words[:3]:
+    if len(words) < FORGE_DELETE_MIN_WORDS or "delete" not in words[:FORGE_DELETE_SEARCH_WORDS]:
         return "", ""
     noun = words[0]
     if noun not in FORGE_DELETE_NOUNS:

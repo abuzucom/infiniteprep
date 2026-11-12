@@ -34,6 +34,9 @@ HOOK_PATH = REPO_ROOT / "hooks" / "require_consent.py"
 LIVE_SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 EXAMPLE_SETTINGS = REPO_ROOT / "hooks" / "claude-code-settings.example.json"
 BLOCKING_EXIT_CODE = 2
+NON_STRING_PATH = 5
+PERMISSION_DENIED_ERRNO = 13
+RESTORED_FILE_MODE = 0o644
 EDIT_MATCHER = "Edit|Write|MultiEdit|NotebookEdit"
 
 EXISTING_TEST = """test('device switch failure leaves the visualizer silent', function () {
@@ -584,7 +587,7 @@ class PathFieldTypeTest(unittest.TestCase):
     """A path that is not a string must deny rather than crash."""
 
     def test_non_string_path_denies(self):
-        for value in (5, ["tests/test_x.js"], {"path": "x"}):
+        for value in (NON_STRING_PATH, ["tests/test_x.js"], {"path": "x"}):
             with self.subTest(value=value):
                 code, parsed = run_hook({
                     "hook_event_name": "PreToolUse",
@@ -619,7 +622,7 @@ class PathReasonTest(unittest.TestCase):
 
     def test_open_os_error_reports_that_the_target_cannot_be_confirmed(self):
         target = self.root / "tests" / "test_unreadable.py"
-        error = PermissionError(13, "permission denied")
+        error = PermissionError(PERMISSION_DENIED_ERRNO, "permission denied")
         with unittest.mock.patch.object(self.module.os, "open", side_effect=error):
             reason = self.module.find_gate_reason("Edit", str(target))
         self.assertEqual(
@@ -709,7 +712,7 @@ class UnreadableFileTest(unittest.TestCase):
         target = os.path.join(self.root, "tests", "test_noread.js")
         Path(target).write_text(EXISTING_TEST, encoding="utf-8")
         os.chmod(target, 0o000)
-        self.addCleanup(os.chmod, target, 0o644)
+        self.addCleanup(os.chmod, target, RESTORED_FILE_MODE)
         self.assertEqual(self._write_over(target), "ask")
 
     def test_non_utf8_file_cannot_be_edited_through_an_empty_old_string(self):

@@ -19,6 +19,16 @@ from unittest.mock import patch
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "scripts" / "check_local_paths.py"
+NAME_TOKEN_BYTES = 4
+SHORT_TOKEN_BYTES = 2
+HOST_TOKEN_BYTES = 5
+NAME_LINE_NUMBER = 3
+CLI_TIMEOUT_SECONDS = 60
+REPORTED_NAME_COUNT = 3
+USAGE_ERROR_EXIT_CODE = 2
+SHA_HEX_LENGTH = 40
+PLAIN_LINE_COUNT = 1000
+ADVERSARIAL_RUN_LENGTH = 200_000
 
 
 def _load_checker():
@@ -36,7 +46,7 @@ checker = _load_checker()
 
 def generated_name() -> str:
     """Return a fresh synthetic account name that no placeholder list holds."""
-    return "z" + secrets.token_hex(4)
+    return "z" + secrets.token_hex(NAME_TOKEN_BYTES)
 
 
 def scanner(allowlist_text: str = "", identity=None):
@@ -106,7 +116,7 @@ class ProfilePathTest(unittest.TestCase):
         name = generated_name()
         text = "one\ntwo\n/home/" + name + "/x\n"
         findings = scanner().scan_text(text, "a.txt")
-        self.assertEqual([finding.line for finding in findings], [3])
+        self.assertEqual([finding.line for finding in findings], [NAME_LINE_NUMBER])
 
 
 class NormalizationTest(unittest.TestCase):
@@ -129,7 +139,7 @@ class NormalizationTest(unittest.TestCase):
                 self.assertEqual(len(scanner().scan_text(line, "a.txt")), 1)
 
     def test_escape_decoding_does_not_hide_raw_names(self):
-        name = "u" + "beef" + secrets.token_hex(2)
+        name = "u" + "beef" + secrets.token_hex(SHORT_TOKEN_BYTES)
         line = "C:\\Users\\" + name + "\\x"
         self.assertEqual(len(scanner().scan_text(line, "a.txt")), 1)
 
@@ -202,7 +212,7 @@ class IdentityTest(unittest.TestCase):
 
     def test_full_identity_token_is_caught_anywhere(self):
         name = generated_name()
-        host = "h" + secrets.token_hex(5)
+        host = "h" + secrets.token_hex(HOST_TOKEN_BYTES)
         identity = checker.Identity(names=(name,), hosts=(host,))
         active = scanner("", identity)
         self.assertEqual(len(active.scan_text("by " + name, "a.txt")), 1)
@@ -242,7 +252,7 @@ class IdentityTest(unittest.TestCase):
 
     def test_environment_values_add_but_never_replace(self):
         name = generated_name()
-        fake = "y" + secrets.token_hex(4)
+        fake = "y" + secrets.token_hex(NAME_TOKEN_BYTES)
         with patch.object(checker, "_os_identity",
                           return_value=checker.Identity(names=(name,))):
             with patch.dict(os.environ, {"USER": fake, "HOME": "/tmp"}, clear=False):
@@ -289,7 +299,8 @@ def run_cli(arguments: list[str], cwd: Path, environment: dict | None = None):
     env.update(environment or {})
     return subprocess.run(
         [sys.executable, "-I", str(SCRIPT), *arguments],
-        cwd=cwd, env=env, capture_output=True, text=True, timeout=60,
+        cwd=cwd, env=env, capture_output=True, text=True,
+        timeout=CLI_TIMEOUT_SECONDS,
     )
 
 
@@ -318,7 +329,7 @@ class CliTest(unittest.TestCase):
         self.assertNotIn(name, result.stdout + result.stderr)
 
     def test_report_lists_every_finding_with_proposals(self):
-        names = [generated_name() for _ in range(3)]
+        names = [generated_name() for _ in range(REPORTED_NAME_COUNT)]
         body = "".join("/home/" + name + "/x\n" for name in names)
         (self.root / "f.txt").write_text(body, encoding="utf-8")
         result = self._cli(["--report", "f.txt"])
@@ -336,7 +347,7 @@ class CliTest(unittest.TestCase):
     def test_report_refused_in_ci(self):
         (self.root / "f.txt").write_text("x\n", encoding="utf-8")
         result = self._cli(["--report", "f.txt"], {"CI": "true"})
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, USAGE_ERROR_EXIT_CODE)
 
     def test_missing_allowlist_is_partial_adoption(self):
         self.allowlist.unlink()
@@ -418,7 +429,7 @@ class GitRangeTest(unittest.TestCase):
         self.assertEqual(self._cli(["--base", self.base, "--head", head]).returncode, 1)
         # A colon cannot appear in a Windows file name, so the path case uses
         # a synthetic log record in the exact `_git_log` output format.
-        log = ("\x1e" + "a" * 40 + "\x1fdocs: ok\n\x1d\n"
+        log = ("\x1e" + "a" * SHA_HEX_LENGTH + "\x1fdocs: ok\n\x1d\n"
                "+++ b/C:/Users/" + name + ".txt\n@@ -0,0 +1 @@\n+clean\n")
         findings = checker.scan_log(scanner(), log)
         self.assertEqual(len(findings), 1)
@@ -433,7 +444,7 @@ class GitRangeTest(unittest.TestCase):
 
     def test_range_rejects_non_sha_revisions(self):
         result = self._cli(["--base", "--output=/tmp/x", "--head", "HEAD"])
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, USAGE_ERROR_EXIT_CODE)
 
 
 class InstallerTest(unittest.TestCase):
@@ -494,13 +505,14 @@ class ScalingTest(unittest.TestCase):
             calls.append(1)
             return original(line)
 
-        lines = "\n".join("plain text line %d" % index for index in range(1000))
+        lines = "\n".join(
+            "plain text line %d" % index for index in range(PLAIN_LINE_COUNT))
         with patch.object(checker, "_normalize_line", side_effect=counting):
             scanner().scan_text(lines, "a.txt")
-        self.assertLessEqual(len(calls), 1000)
+        self.assertLessEqual(len(calls), PLAIN_LINE_COUNT)
 
     def test_adversarial_input_is_bounded(self):
-        line = "/home/" + "a" * 200_000 + "\\" * 200_000
+        line = "/home/" + "a" * ADVERSARIAL_RUN_LENGTH + "\\" * ADVERSARIAL_RUN_LENGTH
         findings = scanner().scan_text(line, "a.txt")
         self.assertEqual(len(findings), 1)
 

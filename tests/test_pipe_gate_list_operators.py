@@ -23,6 +23,7 @@ import gate_corpus
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HOOKS = REPO_ROOT / "hooks"
 BLOCKING_EXIT_CODE = 2
+STDERR_TAIL_CHARACTERS = 300
 # Enough repeated interpreter names to exceed Python's default recursion limit.
 INTERPRETER_CHAIN_LENGTH = 3000
 # One level past MAX_GROUP_DEPTH in hooks/_gate_core.py.
@@ -47,12 +48,14 @@ def invoke_gate(tool_name: str, command: str) -> tuple:
 
 def run_bash(command: str) -> tuple:
     """Return the Bash gate's (exit code, decision) for `command`."""
-    return invoke_gate("Bash", command)[:2]
+    code, decision, _stderr = invoke_gate("Bash", command)
+    return code, decision
 
 
 def run_powershell(command: str) -> tuple:
     """Return the PowerShell gate's (exit code, decision) for `command`."""
-    return invoke_gate("PowerShell", command)[:2]
+    code, decision, _stderr = invoke_gate("PowerShell", command)
+    return code, decision
 
 
 def load_hook(name: str):
@@ -162,7 +165,7 @@ class InterpreterChainDepthTest(unittest.TestCase):
     def test_long_interpreter_chain_with_payload_denies(self):
         command = "bash " * INTERPRETER_CHAIN_LENGTH + "-c 'echo hi'"
         result = self.run_real_hook(command)
-        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr[-300:])
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr[-STDERR_TAIL_CHARACTERS:])
 
     def test_short_chains_keep_their_verdicts(self):
         for command, expected in (("busybox sh -c 'echo hi'", "deny"),

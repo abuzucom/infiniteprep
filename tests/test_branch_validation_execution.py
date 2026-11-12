@@ -10,6 +10,8 @@ from unittest.mock import patch
 from tests.test_enforce_branch_name import REPO_ROOT, hook
 
 core = hook.core
+SHORTENED_CONFIG_READ_TIMEOUT_SECONDS = 0.05
+DETACHED_HEAD_OBJECT_ID = "0" * 40
 
 
 class BranchExecutionTest(unittest.TestCase):
@@ -116,7 +118,7 @@ class BranchExecutionTest(unittest.TestCase):
 
     def test_real_config_reader_reaps_timed_out_process(self):
         command = [sys.executable, "-c", "import time; time.sleep(10)"]
-        with patch.object(core, "CONFIG_READ_TIMEOUT_SECONDS", 0.05):
+        with patch.object(core, "CONFIG_READ_TIMEOUT_SECONDS", SHORTENED_CONFIG_READ_TIMEOUT_SECONDS):
             with self.assertRaises(subprocess.TimeoutExpired):
                 core._run_config_reader(command, dict(os.environ))
 
@@ -141,7 +143,7 @@ class BranchExecutionTest(unittest.TestCase):
             with patch.dict(os.environ, {"GITHUB_HEAD_REF": "fix/example"}):
                 head.write_text("ref: refs/heads/fix/example\n", encoding="utf-8")
                 self.assertEqual(hook.current_branch(directory), "fix/example")
-                head.write_text("0" * 40 + "\n", encoding="utf-8")
+                head.write_text(DETACHED_HEAD_OBJECT_ID + "\n", encoding="utf-8")
                 self.assertEqual(hook.current_branch(directory), "fix/example")
 
 
