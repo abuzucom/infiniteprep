@@ -5,6 +5,18 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.55.0] (2026-11-12)
+
+### Added
+
+- USB export preflight policy in `services/usb/preflight.py` (USB-4, #156). The policy refuses non-removable drives, system and boot volumes, active partitions, read-only media, filesystem errors, unknown layouts, non-FAT32 filesystems, and unknown database formats.
+- A file of 4 GiB or more blocks the whole export.
+- Conservative space estimate in `services/usb/space.py`. The reserve is the larger of a percentage of the estimate and a fixed byte count. Both start at zero.
+- Pre-write recheck in `services/usb/recheck.py`. A changed drive identity, mount path, or writability aborts the export. The recheck reads writability from the fresh mount path on every call.
+- Optional preflight facts on the USB inspection models.
+- Read-only preflight probes in `services/usb/linux_probe.py`, `macos_probe.py`, and `windows_probe.py`. The probes add system, active, primary, hardware ID, and filesystem health facts. No probe needs raw device access.
+- The Linux probe infers filesystem health from the kernel mount state. A read-only mount on writable media refuses. The guidance names a filesystem error and a deliberate read-only mount as causes. The macOS probe leaves active, primary, and health facts unverified. The Windows probe reads `HealthStatus`.
+
 ## [0.54.0] (2026-11-11)
 
 ### Added

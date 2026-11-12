@@ -3,6 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
+
+
+class FilesystemHealth(StrEnum):
+    """Result of a read-only filesystem check. An absent value means not checked."""
+
+    HEALTHY = "healthy"
+    ERRORS = "errors"
 
 
 class DriveInspectionError(Exception):
@@ -41,6 +49,10 @@ class PartitionInfo:
     uuid: str | None = None
     mount_points: tuple[str, ...] = field(default_factory=tuple)
     is_read_only: bool = False
+    # Preflight facts. None means no probe supplied the fact.
+    is_active: bool | None = None
+    is_primary: bool | None = None
+    filesystem_health: FilesystemHealth | None = None
 
     @property
     def is_exfat(self) -> bool:
@@ -67,6 +79,9 @@ class DriveIdentity:
     is_read_only: bool = False
     bus_type: str | None = None
     subsystem: str | None = None
+    # Preflight facts. None means no probe supplied the fact.
+    hardware_id: str | None = None
+    is_system: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +91,8 @@ class DriveInspection:
     drive: DriveIdentity
     partitions: tuple[PartitionInfo, ...] = field(default_factory=tuple)
     space_by_mount: tuple[tuple[str, SpaceInfo], ...] = field(default_factory=tuple)
+    # Names of preflight facts that came from a passive fallback source.
+    inferred_facts: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def space_map(self) -> dict[str, SpaceInfo]:
