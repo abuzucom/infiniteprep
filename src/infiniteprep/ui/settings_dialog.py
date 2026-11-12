@@ -30,6 +30,7 @@ from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, g
 SETTINGS_DIALOG_WIDTH: Final[int] = 620
 SETTINGS_DIALOG_HEIGHT: Final[int] = 460
 CLEANUP_BUTTON_LABEL: Final[str] = "Delete InfinitePrep Data..."
+STOP_ON_FAILURE_LABEL: Final[str] = "Stop an Analyze or write batch at its first failed file"
 
 
 class SettingsDialog(QDialog):
@@ -41,11 +42,13 @@ class SettingsDialog(QDialog):
         credential_store: CredentialStore,
         parent: QWidget | None = None,
         storage_locations: StorageLocations | None = None,
+        cleanup_enabled: bool = True,
     ) -> None:
         """Initialize SettingsDialog with SettingsManager and CredentialStore.
 
         storage_locations names the folders the cleanup action lists. It defaults to the
-        locations chosen at startup.
+        locations chosen at startup. A false cleanup_enabled disables the cleanup
+        button, for use while a batch runs or waits.
         """
         super().__init__(parent)
         self.settings_mgr = settings_manager
@@ -66,10 +69,12 @@ class SettingsDialog(QDialog):
         self.transcode_mode_combo = QComboBox(self)
         self.transcode_preset_combo = QComboBox(self)
         self.playlist_relative_checkbox = QCheckBox("Write paths relative to the playlist", self)
+        self.stop_on_failure_checkbox = QCheckBox(STOP_ON_FAILURE_LABEL, self)
         self.theme_combo = QComboBox(self)
         self.save_btn = QPushButton("Save Settings", self)
         self.cancel_btn = QPushButton("Cancel", self)
         self.cleanup_btn = QPushButton(CLEANUP_BUTTON_LABEL, self)
+        self.cleanup_btn.setEnabled(cleanup_enabled)
 
         self._build_layout()
 
@@ -105,6 +110,9 @@ class SettingsDialog(QDialog):
 
         self.playlist_relative_checkbox.setChecked(self.current_settings.playlist_relative_paths)
         form.addRow("Playlist Export:", self.playlist_relative_checkbox)
+
+        self.stop_on_failure_checkbox.setChecked(self.current_settings.stop_batch_on_first_failure)
+        form.addRow("Batch Queue:", self.stop_on_failure_checkbox)
 
         for theme_name in get_available_themes():
             self.theme_combo.addItem(theme_name)
@@ -146,6 +154,9 @@ class SettingsDialog(QDialog):
         self.current_settings.transcode_mode = self.transcode_mode_combo.currentText()
         self.current_settings.transcode_preset = self.transcode_preset_combo.currentText()
         self.current_settings.playlist_relative_paths = self.playlist_relative_checkbox.isChecked()
+        self.current_settings.stop_batch_on_first_failure = (
+            self.stop_on_failure_checkbox.isChecked()
+        )
         self.current_settings.theme = self.theme_combo.currentText()
         self.settings_mgr.save(self.current_settings)
         app = QApplication.instance()
