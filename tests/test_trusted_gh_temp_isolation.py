@@ -22,6 +22,8 @@ sys.path.insert(0, str(REPOSITORY_ROOT / "scripts"))
 import trusted_gh
 
 TEMP_VARIABLES = ("TMPDIR", "TMP", "TEMP")
+DISTINCT_CALL_COUNT = 2
+OWNER_ONLY_MODE = 0o700
 
 
 class CapturingRunner:
@@ -74,7 +76,7 @@ class PrivateTempDirectoryTest(unittest.TestCase):
         self.assertEqual(call["cwd"].parent, self.parent_path)
 
     def test_each_call_gets_a_distinct_directory(self):
-        first, second = self.run_calls(2).calls
+        first, second = self.run_calls(DISTINCT_CALL_COUNT).calls
         self.assertNotEqual(first["cwd"], second["cwd"])
 
     def test_directory_exists_during_call_and_leaves_after(self):
@@ -85,7 +87,7 @@ class PrivateTempDirectoryTest(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "Windows does not expose POSIX file modes")
     def test_private_directory_is_owner_only(self):
         call = self.run_calls(1).calls[0]
-        self.assertEqual(call["mode"], 0o700)
+        self.assertEqual(call["mode"], OWNER_ONLY_MODE)
 
 
 class TempRootSelectionTest(unittest.TestCase):

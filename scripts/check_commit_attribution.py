@@ -34,6 +34,12 @@ NON_PRINTABLE_PATTERN = re.compile(r"[^\x20-\x7e]")
 MAX_REPORTED_MODEL = 80
 MAX_COMMITS = 200
 MAX_MESSAGE_BYTES = 256 * 1024
+SHORT_SHA_LENGTH = 12
+GIT_RANGE_TIMEOUT_SECONDS = 60
+GIT_COMMIT_TIMEOUT_SECONDS = 30
+GITHUB_API_TIMEOUT_SECONDS = 30
+# Object ID, then the message.
+COMMIT_METADATA_FIELD_COUNT = 2
 
 
 def terminal_trailers(body: str) -> list[tuple[str, str]]:
@@ -66,7 +72,7 @@ def trailer_violations(commits: list[dict]) -> list[str]:
     """Return violations for unapproved co-author and assisted-by trailers."""
     violations = []
     for commit in commits:
-        sha = commit["sha"][:12]
+        sha = commit["sha"][:SHORT_SHA_LENGTH]
         body = commit.get("body", "")
         lines = body.splitlines()
         while lines and not lines[-1].strip():
@@ -122,7 +128,7 @@ def _git_log(repository: str, base: str, head: str) -> list[dict]:
         ["rev-list", "--reverse", "--end-of-options", revision],
         check=True,
         runner=subprocess.run,
-        timeout=60,
+        timeout=GIT_RANGE_TIMEOUT_SECONDS,
     )
     shas = result.stdout.splitlines()
     if len(shas) > MAX_COMMITS or any(not OBJECT_ID_PATTERN.fullmatch(sha) for sha in shas):
@@ -135,10 +141,10 @@ def _git_log(repository: str, base: str, head: str) -> list[dict]:
              "--end-of-options", sha],
             check=True,
             runner=subprocess.run,
-            timeout=30,
+            timeout=GIT_COMMIT_TIMEOUT_SECONDS,
         ).stdout
         fields = metadata.split("\x00", 1)
-        if len(fields) != 2 or fields[0] != sha:
+        if len(fields) != COMMIT_METADATA_FIELD_COUNT or fields[0] != sha:
             raise ValueError("git returned malformed commit metadata")
         if len(fields[1].encode("utf-8")) > MAX_MESSAGE_BYTES:
             raise ValueError("commit message exceeds the supported limit")
@@ -157,7 +163,7 @@ def _repository_name(explicit: str) -> str:
 def _commit_api(repository: str, sha: str, repo_root: str) -> dict:
     """Load one commit from GitHub through the trusted CLI wrapper."""
     endpoint = f"repos/{repository}/commits/{sha}"
-    result = run_gh(repo_root, ["api", endpoint], timeout=30)
+    result = run_gh(repo_root, ["api", endpoint], timeout=GITHUB_API_TIMEOUT_SECONDS)
     if result.returncode != 0:
         raise RuntimeError("GitHub commit identity lookup failed")
     document = json.loads(result.stdout)
@@ -169,7 +175,7 @@ def _commit_api(repository: str, sha: str, repo_root: str) -> dict:
 def _identity_violation(role: str, commit: dict, identity: dict | None,
                         require_noreply: bool = False) -> str | None:
     """Return a bounded identity violation for one commit field."""
-    sha = commit["sha"][:12]
+    sha = commit["sha"][:SHORT_SHA_LENGTH]
     if not isinstance(identity, dict) or not identity.get("login"):
         return f"{sha}: GitHub could not resolve the {role} identity"
     raw = commit.get("commit", {}).get(role, {}).get("email", "")
@@ -228,7 +234,7 @@ def model_disclosure_violations(commits: list[dict]) -> list[str]:
     """
     violations = []
     for commit in commits:
-        sha = commit["sha"][:12]
+        sha = commit["sha"][:SHORT_SHA_LENGTH]
         models, agent_label = _disclosure_labels(commit.get("body", ""))
         for model in models:
             if not VERSION_DIGIT_PATTERN.search(model):

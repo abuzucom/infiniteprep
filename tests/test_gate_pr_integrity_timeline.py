@@ -17,6 +17,8 @@ PUSHED = "2026-09-30T10:00:00Z"
 BEFORE_PUSH = "2026-09-30T09:00:00Z"
 AFTER_PUSH = "2026-09-30T11:00:00Z"
 LATER = "2026-09-30T12:00:00Z"
+NON_STRING_ACTOR_TYPE = 7
+SHA_HEX_LENGTH = 40
 
 
 def labeled(created_at: str, actor_type: str = "User", label: str = LABEL) -> dict:
@@ -88,7 +90,7 @@ class TimelineParsingTest(unittest.TestCase):
                 json.dumps(timeline([{"event": "labeled"}])),
                 json.dumps(timeline([labeled("yesterday")])),
                 json.dumps(timeline([labeled(AFTER_PUSH)], ("soon",))),
-                json.dumps(timeline([labeled(AFTER_PUSH, actor_type=7)]))):
+                json.dumps(timeline([labeled(AFTER_PUSH, actor_type=NON_STRING_ACTOR_TYPE)]))):
             with self.subTest(content=content):
                 with self.assertRaises(ValueError):
                     integrity.load_timeline(self.write(content))
@@ -106,7 +108,8 @@ class TimelineCliTest(unittest.TestCase):
         with patch.object(integrity, "_has_revision", return_value=True):
             with patch.object(integrity, "_changed_paths", return_value=paths):
                 return integrity.main([
-                    "--base", "a" * 40, "--head", "b" * 40, "--pr-number", "1",
+                    "--base", "a" * SHA_HEX_LENGTH,
+                    "--head", "b" * SHA_HEX_LENGTH, "--pr-number", "1",
                     "--labels-json", json.dumps(labels), *extra,
                 ])
 

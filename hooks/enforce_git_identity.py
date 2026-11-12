@@ -40,13 +40,15 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+POLICY_DENIAL_EXIT_CODE = 2
+
 try:
     import _gate_core as core
     import _bash_parser as bash_parser
 except ImportError as error:  # pragma: no cover (exercised by the adoption test)
     print(f"the shared hook parser or core could not be imported ({error})",
           file=sys.stderr)
-    sys.exit(2)
+    sys.exit(POLICY_DENIAL_EXIT_CODE)
 
 CHECKER_PATH = os.path.join("scripts", "check_git_identity.py")
 PUSH_LABEL = "git push"
@@ -214,11 +216,11 @@ def _handle_pre_tool_use(payload: dict, project_dir: str) -> int:
     if not isinstance(tool_input, dict):
         print("blocked by hooks/enforce_git_identity.py: malformed tool input.",
               file=sys.stderr)
-        return 2
+        return POLICY_DENIAL_EXIT_CODE
     command = tool_input.get("command", "")
     for invocation in blocked_command(command, project_dir):
         if _blocks_invocation(project_dir, invocation):
-            return 2
+            return POLICY_DENIAL_EXIT_CODE
     return 0
 
 

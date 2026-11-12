@@ -13,6 +13,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import check_commit_message
 import check_pull_request_message
 
+SHA_HEX_LENGTH = 40
+NON_STRING_TITLE = 7
+
 
 class CommitProseTest(unittest.TestCase):
     """Commit subjects and bodies share the prose policy."""
@@ -20,7 +23,7 @@ class CommitProseTest(unittest.TestCase):
     def test_required_type_prefix_has_no_prose_finding(self):
         messages = [
             (
-                "a" * 40,
+                "a" * SHA_HEX_LENGTH,
                 "fix: reject malformed records",
                 "Reject malformed records before persistence.\n",
             )
@@ -30,7 +33,7 @@ class CommitProseTest(unittest.TestCase):
     def test_subject_and_body_findings_remain_advisory(self):
         messages = [
             (
-                "a" * 40,
+                "a" * SHA_HEX_LENGTH,
                 "fix: improve validation",
                 "The requester prefers serious validation.\n",
             )
@@ -45,7 +48,7 @@ class CommitProseTest(unittest.TestCase):
     def test_commit_body_with_literal_escapes_warns(self):
         messages = [
             (
-                "a" * 40,
+                "a" * SHA_HEX_LENGTH,
                 "fix: improve validation",
                 "Summary\\n- Allow rebase recovery.\\n",
             )
@@ -58,7 +61,7 @@ class CommitProseTest(unittest.TestCase):
 
     def test_existing_subject_contract_remains_available(self):
         found = check_commit_message.find_violations(
-            [("a" * 40, "missing prefix")]
+            [("a" * SHA_HEX_LENGTH, "missing prefix")]
         )
         self.assertEqual(len(found), 1)
         self.assertIn("must start with", found[0])
@@ -163,7 +166,7 @@ class PullRequestProseTest(unittest.TestCase):
         self.assertIn("literal escape sequence", output.getvalue())
 
     def test_malformed_event_returns_one(self):
-        event_path = self._write_event({"pull_request": {"title": 7}})
+        event_path = self._write_event({"pull_request": {"title": NON_STRING_TITLE}})
         self.assertEqual(check_pull_request_message.check_event(event_path), 1)
 
 

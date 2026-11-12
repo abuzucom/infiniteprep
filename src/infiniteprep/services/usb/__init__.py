@@ -9,21 +9,59 @@ from infiniteprep.services.usb.models import (
     DriveIdentity,
     DriveInspection,
     DriveInspectionError,
+    FilesystemHealth,
     InspectionParseError,
     PartitionInfo,
     SpaceInfo,
 )
+from infiniteprep.services.usb.preflight import (
+    DjProfileRequest,
+    PreflightRequest,
+    PreflightResult,
+    Refusal,
+    RefusalCode,
+    evaluate_preflight,
+)
+from infiniteprep.services.usb.recheck import (
+    AbortCode,
+    AbortReason,
+    RecheckResult,
+    TargetSnapshot,
+    capture_target_snapshot,
+    recheck_target,
+)
+from infiniteprep.services.usb.space import (
+    ReservePolicy,
+    compute_reserve_bytes,
+    estimate_export_bytes,
+)
 from infiniteprep.services.usb.windows import WindowsDriveInspector
 
 __all__ = [
+    "AbortCode",
+    "AbortReason",
     "CommandExecutionError",
+    "DjProfileRequest",
     "DriveIdentity",
     "DriveInspection",
     "DriveInspectionError",
+    "FilesystemHealth",
     "InspectionParseError",
     "LinuxDriveInspector",
     "MacOSDriveInspector",
     "PartitionInfo",
+    "PreflightRequest",
+    "PreflightResult",
+    "RecheckResult",
+    "Refusal",
+    "RefusalCode",
+    "ReservePolicy",
     "SpaceInfo",
+    "TargetSnapshot",
     "WindowsDriveInspector",
+    "capture_target_snapshot",
+    "compute_reserve_bytes",
+    "estimate_export_bytes",
+    "evaluate_preflight",
+    "recheck_target",
 ]

@@ -22,6 +22,9 @@ ACTIONS_LOGIN = "github-actions[bot]"
 ACTIONS_EMAIL = "41898282+github-actions[bot]@users.noreply.github.com"
 HUMAN_EMAIL = "654939+itsjustatank@users.noreply.github.com"
 INVALID_BRANCH = "invalid branch"
+HUMAN_ACCOUNT_ID = 583231
+MISMATCHED_ACTIONS_ID = 7
+BOT_COMMIT_VIOLATION_COUNT = 2
 
 
 def load_script(name):
@@ -192,7 +195,7 @@ class BranchExemptionTest(EventFileTestCase):
         self.assertEqual(violations, [INVALID_BRANCH])
 
     def test_human_author_on_bot_branch_is_rejected(self):
-        path = self.write_event(event_payload("octocat", 583231, COVERAGE_BRANCH))
+        path = self.write_event(event_payload("octocat", HUMAN_ACCOUNT_ID, COVERAGE_BRANCH))
         self.assertEqual(self.scan("octocat", COVERAGE_BRANCH, path), [INVALID_BRANCH])
 
     def test_dependabot_ignores_push_event(self):
@@ -261,11 +264,12 @@ class BotCommitIdentityTest(unittest.TestCase):
 
     def test_human_pull_request_with_dependabot_commit_fails(self):
         found = self.violations("dependabot", "itsjustatank")
-        self.assertEqual(len(found), 2)
+        self.assertEqual(len(found), BOT_COMMIT_VIOLATION_COUNT)
         self.assertIn("pull request author is itsjustatank", found[0])
 
     def test_uppercase_bot_email_cannot_bypass(self):
-        self.assertEqual(len(self.violations("uppercase", "itsjustatank")), 2)
+        found = self.violations("uppercase", "itsjustatank")
+        self.assertEqual(len(found), BOT_COMMIT_VIOLATION_COUNT)
 
     def test_unnumbered_bot_email_fails(self):
         found = self.violations("unnumbered", "dependabot[bot]")
@@ -289,8 +293,8 @@ class BotCommitIdentityTest(unittest.TestCase):
     def test_event_id_overrides_registry(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "event.json"
-            path.write_text(json.dumps(event_payload(ACTIONS_LOGIN, 7, "chore/x")),
-                            encoding="utf-8")
+            payload = event_payload(ACTIONS_LOGIN, MISMATCHED_ACTIONS_ID, "chore/x")
+            path.write_text(json.dumps(payload), encoding="utf-8")
             found = self.violations("actions", ACTIONS_LOGIN, str(path))
         self.assertTrue(found)
         self.assertIn("account ID", found[0])
@@ -319,7 +323,7 @@ class BranchNameMainTest(EventFileTestCase):
         self.assertEqual(self.run_main(path)[0], 0)
 
     def test_human_on_bot_branch_fails(self):
-        path = self.write_event(event_payload("octocat", 583231, COVERAGE_BRANCH))
+        path = self.write_event(event_payload("octocat", HUMAN_ACCOUNT_ID, COVERAGE_BRANCH))
         self.assertEqual(self.run_main(path)[0], 1)
 
     def test_wrong_id_fails(self):

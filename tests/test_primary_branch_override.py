@@ -7,6 +7,7 @@ INVALID_OVERRIDES = (
     b"", b"\n", b"develop\nmain\n", b"master\n", b"HEAD\n", b"bad name\n",
     b"-develop\n", "dévelop\n".encode("utf-8"), b"x" * 300 + b"\n",
 )
+SUBTEST_LABEL_LENGTH = 20
 
 
 class PrimaryBranchOverrideTest(unittest.TestCase):
@@ -43,7 +44,7 @@ class PrimaryBranchOverrideTest(unittest.TestCase):
     def test_invalid_override_denies_every_tool(self):
         for content in INVALID_OVERRIDES:
             for branch in ("develop", "main"):
-                with self.subTest(content=content[:20], branch=branch):
+                with self.subTest(content=content[:SUBTEST_LABEL_LENGTH], branch=branch):
                     fixture = BranchFixture(self, branch)
                     fixture.write_override(content)
                     result = self.read(fixture)

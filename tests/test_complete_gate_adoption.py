@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT_PATH = REPOSITORY_ROOT / "scripts" / "complete_gate_adoption.py"
+REGISTRATION_PATH_COUNT = 2
 
 
 def load_script():
@@ -65,7 +66,8 @@ class CompleteGateAdoptionTest(unittest.TestCase):
             ".codex/hooks.json",
         ])
         self.assertEqual(paths[0], "hooks/example.py")
-        self.assertEqual(paths[-2:], [".claude/settings.json", ".codex/hooks.json"])
+        self.assertEqual(
+            paths[-REGISTRATION_PATH_COUNT:], [".claude/settings.json", ".codex/hooks.json"])
 
     def test_install_failure_restores_prior_files(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

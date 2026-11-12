@@ -9,11 +9,13 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+POLICY_DENIAL_EXIT_CODE = 2
+
 try:
     import _gate_core as core
 except ImportError as error:  # pragma: no cover
     print(f"shared gate core import failed ({error})", file=sys.stderr)
-    sys.exit(2)
+    sys.exit(POLICY_DENIAL_EXIT_CODE)
 
 GATE = "enforce_gate_adoption.py"
 CHECKER_PATH = os.path.join("scripts", "check_gate_adoption.py")

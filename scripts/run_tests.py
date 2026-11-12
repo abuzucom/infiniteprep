@@ -12,6 +12,7 @@ except ImportError:
     import check_hook_coverage as shard_runner
 
 DIAGNOSTIC_LIMIT = 4000
+USAGE_ERROR_EXIT_CODE = 2
 
 
 def _ensure_import_root(root: str) -> None:
@@ -81,7 +82,7 @@ def _test_module_names(root: str) -> set[str]:
         package = [] if relative == "." else relative.split(os.sep)
         for filename in files:
             if filename.startswith("test_") and filename.endswith(".py"):
-                stem = filename[:-3]
+                stem = filename.removesuffix(".py")
                 names.add(".".join(package + [stem]))
                 names.add(".".join(["tests"] + package + [stem]))
     return names
@@ -128,26 +129,35 @@ def run_suite(root: str, *, workers: int, timeout: float) -> int:
         )
     except (ImportError, OSError, RuntimeError, ValueError) as error:
         diagnostic = _safe_diagnostic(f"{type(error).__name__}: {error}")
-        print(diagnostic, file=sys.stderr)
+        print(diagnostic, file=sys.stderr, flush=True)
         print(
             "error: test discovery failed; repair the suite and retry",
             file=sys.stderr,
+            flush=True,
         )
         return 1
     if not problems:
-        print("all test shards passed")
+        print("all test shards passed", flush=True)
         return 0
     for problem in problems:
-        print(_safe_diagnostic(problem), file=sys.stderr)
-    print("error: test shards failed; fix the reported tests and retry", file=sys.stderr)
+        print(_safe_diagnostic(problem), file=sys.stderr, flush=True)
+    print(
+        "error: test shards failed; fix the reported tests and retry",
+        file=sys.stderr,
+        flush=True,
+    )
     return 1
 
 
 def main(argv: list[str]) -> int:
     """Run the repository suite with project defaults."""
     if argv:
-        print("error: run_tests.py accepts no arguments", file=sys.stderr)
-        return 2
+        print(
+            "error: run_tests.py accepts no arguments",
+            file=sys.stderr,
+            flush=True,
+        )
+        return USAGE_ERROR_EXIT_CODE
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     started = time.monotonic()
     result = run_suite(
@@ -156,7 +166,7 @@ def main(argv: list[str]) -> int:
         timeout=shard_runner.TEST_SHARD_TIMEOUT_SECONDS,
     )
     elapsed = time.monotonic() - started
-    print(f"test suite finished in {elapsed:.1f}s")
+    print(f"test suite finished in {elapsed:.1f}s", flush=True)
     return result
 
 

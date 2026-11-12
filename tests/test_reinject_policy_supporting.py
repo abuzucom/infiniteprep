@@ -8,6 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 HOOK_PATH = ROOT / "hooks" / "reinject_agents_policy.py"
+OVERFLOW_CANONICAL_POLICY_BYTES = 20000
+OVERFLOW_SUPPORTING_FILE_BYTES = 10000
 
 
 def load_hook():
@@ -146,11 +148,11 @@ class SupportingPolicyTests(unittest.TestCase):
         hook = load_hook()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "AGENTS.md").write_bytes(b"x" * 20000)
+            (root / "AGENTS.md").write_bytes(b"x" * OVERFLOW_CANONICAL_POLICY_BYTES)
             for relative_name in hook.SUPPORTING_POLICY_FILES:
                 path = root / relative_name
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_bytes(b"x" * 10000)
+                path.write_bytes(b"x" * OVERFLOW_SUPPORTING_FILE_BYTES)
             result = subprocess.run(
                 [sys.executable, "-c", (
                     "import importlib.util, pathlib, sys; "
