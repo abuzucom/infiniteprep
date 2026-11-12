@@ -22,6 +22,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Read-only preflight probes in `services/usb/linux_probe.py`, `macos_probe.py`, and `windows_probe.py`. The probes add system, active, primary, hardware ID, and filesystem health facts. No probe needs raw device access.
 - The Linux probe infers filesystem health from the kernel mount state. A read-only mount on writable media refuses. The guidance names a filesystem error and a deliberate read-only mount as causes. The macOS probe leaves active, primary, and health facts unverified. The Windows probe reads `HealthStatus`.
 
+### Fixed
+
+- The `resolve-pr` job in `security-review-pr.yml` skips a cancelled `ci` run. A newer commit cancels the `ci` run of the older commit, and that run no longer names a pull request head. Each such run failed the security review workflow.
+
 ## [0.54.0] (2026-11-11)
 
 ### Added

@@ -19,7 +19,12 @@ SUITE_COMMANDS: Final[tuple[str, ...]] = (
 )
 POSIX_UNSET_SHELL: Final[str] = "env -u GITHUB_EVENT_PATH bash -e {0}"
 PWSH_REMOVE_COMMAND: Final[str] = "Remove-Item Env:GITHUB_EVENT_PATH"
-PULL_REQUEST_GUARD: Final[str] = "github.event.workflow_run.event == 'pull_request'"
+# A newer commit cancels the ci run of the older commit. The cancelled run
+# still fires workflow_run, and its commit is no longer a pull request head.
+PULL_REQUEST_GUARD: Final[str] = (
+    "github.event.workflow_run.event == 'pull_request' && "
+    "github.event.workflow_run.conclusion != 'cancelled'"
+)
 
 
 def load_workflow(path: Path) -> dict[str, Any]:
