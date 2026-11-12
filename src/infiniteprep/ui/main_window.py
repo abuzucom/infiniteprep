@@ -39,7 +39,16 @@ from infiniteprep.domain.enums import (
 )
 from infiniteprep.domain.models import FileAsset
 from infiniteprep.services.import_service import ImportBatchReport, ImportService
+from infiniteprep.services.job_orchestrator import BatchKind, BatchState, QueuedBatch
 from infiniteprep.services.review_service import ReviewService
+from infiniteprep.ui.batch_queue import (
+    BatchQueueController,
+    BatchRun,
+    CancelCheck,
+    ProgressReport,
+    format_batch_result,
+)
+from infiniteprep.ui.batch_queue_dock import BatchQueueDock
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.folder_import import FolderImportController, ImportReportDialog
 from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
@@ -71,6 +80,13 @@ CLOSE_STAY: Final[str] = "stay"
 IMPORT_FAILURE_TEXT: Final[str] = (
     "The import stopped and nothing was imported. Check the folder and try again."
 )
+CLOSE_PROMPT_TEXT: Final[str] = (
+    "A batch is still running or waiting. Keep working, or cancel and exit. "
+    "Cancel stops the running batch after its current file and drops every waiting batch. "
+    "A cancelled import keeps nothing."
+)
+# Runs a queued Analyze batch on a worker thread: file IDs, cancel check, progress report.
+AnalyzeRunner = Callable[[list[str], CancelCheck, ProgressReport], object]
 
 
 def format_duration(seconds: float) -> str:
@@ -99,16 +115,20 @@ class MainWindow(QMainWindow):
         on_transcode_batch: Callable[[list[str]], object] | None = None,
         on_export_playlist: Callable[[list[str], Path], object] | None = None,
         enable_audio_backend: bool = False,
+        analyze_runner: AnalyzeRunner | None = None,
     ) -> None:
         """Initialize MainWindow with core services and callbacks.
 
         enable_audio_backend turns on real audio playback in the detail panel preview.
+        analyze_runner runs Identify & Analyze as a queued batch on a worker thread.
+        Without it, on_analyze_batch runs on the calling thread.
         """
         super().__init__(parent)
         self.repo = repository
         self.import_service = import_service
         self.review_service = review_service
         self.on_analyze_batch = on_analyze_batch
+        self.analyze_runner = analyze_runner
         self.on_open_write_dialog = on_open_write_dialog
         self.on_open_journal_dialog = on_open_journal_dialog
         self.on_open_settings_dialog = on_open_settings_dialog
@@ -133,15 +153,27 @@ class MainWindow(QMainWindow):
             parent=self,
             enable_audio_backend=enable_audio_backend,
         )
-        self.import_controller = FolderImportController(self.import_service, self)
-        self.import_controller.completed.connect(self._on_import_completed)
-        self._close_after_import = False
-        self.import_failure_box: QMessageBox | None = None
-
         self._setup_toolbar()
         self._setup_central_widget()
+        self._setup_batch_queue()
         self._restore_table_layouts()
         self.refresh_file_table()
+
+    def _setup_batch_queue(self) -> None:
+        """Create the batch queue, its dock panel, and the import controller it drives."""
+        self.import_controller = FolderImportController(
+            self.import_service, self, show_progress_dialog=False
+        )
+        self.batch_queue = BatchQueueController(self.import_controller, self.repo.db.close, self)
+        self.batch_dock = BatchQueueDock(self.batch_queue, self)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.batch_dock)
+        self._close_after_queue = False
+        self.import_failure_box: QMessageBox | None = None
+        self.batch_result_box: QMessageBox | None = None
+        self.batch_queue.batch_finished.connect(self._on_batch_finished)
+        self.batch_queue.changed.connect(self._update_action_locks)
+        self.batch_queue.idle.connect(self._on_queue_idle)
+        self.batch_dock.result_requested.connect(self.show_batch_result)
 
     def _setup_toolbar(self) -> None:
         """Build top action toolbar with import, bulk approve, key notation, and dialogs."""
@@ -156,9 +188,9 @@ class MainWindow(QMainWindow):
         analyze_btn.clicked.connect(self._trigger_analyze_all)
         toolbar.addWidget(analyze_btn)
 
-        bulk_btn = QPushButton("Bulk Approve Non-Conflicting", self)
-        bulk_btn.clicked.connect(self._trigger_bulk_approve)
-        toolbar.addWidget(bulk_btn)
+        self.bulk_btn = QPushButton("Bulk Approve Non-Conflicting", self)
+        self.bulk_btn.clicked.connect(self._trigger_bulk_approve)
+        toolbar.addWidget(self.bulk_btn)
 
         write_btn = QPushButton("Preview & Apply Writes", self)
         write_btn.clicked.connect(self._trigger_open_write_dialog)
@@ -172,9 +204,9 @@ class MainWindow(QMainWindow):
         self.export_playlist_btn.clicked.connect(self._trigger_export_playlist)
         toolbar.addWidget(self.export_playlist_btn)
 
-        journal_btn = QPushButton("Change Journal & Restore", self)
-        journal_btn.clicked.connect(self._trigger_open_journal)
-        toolbar.addWidget(journal_btn)
+        self.journal_btn = QPushButton("Change Journal & Restore", self)
+        self.journal_btn.clicked.connect(self._trigger_open_journal)
+        toolbar.addWidget(self.journal_btn)
 
         settings_btn = QPushButton("Settings & Providers", self)
         settings_btn.clicked.connect(self._trigger_open_settings)
@@ -427,19 +459,59 @@ class MainWindow(QMainWindow):
             self.start_folder_import(Path(chosen))
 
     def start_folder_import(self, folder: Path) -> bool:
-        """Import folder on a worker thread. Return False while another import runs."""
-        return self.import_controller.start([folder])
+        """Add a folder import to the batch queue. It runs on a worker thread. Return True."""
+        self.batch_queue.enqueue_import([folder])
+        return True
 
-    def _on_import_completed(self, report: ImportBatchReport | None) -> None:
-        """Refresh the table, then close the window or show the import result."""
+    def queue_batch(self, kind: BatchKind, label: str, run: BatchRun) -> QueuedBatch:
+        """Add a library-changing batch to the queue. run executes on a worker thread."""
+        return self.batch_queue.enqueue_job(kind, label, run)
+
+    def _on_batch_finished(self, _batch: QueuedBatch) -> None:
+        """Show the changes of a finished batch in the table and the detail panel."""
         self.refresh_file_table()
-        if self._close_after_import:
+        if self.detail_panel.current_file_id:
+            self.detail_panel.load_file_asset(self.detail_panel.current_file_id)
+
+    def _on_queue_idle(self) -> None:
+        """Close the window once the queue empties after Cancel and Exit."""
+        if self._close_after_queue:
             self.close()
+
+    def _update_action_locks(self) -> None:
+        """Disable the library changes that run outside the queue while a batch is active.
+
+        Transcode, journal restore, Bulk Approve, and field edits stay off until the
+        queue is idle. Browsing, playback, filtering, and playlist export stay on.
+        """
+        idle = not self.batch_queue.is_busy()
+        for widget in (
+            self.bulk_btn,
+            self.transcode_btn,
+            self.journal_btn,
+            self.detail_panel.fields_table,
+        ):
+            widget.setEnabled(idle)
+
+    def show_batch_result(self, batch: QueuedBatch) -> None:
+        """Open the result of a finished batch. Nothing opens it automatically."""
+        if isinstance(batch.result, ImportBatchReport):
+            ImportReportDialog(batch.result, self).open()
             return
-        if report is None:
+        if batch.kind is BatchKind.IMPORT and batch.state is BatchState.FAILED:
             self._show_import_failure()
             return
-        ImportReportDialog(report, self).open()
+        box = QMessageBox(
+            QMessageBox.Icon.Information,
+            "Batch Result",
+            format_batch_result(batch),
+            QMessageBox.StandardButton.Ok,
+            self,
+        )
+        # The result shows file paths, so it stays plain text.
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        self.batch_result_box = box
+        box.open()
 
     def _show_import_failure(self) -> None:
         """Warn that the import rolled back. The message holds no exception text."""
@@ -455,52 +527,59 @@ class MainWindow(QMainWindow):
         box.open()
 
     def ask_close_during_import(self) -> str:
-        """Ask whether to wait for the running import or cancel it.
+        """Ask whether to keep working or to cancel the batch queue and exit.
 
-        Return CLOSE_WAIT, CLOSE_CANCEL, or CLOSE_STAY when the prompt is dismissed.
+        Return CLOSE_CANCEL, or CLOSE_STAY when the person keeps working or dismisses
+        the prompt. The prompt covers every batch kind. The method keeps its earlier
+        name for existing callers.
         """
         box = QMessageBox(self)
-        box.setWindowTitle("Import In Progress")
-        box.setText(
-            "An import is still running. Wait for it to finish, or cancel it. "
-            "Cancel keeps nothing from this import."
-        )
-        wait_button = box.addButton("Wait, Then Close", QMessageBox.ButtonRole.AcceptRole)
-        cancel_button = box.addButton(
-            "Cancel Import and Close", QMessageBox.ButtonRole.DestructiveRole
-        )
-        box.addButton("Keep Window Open", QMessageBox.ButtonRole.RejectRole)
+        box.setWindowTitle("Batch In Progress")
+        box.setTextFormat(Qt.TextFormat.PlainText)
+        box.setText(CLOSE_PROMPT_TEXT)
+        box.addButton("Keep Working", QMessageBox.ButtonRole.RejectRole)
+        cancel_button = box.addButton("Cancel and Exit", QMessageBox.ButtonRole.DestructiveRole)
         box.exec()
-        clicked = box.clickedButton()
-        if clicked is wait_button:
-            return CLOSE_WAIT
-        if clicked is cancel_button:
+        if box.clickedButton() is cancel_button:
             return CLOSE_CANCEL
         return CLOSE_STAY
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        """Close at once, or ask first while an import runs (D241).
+        """Close at once, or ask first while a batch runs or waits.
 
-        Once Wait or Cancel is chosen, later close requests during the same import wait
-        for it without asking again.
+        Keep Working leaves the window open and the queue running. Cancel and Exit
+        cancels the queue, and the window closes once the running batch stops. Later
+        close requests during that wait ask nothing.
         """
-        if not self.import_controller.is_running():
+        if not self.batch_queue.is_busy():
             super().closeEvent(event)
             return
         event.ignore()
-        if self._close_after_import:
+        if self._close_after_queue:
             return
-        choice = self.ask_close_during_import()
-        if choice == CLOSE_STAY:
+        if self.ask_close_during_import() != CLOSE_CANCEL:
             return
-        self._close_after_import = True
-        if choice == CLOSE_CANCEL:
-            self.import_controller.request_cancel()
+        self._close_after_queue = True
+        self.batch_queue.cancel_all()
 
     def _trigger_analyze_all(self) -> None:
-        """Invoke batch identification and analysis callback on visible files."""
-        if self.on_analyze_batch and self.visible_file_ids:
-            self.on_analyze_batch(list(self.visible_file_ids))
+        """Queue identification and analysis of the visible files.
+
+        Without an analyze_runner, the on_analyze_batch callback runs on this thread.
+        """
+        if not self.visible_file_ids:
+            return
+        file_ids = list(self.visible_file_ids)
+        runner = self.analyze_runner
+        if runner is not None:
+            self.queue_batch(
+                BatchKind.ANALYZE,
+                f"Identify & Analyze {len(file_ids)} file(s)",
+                lambda should_cancel, progress: runner(file_ids, should_cancel, progress),
+            )
+            return
+        if self.on_analyze_batch:
+            self.on_analyze_batch(file_ids)
             self.refresh_file_table()
 
     def _trigger_bulk_approve(self) -> None:
