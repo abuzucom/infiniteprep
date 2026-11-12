@@ -30,7 +30,6 @@ from tests.unit.usb_preflight_support import (
     build_request,
 )
 
-
 KNOWN_FREE_BYTES = 10**9
 SECOND_PARTITION_NUMBER = 2
 EXPECTED_BLOCKED_FILE_BYTES = 4 * 1024**3

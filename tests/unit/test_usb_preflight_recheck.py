@@ -21,7 +21,6 @@ from tests.unit.usb_preflight_support import (
     build_request,
 )
 
-
 REDUCED_FREE_BYTES = 15_000_000_000
 OTHER_DRIVE_BYTES = 64_000_000_000
 OTHER_PARTITION_BYTES = 31_000_000_000

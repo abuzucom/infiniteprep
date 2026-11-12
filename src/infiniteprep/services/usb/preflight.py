@@ -37,7 +37,9 @@ FACT_SYSTEM_VOLUME: Final[str] = "system_volume"
 
 REPAIR_GUIDANCE: Final[str] = (
     "Repair the filesystem with the operating system disk tool, then retry. "
-    "InfinitePrep never repairs a drive."
+    "A drive mounted read-only on purpose gives the same result. "
+    "Mount such a drive writable, then retry. "
+    "InfinitePrep never repairs or remounts a drive."
 )
 READ_ONLY_GUIDANCE: Final[str] = (
     "Release the write-protect switch or choose another drive. "
