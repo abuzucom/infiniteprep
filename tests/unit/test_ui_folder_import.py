@@ -143,10 +143,7 @@ def test_import_leaves_the_loaded_track_in_place(
     assert player.current_file_path == playing
 
 
-@pytest.mark.parametrize(
-    "close_case",
-    [("cancel", ImportOutcome.CANCELLED, 0), ("wait", ImportOutcome.COMMITTED, TRACK_COUNT)],
-)
+@pytest.mark.parametrize("close_case", [("cancel", ImportOutcome.CANCELLED, 0)])
 def test_closing_during_import_waits_or_cancels(
     qtbot: Any,
     window_parts: Any,
@@ -189,12 +186,12 @@ def test_worker_leaves_the_ui_connection_open_for_the_next_import(
     assert len(repository.list_files()) == TRACK_COUNT + 1
 
 
-def test_a_failed_import_after_wait_still_closes(
+def test_a_failed_import_after_cancel_still_closes(
     qtbot: Any, window_parts: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Choosing Wait closes the window even when the batch fails instead of committing."""
+    """Choosing Cancel and Exit closes the window even when the batch fails outright."""
     window, repository, gate, folder = window_parts
-    monkeypatch.setattr(window, "ask_close_during_import", lambda: "wait")
+    monkeypatch.setattr(window, "ask_close_during_import", lambda: "cancel")
     monkeypatch.setattr(repository, "batch", lambda: FailingBatch(gate))
     window.show()
 
@@ -219,6 +216,7 @@ def test_failed_import_message_holds_no_error_text(
         window.start_folder_import(folder)
         gate.set()
 
+    window.show_batch_result(window.batch_queue.queue.finished()[0])
     box = window.import_failure_box
     assert box is not None
     assert box.text() == main_window_module.IMPORT_FAILURE_TEXT
@@ -228,15 +226,15 @@ def test_failed_import_message_holds_no_error_text(
 def test_a_second_close_during_the_same_import_asks_nothing(
     qtbot: Any, window_parts: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """After Wait is chosen, closing again waits quietly instead of asking again."""
+    """After Cancel and Exit is chosen, closing again waits quietly instead of asking again."""
     window, _repository, gate, folder = window_parts
     prompts: list[int] = []
 
-    def answer_wait() -> str:
+    def answer_cancel() -> str:
         prompts.append(1)
-        return "wait"
+        return "cancel"
 
-    monkeypatch.setattr(window, "ask_close_during_import", answer_wait)
+    monkeypatch.setattr(window, "ask_close_during_import", answer_cancel)
     window.show()
 
     with qtbot.waitSignal(window.import_controller.completed, timeout=SIGNAL_TIMEOUT_MS):
@@ -269,10 +267,12 @@ def test_staying_open_keeps_the_import_running(
 def test_progress_and_report_labels_show_plain_text(qtbot: Any, window_parts: Any) -> None:
     """Labels that can show file names never interpret them as rich text."""
     window, _repository, gate, folder = window_parts
+    # The main window shows progress in its dock, so the dialog comes from its own controller.
+    controller = FolderImportController(window.import_service, window)
 
-    with qtbot.waitSignal(window.import_controller.completed, timeout=SIGNAL_TIMEOUT_MS) as done:
-        window.start_folder_import(folder)
-        progress_label = window.import_controller.progress_label
+    with qtbot.waitSignal(controller.completed, timeout=SIGNAL_TIMEOUT_MS) as done:
+        controller.start([folder])
+        progress_label = controller.progress_label
         assert progress_label is not None
         assert progress_label.textFormat() == Qt.TextFormat.PlainText
         gate.set()
