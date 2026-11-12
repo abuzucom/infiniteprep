@@ -5,11 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.57.2] (2026-11-12)
+## [0.57.3] (2026-11-12)
 
 ### Added
 
-- `docs/decision-register.md` records D372, the USB drive class rule of issue 207, and D373 to D389, the batch queue decisions of issue 109. D239 and D241 now read as superseded.
+- `docs/decision-register.md` records D372, the USB drive class rule of issue 207, and D373 to D387, the batch queue decisions of issue 109. D239 and D241 now read as superseded. The register omits D388 and D389. Both recorded the PR count and the branch of PR 202.
 
 - USB export confirm dialog in `ui/usb_preflight_dialog.py` (USB-4, #156). The dialog names the target drive, the DJ profiles, the planned changes, and the space figures. A refusal disables the confirm button. A safety refusal hides the drive identity and the space figures. Facts without a source show as not verified.
 - USB export drive picker in `ui/usb_drive_picker_dialog.py`. The picker lists removable-class drives only. A refused drive shows its first reason. The picker disables a drive with a failed probe and shows fixed text.
