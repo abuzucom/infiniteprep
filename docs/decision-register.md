@@ -123,7 +123,7 @@ D(N+92).
 | D185 | Require MBR with exactly one partition. |
 | D186 | Require that partition to be primary. |
 | D187 | Refuse active or bootable partitions. |
-| D188 | Accept removable-class drives only. |
+| D188 | Accept removable-class drives only. D372 refines the class rule. |
 | D189 | Refuse targets with unknown database-format support. |
 | D190 | Use only family-common verified capabilities in broad profiles. |
 | D191 | Match recovery by verified volume ID. Confirm if needed. |
@@ -179,9 +179,9 @@ D(N+92).
 | D236 | D83b1 is the online installer. D83b2 is the updater. |
 | D237 | D78b1 is the import worker. D78b2 holds the small fixes. |
 | D238 | Import scans first, then uses one transaction with a savepoint per file. Cancel or a crash rolls back the batch. |
-| D239 | Import shows a modal progress dialog with Cancel. Playback keeps running. |
+| D239 | Superseded by D379. |
 | D240 | Import ends with a report of counts and expandable per-file warnings, with a Copy button. |
-| D241 | Closing during an import offers wait and close, or cancel, roll back, and close. |
+| D241 | Superseded by D386. |
 | D242 | Other tags show in a read-only key and value table. Binary frames show size and SHA-256. |
 | D243 | No playback prompt. Import runs while playback continues. |
 | D244 | A hung file read gets a 2-minute limit with Quit Now or Keep Waiting. |
@@ -338,6 +338,32 @@ issue 158. That brief numbers them D1 to D12. The register numbers apply.
 | D370 | Brief D11: the research delivers separate DeviceSQL and OneLibrary reports in one handoff. |
 | D371 | Brief D12: the device writer split comes from research evidence. The owner approves it before any implementation issue exists. |
 
+## D372 to D389: drive class rule and batch queue (2026-11-11, 2026-11-12)
+
+D372 comes from issue 207. D373 to D389 come from the owner decisions in the
+comment on issue 109, in the same order.
+
+| ID | Decision |
+| --- | --- |
+| D372 | A drive passes the class rule on a USB, SD, or MMC bus alone. A drive without the removable flag shows a "reports as a fixed disk" note in the confirm dialog and the drive picker. This refines D188. |
+| D373 | The Scope paragraph of issue 109 is the batch queue design source. |
+| D374 | The queue governs Identify & Analyze, folder import, and Apply Safe Writes. Transcode to XDJ stays outside the queue. |
+| D375 | The queue starts one worker thread per batch. Import keeps `ImportWorker`. Analyze and writes each gain a worker. |
+| D376 | The queue lives in memory only. Waiting batches vanish at exit. No schema change. |
+| D377 | The queue view is a dock panel at the bottom of the main window. |
+| D378 | Move Up and Move Down buttons plus drag and drop reorder waiting batches. The running batch never moves. |
+| D379 | The dock shows progress for every batch type. The modal import progress dialog goes away. This replaces D239. The D244 stuck-file prompt stays. |
+| D380 | A finished batch stays in the dock with counts and a status. View Result opens its report. Import reuses the D240 report dialog. No report opens automatically. Clear Finished empties the list. |
+| D381 | Cancel removes a waiting batch. Cancel on a running import keeps D238. Cancel on a running Analyze or write batch finishes the current file, stops, and keeps finished files. |
+| D382 | Settings & Providers gains "Stop a batch at its first failed file", off by default. |
+| D383 | A new `WriteService` method continues past a failed write. `apply_batch` keeps its contract. |
+| D384 | The queued Analyze path treats any exception type as a per-file failure. `process_files` keeps its contract. |
+| D385 | A queued write batch applies the previewed plans. The per-file preflight still runs. |
+| D386 | Close during a running or waiting batch offers Keep Working, or Cancel and Exit. This replaces D241. |
+| D387 | While any batch runs or waits, transcode, journal restore, data deletion, review edits, and Bulk Approve stay disabled. Browsing, playback, filtering, playlist export, and queue controls stay available. |
+| D388 | One draft PR carried the full batch queue scope. |
+| D389 | The batch queue branch was `feat/add-batch-queue`. |
+
 ## Open questions
 
 | Source | Question |
@@ -347,4 +373,3 @@ issue 158. That brief numbers them D1 to D12. The register numbers apply.
 | Brief D5 | The mandatory feature coverage per format and device profile. |
 | Brief D8 | Create and Update release sequencing. |
 | Brief D10 | The USB test fixture policy. |
-| PR 188 | Whether REL-1 waits for REL-0 or carries its own test edits. |
