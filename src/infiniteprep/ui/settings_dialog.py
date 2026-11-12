@@ -9,10 +9,12 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QFormLayout,
     QHBoxLayout,
     QLineEdit,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -21,7 +23,13 @@ from infiniteprep import storage_paths
 from infiniteprep.adapters.llm.ollama_openai import RECOMMENDED_MODELS
 from infiniteprep.adapters.transcoder.safe_transcoder import TranscodeMode, TranscodePreset
 from infiniteprep.config.credentials import CredentialStore
-from infiniteprep.config.settings import AppSettings, SettingsManager
+from infiniteprep.config.settings import (
+    BYTES_PER_MIB,
+    MAX_USB_RESERVE_MIB,
+    MAX_USB_RESERVE_PERCENT,
+    AppSettings,
+    SettingsManager,
+)
 from infiniteprep.data_cleanup import CleanupChoice, data_folders
 from infiniteprep.storage_paths import StorageLocations
 from infiniteprep.ui.cleanup_dialog import CleanupDialog
@@ -30,6 +38,7 @@ from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, g
 SETTINGS_DIALOG_WIDTH: Final[int] = 620
 SETTINGS_DIALOG_HEIGHT: Final[int] = 460
 CLEANUP_BUTTON_LABEL: Final[str] = "Delete InfinitePrep Data..."
+USB_RESERVE_PERCENT_DECIMALS: Final[int] = 1
 STOP_ON_FAILURE_LABEL: Final[str] = "Stop an Analyze or write batch at its first failed file"
 
 
@@ -71,6 +80,8 @@ class SettingsDialog(QDialog):
         self.playlist_relative_checkbox = QCheckBox("Write paths relative to the playlist", self)
         self.stop_on_failure_checkbox = QCheckBox(STOP_ON_FAILURE_LABEL, self)
         self.theme_combo = QComboBox(self)
+        self.usb_reserve_percent_spin = QDoubleSpinBox(self)
+        self.usb_reserve_mib_spin = QSpinBox(self)
         self.save_btn = QPushButton("Save Settings", self)
         self.cancel_btn = QPushButton("Cancel", self)
         self.cleanup_btn = QPushButton(CLEANUP_BUTTON_LABEL, self)
@@ -120,6 +131,7 @@ class SettingsDialog(QDialog):
         current_theme = getattr(self.current_settings, "theme", DEFAULT_DARK_THEME)
         self.theme_combo.setCurrentText(current_theme)
         form.addRow("UI Theme:", self.theme_combo)
+        self._add_usb_reserve_rows(form)
 
         root.addLayout(form)
         buttons = QHBoxLayout()
@@ -132,6 +144,19 @@ class SettingsDialog(QDialog):
         self.save_btn.clicked.connect(self.save_settings)
         self.cancel_btn.clicked.connect(self.reject)
         self.cleanup_btn.clicked.connect(self.open_cleanup_dialog)
+
+    def _add_usb_reserve_rows(self, form: QFormLayout) -> None:
+        """Add the two USB export reserve inputs. The larger reserve kind applies."""
+        self.usb_reserve_percent_spin.setDecimals(USB_RESERVE_PERCENT_DECIMALS)
+        self.usb_reserve_percent_spin.setRange(0.0, MAX_USB_RESERVE_PERCENT)
+        self.usb_reserve_percent_spin.setValue(self.current_settings.usb_reserve_percent)
+        form.addRow("USB Export Reserve (% of export size):", self.usb_reserve_percent_spin)
+
+        self.usb_reserve_mib_spin.setRange(0, MAX_USB_RESERVE_MIB)
+        # A partial MiB rounds up. A save never shrinks the stored reserve.
+        stored_mib = -(-self.current_settings.usb_reserve_bytes // BYTES_PER_MIB)
+        self.usb_reserve_mib_spin.setValue(stored_mib)
+        form.addRow("USB Export Reserve (MiB):", self.usb_reserve_mib_spin)
 
     def open_cleanup_dialog(self) -> None:
         """Open the cleanup dialog. A confirmed choice closes Settings without saving."""
@@ -158,6 +183,8 @@ class SettingsDialog(QDialog):
             self.stop_on_failure_checkbox.isChecked()
         )
         self.current_settings.theme = self.theme_combo.currentText()
+        self.current_settings.usb_reserve_percent = self.usb_reserve_percent_spin.value()
+        self.current_settings.usb_reserve_bytes = self.usb_reserve_mib_spin.value() * BYTES_PER_MIB
         self.settings_mgr.save(self.current_settings)
         app = QApplication.instance()
         if app is not None:

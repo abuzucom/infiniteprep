@@ -35,6 +35,7 @@ from infiniteprep.services.usb.space import (
     compute_reserve_bytes,
     estimate_export_bytes,
 )
+from infiniteprep.services.usb.targets import TargetCandidate, load_removable_targets
 from infiniteprep.services.usb.windows import WindowsDriveInspector
 
 __all__ = [
@@ -57,11 +58,13 @@ __all__ = [
     "RefusalCode",
     "ReservePolicy",
     "SpaceInfo",
+    "TargetCandidate",
     "TargetSnapshot",
     "WindowsDriveInspector",
     "capture_target_snapshot",
     "compute_reserve_bytes",
     "estimate_export_bytes",
     "evaluate_preflight",
+    "load_removable_targets",
     "recheck_target",
 ]
