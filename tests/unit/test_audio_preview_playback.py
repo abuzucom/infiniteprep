@@ -102,13 +102,16 @@ def test_the_main_window_passes_the_audio_backend_flag(
     qtbot: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """enable_audio_backend reaches the preview widget without starting a real player."""
-    received: list[bool] = []
+    received: list[tuple[bool, bool]] = []
 
     def recording_preview(
-        parent: QWidget | None = None, enable_multimedia_backend: bool = False
+        parent: QWidget | None = None,
+        enable_multimedia_backend: bool = False,
+        *,
+        settings_manager: Any,
     ) -> AudioPreviewWidget:
-        received.append(enable_multimedia_backend)
-        return AudioPreviewWidget(parent)
+        received.append((enable_multimedia_backend, settings_manager is not None))
+        return AudioPreviewWidget(parent, settings_manager=settings_manager)
 
     monkeypatch.setattr(detail_panel_module, "AudioPreviewWidget", recording_preview)
     repo = Repository(DatabaseManager(":memory:"))
@@ -121,4 +124,4 @@ def test_the_main_window_passes_the_audio_backend_flag(
     )
     qtbot.addWidget(window)
 
-    assert received == [True]
+    assert received == [(True, True)]
