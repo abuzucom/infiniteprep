@@ -35,6 +35,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `MainWindow.start_folder_import` queues the import and always returns `True`.
 - While a batch runs or waits, Transcode to XDJ, Change Journal & Restore, Bulk Approve, field edits, and Delete InfinitePrep Data stay disabled.
 
+### Fixed
+
+- The `resolve-pr` job in `security-review-pr.yml` skips a cancelled `ci` run. A newer commit cancels the `ci` run of the older commit, and that run no longer names a pull request head. Each such run failed the security review workflow.
+
 ## [0.54.0] (2026-11-11)
 
 ### Added
