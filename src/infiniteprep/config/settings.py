@@ -161,6 +161,8 @@ class AppSettings:
     transcode_mode: str = "sibling_export"
     transcode_preset: str = "XDJ_LOSSLESS_AUTO"
     playlist_relative_paths: bool = True
+    # Ends an Analyze or write batch at its first failed file. Imports ignore it.
+    stop_batch_on_first_failure: bool = False
     theme: str = "dark_teal.xml"
     file_table_layout: str = ""  # Base64-encoded QHeaderView state.
     file_table_column_count: int = 0  # Column count when the layout was saved.
