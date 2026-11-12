@@ -5,6 +5,12 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.53.2] (2026-11-12)
+
+### Fixed
+
+- The `resolve-pr` job in `security-review-pr.yml` skips a cancelled `ci` run. A newer commit cancels the `ci` run of the older commit, and that run no longer names a pull request head. Each such run failed the security review workflow.
+
 ## [0.53.1] (2026-11-11)
 
 ### Added
