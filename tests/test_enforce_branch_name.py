@@ -32,6 +32,7 @@ TRUSTED_GIT_PATH = REPO_ROOT / "scripts" / "trusted_git.py"
 VIOLATING_BRANCH = "claude/session-start-hook-branch-check-5b33fv"
 CONFORMING_BRANCH = "feat/session-start-branch-check"
 BLOCKING_EXIT_CODE = 2
+SHA_HEX_LENGTH = 40
 
 
 def _load_hook_module():
@@ -64,7 +65,8 @@ def _run_fixture_hook(payload, branch: str, client: str, project_dir: Path):
     git_dir.mkdir(exist_ok=True)
     (git_dir / "objects").mkdir(exist_ok=True)
     (git_dir / "refs").mkdir(exist_ok=True)
-    head = "0" * 40 if branch == "HEAD" else "ref: refs/heads/" + branch
+    detached_head = "0" * SHA_HEX_LENGTH
+    head = detached_head if branch == "HEAD" else "ref: refs/heads/" + branch
     (git_dir / "HEAD").write_text(head + "\n", encoding="utf-8")
     config = git_dir / "config"
     if not config.exists():

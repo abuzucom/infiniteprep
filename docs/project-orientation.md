@@ -14,7 +14,8 @@ Commands:
 - Policy lint: `make lint PYTHON=python`
 - Policy tests: `python scripts/run_tests.py`
 
-Obtain consent before tests, scripts, or Makefile targets.
+Obtain consent before each workflow that the command execution gate routes to
+consent. Workflows the gate allows run without consent.
 
 Do not touch without active-human approval:
 

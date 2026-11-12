@@ -55,9 +55,6 @@ Treat these outcomes as transaction failures:
   conceal an omission.
 - A candidate replaces the last verified working set before full verification.
 
-The repository checkers validate observed repository artifacts. External
-integrity controls must validate the independent source and staged activation.
-
 `hooks/enforce_gate_adoption.py` calls `scripts/check_gate_adoption.py` before
 ordinary work on Claude Code, Codex, Gemini, and Antigravity. The hook permits
 only questions, fixed verification, read-only discovery, writes below
@@ -88,13 +85,12 @@ The gates refuse destructive commands, unsafe infrastructure access, direct
 GitHub CLI lookup, unsafe GitHub HTTP substitutes, credential-manager access,
 browser token recovery, and incomplete policy loading.
 
-The shared command classifier permits only a local, explicitly named
-Cloudflare Pages deployment from a dedicated non-hidden output directory named
-`build` or `dist`. It rejects repository roots, hidden paths, and protected
-credential contents. It denies other Wrangler operations.
-
 The gates route consent-required acts to the active human. Unattended sessions
 refuse those acts.
+
+Shell gates allow repeated `scripts/trusted_gh.py` calls and route
+`-c agents.githubFallback=confirmed` commands to consent without cross-process
+state. Repository hooks cannot force a tool call when a model refuses in prose.
 
 Designed denials, prompts, refusals, opaque-command blocks, and exit code 2 on
 missing shared modules are policy outcomes. They are not defects.
@@ -119,11 +115,9 @@ result. Missing or contradictory approval metadata fails closed. Repository
 hooks cannot inspect client prose when the client API hides it. An external
 harness must enforce those claims.
 
-The complete adoption inventory and recovery procedure cover every hook,
-registration, shared module, test, checker, manifest, policy file, and
-synchronized copy. A designed-denial defect report includes the exact input,
-contradictory policy text, and a reproduction. Report a blocked file, command,
-and message. A blocking gate does not authorize another act.
+A designed-denial defect report includes the exact input, contradictory policy
+text, and a reproduction. Report a blocked file, command, and message. A
+blocking gate does not authorize another act.
 
 The destructive gate set includes the Bash, PowerShell, CMD, shared parser,
 platform policy, shared gate, and parity-test files. Register Bash, PowerShell,
@@ -149,6 +143,16 @@ invisible to this signal, the same documented gap
 trailer to evade this gate. Fix the flagged prose instead. No CI job or
 repository hook runs this gate. Run it locally or from an external harness.
 
+In `scripts/prose_bans.txt`, each nonempty policy line defines one exact word
+or phrase. Section headers define scope. Add entries without changing checker
+logic. The denylist source receives the sole self-scan exemption. The
+handoff-exempt section skips matches only for `plan/HANDOFF.md.example`.
+
+`scripts/check_hedging.py` prose findings always return exit code 0. Unreadable
+policy data and unsafe metadata return exit code 1. Pattern checks provide
+advisory coverage. Human review covers semantic paraphrases and complex
+grammar.
+
 ## Protected files and hook inventory
 Modifying hook files or `scripts/banned_models.txt` can never be inferred,
 inherited, or grandfathered from prior instructions, plan approvals, handoff
@@ -172,7 +176,8 @@ The protected inventory covers:
   `hooks/block_infrastructure_access.py`, `hooks/enforce_branch_name.py`,
   `hooks/enforce_gate_adoption.py`, `hooks/enforce_git_identity.py`,
   `hooks/reinject_agents_policy.py`, `hooks/require_consent.py`,
-  `hooks/github-command-denylist.txt`, `hooks/primary-branch.txt`, and
+  `hooks/github-command-denylist.txt`, `hooks/primary-branch.txt`,
+  `hooks/workflow-scripts.txt`, and
   `hooks/claude-code-settings.example.json`.
 - Hook configurations:
   `.claude/settings.json`, `.agents/`, `.codex/hooks.json`,

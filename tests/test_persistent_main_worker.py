@@ -8,6 +8,9 @@ from pathlib import Path
 
 from tests.persistent_main_worker import MainWorker
 
+FIRST_EXIT_CODE = 3
+SECOND_INVOCATION_COUNT = 2
+SLOW_REQUEST_TIMEOUT_SECONDS = 0.05
 
 MODULE_SOURCE = """\
 import json
@@ -50,7 +53,7 @@ class MainWorkerTest(unittest.TestCase):
             self.addCleanup(worker.close)
 
             first = worker.invoke(
-                ["alpha"], {"code": 3}, first_cwd,
+                ["alpha"], {"code": FIRST_EXIT_CODE}, first_cwd,
                 {**os.environ, "WORKER_TEST_VALUE": "first"},
             )
             second = worker.invoke(
@@ -60,15 +63,15 @@ class MainWorkerTest(unittest.TestCase):
 
         first_output = json.loads(first.stdout)
         second_output = json.loads(second.stdout)
-        self.assertEqual(first.returncode, 3)
+        self.assertEqual(first.returncode, FIRST_EXIT_CODE)
         self.assertEqual(second.returncode, 0)
         self.assertEqual(first_output["argv"], ["alpha"])
         self.assertEqual(second_output["argv"], ["beta"])
         self.assertEqual(Path(first_output["cwd"]).resolve(), first_cwd.resolve())
         self.assertEqual(Path(second_output["cwd"]).resolve(), second_cwd.resolve())
         self.assertEqual(first_output["invocations"], 1)
-        self.assertEqual(second_output["invocations"], 2)
-        self.assertEqual(first_output["payload"], {"code": 3})
+        self.assertEqual(second_output["invocations"], SECOND_INVOCATION_COUNT)
+        self.assertEqual(first_output["payload"], {"code": FIRST_EXIT_CODE})
         self.assertEqual(second_output["value"], "second")
         self.assertEqual(first.stderr, "worker diagnostic\n")
 
@@ -77,7 +80,7 @@ class MainWorkerTest(unittest.TestCase):
             repository_root = Path(temporary)
             module_path = repository_root / "slow_cli.py"
             module_path.write_text(MODULE_SOURCE, encoding="utf-8")
-            worker = MainWorker(module_path, request_timeout=0.05)
+            worker = MainWorker(module_path, request_timeout=SLOW_REQUEST_TIMEOUT_SECONDS)
             self.addCleanup(worker.close)
             with self.assertRaisesRegex(RuntimeError, "timed out"):
                 worker.invoke(

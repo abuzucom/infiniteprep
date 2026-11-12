@@ -14,6 +14,12 @@ from pathlib import Path
 CHECKER_PATH = Path(__file__).resolve().parent.parent / "scripts" / "check_changelog.py"
 REPOSITORY_CHANGELOG = CHECKER_PATH.parent.parent / "CHANGELOG.md"
 BASE_HEADING = ("1.0.0", "2026-01-01")
+BASE_HEADING_DAY = date(2026, 1, 1)
+# These days match the 2.0.0 entry, the 2.0.1 entry, and the day after both.
+RELEASE_DAY = date(2026, 9, 13)
+NEXT_RELEASE_DAY = date(2026, 9, 14)
+DAY_AFTER_NEXT_RELEASE = date(2026, 9, 15)
+NAIVE_LOCAL_DATETIME = datetime(2026, 3, 8, 23, 59, 59)
 ONE_DAY = timedelta(days=1)
 ONE_SECOND = timedelta(seconds=1)
 # Each UTC midnight sits on a DST transition day; the offsets are the ones
@@ -186,12 +192,12 @@ class RangeDateTest(unittest.TestCase):
     def test_head_date_after_today_fails(self):
         head = _changelog(("2.0.1", "2026-09-14"), ("2.0.0", "2026-09-13"))
         findings = checker.find_range_violations(
-            self.BASE, head, self.CHANGED, today=date(2026, 9, 13))
+            self.BASE, head, self.CHANGED, today=RELEASE_DAY)
         self.assertTrue(any("after the UTC date" in finding for finding in findings), findings)
 
     def test_empty_base_is_not_compared(self):
         head = _changelog(("1.0.0", "2026-09-13"))
-        findings = checker.find_range_violations("", head, self.CHANGED, today=date(2026, 9, 13))
+        findings = checker.find_range_violations("", head, self.CHANGED, today=RELEASE_DAY)
         self.assertEqual(findings, [])
 
 
@@ -203,22 +209,22 @@ class StagedDateTest(unittest.TestCase):
 
     def test_today_date_passes(self):
         findings = checker._staged_findings(
-            ["CHANGELOG.md"], self.STAGED, self.HEAD, date(2026, 9, 14))
+            ["CHANGELOG.md"], self.STAGED, self.HEAD, NEXT_RELEASE_DAY)
         self.assertEqual(findings, [])
 
     def test_stale_date_fails(self):
         findings = checker._staged_findings(
-            ["CHANGELOG.md"], self.STAGED, self.HEAD, date(2026, 9, 15))
+            ["CHANGELOG.md"], self.STAGED, self.HEAD, DAY_AFTER_NEXT_RELEASE)
         self.assertTrue(any("2026-09-15" in finding for finding in findings), findings)
 
     def test_missing_version_advance_fails(self):
         findings = checker._staged_findings(
-            ["CHANGELOG.md"], self.HEAD, self.HEAD, date(2026, 9, 13))
+            ["CHANGELOG.md"], self.HEAD, self.HEAD, RELEASE_DAY)
         self.assertTrue(any("advance" in finding for finding in findings), findings)
 
     def test_unstaged_changelog_fails(self):
         findings = checker._staged_findings(
-            ["README.md"], self.STAGED, self.HEAD, date(2026, 9, 14))
+            ["README.md"], self.STAGED, self.HEAD, NEXT_RELEASE_DAY)
         self.assertTrue(any("CHANGELOG.md" in finding for finding in findings), findings)
 
     def test_unversioned_staged_changelog_returns_failure_without_raising(self):
@@ -226,7 +232,7 @@ class StagedDateTest(unittest.TestCase):
             repository = Path(directory)
             _init_repository(repository)
             _stage_changelog(repository, "# Changelog\n")
-            self.assertEqual(checker.check_staged(repository, today=date(2026, 1, 1)), 1)
+            self.assertEqual(checker.check_staged(repository, today=BASE_HEADING_DAY), 1)
 
     def test_unstaged_changelog_reports_missing_entry(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -236,7 +242,7 @@ class StagedDateTest(unittest.TestCase):
             _run_git(repository, "add", "README.md")
             captured_errors = io.StringIO()
             with contextlib.redirect_stderr(captured_errors):
-                exit_code = checker.check_staged(repository, today=date(2026, 1, 1))
+                exit_code = checker.check_staged(repository, today=BASE_HEADING_DAY)
             self.assertEqual(exit_code, 1)
             self.assertIn("staged changes require a versioned CHANGELOG.md entry",
                           captured_errors.getvalue())
@@ -260,7 +266,7 @@ class UtcDateConversionTest(unittest.TestCase):
 
     def test_naive_datetime_is_rejected(self):
         with self.assertRaises(ValueError):
-            checker.utc_date(datetime(2026, 3, 8, 23, 59, 59))
+            checker.utc_date(NAIVE_LOCAL_DATETIME)
 
 
 class ProcessTimezoneTest(unittest.TestCase):

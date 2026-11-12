@@ -36,6 +36,10 @@ LINUX_PACKAGE_MANAGERS = frozenset({
     "yum",
     "zypper",
 })
+# A Windows drive path such as C:\ carries its path separator at this index.
+WINDOWS_DRIVE_SEPARATOR_INDEX = 2
+# A copy names a source endpoint and a destination endpoint.
+TRANSFER_ENDPOINT_COUNT = 2
 
 
 def normalize_program_name(program: str) -> str:
@@ -47,10 +51,10 @@ def is_remote_endpoint(endpoint: str, platform_name: str = sys.platform) -> bool
     """Return whether a transfer endpoint names a remote host."""
     candidate = endpoint.strip().strip('"').strip("'")
     if (platform_name.startswith("win")
-            and len(candidate) >= 3
+            and len(candidate) > WINDOWS_DRIVE_SEPARATOR_INDEX
             and candidate[0].isalpha()
             and candidate[1] == ":"
-            and candidate[2] in "\\/"):
+            and candidate[WINDOWS_DRIVE_SEPARATOR_INDEX] in "\\/"):
         return False
     if "://" in candidate:
         return True
@@ -72,9 +76,9 @@ def classify_transfer_direction(
 ) -> tuple[str, str]:
     """Classify a two-endpoint copy from local and remote path properties."""
     endpoints = [argument for argument in arguments if not argument.startswith("-")]
-    if len(endpoints) < 2:
+    if len(endpoints) < TRANSFER_ENDPOINT_COUNT:
         return "ask", "a transfer endpoint is missing or cannot be resolved"
-    source_endpoint = endpoints[-2]
+    source_endpoint = endpoints[-TRANSFER_ENDPOINT_COUNT]
     destination_endpoint = endpoints[-1]
     source_is_remote = is_remote_endpoint(source_endpoint, platform_name=platform_name)
     destination_is_remote = is_remote_endpoint(

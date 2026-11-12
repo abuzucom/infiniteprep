@@ -179,8 +179,9 @@ def _run_blocks(content: str) -> list[str]:
         match = re.match(r"^( *)run:\s*(.*)$", line)
         if not match:
             continue
-        indent = len(match.group(1))
-        parts = [] if match.group(2) in ("|", "|-", ">", ">-") else [match.group(2)]
+        leading_spaces, inline_command = match.groups()
+        indent = len(leading_spaces)
+        parts = [] if inline_command in ("|", "|-", ">", ">-") else [inline_command]
         end = index + 1
         while end < len(lines):
             candidate = lines[end]

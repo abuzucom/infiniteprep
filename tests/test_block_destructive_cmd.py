@@ -9,6 +9,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 HOOK_PATH = REPOSITORY_ROOT / "hooks" / "block_destructive_cmd.py"
+BLOCKING_EXIT_CODE = 2
 
 
 def run_cmd_gate(command_text: str, permission_mode: str = "default"):
@@ -187,7 +188,7 @@ class PayloadTest(unittest.TestCase):
             text=True,
             check=False,
         )
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("cannot clear", result.stderr)
 
 

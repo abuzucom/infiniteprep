@@ -27,6 +27,7 @@ PROXY_VARIABLES = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
                    "http_proxy", "https_proxy", "all_proxy")
 # The managed Codex sandbox points proxies at this closed loopback port.
 MANAGED_PROXY_HOST = "127.0.0.1"
+MANAGED_PROXY_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 MANAGED_PROXY_PORT = 9
 # Variables like GIT_SSH_COMMAND, GIT_ASKPASS, or LD_PRELOAD make Git run
 # another program, so the child environment starts from this allowlist.
@@ -55,6 +56,8 @@ GIT_CONTEXT_IDENTITY_KEYS = frozenset((
 MAX_GIT_CONTEXT_PAIRS = 64
 USAGE_FAILURE = 2
 RUNNER_FAILURE = 1
+CLONE_ARGUMENT_COUNT = 3
+FETCH_MINIMUM_ARGUMENT_COUNT = 2
 # run_git config overrides may only neutralize filter drivers. A wider key
 # such as core.pager or credential.helper would let a caller run a program.
 CONFIG_OVERRIDE_SECTION = "filter"
@@ -73,9 +76,10 @@ def is_managed_proxy_placeholder(value: str) -> bool:
         parsed = urllib.parse.urlsplit(candidate if "://" in candidate
                                        else "//" + candidate)
         port = parsed.port
+        hostname = parsed.hostname
     except ValueError:
         return False
-    return parsed.hostname == MANAGED_PROXY_HOST and port == MANAGED_PROXY_PORT
+    return bool(hostname and hostname.casefold() in MANAGED_PROXY_HOSTS and port == MANAGED_PROXY_PORT)
 
 
 def sanitize_managed_proxy(environment: dict) -> None:
@@ -376,20 +380,21 @@ def _transport_arguments(workspace: Path, arguments: list[str]) -> list[str] | N
         return None
     operation = arguments[0]
     if operation == "clone":
-        if len(arguments) != 3 or not _github_source(arguments[1]):
+        if len(arguments) != CLONE_ARGUMENT_COUNT or not _github_source(arguments[1]):
             return None
-        destination = _workspace_path(workspace, arguments[2], must_exist=False)
+        _clone, source, target = arguments
+        destination = _workspace_path(workspace, target, must_exist=False)
         if destination is None:
             return None
-        return ["clone", "--", arguments[1], str(destination)]
-    if len(arguments) < 2:
+        return ["clone", "--", source, str(destination)]
+    if len(arguments) < FETCH_MINIMUM_ARGUMENT_COUNT:
         return None
     repository = _workspace_path(
         workspace, arguments[1], must_exist=True, allow_root=True,
     )
     if repository is None or not (repository / ".git").exists():
         return None
-    remaining = arguments[2:]
+    _fetch, _repository, *remaining = arguments
     if any(not _literal(value) for value in remaining):
         return None
     if remaining and not _fetch_remote(remaining[0]):

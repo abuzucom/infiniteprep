@@ -13,6 +13,7 @@ from yaml.tokens import ScalarToken
 FROM_STAGE = re.compile(r"^\s*FROM\s+\S+", re.IGNORECASE)
 USER_INSTRUCTION = re.compile(r"^\s*USER\b(.*)$", re.IGNORECASE)
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z0-9_.-]+)\1")
+HEREDOC_MARKER_GROUP = 2
 CONTAINER_KEYS = ("containers", "initContainers", "ephemeralContainers")
 EXCEPTION_PREFIX = "# runtime-root: this container "
 EXCEPTION_SUFFIX = " (Rule 12 exception)."
@@ -177,7 +178,7 @@ def _skip_heredocs(lines: list[str], index: int, logical: str) -> int:
     matches = list(HEREDOC.finditer(logical)) if instruction in (
         "RUN", "COPY", "ADD") else []
     for delimiter in matches:
-        marker = delimiter.group(2)
+        marker = delimiter.group(HEREDOC_MARKER_GROUP)
         strip_tabs = "<<-" in delimiter.group(0)
         while index < len(lines):
             candidate = lines[index].lstrip("\t") if strip_tabs else lines[index]

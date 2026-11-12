@@ -21,6 +21,8 @@ MAX_TITLE_LENGTH = 4096
 MAX_BODY_LENGTH = 1024 * 1024
 DEPENDABOT_LOGIN = "dependabot[bot]"
 SHORT_SHA_LENGTH = 12
+MAX_SANITIZED_LENGTH = 120
+OWNER_REPOSITORY_SEGMENT_COUNT = 2
 
 # A remote URL splits into host and path. The host is validated in code
 # rather than in the pattern, which keeps the pattern free of the nested
@@ -79,7 +81,7 @@ def _load_event(path: Path) -> tuple[str, str, str, str]:
 def _sanitize(value: str) -> str:
     """Return untrusted text as one bounded single-line fragment."""
     collapsed = " ".join(value.split())
-    return collapsed[:120]
+    return collapsed[:MAX_SANITIZED_LENGTH]
 
 
 def find_external_references(text: str, owner: str, field: str) -> list[str]:
@@ -113,10 +115,11 @@ def parse_remote_owner(url: str) -> str:
     match = REMOTE_PARTS.match(url.strip())
     if not match:
         return ""
-    if not is_github_host(match.group(1)):
+    host, path = match.groups()
+    if not is_github_host(host):
         return ""
-    segments = [segment for segment in match.group(2).split("/") if segment]
-    return segments[0] if len(segments) == 2 else ""
+    segments = [segment for segment in path.split("/") if segment]
+    return segments[0] if len(segments) == OWNER_REPOSITORY_SEGMENT_COUNT else ""
 
 
 def resolve_owner(explicit: str, environment: dict, repo) -> str:

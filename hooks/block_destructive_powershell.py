@@ -38,6 +38,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 _CWD = [""]
 GATE = "block_destructive_powershell.py"
+POLICY_DENIAL_EXIT_CODE = 2
+BRACED_ENVIRONMENT_PREFIX = "${env:"
+VARIABLE_ENVIRONMENT_PREFIX = "$env:"
+DRIVE_ENVIRONMENT_PREFIX = "env:"
 
 try:
     import _gate_core as core
@@ -54,7 +58,7 @@ except ImportError as error:  # pragma: no cover
         "permissionDecisionReason": _REASON,
     }}))
     print(_REASON, file=sys.stderr)
-    sys.exit(2)
+    sys.exit(POLICY_DENIAL_EXIT_CODE)
 
 GATED_KEYWORDS = core.gated_keywords() + tuple(core.DELETE_PROGRAMS)
 # A subexpression puts a command where an argument goes, the mirror of
@@ -218,12 +222,12 @@ def _environment_reference_name(value: str) -> str:
     """Return an environment provider variable name from PowerShell syntax."""
     candidate = value.strip().strip('"').strip("'")
     lowered = candidate.lower()
-    if lowered.startswith("${env:") and "}" in candidate:
-        return candidate[6:candidate.index("}")].lstrip("\\/").upper()
-    if lowered.startswith("$env:"):
-        return candidate[5:].lstrip("\\/").upper()
-    if lowered.startswith("env:"):
-        return candidate[4:].lstrip("\\/").upper()
+    if lowered.startswith(BRACED_ENVIRONMENT_PREFIX) and "}" in candidate:
+        return candidate[len(BRACED_ENVIRONMENT_PREFIX):candidate.index("}")].lstrip("\\/").upper()
+    if lowered.startswith(VARIABLE_ENVIRONMENT_PREFIX):
+        return candidate[len(VARIABLE_ENVIRONMENT_PREFIX):].lstrip("\\/").upper()
+    if lowered.startswith(DRIVE_ENVIRONMENT_PREFIX):
+        return candidate[len(DRIVE_ENVIRONMENT_PREFIX):].lstrip("\\/").upper()
     return ""
 
 

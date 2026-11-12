@@ -26,9 +26,11 @@ CONSENT_COMMANDS = (
     "python -I scripts/trusted_gh.py run pr list",
     "python3.12 scripts/trusted_gh.py run pr list",
     "py scripts/trusted_gh.py run pr list",
-    "python ./scripts/read_git_state.py branch",
     "python3 -I ./scripts/trusted_git.py fetch .",
     "python scripts/../scripts/trusted_git.py fetch .",
+)
+ALLOWED_COMMANDS = (
+    "python ./scripts/read_git_state.py branch",
 )
 UNMATCHED_COMMANDS = (
     "python scripts/trusted_git.py push origin main",
@@ -54,6 +56,12 @@ class TrustedScriptRecognitionTest(unittest.TestCase):
             with self.subTest(command=command):
                 decision, _reason = GATE.workflow_decision(command, PROJECT_DIR)
                 self.assertEqual(decision, "ask")
+
+    def test_state_reader_spelling_runs_without_consent(self) -> None:
+        for command in ALLOWED_COMMANDS:
+            with self.subTest(command=command):
+                decision, _reason = GATE.workflow_decision(command, PROJECT_DIR)
+                self.assertEqual(decision, "allow")
 
     def test_other_shapes_stay_unmatched(self) -> None:
         for command in UNMATCHED_COMMANDS:

@@ -11,6 +11,7 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 HOOK_PATH = REPOSITORY_ROOT / "hooks" / "block_infrastructure_access.py"
+BLOCKING_EXIT_CODE = 2
 SETTINGS_PATHS = (
     REPOSITORY_ROOT / ".claude" / "settings.json",
     REPOSITORY_ROOT / "hooks" / "claude-code-settings.example.json",
@@ -58,7 +59,7 @@ class InfrastructureAccessTest(unittest.TestCase):
     def assert_denied(self, request: dict) -> None:
         """Assert one request receives a native denial."""
         result = run_hook(request, self.root)
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
         output = json.loads(result.stdout)
         decision = output["hookSpecificOutput"]["permissionDecision"]
         self.assertEqual(decision, "deny")

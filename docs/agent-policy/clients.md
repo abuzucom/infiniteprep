@@ -15,6 +15,11 @@ Antigravity uses an ephemeral `PreInvocation` message. Its `PreToolUse`
 payload must remain schema-safe. Do not emit unsupported `injectSteps` fields
 from `PreToolUse`.
 
+Default sandboxes isolate outbound network access. Request the client's
+approved `external-network` path when `scripts/trusted_gh.py` reports a
+connectivity failure. Execute a fresh attempt on active-human retry
+instruction.
+
 Client APIs differ. Do not claim coverage that the client cannot observe.
 Repository hooks remain defense in depth only.
 
@@ -26,10 +31,7 @@ check.
 ## Compaction events
 Claude and Codex report compaction through the session payload `source`
 field. The reinjection hook prepends a compaction directive to policy
-context for those events. The directive orders disclosure of the complete
-compaction text, a stop, plan-mode re-entry, a canonical `AGENTS.md`
-re-read, and a detailed plan from repository state, the compaction message,
-handoff material, and the active human's stated tasks and goals.
+context for those events.
 
 Claude and Codex deliver policy through hook context. Gemini prepends a
 system message. Antigravity uses an ephemeral message.

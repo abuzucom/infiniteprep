@@ -42,6 +42,19 @@ MAX_SANITIZED_LENGTH = 300
 # Shorter identity values match ordinary words, so they count only as a
 # profile path segment.
 MIN_FULL_TOKEN_LENGTH = 4
+SHORT_SHA_LENGTH = 12
+HEX_RADIX = 16
+UTF16_UNIT_BYTES = 2
+# ASCII-heavy UTF-16 text holds NUL bytes in one byte position of each code unit.
+UTF16_NUL_HEAVY_RATIO = 0.4
+NUL_SPARSE_RATIO = 0.2
+# Each allowlist line holds a file path and an account name.
+ALLOWLIST_FIELD_COUNT = 2
+# The Win32 UNLEN limit of 256 characters plus the terminating NUL.
+WINDOWS_USER_NAME_BUFFER_LENGTH = 257
+GUID_BYTE_LENGTH = 16
+PATCH_NEW_PATH_PREFIX = "+++ "
+USAGE_ERROR_EXIT_CODE = 2
 OBJECT_ID_PATTERN = re.compile(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\Z")
 
 PLACEHOLDER_NAMES = frozenset((
@@ -65,6 +78,7 @@ PROFILE_PATTERN = re.compile(
     r"[\\/]+([^\\/\s\"'`<>|:*?,;()\[\]{}.][^\\/\s\"'`<>|:*?,;()\[\]{}]*)"
 )
 ESCAPE_PATTERN = re.compile(r"\\(?:u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|(\\))")
+HEX_BYTE_ESCAPE_GROUP = 2
 FAST_PATH_BLOCKERS = ("\\", "%", "&", "\x00")
 ALLOWLIST_PATH_PATTERN = re.compile(r"[A-Za-z0-9._@+=-]+(?:/[A-Za-z0-9._@+= -]+)*")
 ALLOWLIST_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{1,63}")
@@ -135,8 +149,8 @@ def sanitize(value: object) -> str:
 
 def _decode_escape(match: re.Match) -> str:
     """Replace one JSON or C escape with the character it encodes."""
-    code = match.group(1) or match.group(2)
-    return chr(int(code, 16)) if code else "\\"
+    code = match.group(1) or match.group(HEX_BYTE_ESCAPE_GROUP)
+    return chr(int(code, HEX_RADIX)) if code else "\\"
 
 
 def _fold(text: str) -> str:
@@ -195,13 +209,13 @@ def _decode_as(content: bytes, encoding: str) -> str | None:
 
 def _bomless_wide_encodings(content: bytes) -> list:
     """Return UTF-16 candidates whose NUL byte pattern identifies them."""
-    if len(content) < 2 or len(content) % 2:
+    if len(content) < UTF16_UNIT_BYTES or len(content) % UTF16_UNIT_BYTES:
         return []
-    even = content[0::2].count(0) / (len(content) // 2)
-    odd = content[1::2].count(0) / (len(content) // 2)
-    if odd > 0.4 and even < 0.2:
+    even = content[0::UTF16_UNIT_BYTES].count(0) / (len(content) // UTF16_UNIT_BYTES)
+    odd = content[1::UTF16_UNIT_BYTES].count(0) / (len(content) // UTF16_UNIT_BYTES)
+    if odd > UTF16_NUL_HEAVY_RATIO and even < NUL_SPARSE_RATIO:
         return ["utf-16-le"]
-    if even > 0.4 and odd < 0.2:
+    if even > UTF16_NUL_HEAVY_RATIO and odd < NUL_SPARSE_RATIO:
         return ["utf-16-be"]
     return []
 
@@ -220,7 +234,7 @@ def parse_allowlist(text: str) -> frozenset:
             continue
         fields = line.split("\t")
         valid = (
-            len(fields) == 2
+            len(fields) == ALLOWLIST_FIELD_COUNT
             and ALLOWLIST_PATH_PATTERN.fullmatch(fields[0]) is not None
             and ".." not in fields[0].split("/")
             and ALLOWLIST_NAME_PATTERN.fullmatch(fields[1]) is not None
@@ -372,12 +386,12 @@ def _windows_account() -> tuple:
     """Return the account name and profile path from Win32 APIs."""
     import ctypes
     import uuid
-    size = ctypes.c_ulong(257)
+    size = ctypes.c_ulong(WINDOWS_USER_NAME_BUFFER_LENGTH)
     buffer = ctypes.create_unicode_buffer(size.value)
     name = buffer.value if ctypes.windll.advapi32.GetUserNameW(
         buffer, ctypes.byref(size)) else ""
     folder_id = ctypes.create_string_buffer(
-        uuid.UUID("5E6C858F-0E22-4760-9AFE-EA3317B67173").bytes_le, 16)
+        uuid.UUID("5E6C858F-0E22-4760-9AFE-EA3317B67173").bytes_le, GUID_BYTE_LENGTH)
     pointer = ctypes.c_wchar_p()
     status = ctypes.windll.shell32.SHGetKnownFolderPath(
         folder_id, 0, None, ctypes.byref(pointer))
@@ -499,10 +513,10 @@ def _git_log(repo: Path, revisions: list) -> str:
 
 def _scan_patch(scanner: Scanner, sha: str, patch: str) -> list:
     """Scan added lines and new paths of one commit's patch."""
-    findings, path, number = [], f"commit {sha[:12]}", 0
+    findings, path, number = [], f"commit {sha[:SHORT_SHA_LENGTH]}", 0
     for line in patch.splitlines():
-        if line.startswith("+++ "):
-            path = line[4:].removeprefix("b/")
+        if line.startswith(PATCH_NEW_PATH_PREFIX):
+            path = line[len(PATCH_NEW_PATH_PREFIX):].removeprefix("b/")
             findings += scanner.scan_path(path)
             continue
         hunk = HUNK_PATTERN.match(line)
@@ -520,7 +534,7 @@ def scan_log(scanner: Scanner, log: str) -> list:
     for record in log.split("\x1e")[1:]:
         sha, _separator, rest = record.partition("\x1f")
         message, _separator, patch = rest.partition("\x1d")
-        findings += scanner.scan_text(message, f"commit {sha[:12]} message")
+        findings += scanner.scan_text(message, f"commit {sha[:SHORT_SHA_LENGTH]} message")
         findings += _scan_patch(scanner, sha, patch)
     return findings
 
@@ -599,7 +613,7 @@ def _validate_mode(parser: argparse.ArgumentParser, args) -> None:
     if args.report and (os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS")):
         print("error: --report is disabled in CI. Recovery: run it locally.",
               file=sys.stderr)
-        sys.exit(2)
+        sys.exit(USAGE_ERROR_EXIT_CODE)
 
 
 def _build_for_mode(args) -> Scanner:

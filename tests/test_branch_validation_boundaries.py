@@ -10,6 +10,8 @@ from pathlib import Path
 from tests.test_enforce_branch_name import HOOK_PATH, REPO_ROOT, hook
 
 TIMEOUT_SECONDS = 10
+BLOCKING_EXIT_CODE = 2
+LONG_LITERAL_SIZES = (1024, 8192, 32768)
 
 
 class BranchBoundaryTest(unittest.TestCase):
@@ -40,19 +42,19 @@ class BranchBoundaryTest(unittest.TestCase):
             "file_path": str(self.admin / "HEAD"),
             "content": "ref: refs/heads/claude/x\n",
         })
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
 
     def test_shell_write_protects_actual_worktree_head(self):
         result = self.run_payload("Bash", {
             "command": "printf 'ref: refs/heads/claude/x' > administration/HEAD",
         })
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
 
     def test_file_tool_rejects_unresolved_metadata_content(self):
         result = self.run_payload("Write", {
             "file_path": ".git", "content": "gitdir: unknown-location\n",
         })
-        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
 
     def test_branch_stdin_is_not_a_literal_target(self):
         context = {"subcommand": "update-ref", "arguments": ["--stdin"]}
@@ -74,10 +76,10 @@ class BranchBoundaryTest(unittest.TestCase):
             self.assertEqual(result, 0)
 
     def test_long_literals_remain_bounded(self):
-        for size in (1024, 8192, 32768):
+        for size in LONG_LITERAL_SIZES:
             with self.subTest(size=size):
                 result = self.run_payload("Bash", {"command": 'printf "' + "x" * size})
-                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
 
     def test_checker_treats_option_like_branch_as_data(self):
         self.assertTrue(hook.check_branch("--help", project_dir=str(REPO_ROOT)))

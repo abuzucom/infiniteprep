@@ -20,11 +20,13 @@ try:
 except ImportError:
     from json_line_worker import JsonLineWorkerProcess
 
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 5.0
+
 
 class HookWorker:
     """Invoke one hook process repeatedly through a JSON-line protocol."""
 
-    def __init__(self, hook_path, request_timeout: float = 5.0):
+    def __init__(self, hook_path, request_timeout: float = DEFAULT_REQUEST_TIMEOUT_SECONDS):
         self.transport = JsonLineWorkerProcess(
             "hook",
             hook_path,
