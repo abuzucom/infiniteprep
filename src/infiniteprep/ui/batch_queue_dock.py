@@ -46,6 +46,7 @@ class BatchQueueDock(QDockWidget):
         self.setObjectName("batch_queue_dock")
         self.controller = controller
         self._refreshing = False
+        self._drag_sync_pending = False
         self.batch_list = QListWidget(self)
         self.move_up_btn = QPushButton("Move Up", self)
         self.move_down_btn = QPushButton("Move Down", self)
@@ -118,7 +119,13 @@ class BatchQueueDock(QDockWidget):
         return False
 
     def refresh(self) -> None:
-        """Rebuild the rows from the queue and keep the selection on the same batch."""
+        """Rebuild the rows from the queue and keep the selection on the same batch.
+
+        A dropped row order waits for its sync. A rebuild before that sync would
+        discard the drop, so the rebuild waits too. The sync then triggers it.
+        """
+        if self._drag_sync_pending:
+            return
         selected = self.selected_batch()
         self._refreshing = True
         self.batch_list.clear()
@@ -181,11 +188,14 @@ class BatchQueueDock(QDockWidget):
 
     def _schedule_drag_sync(self, *_args: object) -> None:
         """After a drop settles, copy the dragged order into the queue."""
-        if not self._refreshing:
-            QTimer.singleShot(0, self._apply_dragged_order)
+        if self._refreshing or self._drag_sync_pending:
+            return
+        self._drag_sync_pending = True
+        QTimer.singleShot(0, self._apply_dragged_order)
 
     def _apply_dragged_order(self) -> None:
         """Send the waiting batches in their listed order to the queue."""
+        self._drag_sync_pending = False
         waiting_ids = {batch.id for batch in self.controller.queue.waiting()}
         dragged_order = [
             batch_id for batch_id in self.listed_batch_ids() if batch_id in waiting_ids
