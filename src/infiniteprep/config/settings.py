@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import json
 import logging
@@ -240,14 +241,18 @@ class SettingsManager:
             os.replace(temporary_path, self.settings_path)
         except BaseException:
             # Every failure, including an interrupt, removes the temporary file.
-            temporary_path.unlink(missing_ok=True)
+            # A failed removal must not replace the original error.
+            with contextlib.suppress(OSError):
+                temporary_path.unlink(missing_ok=True)
             raise
 
     def update(self, **changes: object) -> AppSettings:
         """Merge selected fields into the latest settings and persist them.
 
         An unknown name or an invalid value raises ValueError and writes nothing.
-        The default fallback applies only to values read from disk.
+        The default fallback applies only to values read from disk. The write
+        stores the sanitized settings, so a stored value that failed validation
+        on load becomes its default on disk, as with load followed by save.
         """
         with self._lock:
             settings = self._load_unlocked()

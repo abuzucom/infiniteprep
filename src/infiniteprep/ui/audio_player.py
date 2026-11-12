@@ -139,7 +139,8 @@ def extract_waveform_envelope(
     The waveform worker calls this off the UI thread for the fallback overview. A set
     cancel event ends the read early. The caller then discards the returned bins.
     """
-    if bins <= 0 or not file_path.exists():
+    # Only a regular file reaches the decoder. A FIFO or device could block the read.
+    if bins <= 0 or not file_path.is_file():
         return [FALLBACK_ENVELOPE_EMPTY] * max(1, bins)
     try:
         size_bytes = file_path.stat().st_size
