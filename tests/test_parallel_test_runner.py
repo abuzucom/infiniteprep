@@ -69,9 +69,12 @@ class ParallelTestRunnerTest(unittest.TestCase):
         makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
         pre_commit = (REPO_ROOT / ".pre-commit-config.yaml").read_text(
             encoding="utf-8")
-        workflow = (
-            REPO_ROOT / ".github" / "workflows" / "sync-check.yml"
-        ).read_text(encoding="utf-8")
+        # The Windows and macOS suite jobs live in os-tests.yml.
+        workflows = REPO_ROOT / ".github" / "workflows"
+        workflow = "".join(
+            (workflows / name).read_text(encoding="utf-8")
+            for name in ("sync-check.yml", "os-tests.yml")
+        )
         command = "python scripts/run_tests.py"
         self.assertIn("$(PYTHON) scripts/run_tests.py", makefile)
         self.assertIn(f"entry: {command}", pre_commit)

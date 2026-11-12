@@ -11,6 +11,8 @@ import yaml
 ROOT: Final[Path] = Path(__file__).resolve().parent.parent
 WORKFLOWS: Final[Path] = ROOT / ".github" / "workflows"
 SYNC_WORKFLOW: Final[Path] = WORKFLOWS / "sync-check.yml"
+# The Windows and macOS suite jobs live in os-tests.yml.
+OS_TESTS_WORKFLOW: Final[Path] = WORKFLOWS / "os-tests.yml"
 SECURITY_CALLER: Final[Path] = WORKFLOWS / "security-review-pr.yml"
 QUALITY_CALLER: Final[Path] = WORKFLOWS / "quality-review-pr.yml"
 SUITE_COMMANDS: Final[tuple[str, ...]] = (
@@ -48,8 +50,10 @@ class SyncCheckEventPathTest(unittest.TestCase):
     """Every sync-check suite run drops the push event payload."""
 
     def setUp(self) -> None:
-        self.workflow = load_workflow(SYNC_WORKFLOW)
-        self.suite_steps = find_suite_steps(self.workflow)
+        self.suite_steps = [
+            *find_suite_steps(load_workflow(SYNC_WORKFLOW)),
+            *find_suite_steps(load_workflow(OS_TESTS_WORKFLOW)),
+        ]
 
     def test_each_suite_command_runs_in_a_step(self) -> None:
         commands = [str(step["run"]).strip() for _, step in self.suite_steps]

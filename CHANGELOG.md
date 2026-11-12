@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.57.0] (2026-11-12)
+## [0.57.1] (2026-11-12)
 
 ### Added
 
@@ -42,6 +42,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Closing the window while a batch runs or waits offers **Keep Working** or **Cancel and Exit**. The earlier wait-then-close choice is gone. `MainWindow.ask_close_during_import` now returns only `cancel` or `stay`.
 - `MainWindow.start_folder_import` queues the import and always returns `True`.
 - While a batch runs or waits, Transcode to XDJ, Change Journal & Restore, Bulk Approve, field edits, and Delete InfinitePrep Data stay disabled.
+- The `tests-windows` and `tests-macos` jobs move from `sync-check.yml` to the new `os-tests.yml`. That workflow omits the `edited` event. A pull request title or description edit no longer cancels or reruns a platform job.
+- A docs-only or website-only change skips both platform jobs and the advisory AgentLint step in `sync-check.yml`. Every blocking check in `sync-check.yml` still runs.
+- The `check-sync` job probes the configured hook launchers on Linux.
 
 ### Fixed
 
