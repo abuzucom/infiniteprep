@@ -39,6 +39,13 @@ The earlier record named `b452348`. The copied files matched `59c6d95`.
 - The `sync-check.yml` suite steps run in a shell that drops
   `GITHUB_EVENT_PATH`. A push payload otherwise fails the compliance scanner
   tests.
+- `sync-check.yml` holds no `tests-windows` or `tests-macos` job. Both jobs
+  run from `os-tests.yml`. That workflow omits the `edited` event.
+  `sync-check.yml` probes the hook launchers in `check-sync` and skips
+  AgentLint for a light change.
+- `tests/test_push_event_workflow_wiring.py` and
+  `tests/test_parallel_test_runner.py` read the suite steps from both
+  workflows.
 - `.gitattributes` keeps `* text=auto eol=lf` and adds the policy entries.
 - `pyproject.toml` excludes the copied gate files from Ruff. The agents lint
   in `ci.yml` covers those files.
