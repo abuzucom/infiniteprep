@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import yaml
 
-from tests.test_enforce_branch_name import REPO_ROOT, hook
+from tests.test_enforce_branch_name import BLOCKING_EXIT_CODE, REPO_ROOT, hook
 
 
 class CiBranchFixtureTest(unittest.TestCase):
@@ -21,7 +21,7 @@ class CiBranchFixtureTest(unittest.TestCase):
             for name in ("check_branch_name.py", "trusted_git.py"):
                 (root / "scripts" / name).write_bytes((REPO_ROOT / "scripts" / name).read_bytes())
             cases = (
-                ({"tool_name": [], "tool_input": {}}, 2),
+                ({"tool_name": [], "tool_input": {}}, BLOCKING_EXIT_CODE),
                 ({"tool_name": "Write", "tool_input": {"file_path": "notes.txt", "content": "text"}}, 0),
                 ({"tool_name": "Bash", "tool_input": {"command": "echo safe"}}, 0),
                 ({"tool_name": "Bash", "tool_input": {"command": "python scripts/read_git_state.py branch"}}, 0),

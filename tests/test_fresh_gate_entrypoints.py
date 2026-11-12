@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+BLOCKING_EXIT_CODE = 2
 CASES = (
     ("block_destructive_bash.py", "Bash", "aws --version"),
     ("block_destructive_powershell.py", "PowerShell", "terraform validate"),
@@ -66,7 +67,7 @@ class FreshGateEntrypointTest(unittest.TestCase):
                     text=True,
                     check=False,
                 )
-                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
                 output = json.loads(result.stdout)
                 decision = output["hookSpecificOutput"]["permissionDecision"]
                 self.assertEqual(decision, "deny")

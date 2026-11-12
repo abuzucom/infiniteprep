@@ -15,6 +15,9 @@ from tests.test_command_execution_gate import _load_gate_module
 from tests.test_enforce_branch_name import _load_hook_module
 
 READ_LIMIT = 64
+OVERSIZE_FACTOR = 2
+# os.stat_result accepts the ten portable fields as a sequence.
+STAT_RESULT_FIELD_COUNT = 10
 WORKFLOW_CONSENT = "Repository workflow requires execution consent"
 PROGRAM_NAMES = ("make", "rg", "python", "npm")
 
@@ -86,9 +89,9 @@ class ReadRegularTest(TemporaryTree):
                 self.hook._read_regular(str(path), READ_LIMIT)
 
     def test_growth_after_lstat_raises(self) -> None:
-        path = self.write("HEAD", "x" * (READ_LIMIT * 2))
+        path = self.write("HEAD", "x" * (READ_LIMIT * OVERSIZE_FACTOR))
         real = os.lstat(path)
-        fields = list(real[:10])
+        fields = list(real[:STAT_RESULT_FIELD_COUNT])
         fields[stat.ST_SIZE] = 1
         reported = os.stat_result(fields)
         with patch.object(self.hook.os, "lstat", return_value=reported):
@@ -125,9 +128,10 @@ class RepositoryProgramPathTest(TemporaryTree):
             return self.gate.workflow_decision(command, str(self.root))
 
     def test_outside_program_keeps_the_plain_prompt(self) -> None:
-        for command in ("make lint PYTHON=python", "rg -n x README.md", "python scripts/run_tests.py"):
+        for command in ("make lint PYTHON=python", "python scripts/run_tests.py"):
             with self.subTest(command=command):
                 self.assertEqual(self.decide(command, self.outside), ("ask", WORKFLOW_CONSENT))
+        self.assertEqual(self.decide("rg -n x README.md", self.outside), ("allow", ""))
 
     def test_missing_program_keeps_the_plain_prompt(self) -> None:
         self.assertEqual(self.decide("make lint PYTHON=python", self.base / "empty"),

@@ -28,6 +28,7 @@ REPOSITORY_ONLY_END = "<!-- repository-only:end -->"
 SOURCE_ONLY_START = "<!-- source-only:start -->"
 SOURCE_ONLY_END = "<!-- source-only:end -->"
 MAX_POLICY_BYTES = 64 * 1024
+MANIFEST_JSON_INDENT = 2
 # Files that must be byte-identical wherever these gates are installed. A
 # decision reached by one gate and not the other is the failure the whole
 # design exists to prevent, so the files carrying decisions are listed here
@@ -426,7 +427,7 @@ def write_shared(root: Path) -> int:
         "shared": recorded,
     }
     (root / SHARED_MANIFEST).write_text(
-        json.dumps(body, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        json.dumps(body, indent=MANIFEST_JSON_INDENT, sort_keys=True) + "\n", encoding="utf-8")
     print(f"recorded {len(recorded)} shared files in {SHARED_MANIFEST}")
     return 0
 

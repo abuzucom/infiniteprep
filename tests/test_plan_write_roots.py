@@ -18,6 +18,7 @@ WINDOWS_SPECS = (
     ("tree", r"C:\Users\u\.claude\plans"),
     ("scratchpad", r"C:\Users\u\AppData\Local\Temp"),
 )
+NON_STRING_PLAN_DIRECTORY = 7
 
 
 class WriteRootMatchTest(unittest.TestCase):
@@ -128,7 +129,8 @@ class HookWriteRootTest(unittest.TestCase):
         self.assertEqual(decision(self.write(project_plans / "p.md", "gemini"), "gemini"), "deny")
         settings = self.home / ".gemini" / "settings.json"
         settings.parent.mkdir(parents=True, exist_ok=True)
-        for value in (str(self.home), os.path.abspath(os.sep), "relative-plans", 7, "{"):
+        for value in (str(self.home), os.path.abspath(os.sep), "relative-plans",
+                      NON_STRING_PLAN_DIRECTORY, "{"):
             with self.subTest(value=value):
                 document = "{" if value == "{" else json.dumps(
                     {"general": {"plan": {"directory": value}}})

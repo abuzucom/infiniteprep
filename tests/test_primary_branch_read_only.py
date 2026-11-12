@@ -9,6 +9,7 @@ import unittest
 from tests.read_only_branch_support import DETACHED_HEAD, BranchFixture, decision
 
 READ_ONLY_STATES = ("main", DETACHED_HEAD)
+SHA_HEX_LENGTH = 40
 ALLOWED_BASH = (
     "git status", "git status --short", "git log --oneline -5", "git --no-pager log -3",
     "git diff", "git show HEAD", "git rev-parse HEAD", "git ls-files", "git blame README.md",
@@ -16,12 +17,13 @@ ALLOWED_BASH = (
     "git branch", "git worktree list", "git fetch origin", "git fetch --prune origin",
     "ls -la", "cat README.md", "head -n 1 README.md", "tail -n 1 README.md", "pwd",
     "wc -l README.md", "echo ready", "printf ready", "git log --oneline | head -5",
+    "python scripts/read_git_state.py all", "python -m unittest tests.test_enforce_branch_name",
+    "python scripts/check_gate_adoption.py", "rg -n fixture README.md",
 )
 CONSENT_BASH = (
-    "python scripts/read_git_state.py all", "python scripts/sync.py --check",
+    "python scripts/sync.py --check",
     "python scripts/sync.py --check-shared", "python scripts/sync.py --print-adoptable",
-    "python scripts/run_tests.py", "python -m unittest tests.test_enforce_branch_name",
-    "python scripts/check_gate_adoption.py", "rg -n fixture README.md",
+    "python scripts/run_tests.py",
     "git switch -c feat/new-work", "git checkout -b feat/new-work",
 )
 DENIED_BASH = (
@@ -130,7 +132,7 @@ class ReadOnlyConsentTest(ReadOnlyCase):
         fixture.add_local_branch("feat/existing")
         self.assertEqual(decision(fixture.shell("git switch feat/existing")), "allow")
         packed = fixture.admin / "packed-refs"
-        packed.write_text("# pack-refs with: peeled\n" + "0" * 40
+        packed.write_text("# pack-refs with: peeled\n" + "0" * SHA_HEX_LENGTH
                           + " refs/heads/fix/packed\n", encoding="utf-8")
         self.assertEqual(decision(fixture.shell("git switch fix/packed")), "allow")
         for command in ("git switch feat/missing", "git switch ../outside", "git switch -"):

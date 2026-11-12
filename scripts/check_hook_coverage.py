@@ -41,6 +41,9 @@ TEST_SHARD_TIMEOUT_SECONDS = 30
 RESOURCE_SHARD_TIMEOUT_SECONDS = 180
 PROGRESS_INTERVAL_SECONDS = 10
 PROCESS_SHUTDOWN_TIMEOUT_SECONDS = 5
+TRACE_RECORD_LENGTH = 2
+FAILURE_OUTPUT_TAIL_CHARS = 2000
+BASELINE_JSON_INDENT = 2
 PRIORITY_TEST_SHARDS = (
     "test_enforce_git_identity.py::PreToolUseTest",
     "test_immutable_compliance.py::ImmutableComplianceScannerTest",
@@ -54,9 +57,20 @@ PRIORITY_TEST_SHARDS = (
     "test_enforce_git_identity.py::CommitRangeTest",
     "test_check_conflict_markers.py::SecurityHardeningTest",
     "test_check_conflict_markers.py::SparseCheckoutTest",
+    "test_branch_review_regressions.py::BranchReviewTest",
+    "test_check_changelog_daily_entries.py::ProcessTimezoneTest",
+    "test_branch_validation_contexts.py::BranchContextTest",
+    "test_branch_write_destinations.py::BranchWriteDestinationTest",
+    "test_check_gate_adoption.py::PartialAdoptionTest",
+    "test_gate_adoption_transaction.py::TransactionRegistrationTest",
 )
 RESOURCE_HEAVY_TEST_SHARDS = frozenset(PRIORITY_TEST_SHARDS)
-EXCLUSIVE_TEST_SHARDS = RESOURCE_HEAVY_TEST_SHARDS
+# Shards listed here run alone, with no other shard active. The set ships empty.
+# tests/test_shard_priority.py exercises the isolation path with a patched set.
+EXCLUSIVE_TEST_SHARDS: frozenset[str] = frozenset()
+PRIORITY_INDEX = {
+    label: index for index, label in enumerate(PRIORITY_TEST_SHARDS)
+}
 
 
 @dataclass(frozen=True)
@@ -136,7 +150,7 @@ def traced_lines(out_dir: str) -> set:
         if not isinstance(records, list):
             raise ValueError("trace file must contain a list")
         for record in records:
-            valid = (isinstance(record, list) and len(record) == 2
+            valid = (isinstance(record, list) and len(record) == TRACE_RECORD_LENGTH
                      and isinstance(record[0], str)
                      and isinstance(record[1], int)
                      and not isinstance(record[1], bool))
@@ -154,9 +168,10 @@ def unreached_counts(root: str, hit: set) -> dict:
         if not name.endswith(".py"):
             continue
         path = os.path.join(target, name)
+        resolved_path = os.path.abspath(path)
         owned = function_statements(path)
         for line, function in owned.items():
-            if (os.path.abspath(path), line) in hit:
+            if (resolved_path, line) in hit:
                 continue
             key = "%s::%s" % (name, function)
             counts[key] = counts.get(key, 0) + 1
@@ -219,29 +234,68 @@ def prioritize_test_shards(
     ]
 
 
+def normalize_shard_label(label: str) -> str:
+    """Return the label without an optional tests/ path prefix."""
+    return label.removeprefix("tests/")
+
+
 def shard_priority(label: str, ordinary_priority: int) -> int:
     """Return the configured priority for one class or method label."""
+    normalized = normalize_shard_label(label)
+    index = PRIORITY_INDEX.get(normalized)
+    if index is not None:
+        return index
     for index, priority_label in enumerate(PRIORITY_TEST_SHARDS):
-        if label == priority_label or label.startswith(priority_label + "."):
+        if normalized.startswith(priority_label + "."):
             return index
     return ordinary_priority
 
 
 def is_resource_heavy(label: str) -> bool:
     """Return whether a class or method label receives the resource timeout."""
+    normalized = normalize_shard_label(label)
+    if normalized in RESOURCE_HEAVY_TEST_SHARDS:
+        return True
     return any(
-        label == resource_label or label.startswith(resource_label + ".")
+        normalized.startswith(resource_label + ".")
         for resource_label in RESOURCE_HEAVY_TEST_SHARDS
     )
+
+
+def is_exclusive_shard(label: str) -> bool:
+    """Return whether a class or method label requires isolated execution."""
+    normalized = normalize_shard_label(label)
+    if normalized in EXCLUSIVE_TEST_SHARDS:
+        return True
+    return any(
+        normalized.startswith(exclusive_label + ".")
+        for exclusive_label in EXCLUSIVE_TEST_SHARDS
+    )
+
+
+def terminate_windows_process_tree(process: subprocess.Popen) -> None:
+    """Stop a Windows process tree with taskkill and fall back to kill."""
+    killed_tree = False
+    try:
+        completed = subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=PROCESS_SHUTDOWN_TIMEOUT_SECONDS,
+            check=False,
+        )
+        killed_tree = completed.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        killed_tree = False
+    if not killed_tree and process.poll() is None:
+        process.kill()
 
 
 def terminate_process_tree(process: subprocess.Popen) -> None:
     """Stop a timed-out test process and all descendants."""
     if os.name == "nt":
-        subprocess.run(
-            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-            capture_output=True, check=False, text=True,
-            encoding="utf-8", errors="replace")
+        terminate_windows_process_tree(process)
     else:
         os.killpg(process.pid, signal.SIGTERM)
     try:
@@ -251,7 +305,10 @@ def terminate_process_tree(process: subprocess.Popen) -> None:
             process.kill()
         else:
             os.killpg(process.pid, signal.SIGKILL)
-        process.wait()
+        try:
+            process.wait(timeout=PROCESS_SHUTDOWN_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            return
 
 
 def run_test_shard(
@@ -280,7 +337,11 @@ def run_test_shard(
         timed_out = False
     except subprocess.TimeoutExpired:
         terminate_process_tree(process)
-        stdout, stderr = process.communicate()
+        try:
+            stdout, stderr = process.communicate(
+                timeout=PROCESS_SHUTDOWN_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            stdout, stderr = "", "process shutdown timed out waiting for pipes"
         timed_out = True
     finally:
         if process_registry is not None:
@@ -296,7 +357,7 @@ def result_problem(result: TestShardResult, timeout: float) -> str:
         return "%s timed out after %.1f seconds" % (result.name, timeout)
     output = result.stderr or result.stdout
     return "%s failed with exit code %d:\n%s" % (
-        result.name, result.returncode, output[-2000:])
+        result.name, result.returncode, output[-FAILURE_OUTPUT_TAIL_CHARS:])
 
 
 def record_result(result: TestShardResult, timeout: float) -> str:
@@ -324,7 +385,9 @@ def submit_available_shards(
     shard_arguments: tuple,
 ) -> None:
     """Fill workers while keeping exclusive work isolated."""
-    exclusive_is_active = any(details[2] for details in active_futures.values())
+    root, environment, default_timeout, process_registry = shard_arguments
+    exclusive_is_active = any(
+        exclusive for _label, _import_name, exclusive, _timeout in active_futures.values())
     if exclusive_is_active:
         return
     while len(active_futures) < worker_count:
@@ -336,17 +399,17 @@ def submit_available_shards(
             label, import_name = ordinary_shards.popleft()
         else:
             return
-        shard_timeout = shard_arguments[2]
+        shard_timeout = default_timeout
         if is_resource_heavy(label):
             shard_timeout = max(shard_timeout, RESOURCE_SHARD_TIMEOUT_SECONDS)
         future = executor.submit(
             run_test_shard,
-            shard_arguments[0],
-            shard_arguments[1],
+            root,
+            environment,
             label,
             import_name,
             shard_timeout,
-            shard_arguments[3],
+            process_registry,
         )
         active_futures[future] = (
             label, import_name, is_exclusive, shard_timeout)
@@ -388,10 +451,10 @@ def run_test_shards(root: str, environment: dict,
         raise ValueError("coverage test discovery returned no shards")
     exclusive_shards = deque(
         shard for shard in test_shards
-        if shard[0] in EXCLUSIVE_TEST_SHARDS)
+        if is_exclusive_shard(shard[0]))
     ordinary_shards = deque(
         shard for shard in test_shards
-        if shard[0] not in EXCLUSIVE_TEST_SHARDS)
+        if not is_exclusive_shard(shard[0]))
     worker_count = min(workers, len(test_shards))
     print("hook coverage: starting %d test shards with %d workers"
           % (len(test_shards), worker_count), file=sys.stderr, flush=True)
@@ -432,7 +495,9 @@ def run_test_shards(root: str, environment: dict,
                 executor, active_futures, ordinary_shards,
                 exclusive_shards, worker_count, shard_arguments)
     finally:
-        executor.shutdown(wait=True, cancel_futures=True)
+        # Every result is collected before this point. Waiting here would let one stuck
+        # worker thread hang the run after its process was terminated.
+        executor.shutdown(wait=False, cancel_futures=True)
     return []
 
 
@@ -507,7 +572,7 @@ def write_baseline(root: str, counts: dict) -> int:
     }
     path = os.path.join(root, BASELINE)
     with io.open(path, "w", encoding="utf-8") as handle:
-        handle.write(json.dumps(body, indent=2) + "\n")
+        handle.write(json.dumps(body, indent=BASELINE_JSON_INDENT) + "\n")
     print("recorded %d functions with unreached statements in %s"
           % (len(counts), BASELINE))
     return 0

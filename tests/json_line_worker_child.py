@@ -10,6 +10,9 @@ from pathlib import Path
 
 
 WORKER_MODES = frozenset({"hook", "main"})
+# The argument vector holds the script path, the worker mode, and the target path.
+WORKER_ARGUMENT_COUNT = 3
+USAGE_ERROR_EXIT_CODE = 2
 
 
 def load_target_module(target_path: Path):
@@ -100,14 +103,15 @@ def process_requests(worker_mode: str, target_path: Path) -> None:
 
 def main() -> int:
     """Validate fixed worker arguments and run the request protocol."""
-    if len(sys.argv) != 3 or sys.argv[1] not in WORKER_MODES:
+    if len(sys.argv) != WORKER_ARGUMENT_COUNT or sys.argv[1] not in WORKER_MODES:
         print("usage: json_line_worker_child.py <hook|main> <target>", file=sys.stderr)
-        return 2
-    target_path = Path(sys.argv[2]).resolve()
+        return USAGE_ERROR_EXIT_CODE
+    _, worker_mode, target_argument = sys.argv
+    target_path = Path(target_argument).resolve()
     if not target_path.is_file() or target_path.suffix.casefold() != ".py":
         print("persistent worker target must be a Python file", file=sys.stderr)
-        return 2
-    process_requests(sys.argv[1], target_path)
+        return USAGE_ERROR_EXIT_CODE
+    process_requests(worker_mode, target_path)
     return 0
 
 

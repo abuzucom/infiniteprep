@@ -19,6 +19,7 @@ PRINTABLE_MAXIMUM = 126
 BYTE_MAXIMUM = 255
 UNICODE_SHORT_MAXIMUM = 65535
 SUCCESS = 0
+USAGE_ERROR_EXIT_CODE = 2
 # `git config --get-regexp` exits 1 when no key matches.
 NO_MATCHING_CONFIG = 1
 FILTER_SECTION = "filter."
@@ -216,7 +217,7 @@ def main(argv: list[str]) -> int:
     """Print safe JSON for one fixed Git state operation."""
     if len(argv) != 1 or argv[0] not in OPERATIONS:
         print("error: select all, branch, remote, revision, or status", file=sys.stderr)
-        return 2
+        return USAGE_ERROR_EXIT_CODE
     try:
         state = read_state(argv[0], Path.cwd())
     except (OSError, ValueError, subprocess.TimeoutExpired):

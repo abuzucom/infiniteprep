@@ -29,10 +29,13 @@ SUBJECT_PATTERN = re.compile(r"^(feat|fix|chore|docs|test|ci): \S.*$")
 TYPE_PREFIX_PATTERN = re.compile(r"^(?:feat|fix|chore|docs|test|ci):\s+")
 SQUASH_SUFFIX = re.compile(r" \(#\d+\)$")
 MAX_LENGTH = 50
+SHORT_SHA_LENGTH = 12
 MAX_COMMIT_COUNT = 200
 MAX_METADATA_BYTES = 4 * 1024 * 1024
 RECORD_SEPARATOR = "\x1e"
 FIELD_SEPARATOR = "\x1f"
+SUBJECT_FIELD_COUNT = 2
+MESSAGE_FIELD_COUNT = 3
 
 
 def _strip_squash_suffix(subject: str) -> str:
@@ -55,7 +58,7 @@ def find_violations(subjects: list[tuple[str, str]]) -> list[str]:
     """
     violations = []
     for sha, raw_subject in subjects:
-        short_sha = sha[:12]
+        short_sha = sha[:SHORT_SHA_LENGTH]
         prefix = f"{short_sha}: " if short_sha else ""
         subject = _strip_squash_suffix(raw_subject)
         if not SUBJECT_PATTERN.match(subject):
@@ -98,7 +101,7 @@ def find_message_prose_violations(
     """Return sanitized prose findings for commit subjects and bodies."""
     findings = []
     for sha, subject, body in messages:
-        short_sha = sha[:12]
+        short_sha = sha[:SHORT_SHA_LENGTH]
         findings.extend(
             find_prose_violations(
                 mask_type_prefix(subject),
@@ -156,7 +159,7 @@ def load_commits(base: str, head: str, repo=None) -> list[tuple[str, str]]:
         if not line:
             continue
         fields = line.split("\x00")
-        if len(fields) != 2 or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
+        if len(fields) != SUBJECT_FIELD_COUNT or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
             raise ValueError("git log returned malformed commit metadata")
         sha, subject = fields
         commits.append((sha, subject))
@@ -173,9 +176,9 @@ def _parse_message_records(stdout: str) -> list[tuple[str, str, str]]:
         if not record:
             continue
         fields = record.split(FIELD_SEPARATOR)
-        if len(fields) != 3 or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
+        if len(fields) != MESSAGE_FIELD_COUNT or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
             raise ValueError("git log returned malformed commit metadata")
-        messages.append((fields[0], fields[1], fields[2]))
+        messages.append(tuple(fields))
     return messages
 
 

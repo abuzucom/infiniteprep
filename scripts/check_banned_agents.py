@@ -42,6 +42,11 @@ OBJECT_ID = re.compile(r"^[0-9a-fA-F]{40,64}$")
 MAX_COMMITS = 200
 MAX_COMMIT_BYTES = 256 * 1024
 MAX_TOTAL_COMMIT_BYTES = 4 * 1024 * 1024
+SHORT_SHA_LENGTH = 12
+GIT_COMMIT_TIMEOUT_SECONDS = 30
+GIT_RANGE_TIMEOUT_SECONDS = 60
+# Object ID, author name and email, committer name and email, then the message.
+COMMIT_FIELD_COUNT = 6
 
 
 def _compile_wildcard(pattern: str) -> re.Pattern[str]:
@@ -197,7 +202,7 @@ def find_violations(
     exact_bans, wildcards = load_banned_models(banned_models_file)
     violations = []
     for commit in commits:
-        sha = commit["sha"][:12]
+        sha = commit["sha"][:SHORT_SHA_LENGTH]
         for role in ("author", "committer"):
             name = commit[f"{role}_name"]
             email = commit[f"{role}_email"]
@@ -243,7 +248,7 @@ def _commit_size(repository, sha: str) -> int:
     """Return one bounded commit-object size."""
     result = run_git(
         repository, ["cat-file", "-s", "--", sha], check=True,
-        runner=subprocess.run, timeout=30)
+        runner=subprocess.run, timeout=GIT_COMMIT_TIMEOUT_SECONDS)
     raw_size = result.stdout.strip()
     if not raw_size.isdigit() or int(raw_size) > MAX_COMMIT_BYTES:
         raise ValueError(f"commit {sha} exceeds the metadata size limit")
@@ -258,10 +263,10 @@ def _load_commit(repository, sha: str) -> dict:
         ["show", "--no-ext-diff", "--no-patch", f"--format={fmt}", "--end-of-options", sha],
         check=True,
         runner=subprocess.run,
-        timeout=30,
+        timeout=GIT_COMMIT_TIMEOUT_SECONDS,
     )
-    fields = result.stdout.split("\x00", 5)
-    if len(fields) != 6 or fields[0] != sha:
+    fields = result.stdout.split("\x00", COMMIT_FIELD_COUNT - 1)
+    if len(fields) != COMMIT_FIELD_COUNT or fields[0] != sha:
         raise ValueError(f"malformed metadata for commit {sha}")
     return dict(
         zip(
@@ -282,7 +287,7 @@ def load_commits(base: str, head: str, repo=None) -> list[dict]:
         ["rev-list", "--count", "--end-of-options", revision],
         check=True,
         runner=subprocess.run,
-        timeout=60,
+        timeout=GIT_RANGE_TIMEOUT_SECONDS,
     )
     raw_count = count_result.stdout.strip()
     if not raw_count.isdigit() or int(raw_count) > MAX_COMMITS:
@@ -292,7 +297,7 @@ def load_commits(base: str, head: str, repo=None) -> list[dict]:
         ["rev-list", "--reverse", "--end-of-options", revision],
         check=True,
         runner=subprocess.run,
-        timeout=60,
+        timeout=GIT_RANGE_TIMEOUT_SECONDS,
     )
     shas = result.stdout.splitlines()
     if len(shas) > MAX_COMMITS:

@@ -84,6 +84,11 @@ COMMITTER_EMAIL_SOURCES = (
 
 HISTORY_CANDIDATE_LIMIT = 5
 HISTORY_COMMIT_LIMIT = 50
+SHORT_SHA_LENGTH = 12
+IDENTITY_FIELD_COUNT = 3
+CANDIDATE_FIELD_COUNT = 4
+# Git writes an escaped character as a backslash pair between two quotes.
+QUOTE_ESCAPE_LENGTH = 2
 GIT_CONTEXT_VARIABLES = frozenset((
     "GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR",
     "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_NOSYSTEM",
@@ -282,10 +287,10 @@ def _read_quoted(text: str, index: int) -> tuple:
             raise ValueError(CONFIG_PARAMETERS_ERROR)
         parts.append(text[index:end])
         index = end + 1
-        if not (text.startswith(("\\'", "\\!"), index) and text.startswith("'", index + 2)):
+        if not (text.startswith(("\\'", "\\!"), index) and text.startswith("'", index + QUOTE_ESCAPE_LENGTH)):
             return "".join(parts), index
         parts.append(text[index + 1])
-        index += 3
+        index += QUOTE_ESCAPE_LENGTH + 1
 
 
 def _parse_config_parameters(text: str) -> list:
@@ -424,12 +429,12 @@ def log_identities(revisions: list, repo=None) -> list:
         if not line:
             continue
         fields = line.split("\x00")
-        if len(fields) != 3 or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
+        if len(fields) != IDENTITY_FIELD_COUNT or not re.fullmatch(r"[0-9a-fA-F]{40,64}", fields[0]):
             raise ValueError("git log returned malformed identity metadata")
         sha, author_email, committer_email = fields
         identities.append(
             {
-                "label": sha[:12],
+                "label": sha[:SHORT_SHA_LENGTH],
                 "author_email": author_email,
                 "committer_email": committer_email,
                 "unset_name": False,
@@ -501,9 +506,10 @@ def history_identity_candidates(repo=None) -> list:
     seen = set()
     for line in result.stdout.splitlines():
         fields = line.split("\x00")
-        if len(fields) != 4:
+        if len(fields) != CANDIDATE_FIELD_COUNT:
             raise ValueError("git log returned malformed identity candidates")
-        for name, email in ((fields[0], fields[1]), (fields[2], fields[3])):
+        author_name, author_email, committer_name, committer_email = fields
+        for name, email in ((author_name, author_email), (committer_name, committer_email)):
             candidate = (name.strip(), email.strip())
             if not candidate[0] or not NUMBERED_NOREPLY.fullmatch(candidate[1]):
                 continue
