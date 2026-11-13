@@ -10,6 +10,7 @@ from enum import StrEnum
 from typing import Final
 
 from infiniteprep.services.usb.models import (
+    DriveIdentity,
     DriveInspection,
     FilesystemHealth,
     PartitionInfo,
@@ -133,12 +134,17 @@ def _select_single_partition(inspection: DriveInspection) -> PartitionInfo | Non
     return inspection.partitions[0]
 
 
+def is_removable_class(drive: DriveIdentity) -> bool:
+    """Return True for a drive with the removable flag on a USB, SD, or MMC bus (D188)."""
+    bus_type = (drive.bus_type or "").casefold()
+    return drive.is_removable and bus_type in REMOVABLE_BUS_TYPES
+
+
 def _collect_safety_refusals(inspection: DriveInspection) -> list[Refusal]:
     """Return refusals for non-removable, system, boot, and active targets."""
     drive = inspection.drive
     refusals: list[Refusal] = []
-    bus_type = (drive.bus_type or "").casefold()
-    if not drive.is_removable or bus_type not in REMOVABLE_BUS_TYPES:
+    if not is_removable_class(drive):
         refusals.append(
             Refusal(
                 RefusalCode.NOT_REMOVABLE,

@@ -6,6 +6,7 @@ import contextlib
 import ipaddress
 import json
 import logging
+import math
 import os
 import socket
 import tempfile
@@ -43,6 +44,13 @@ BLOCKED_METADATA_HOSTS: Final[frozenset[str]] = frozenset(
     }
 )
 CGNAT_NETWORK: Final[ipaddress.IPv4Network] = ipaddress.IPv4Network("100.64.0.0/10")
+BYTES_PER_MIB: Final[int] = 1024 * 1024
+# The USB export reserve is the larger of a percentage of the estimated export
+# size and a fixed byte count (D97 to D99, D199).
+MAX_USB_RESERVE_PERCENT: Final[float] = 100.0
+# One TiB. No FAT32 volume holds more than 2 TiB.
+MAX_USB_RESERVE_MIB: Final[int] = 1024 * 1024
+MAX_USB_RESERVE_BYTES: Final[int] = MAX_USB_RESERVE_MIB * BYTES_PER_MIB
 
 
 def _is_disallowed_ip(ip_text: str) -> bool:
@@ -161,6 +169,8 @@ class AppSettings:
     detail_table_layout: str = ""  # Base64-encoded QHeaderView state.
     detail_table_column_count: int = 0  # Column count when the layout was saved.
     waveform_zoom_seconds: int = DEFAULT_WAVEFORM_ZOOM_SECONDS
+    usb_reserve_percent: float = 0.0  # Percent of the estimated export size.
+    usb_reserve_bytes: int = 0
 
 
 def _find_setting_value_problem(name: str, value: object, default: object) -> str | None:
@@ -171,7 +181,16 @@ def _find_setting_value_problem(name: str, value: object, default: object) -> st
         return "an unsupported waveform zoom duration"
     if name in NONNEGATIVE_COUNT_SETTINGS and value < 0:
         return "a negative count"
+    if name == "usb_reserve_percent" and not _is_supported_reserve_percent(value):
+        return "a reserve percentage outside 0 to 100"
+    if name == "usb_reserve_bytes" and not 0 <= value <= MAX_USB_RESERVE_BYTES:
+        return "a reserve size outside the supported range"
     return None
+
+
+def _is_supported_reserve_percent(value: float) -> bool:
+    """Return True for a finite reserve percentage from 0 to 100."""
+    return math.isfinite(value) and 0 <= value <= MAX_USB_RESERVE_PERCENT
 
 
 def _validated_setting_value(name: str, value: object, default: object) -> object:

@@ -5,10 +5,22 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.57.2] (2026-11-12)
+## [0.57.4] (2026-11-13)
+
+### Changed
+
+- A docs-only pull request skips the security review and the quality review. A `classify` job in `security-review-pr.yml` and `quality-review-pr.yml` runs the classifier from the default branch and reads the pull request head as Git objects. Each workflow publishes its check with the `skipped` conclusion. A website change, a mixed change, and a failed classification keep both reviews.
+
+## [0.57.3] (2026-11-12)
 
 ### Added
 
+- `docs/decision-register.md` records D372, the USB drive class rule of issue 207, and D373 to D387, the batch queue decisions of issue 109. D239 and D241 now read as superseded. The register omits D388 and D389. Both recorded the PR count and the branch of PR 202.
+
+- USB export confirm dialog in `ui/usb_preflight_dialog.py` (USB-4, #156). The dialog names the target drive, the DJ profiles, the planned changes, and the space figures. A refusal disables the confirm button. A safety refusal hides the drive identity and the space figures. Facts without a source show as not verified.
+- USB export drive picker in `ui/usb_drive_picker_dialog.py`. The picker lists removable-class drives only. A refused drive shows its first reason. The picker disables a drive with a failed probe and shows fixed text.
+- `services/usb/targets.py` selects the inspector and the probe for the current platform and loads the removable-class drives.
+- USB export reserve settings `usb_reserve_percent` and `usb_reserve_bytes` with two inputs in the Settings dialog. An invalid stored value loads as zero. `SettingsManager.update` rejects an out-of-range reserve.
 - A batch queue runs one library-changing batch at a time (INFRA-1, #109). Identify & Analyze, folder import, and Apply Safe Writes join the queue. Each batch runs on its own worker thread, and later batches wait in order. The queue lives in memory. Waiting batches end with the app.
 - The **Batch Queue** dock lists the running, waiting, and finished batches with progress. **Move Up**, **Move Down**, and drag and drop reorder waiting batches. **Cancel Batch** removes a waiting batch. On a running Analyze or write batch it stops after the current file and keeps the finished files. On a running import it rolls back the whole import.
 - A finished batch stays in the dock with counts. **View Result** opens the report. **Clear Finished** empties the list.
@@ -36,7 +48,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- A docs-only pull request skips the security review and the quality review. A `classify` job in `security-review-pr.yml` and `quality-review-pr.yml` runs the classifier from the default branch and reads the pull request head as Git objects. Each workflow publishes its check with the `skipped` conclusion. A website change, a mixed change, and a failed classification keep both reviews.
 - Identify & Analyze and Apply Safe Writes no longer block the window. A queued batch continues past a failed file by default.
 - The main window shows import progress in the dock. The modal import progress dialog no longer opens there. The stuck-file prompt stays.
 - No report opens when a batch ends. The import report and the import failure message open from **View Result**.
