@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.57.1] (2026-11-12)
+## [0.57.2] (2026-11-12)
 
 ### Added
 
@@ -36,6 +36,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- A docs-only pull request skips the security review and the quality review. A `classify` job in `security-review-pr.yml` and `quality-review-pr.yml` runs the classifier from the default branch and reads the pull request head as Git objects. Each workflow publishes its check with the `skipped` conclusion. A website change, a mixed change, and a failed classification keep both reviews.
 - Identify & Analyze and Apply Safe Writes no longer block the window. A queued batch continues past a failed file by default.
 - The main window shows import progress in the dock. The modal import progress dialog no longer opens there. The stuck-file prompt stays.
 - No report opens when a batch ends. The import report and the import failure message open from **View Result**.

@@ -57,14 +57,60 @@ jobs:
             core.setOutput('title', pull.title || '');
             core.setOutput('body', pull.body || '');
 
-  review:
+  # Sorts the pull request into a change class. The classifier comes from the
+  # default branch. The pull request head serves as Git objects only, and no
+  # pull request file runs. The job holds a read-only token and no secret.
+  classify:
     needs: resolve
+    if: needs.resolve.outputs.found == 'true' && needs.resolve.outputs.same_repo == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      change_class: ${{ steps.classify.outputs.change_class }}
+    steps:
+      # A workflow_run job checks out the default branch when no ref is named.
+      - name: Check out the trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          path: trusted-base
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check out the pull request head as data
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ needs.resolve.outputs.head_sha }}
+          path: pr-head
+          persist-credentials: false
+          fetch-depth: 0
+
+      # Git reads the pull request commits through the alternate object
+      # directory. The command and its working directory stay trusted.
+      - name: Classify changed paths
+        id: classify
+        working-directory: trusted-base
+        env:
+          BASE_SHA: ${{ needs.resolve.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+          GIT_ALTERNATE_OBJECT_DIRECTORIES: ${{ github.workspace }}/pr-head/.git/objects
+        run: python3 scripts/classify_changed_paths.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  # A docs-only pull request skips the model review. The status function
+  # replaces the implicit success check on needs. A failed classify job
+  # yields no class, and the review then runs.
+  review:
+    needs: [resolve, classify]
     permissions:
       contents: read
       actions: read
       pull-requests: write
       checks: write
-    if: needs.resolve.outputs.found == 'true' && needs.resolve.outputs.same_repo == 'true'
+    if: >-
+      ${{ !cancelled() && needs.resolve.outputs.found == 'true' &&
+      needs.resolve.outputs.same_repo == 'true' &&
+      needs.classify.outputs.change_class != 'docs' }}
     # Euler 0.6.5. Keep the uses: pin and quality_ref on the same commit.
     uses: abuzucom/euler/.github/workflows/quality-review.yml@1a3f67cba9d6ed7f45af4822f9ca27dd14db6a46
     with:
@@ -101,5 +147,32 @@ jobs:
               output: {
                 title: 'Skipped for fork pull request',
                 summary: 'Fork pull requests receive no provider secret.',
+              },
+            });
+
+  # The check keeps its name on a docs-only pull request. A required
+  # quality-review check then reports a result.
+  docs-only-skipped:
+    needs: [resolve, classify]
+    if: needs.classify.outputs.change_class == 'docs'
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+    steps:
+      - name: Publish skip result
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+        env:
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+        with:
+          script: |
+            await github.rest.checks.create({
+              ...context.repo,
+              name: 'quality-review',
+              head_sha: process.env.HEAD_SHA,
+              status: 'completed',
+              conclusion: 'skipped',
+              output: {
+                title: 'Skipped for docs-only pull request',
+                summary: 'The pull request changes documentation files only.',
               },
             });
