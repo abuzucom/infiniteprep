@@ -12,10 +12,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The InfinitePrep logo is the app icon and the website favicon (D393).
   - Every window and the taskbar entry show the logo. `ui/app_icon.py` loads the 256x256 `ui/app-icon.png` at startup. A missing icon file logs a warning and keeps the platform default icon.
   - The Windows exe, the macOS app, and the Linux AppImage carry the logo. The AppImage icon replaces the D287 placeholder.
+  - The Windows setup.exe and Uninstall.exe show the logo. `installer.nsi` requires `/DICON_FILE`.
+  - `packaging/make_icon.py` writes the AppImage PNG and the installer ICO. It stops the build unless the environment holds Pillow 13.0.0.
   - `website/favicon.png` holds the 64x64 favicon. `website/index.html` links it.
   - Each bundle allowlist admits `_internal/infiniteprep/ui/app-icon.png`.
   - `pillow==13.0.0` joins the dev dependencies and the lockfile. PyInstaller uses it to convert the PNG icon.
-- Added `tests/unit/test_app_icon.py` and `tests/test_app_icon_wiring.py`.
+- Added `tests/unit/test_app_icon.py`, `tests/unit/test_make_icon.py`, and `tests/test_app_icon_wiring.py`.
+- `test_the_site_folder_holds_the_four_site_files` replaces the three-file name in `tests/test_pages_deployment_workflow.py`.
 - `README.md` shows the centered InfinitePrep logo from `docs/infiniteprep-logo.png` above the title.
 
 - `docs/decision-register.md` records D390 to D392, the stuck-file choices of PR 213. D244 points to the new entries. D240 points to D380 for when its report opens. D388 and D389 stay unused.

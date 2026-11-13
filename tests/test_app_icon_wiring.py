@@ -18,6 +18,8 @@ ALLOWLIST_NAMES = ("linux.txt", "macos.txt", "windows.txt")
 BUNDLED_ICON = "_internal/infiniteprep/ui/app-icon.png"
 WORKFLOW_PATH = ROOT / ".github/workflows/build-packages.yml"
 APPIMAGE_STEP = "Build Linux AppImage"
+INSTALLER_STEP = "Build Windows installer"
+INSTALLER_SCRIPT = ROOT / "packaging/windows/installer.nsi"
 SITE_INDEX = ROOT / "website/index.html"
 FAVICON_PATH = ROOT / "website/favicon.png"
 PYPROJECT_PATH = ROOT / "pyproject.toml"
@@ -39,6 +41,14 @@ def read_png_size(path: Path) -> tuple[int, int]:
     if not data.startswith(PNG_SIGNATURE):
         raise ValueError(f"{path} is not a PNG file")
     return struct.unpack(">II", data[PNG_SIZE_OFFSET:PNG_SIZE_END])
+
+
+def read_step_run(name: str) -> str:
+    """Return the run script of the one bundle-job step with this name."""
+    workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
+    steps: list[dict[str, Any]] = workflow["jobs"]["bundle"]["steps"]
+    [step] = [step for step in steps if step.get("name") == name]
+    return step["run"]
 
 
 class AppIconWiringTest(unittest.TestCase):
@@ -67,14 +77,30 @@ class AppIconWiringTest(unittest.TestCase):
                 self.assertIn(BUNDLED_ICON, lines)
 
     def test_the_appimage_icon_comes_from_the_logo(self) -> None:
-        """The AppImage step resizes the logo instead of drawing a placeholder."""
-        workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
-        steps: list[dict[str, Any]] = workflow["jobs"]["bundle"]["steps"]
-        [step] = [step for step in steps if step.get("name") == APPIMAGE_STEP]
-        run = step["run"]
-        self.assertIn("src/infiniteprep/ui/app-icon.png", run)
-        self.assertIn("from PIL import Image", run)
+        """The AppImage step converts the logo instead of drawing a placeholder."""
+        run = read_step_run(APPIMAGE_STEP)
+        self.assertIn(
+            'packaging/make_icon.py" png "$GITHUB_WORKSPACE/src/infiniteprep/ui/app-icon.png"',
+            run,
+        )
         self.assertNotIn('chunk(b"IHDR"', run)
+        self.assertNotIn("<<'PY'", run)
+
+    def test_the_installer_build_converts_the_logo(self) -> None:
+        """The installer step makes an ICO and passes it to makensis."""
+        run = read_step_run(INSTALLER_STEP)
+        self.assertIn("packaging\\make_icon.py ico src\\infiniteprep\\ui\\app-icon.png $icon", run)
+        self.assertIn('"/DICON_FILE=$icon"', run)
+        self.assertLess(run.index("make_icon.py"), run.index("& $makensis"))
+
+    def test_the_installer_and_uninstaller_show_the_logo(self) -> None:
+        """installer.nsi requires the ICO and sets it before the first page."""
+        script = INSTALLER_SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("!ifndef ICON_FILE", script)
+        for define in ('!define MUI_ICON "${ICON_FILE}"', '!define MUI_UNICON "${ICON_FILE}"'):
+            with self.subTest(define=define):
+                self.assertIn(define, script)
+                self.assertLess(script.index(define), script.index("!insertmacro MUI_PAGE_LICENSE"))
 
     def test_pillow_is_a_pinned_build_dependency(self) -> None:
         """PyInstaller needs Pillow to convert the PNG icon."""

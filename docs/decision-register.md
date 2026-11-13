@@ -379,7 +379,7 @@ This comes from the owner choice of a separate favicon file and packaged icons.
 
 | ID | Decision |
 | --- | --- |
-| D393 | The README logo serves as the window icon, the Windows exe icon, the macOS app icon, the AppImage icon, and the website favicon. Pillow 13.0.0 joins the dev dependencies for the PyInstaller icon conversion and the AppImage resize. This replaces D287. |
+| D393 | The README logo is the window icon, the Windows exe icon, the macOS app icon, the AppImage icon, the Windows installer and uninstaller icon, and the website favicon. Pillow 13.0.0 joins the dev dependencies for the PyInstaller icon conversion and `packaging/make_icon.py`. The converter refuses any other Pillow release. This replaces D287. |
 
 ## Open questions
 

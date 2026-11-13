@@ -1,7 +1,7 @@
 ; InfinitePrep per-user Windows installer (D83a1b).
 ;
 ; Build: makensis /DVERSION=<version> /DSOURCE_DIR=<bundle folder>
-;        /DOUTPUT_FILE=<setup.exe path> installer.nsi
+;        /DOUTPUT_FILE=<setup.exe path> /DICON_FILE=<logo .ico> installer.nsi
 ;
 ; The installer needs no admin rights. Program files go to
 ; %LocalAppData%\Programs\InfinitePrep (D264), apart from the per-user
@@ -26,6 +26,9 @@ SetCompressor zlib
 !ifndef OUTPUT_FILE
   !error "Pass /DOUTPUT_FILE=<setup.exe path>."
 !endif
+!ifndef ICON_FILE
+  !error "Pass /DICON_FILE=<logo .ico>. packaging/make_icon.py ico writes it."
+!endif
 
 !define APP_NAME "InfinitePrep"
 !define APP_EXE "InfinitePrep.exe"
@@ -43,6 +46,9 @@ InstallDir "$LOCALAPPDATA\Programs\${APP_NAME}"
 RequestExecutionLevel user
 
 !define MUI_ABORTWARNING
+; setup.exe and Uninstall.exe carry the logo (D393). MUI reads both before the first page.
+!define MUI_ICON "${ICON_FILE}"
+!define MUI_UNICON "${ICON_FILE}"
 !insertmacro MUI_PAGE_LICENSE "${SOURCE_DIR}\LICENSE"
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES

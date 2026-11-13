@@ -258,7 +258,11 @@ jobs:
           $makensis = Join-Path $env:RUNNER_TEMP 'nsis-3.13\makensis.exe'
           $source = (Resolve-Path dist\InfinitePrep).Path
           $output = Join-Path (Resolve-Path dist).Path "InfinitePrep-$version-windows-x64-setup.exe"
-          & $makensis /V2 "/DVERSION=$version" "/DSOURCE_DIR=$source" "/DOUTPUT_FILE=$output" packaging\windows\installer.nsi
+          # setup.exe and Uninstall.exe show the logo (D393).
+          $icon = Join-Path $env:RUNNER_TEMP 'infiniteprep-installer.ico'
+          python packaging\make_icon.py ico src\infiniteprep\ui\app-icon.png $icon
+          if ($LASTEXITCODE -ne 0) { throw "make_icon.py failed with exit code $LASTEXITCODE." }
+          & $makensis /V2 "/DVERSION=$version" "/DSOURCE_DIR=$source" "/DOUTPUT_FILE=$output" "/DICON_FILE=$icon" packaging\windows\installer.nsi
           if ($LASTEXITCODE -ne 0) { throw "makensis failed with exit code $LASTEXITCODE." }
 
       # Install, smoke-check, and uninstall the real setup.exe (D268). The
@@ -379,15 +383,7 @@ jobs:
           icon="$RUNNER_TEMP/infiniteprep.png"
           mkdir -p "$appdir/usr/bin"
           cp -a dist/InfinitePrep/. "$appdir/usr/bin/"
-          python - "$GITHUB_WORKSPACE/src/infiniteprep/ui/app-icon.png" "$icon" <<'PY'
-          import sys
-
-          from PIL import Image
-
-          size = 256
-          with Image.open(sys.argv[1]) as logo:
-              logo.convert("RGBA").resize((size, size), Image.Resampling.LANCZOS).save(sys.argv[2])
-          PY
+          python "$GITHUB_WORKSPACE/packaging/make_icon.py" png "$GITHUB_WORKSPACE/src/infiniteprep/ui/app-icon.png" "$icon"
           export LDAI_RUNTIME_FILE="$tools/runtime-x86_64"
           export LDAI_OUTPUT="$GITHUB_WORKSPACE/dist/InfinitePrep-$version-linux-x86_64.AppImage"
           export LINUXDEPLOY_OUTPUT_VERSION="$version"

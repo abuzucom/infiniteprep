@@ -80,8 +80,8 @@ class PagesDeploymentWorkflowTest(unittest.TestCase):
         self.assertEqual(len(uploads), 1)
         self.assertEqual(uploads[0]["with"]["path"], f"./{SITE_FOLDER}")
 
-    def test_the_site_folder_holds_the_three_site_files(self) -> None:
-        """The site folder holds the landing page, the crawler preferences, and the domain."""
+    def test_the_site_folder_holds_the_four_site_files(self) -> None:
+        """The site folder holds the page, its favicon, the crawler preferences, and the domain."""
         published = sorted(path.name for path in (REPOSITORY_ROOT / SITE_FOLDER).iterdir())
         self.assertEqual(published, list(SITE_FILES))
 
