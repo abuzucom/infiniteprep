@@ -195,9 +195,66 @@ jobs:
             core.setOutput("head_repo_url", headRepository.clone_url);
             core.setOutput("head_repo_full_name", headRepository.full_name);
 
-  review:
+  # Sorts the pull request into a change class. The classifier comes from the
+  # default branch. The job fetches the pull request head commit as Git
+  # objects only. No pull request file reaches a working tree, and no pull
+  # request file runs. The job holds a read-only token and no secret. It runs
+  # only when a review job would run, so an unapproved fork receives nothing.
+  classify:
     needs: resolve-pr
-    if: needs.resolve-pr.result == 'success' && needs.resolve-pr.outputs.same_repository == 'true' && needs.resolve-pr.outputs.already_reviewed != 'true'
+    if: >-
+      ${{ needs.resolve-pr.result == 'success' &&
+      needs.resolve-pr.outputs.already_reviewed != 'true' &&
+      (needs.resolve-pr.outputs.same_repository == 'true' ||
+      (needs.resolve-pr.outputs.fork_review_approved == 'true' &&
+      needs.resolve-pr.outputs.compliance_passed == 'true')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      change_class: ${{ steps.classify.outputs.change_class }}
+    steps:
+      # A workflow_run job checks out the default branch when no ref is named.
+      - name: Check out the trusted default branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          path: trusted-base
+          persist-credentials: false
+          fetch-depth: 0
+
+      # The base repository serves a fork head through its pull request ref.
+      # The token reaches only this fetch, through a one-command header. The
+      # checkout above keeps no credential.
+      - name: Fetch the pull request head commit
+        working-directory: trusted-base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
+        run: |
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid head commit."; exit 1; }
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            fetch --no-tags origin "$HEAD_SHA"
+
+      - name: Classify changed paths
+        id: classify
+        working-directory: trusted-base
+        env:
+          BASE_SHA: ${{ needs.resolve-pr.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
+        run: python3 scripts/classify_changed_paths.py --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  # A docs-only pull request skips the model review. The status function
+  # replaces the implicit success check on needs. A failed classify job
+  # yields no class, and the review then runs.
+  review:
+    needs: [resolve-pr, classify]
+    if: >-
+      ${{ !cancelled() && needs.resolve-pr.result == 'success' &&
+      needs.resolve-pr.outputs.same_repository == 'true' &&
+      needs.resolve-pr.outputs.already_reviewed != 'true' &&
+      needs.classify.outputs.change_class != 'docs' }}
     # Foucault 3.6.1. Keep the uses: pin and audit_ref on the same commit.
     uses: abuzucom/foucault/.github/workflows/security-review.yml@308e964350f2ca2571d27832172dd47f5c4ee47d
     with:
@@ -215,8 +272,14 @@ jobs:
       MODEL_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
 
   fork-review:
-    needs: resolve-pr
-    if: needs.resolve-pr.result == 'success' && needs.resolve-pr.outputs.same_repository == 'false' && needs.resolve-pr.outputs.fork_review_approved == 'true' && needs.resolve-pr.outputs.compliance_passed == 'true' && needs.resolve-pr.outputs.already_reviewed != 'true'
+    needs: [resolve-pr, classify]
+    if: >-
+      ${{ !cancelled() && needs.resolve-pr.result == 'success' &&
+      needs.resolve-pr.outputs.same_repository == 'false' &&
+      needs.resolve-pr.outputs.fork_review_approved == 'true' &&
+      needs.resolve-pr.outputs.compliance_passed == 'true' &&
+      needs.resolve-pr.outputs.already_reviewed != 'true' &&
+      needs.classify.outputs.change_class != 'docs' }}
     # Foucault 3.6.1. Keep the uses: pin and audit_ref on the same commit.
     uses: abuzucom/foucault/.github/workflows/security-review.yml@308e964350f2ca2571d27832172dd47f5c4ee47d
     with:
@@ -241,3 +304,30 @@ jobs:
           echo "Fork review is waiting for the safe-to-review label and a
           successful ci run. Approved reviews also require
           manual approval in the fork-review environment."
+
+  # The check keeps its name on a docs-only pull request. A required
+  # security-review check then reports a result.
+  docs-only-skipped:
+    needs: [resolve-pr, classify]
+    if: needs.classify.outputs.change_class == 'docs'
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+    steps:
+      - name: Publish skip result
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+        env:
+          HEAD_SHA: ${{ needs.resolve-pr.outputs.head_sha }}
+        with:
+          script: |
+            await github.rest.checks.create({
+              ...context.repo,
+              name: 'security-review',
+              head_sha: process.env.HEAD_SHA,
+              status: 'completed',
+              conclusion: 'skipped',
+              output: {
+                title: 'Skipped for docs-only pull request',
+                summary: 'The pull request changes documentation files only.',
+              },
+            });
