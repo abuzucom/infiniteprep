@@ -9,7 +9,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- `README.md` shows the centered InfinitePrep logo from `docs/infiniteprep-logo.png` above a centered title.
+- `README.md` shows the centered InfinitePrep logo from `docs/infiniteprep-logo.png` above the title.
 
 - `docs/decision-register.md` records D390 to D392, the stuck-file choices of PR 213. D244 points to the new entries. D240 points to D380 for when its report opens. D388 and D389 stay unused.
 
