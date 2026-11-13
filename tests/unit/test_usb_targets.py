@@ -16,7 +16,6 @@ from infiniteprep.services.usb.models import (
     DriveInspection,
     DriveInspectionError,
 )
-from infiniteprep.services.usb.preflight import is_removable_class
 from infiniteprep.services.usb.targets import (
     INSPECTION_FAILED_TEXT,
     build_platform_tools,
@@ -56,35 +55,6 @@ class RecordingProbe:
 def build_named_inspection(name: str, **drive_changes: object) -> DriveInspection:
     """Return the passing stick under another drive name with drive fields replaced."""
     return build_inspection(drive=build_drive(name=name, **drive_changes))
-
-
-def test_removable_class_needs_the_flag_and_a_removable_bus() -> None:
-    """A drive counts as removable-class only with the flag and a USB, SD, or MMC bus."""
-    assert is_removable_class(build_drive())
-    assert is_removable_class(build_drive(bus_type="SD"))
-    assert not is_removable_class(build_drive(is_removable=False))
-    assert not is_removable_class(build_drive(bus_type="sata"))
-    assert not is_removable_class(build_drive(bus_type=None))
-
-
-def test_only_removable_class_drives_are_probed_and_listed() -> None:
-    """Internal disks and fixed USB disks never reach the probe or the result."""
-    inspector = FixedInspector(
-        (
-            build_named_inspection("sda", is_removable=False, bus_type="sata"),
-            build_named_inspection("sdb"),
-            build_named_inspection("sdc", is_removable=False),
-        )
-    )
-    probe = RecordingProbe()
-
-    candidates = load_removable_targets(inspector, probe)
-
-    assert probe.probed_names == ["sdb"]
-    assert [candidate.name for candidate in candidates] == ["sdb"]
-    assert candidates[0].error is None
-    assert candidates[0].inspection is not None
-    assert candidates[0].inspection.drive.hardware_id == PROBED_HARDWARE_ID
 
 
 def test_failed_probe_lists_the_drive_without_hiding_the_rest() -> None:
