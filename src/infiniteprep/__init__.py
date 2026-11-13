@@ -1,3 +1,3 @@
 """InfinitePrep - DJ Music Metadata Application."""
 
-__version__ = "0.57.7"
+__version__ = "0.57.8"

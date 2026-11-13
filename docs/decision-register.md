@@ -180,11 +180,11 @@ D(N+92).
 | D237 | D78b1 is the import worker. D78b2 holds the small fixes. |
 | D238 | Import scans first, then uses one transaction with a savepoint per file. Cancel or a crash rolls back the batch. |
 | D239 | Superseded by D379. |
-| D240 | Import ends with a report of counts and expandable per-file warnings, with a Copy button. |
+| D240 | Import ends with a report of counts and expandable per-file warnings, with a Copy button. D380 sets when it opens. |
 | D241 | Superseded by D386. |
 | D242 | Other tags show in a read-only key and value table. Binary frames show size and SHA-256. |
 | D243 | No playback prompt. Import runs while playback continues. |
-| D244 | A hung file read gets a 2-minute limit with Quit Now or Keep Waiting. |
+| D244 | A hung file read gets a 2-minute limit with Quit Now or Keep Waiting. D390 to D392 extend it to queued batches. |
 | D245 | Other tags hides keys with a leading underscore. |
 | D246 | The detail panel reloads audio only when the file ID changes. |
 
@@ -362,6 +362,17 @@ name the PR count and the branch of PR 202. They carry no register number.
 | D385 | A queued write batch applies the previewed plans. The per-file preflight still runs. |
 | D386 | Close during a running or waiting batch offers Keep Working, or Cancel and Exit. This replaces D241. |
 | D387 | While any batch runs or waits, transcode, journal restore, data deletion, review edits, and Bulk Approve stay disabled. Browsing, playback, filtering, playlist export, and queue controls stay available. |
+
+## D390 to D392: stuck-file prompt for queued batches (2026-11-13)
+
+These come from the owner choices in PR 213. D388 and D389 stay unused.
+
+| ID | Decision |
+| --- | --- |
+| D390 | A queued Analyze batch raises the D244 Quit Now or Keep Waiting prompt after 5 minutes on one file. |
+| D391 | A queued write batch raises the prompt after 2 minutes on one file. The prompt states that files written so far stay written and that Recover Interrupted Writes offers the interrupted file at the next launch. |
+| D392 | One shared stuck-file watcher serves imports, Analyze batches, and write batches. Imports keep the 2-minute limit. |
+
 ## Open questions
 
 | Source | Question |
