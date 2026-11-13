@@ -58,8 +58,9 @@ jobs:
             core.setOutput('body', pull.body || '');
 
   # Sorts the pull request into a change class. The classifier comes from the
-  # default branch. The pull request head serves as Git objects only, and no
-  # pull request file runs. The job holds a read-only token and no secret.
+  # default branch. The job fetches the pull request head commit as Git
+  # objects only. No pull request file reaches a working tree, and no pull
+  # request file runs. The job holds a read-only token and no secret.
   classify:
     needs: resolve
     if: needs.resolve.outputs.found == 'true' && needs.resolve.outputs.same_repo == 'true'
@@ -78,23 +79,25 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Check out the pull request head as data
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          ref: ${{ needs.resolve.outputs.head_sha }}
-          path: pr-head
-          persist-credentials: false
-          fetch-depth: 0
+      # The token reaches only this fetch, through a one-command header.
+      # The checkout above keeps no credential.
+      - name: Fetch the pull request head commit
+        working-directory: trusted-base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+        run: |
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid head commit."; exit 1; }
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            fetch --no-tags origin "$HEAD_SHA"
 
-      # Git reads the pull request commits through the alternate object
-      # directory. The command and its working directory stay trusted.
       - name: Classify changed paths
         id: classify
         working-directory: trusted-base
         env:
           BASE_SHA: ${{ needs.resolve.outputs.base_sha }}
           HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
-          GIT_ALTERNATE_OBJECT_DIRECTORIES: ${{ github.workspace }}/pr-head/.git/objects
         run: python3 scripts/classify_changed_paths.py --base "$BASE_SHA" --head "$HEAD_SHA"
 
   # A docs-only pull request skips the model review. The status function

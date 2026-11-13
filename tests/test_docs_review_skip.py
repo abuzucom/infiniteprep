@@ -21,8 +21,18 @@ GIT = shutil.which("git") or "git"
 GIT_IDENTITY = ("-c", "user.name=Test Author", "-c", "user.email=author@example.invalid")
 CLASSIFY_COMMAND = 'python3 scripts/classify_changed_paths.py --base "$BASE_SHA" --head "$HEAD_SHA"'
 TRUSTED_PATH = "trusted-base"
-HEAD_PATH = "pr-head"
-HEAD_OBJECTS = "${{ github.workspace }}/pr-head/.git/objects"
+# The workflow expression that hands the run's own access grant to the fetch.
+RUN_ACCESS_EXPRESSION = "${{ github.token }}"
+SHA_GUARD = '[[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]'
+FETCH_COMMAND = 'fetch --no-tags origin "$HEAD_SHA"'
+PULL_REF = "refs/pull/1/head"
+SECURITY_CLASSIFY_GUARDS = (
+    "needs.resolve-pr.result == 'success'",
+    "needs.resolve-pr.outputs.already_reviewed != 'true'",
+    "needs.resolve-pr.outputs.same_repository == 'true'",
+    "needs.resolve-pr.outputs.fork_review_approved == 'true'",
+    "needs.resolve-pr.outputs.compliance_passed == 'true'",
+)
 CLASS_OUTPUT = "${{ steps.classify.outputs.change_class }}"
 NOT_CANCELLED = "!cancelled()"
 NOT_DOCS = "needs.classify.outputs.change_class != 'docs'"
@@ -119,30 +129,46 @@ class ClassifyJobTest(unittest.TestCase):
                 self.assertEqual(trusted["with"]["fetch-depth"], 0)
                 self.assertIs(trusted["with"]["persist-credentials"], False)
 
-    def test_head_checkout_lands_beside_the_trusted_checkout(self) -> None:
-        """The pull request head gets its own directory and keeps no credentials."""
-        for caller in CALLERS:
-            with self.subTest(workflow=caller.workflow):
-                head = load_jobs(caller)["classify"]["steps"][1]
-                self.assertTrue(head["uses"].startswith(CHECKOUT_ACTION))
-                self.assertEqual(head["with"]["path"], HEAD_PATH)
-                self.assertIn(f"needs.{caller.resolve_job}.outputs.head_sha", head["with"]["ref"])
-                self.assertEqual(head["with"]["fetch-depth"], 0)
-                self.assertIs(head["with"]["persist-credentials"], False)
-
-    def test_only_the_trusted_classifier_runs(self) -> None:
-        """One command runs, from the trusted checkout, with the head as Git objects."""
+    def test_no_pull_request_checkout_exists(self) -> None:
+        """The trusted checkout is the only checkout, so no pull request file lands on disk."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
                 steps = load_jobs(caller)["classify"]["steps"]
-                commands = [step for step in steps if "run" in step]
-                self.assertEqual(len(commands), 1)
-                classify = commands[0]
+                checkouts = [s for s in steps if s.get("uses", "").startswith(CHECKOUT_ACTION)]
+                self.assertEqual(len(checkouts), 1)
+
+    def test_fetch_takes_one_validated_commit_into_the_trusted_checkout(self) -> None:
+        """The head commit arrives as Git objects, and only this step sees the token."""
+        for caller in CALLERS:
+            with self.subTest(workflow=caller.workflow):
+                fetch = load_jobs(caller)["classify"]["steps"][1]
+                self.assertEqual(fetch["working-directory"], TRUSTED_PATH)
+                self.assertEqual(fetch["env"]["GH_TOKEN"], RUN_ACCESS_EXPRESSION)
+                head_source = f"needs.{caller.resolve_job}.outputs.head_sha"
+                self.assertIn(head_source, fetch["env"]["HEAD_SHA"])
+                self.assertIn(SHA_GUARD, fetch["run"])
+                self.assertIn(FETCH_COMMAND, fetch["run"])
+                self.assertLess(fetch["run"].index(SHA_GUARD), fetch["run"].index(FETCH_COMMAND))
+
+    def test_only_the_trusted_classifier_runs(self) -> None:
+        """The classifier runs from the trusted checkout and receives no token."""
+        for caller in CALLERS:
+            with self.subTest(workflow=caller.workflow):
+                steps = load_jobs(caller)["classify"]["steps"]
+                self.assertEqual(len([step for step in steps if "run" in step]), 2)
+                classify = steps[-1]
                 self.assertEqual(classify["id"], "classify")
                 self.assertEqual(classify["run"], CLASSIFY_COMMAND)
                 self.assertEqual(classify["working-directory"], TRUSTED_PATH)
-                self.assertEqual(classify["env"]["GIT_ALTERNATE_OBJECT_DIRECTORIES"], HEAD_OBJECTS)
+                self.assertEqual(set(classify["env"]), {"BASE_SHA", "HEAD_SHA"})
                 self.assertNotIn("continue-on-error", classify)
+
+    def test_unapproved_forks_get_no_classification(self) -> None:
+        """The security caller classifies only when a review job would run."""
+        condition = load_jobs(CALLERS[0])["classify"]["if"]
+        for fragment in SECURITY_CLASSIFY_GUARDS:
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, condition)
 
 
 class ReviewSkipTest(unittest.TestCase):
@@ -182,25 +208,35 @@ class ReviewSkipTest(unittest.TestCase):
                 self.assertIn("head_sha: process.env.HEAD_SHA", script)
 
 
-class AlternateObjectClassificationTest(unittest.TestCase):
-    """The trusted classifier reads pull request commits from a second checkout."""
+class FetchedCommitClassificationTest(unittest.TestCase):
+    """The trusted classifier reads a pull request commit fetched by its hash."""
 
     def setUp(self) -> None:
-        """Create a trusted checkout and a pull request checkout that extends it."""
+        """Create an origin, a trusted clone, and a contributor clone of it."""
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         root = Path(self.directory.name)
+        origin = root / "origin"
+        origin.mkdir()
+        run_git(origin, "init", "--quiet")
+        self.base_sha = commit_file(origin, "src/app.py", "VALUE = 1\n")
         self.trusted = root / TRUSTED_PATH
-        self.head = root / HEAD_PATH
-        self.trusted.mkdir()
-        run_git(self.trusted, "init", "--quiet")
-        self.base_sha = commit_file(self.trusted, "src/app.py", "VALUE = 1\n")
-        run_git(root, "clone", "--quiet", str(self.trusted), str(self.head))
+        self.contributor = root / "contributor"
+        run_git(root, "clone", "--quiet", str(origin), str(self.trusted))
+        run_git(root, "clone", "--quiet", str(origin), str(self.contributor))
+
+    def publish_head(self, *files: tuple[str, str]) -> str:
+        """Commit the files, push them to the pull request ref, and return the head."""
+        head_sha = ""
+        for name, text in files:
+            head_sha = commit_file(self.contributor, name, text)
+        run_git(self.contributor, "push", "--quiet", "origin", f"HEAD:{PULL_REF}")
+        return head_sha
 
     def classify(self, head_sha: str) -> str:
-        """Run the classifier in the trusted checkout and return its class line."""
+        """Fetch the head commit into the trusted clone, classify, and return the class line."""
+        run_git(self.trusted, "fetch", "--quiet", "--no-tags", "origin", head_sha)
         environment = dict(os.environ)
-        environment["GIT_ALTERNATE_OBJECT_DIRECTORIES"] = str(self.head / ".git" / "objects")
         environment.pop("GITHUB_OUTPUT", None)
         result = subprocess.run(
             [sys.executable, str(CLASSIFIER), "--base", self.base_sha, "--head", head_sha],
@@ -212,20 +248,20 @@ class AlternateObjectClassificationTest(unittest.TestCase):
         )
         return result.stdout.splitlines()[0]
 
-    def test_docs_commit_in_the_head_checkout_classifies_as_docs(self) -> None:
-        """The trusted checkout never holds the commit, and the class is still docs."""
-        head_sha = commit_file(self.head, "docs/guide.md", "Guide\n")
+    def test_fetched_docs_commit_classifies_as_docs(self) -> None:
+        """Only the commit objects arrive, and the working tree stays on the base."""
+        head_sha = self.publish_head(("docs/guide.md", "Guide\n"))
         self.assertEqual(self.classify(head_sha), "change_class=docs")
+        self.assertFalse((self.trusted / "docs" / "guide.md").exists())
 
-    def test_website_commit_in_the_head_checkout_keeps_the_reviews(self) -> None:
+    def test_fetched_website_commit_keeps_the_reviews(self) -> None:
         """A landing site change is not in the docs class."""
-        head_sha = commit_file(self.head, "website/index.html", "<p>Site</p>\n")
+        head_sha = self.publish_head(("website/index.html", "<p>Site</p>\n"))
         self.assertEqual(self.classify(head_sha), "change_class=website")
 
-    def test_code_commit_in_the_head_checkout_classifies_as_full(self) -> None:
+    def test_fetched_code_commit_classifies_as_full(self) -> None:
         """A code change beside a docs change keeps both reviews."""
-        commit_file(self.head, "docs/guide.md", "Guide\n")
-        head_sha = commit_file(self.head, "src/app.py", "VALUE = 2\n")
+        head_sha = self.publish_head(("docs/guide.md", "Guide\n"), ("src/app.py", "VALUE = 2\n"))
         self.assertEqual(self.classify(head_sha), "change_class=full")
 
 
