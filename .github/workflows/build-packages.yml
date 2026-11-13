@@ -258,7 +258,11 @@ jobs:
           $makensis = Join-Path $env:RUNNER_TEMP 'nsis-3.13\makensis.exe'
           $source = (Resolve-Path dist\InfinitePrep).Path
           $output = Join-Path (Resolve-Path dist).Path "InfinitePrep-$version-windows-x64-setup.exe"
-          & $makensis /V2 "/DVERSION=$version" "/DSOURCE_DIR=$source" "/DOUTPUT_FILE=$output" packaging\windows\installer.nsi
+          # setup.exe and Uninstall.exe show the logo (D393).
+          $icon = Join-Path $env:RUNNER_TEMP 'infiniteprep-installer.ico'
+          python packaging\make_icon.py ico src\infiniteprep\ui\app-icon.png $icon
+          if ($LASTEXITCODE -ne 0) { throw "make_icon.py failed with exit code $LASTEXITCODE." }
+          & $makensis /V2 "/DVERSION=$version" "/DSOURCE_DIR=$source" "/DOUTPUT_FILE=$output" "/DICON_FILE=$icon" packaging\windows\installer.nsi
           if ($LASTEXITCODE -ne 0) { throw "makensis failed with exit code $LASTEXITCODE." }
 
       # Install, smoke-check, and uninstall the real setup.exe (D268). The
@@ -363,7 +367,8 @@ jobs:
 
       # linuxdeploy runs without its Qt plugin, because PyInstaller already
       # bundles Qt (D284). The pinned runtime replaces the plugin's download
-      # of a moving one (D285). The icon is a plain placeholder (D287).
+      # of a moving one (D285). The icon is the logo at 256x256, a size
+      # linuxdeploy accepts (D393).
       - name: Build Linux AppImage
         if: runner.os == 'Linux'
         shell: bash
@@ -378,24 +383,7 @@ jobs:
           icon="$RUNNER_TEMP/infiniteprep.png"
           mkdir -p "$appdir/usr/bin"
           cp -a dist/InfinitePrep/. "$appdir/usr/bin/"
-          python - "$icon" <<'PY'
-          import struct
-          import sys
-          import zlib
-
-          size = 256
-          rows = b"".join(b"\x00" + b"\x20\x60\xa0" * size for _ in range(size))
-
-          def chunk(kind, data):
-              body = kind + data
-              return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
-
-          header = struct.pack(">IIBBBBB", size, size, 8, 2, 0, 0, 0)
-          png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header)
-          png += chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
-          with open(sys.argv[1], "wb") as handle:
-              handle.write(png)
-          PY
+          python "$GITHUB_WORKSPACE/packaging/make_icon.py" png "$GITHUB_WORKSPACE/src/infiniteprep/ui/app-icon.png" "$icon"
           export LDAI_RUNTIME_FILE="$tools/runtime-x86_64"
           export LDAI_OUTPUT="$GITHUB_WORKSPACE/dist/InfinitePrep-$version-linux-x86_64.AppImage"
           export LINUXDEPLOY_OUTPUT_VERSION="$version"

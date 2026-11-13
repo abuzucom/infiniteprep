@@ -232,7 +232,7 @@ D(N+92).
 | D284 | Drop the linuxdeploy Qt plugin. |
 | D285 | Pin AppImage type2-runtime 20251108. |
 | D286 | linuxdeploy, its AppImage plugin, and the runtime approved after a license check. NOTICE lists the runtime's static libfuse. |
-| D287 | Use a placeholder icon. |
+| D287 | Superseded by D393. |
 | D288 | Ship two tarballs, plain and portable. |
 | D289 | macOS uses per-user storage. A `portable.mode` file next to the app switches to a folder beside it. |
 | D290 | macOS work splits into storage, the Settings cleanup action, and the app with its DMG. |
@@ -372,6 +372,14 @@ These come from the owner choices in PR 213. D388 and D389 stay unused.
 | D390 | A queued Analyze batch raises the D244 Quit Now or Keep Waiting prompt after 5 minutes on one file. |
 | D391 | A queued write batch raises the prompt after 2 minutes on one file. The prompt states that files written so far stay written and that Recover Interrupted Writes offers the interrupted file at the next launch. |
 | D392 | One shared stuck-file watcher serves imports, Analyze batches, and write batches. Imports keep the 2-minute limit. |
+
+## D393: logo as app icon and favicon (2026-11-13)
+
+This comes from the owner choice of a separate favicon file and packaged icons.
+
+| ID | Decision |
+| --- | --- |
+| D393 | The README logo is the window icon, the Windows exe icon, the macOS app icon, the AppImage icon, the Windows installer and uninstaller icon, and the website favicon. Pillow 13.0.0 joins the dev dependencies for the PyInstaller icon conversion and `packaging/make_icon.py`. The converter refuses any other Pillow release. This replaces D287. |
 
 ## Open questions
 
