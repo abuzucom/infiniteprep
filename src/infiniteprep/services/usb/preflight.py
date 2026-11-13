@@ -51,7 +51,7 @@ READ_ONLY_GUIDANCE: Final[str] = (
 class RefusalCode(StrEnum):
     """Stable identifiers for every preflight refusal."""
 
-    NOT_REMOVABLE = "not_removable"
+    UNSUPPORTED_BUS = "unsupported_bus"
     SYSTEM_VOLUME = "system_volume"
     SYSTEM_STATE_UNKNOWN = "system_state_unknown"
     ACTIVE_PARTITION = "active_partition"
@@ -74,12 +74,30 @@ class RefusalCode(StrEnum):
 # an export stay hidden.
 SAFETY_REFUSAL_CODES: Final[frozenset[RefusalCode]] = frozenset(
     {
-        RefusalCode.NOT_REMOVABLE,
+        RefusalCode.UNSUPPORTED_BUS,
         RefusalCode.SYSTEM_VOLUME,
         RefusalCode.SYSTEM_STATE_UNKNOWN,
         RefusalCode.ACTIVE_PARTITION,
     }
 )
+FIXED_DISK_NOTE_TEXT: Final[str] = (
+    "The drive reports as a fixed disk. DJ players accept USB fixed disks "
+    "formatted as FAT32 with one primary MBR partition."
+)
+
+
+class NoteCode(StrEnum):
+    """Stable identifiers for informational preflight notes."""
+
+    FIXED_DISK = "fixed_disk"
+
+
+@dataclass(frozen=True)
+class Note:
+    """One fact about a target that does not block the export."""
+
+    code: NoteCode
+    message: str
 
 
 @dataclass(frozen=True)
@@ -120,6 +138,7 @@ class PreflightResult:
     reserve_bytes: int
     available_bytes: int | None
     mount_path: str | None
+    notes: tuple[Note, ...] = ()
 
     @property
     def passed(self) -> bool:
@@ -134,22 +153,33 @@ def _select_single_partition(inspection: DriveInspection) -> PartitionInfo | Non
     return inspection.partitions[0]
 
 
-def is_removable_class(drive: DriveIdentity) -> bool:
-    """Return True for a drive with the removable flag on a USB, SD, or MMC bus (D188)."""
+def is_supported_bus_class(drive: DriveIdentity) -> bool:
+    """Return True for a drive on a USB, SD, or MMC bus (D188, D372).
+
+    The removable flag follows the device firmware. Portable SSDs and some
+    flash sticks report as fixed disks. The flag does not decide the class.
+    """
     bus_type = (drive.bus_type or "").casefold()
-    return drive.is_removable and bus_type in REMOVABLE_BUS_TYPES
+    return bus_type in REMOVABLE_BUS_TYPES
+
+
+def _collect_notes(drive: DriveIdentity) -> tuple[Note, ...]:
+    """Return the informational notes for a drive on a supported bus."""
+    if not is_supported_bus_class(drive) or drive.is_removable:
+        return ()
+    return (Note(NoteCode.FIXED_DISK, FIXED_DISK_NOTE_TEXT),)
 
 
 def _collect_safety_refusals(inspection: DriveInspection) -> list[Refusal]:
-    """Return refusals for non-removable, system, boot, and active targets."""
+    """Return refusals for unsupported buses and for system, boot, and active targets."""
     drive = inspection.drive
     refusals: list[Refusal] = []
-    if not is_removable_class(drive):
+    if not is_supported_bus_class(drive):
         refusals.append(
             Refusal(
-                RefusalCode.NOT_REMOVABLE,
-                "The drive is not a removable USB or card drive.",
-                "Choose a removable USB stick or memory card.",
+                RefusalCode.UNSUPPORTED_BUS,
+                "The drive is not connected through USB or a memory card reader.",
+                "Choose a USB drive or a memory card.",
             )
         )
     if drive.is_system:
@@ -344,4 +374,5 @@ def evaluate_preflight(
         reserve_bytes=reserve_bytes,
         available_bytes=available,
         mount_path=mount_path,
+        notes=_collect_notes(inspection.drive),
     )

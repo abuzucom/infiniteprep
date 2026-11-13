@@ -5,11 +5,15 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.57.4] (2026-11-13)
+## [0.57.5] (2026-11-13)
 
 ### Changed
 
-- A docs-only pull request skips the security review and the quality review. A `classify` job in `security-review-pr.yml` and `quality-review-pr.yml` runs the classifier from the default branch and reads the pull request head as Git objects. Each workflow publishes its check with the `skipped` conclusion. A website change, a mixed change, and a failed classification keep both reviews.
+- A docs-only pull request skips the security review and the quality review. A `classify` job in `security-review-pr.yml` and `quality-review-pr.yml` runs the classifier from the default branch. The job fetches the pull request head commit as Git objects, and no pull request file reaches a working tree. Each workflow publishes its check with the `skipped` conclusion. A website change, a mixed change, and a failed classification keep both reviews. An unapproved fork pull request gets no fetch.
+- The USB drive class rule accepts a USB, SD, or MMC bus with or without the removable flag (D372, #207). Portable SSDs, USB hard disks, and flash sticks that report as fixed disks now pass on Windows, Linux, and macOS. The system and boot refusal, the MBR rules, and the FAT32 rule stay.
+- A drive without the removable flag carries a fixed-disk note. The confirm dialog lists it under **Notes**. The drive picker adds it to the drive row. `PreflightResult` gains a `notes` field with `Note` and `NoteCode`.
+- The Windows inspector sets the removable flag from the volume `DriveType` only. A USB disk with a Fixed volume reports as not removable.
+- Breaking: `RefusalCode.NOT_REMOVABLE` becomes `RefusalCode.UNSUPPORTED_BUS`. `is_removable_class` becomes `is_supported_bus_class`. D207 permits breaking changes before 1.0.0.
 
 ## [0.57.3] (2026-11-12)
 

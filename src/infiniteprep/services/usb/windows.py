@@ -168,10 +168,12 @@ def _space_from_volume(volume: dict[str, Any]) -> SpaceInfo | None:
     )
 
 
-def _is_removable_disk(bus_type: str | None, partition_volumes: list[dict[str, Any]]) -> bool:
-    """Infer removability from bus type or any partition volume drive type."""
-    if (bus_type or "").casefold() == "usb":
-        return True
+def _is_removable_disk(partition_volumes: list[dict[str, Any]]) -> bool:
+    """Return True when any partition volume reports the Removable drive type.
+
+    Get-Disk reports BusType USB for flash sticks and portable SSDs alike. The
+    volume drive type follows the removable media bit of the device (D372).
+    """
     return any(
         (clean_str(volume.get("DriveType")) or "").casefold() == "removable"
         for volume in partition_volumes
@@ -343,9 +345,7 @@ class WindowsDriveInspector:
         """Construct a DriveInspection record for one disk."""
         partition_entries = partitions_by_disk.get(number, [])
         partition_volumes = self._collect_partition_volumes(partition_entries, volume_by_letter)
-        identity = _build_drive_identity(
-            disk, number, _is_removable_disk(clean_str(disk.get("BusType")), partition_volumes)
-        )
+        identity = _build_drive_identity(disk, number, _is_removable_disk(partition_volumes))
         scheme_raw = clean_str(disk.get("PartitionStyle"))
         scheme = scheme_raw.casefold() if scheme_raw else None
         partitions: list[PartitionInfo] = []

@@ -16,6 +16,8 @@ from infiniteprep.services.usb.models import (
 )
 from infiniteprep.services.usb.preflight import (
     DjProfileRequest,
+    Note,
+    NoteCode,
     PreflightRequest,
     PreflightResult,
     Refusal,
@@ -50,6 +52,8 @@ __all__ = [
     "InspectionParseError",
     "LinuxDriveInspector",
     "MacOSDriveInspector",
+    "Note",
+    "NoteCode",
     "PartitionInfo",
     "PreflightRequest",
     "PreflightResult",
