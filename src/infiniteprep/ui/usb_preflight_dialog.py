@@ -125,6 +125,7 @@ class UsbPreflightDialog(QDialog):
         self.changes_list = QListWidget(self)
         self.refusals_list = QListWidget(self)
         self.unverified_list = QListWidget(self)
+        self.notes_list = QListWidget(self)
         self.confirm_btn = QPushButton("Confirm Export", self)
         self.cancel_btn = QPushButton("Cancel", self)
 
@@ -152,6 +153,7 @@ class UsbPreflightDialog(QDialog):
         self.refusals_list.addItems(
             [f"{refusal.message} {refusal.guidance}".strip() for refusal in result.refusals]
         )
+        self.notes_list.addItems([note.message for note in result.notes])
         self.unverified_list.addItems(
             [
                 FACT_DISPLAY_NAMES.get(name, name) + NOT_VERIFIED_SUFFIX
@@ -168,6 +170,7 @@ class UsbPreflightDialog(QDialog):
         root.addWidget(self.space_group)
         self._add_titled_list(root, "Refusals", self.refusals_list)
         self._add_titled_list(root, "Not verified", self.unverified_list)
+        self._add_titled_list(root, "Notes", self.notes_list)
         buttons = QHBoxLayout()
         buttons.addStretch()
         buttons.addWidget(self.confirm_btn)

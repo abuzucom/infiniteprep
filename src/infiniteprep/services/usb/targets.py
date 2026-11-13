@@ -1,7 +1,7 @@
-"""Loader for removable-class USB export targets (D131, D188).
+"""Loader for USB export targets (D131, D188, D372).
 
-The loader inspects every drive, keeps the removable-class ones, and probes
-each. Drives outside the removable class never reach a probe or the result.
+The loader inspects every drive, keeps the drives on a USB, SD, or MMC bus,
+and probes each. Drives on other buses never reach a probe or the result.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from infiniteprep.services.usb.linux_probe import LinuxPreflightProbe
 from infiniteprep.services.usb.macos import MacOSDriveInspector
 from infiniteprep.services.usb.macos_probe import MacOSPreflightProbe
 from infiniteprep.services.usb.models import DriveInspection, DriveInspectionError
-from infiniteprep.services.usb.preflight import is_removable_class
+from infiniteprep.services.usb.preflight import is_supported_bus_class
 from infiniteprep.services.usb.windows import WindowsDriveInspector
 from infiniteprep.services.usb.windows_probe import WindowsPreflightProbe
 
@@ -45,7 +45,7 @@ class PreflightProbe(Protocol):
 
 @dataclass(frozen=True)
 class TargetCandidate:
-    """One removable-class drive. A failed probe leaves the inspection absent."""
+    """One drive on a supported bus. A failed probe leaves the inspection absent."""
 
     name: str
     inspection: DriveInspection | None
@@ -70,7 +70,7 @@ def load_removable_targets(
     inspector: DriveInspector | None = None,
     probe: PreflightProbe | None = None,
 ) -> tuple[TargetCandidate, ...]:
-    """Inspect all drives and return the probed removable-class ones.
+    """Inspect all drives and return the probed ones on a supported bus.
 
     A failed probe yields a candidate with fixed error text. The other drives
     still load. Raises DriveInspectionError when the drive listing fails.
@@ -81,7 +81,7 @@ def load_removable_targets(
         probe = probe or default_probe
     candidates: list[TargetCandidate] = []
     for inspection in inspector.inspect_all():
-        if not is_removable_class(inspection.drive):
+        if not is_supported_bus_class(inspection.drive):
             continue
         name = inspection.drive.name
         try:
