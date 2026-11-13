@@ -38,6 +38,7 @@ from infiniteprep.ui.action_handlers import (
     export_playlist_with_feedback,
     run_transcode_with_confirmation,
 )
+from infiniteprep.ui.app_icon import apply_application_icon
 from infiniteprep.ui.batch_queue import CancelCheck, ProgressReport
 from infiniteprep.ui.cleanup_dialog import build_cleanup_blocked_box, build_cleanup_result_box
 from infiniteprep.ui.journal_dialog import JournalDialog
@@ -183,6 +184,7 @@ def launch_desktop_app() -> int:
     # Qt reads the logging rules when QApplication starts.
     silence_ffmpeg_logs()
     qt_app = QApplication.instance() or QApplication(sys.argv)
+    apply_application_icon(qt_app)
     # The storage prompts need Qt, and the database needs the chosen folder.
     opened = open_storage(
         Path(sys.executable),

@@ -13,6 +13,7 @@ NOTICE
 ICU-LICENSE.txt
 _internal/base_library.zip
 _internal/infiniteprep/db/schema.sql
+_internal/infiniteprep/ui/app-icon.png
 
 # Python 3.12 framework and standard library extensions
 _internal/Python

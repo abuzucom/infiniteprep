@@ -12,7 +12,7 @@ import yaml
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github/workflows/deploy-pages.yml"
 SITE_FOLDER = "website"
-SITE_FILES = ("CNAME", "index.html", "robots.txt")
+SITE_FILES = ("CNAME", "favicon.png", "index.html", "robots.txt")
 EXPECTED_PERMISSIONS = {
     "contents": "read",
     "pages": "write",

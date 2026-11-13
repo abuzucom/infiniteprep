@@ -42,6 +42,9 @@ APP_VERSION = re.search(r'^__version__ = "([^"]+)"$', version_source, re.MULTILI
 # The app never imports setuptools or pkg_resources (D313). Excluding them also keeps
 # PyInstaller from adding the pkg_resources runtime hook.
 UNUSED_PYTHON_PACKAGES = ["setuptools", "pkg_resources"]
+# The logo serves as the window icon and the packaged app icon (D393). PyInstaller
+# converts the PNG to .ico and .icns with Pillow.
+APP_ICON_SOURCE = src_dir / "infiniteprep" / "ui" / "app-icon.png"
 
 a = Analysis(
     [str(src_dir / "infiniteprep" / "main.py")],
@@ -49,6 +52,7 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(src_dir / "infiniteprep" / "db" / "schema.sql"), "infiniteprep/db"),
+        (str(APP_ICON_SOURCE), "infiniteprep/ui"),
     ],
     hiddenimports=[
         "PySide6.QtCore",
@@ -135,6 +139,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
+    icon=str(APP_ICON_SOURCE),
 )
 coll = COLLECT(
     exe,
@@ -150,6 +155,7 @@ if sys.platform == "darwin":
     app = BUNDLE(
         coll,
         name="InfinitePrep.app",
+        icon=str(APP_ICON_SOURCE),
         bundle_identifier=MACOS_BUNDLE_IDENTIFIER,
         version=APP_VERSION,
         info_plist={
