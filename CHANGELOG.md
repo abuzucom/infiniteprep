@@ -5,6 +5,15 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.57.4] (2026-11-13)
+
+### Changed
+
+- The USB drive class rule accepts a USB, SD, or MMC bus with or without the removable flag (D372, #207). Portable SSDs, USB hard disks, and flash sticks that report as fixed disks now pass on Windows, Linux, and macOS. The system and boot refusal, the MBR rules, and the FAT32 rule stay.
+- A drive without the removable flag carries a fixed-disk note. The confirm dialog lists it under **Notes**. The drive picker adds it to the drive row. `PreflightResult` gains a `notes` field with `Note` and `NoteCode`.
+- The Windows inspector sets the removable flag from the volume `DriveType` only. A USB disk with a Fixed volume reports as not removable.
+- Breaking: `RefusalCode.NOT_REMOVABLE` becomes `RefusalCode.UNSUPPORTED_BUS`. `is_removable_class` becomes `is_supported_bus_class`. D207 permits breaking changes before 1.0.0.
+
 ## [0.57.3] (2026-11-12)
 
 ### Added

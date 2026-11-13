@@ -1,6 +1,6 @@
-"""Drive picker for a USB export target (D93, D188).
+"""Drive picker for a USB export target (D93, D188, D372).
 
-The picker lists removable-class drives only. Drive text is untrusted and
+The picker lists drives on a USB, SD, or MMC bus only. Drive text is untrusted and
 renders as plain text. Raw command errors never reach the dialog.
 """
 
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 USB_DRIVE_PICKER_WIDTH: Final[int] = 620
 USB_DRIVE_PICKER_HEIGHT: Final[int] = 360
 LOAD_FAILED_TEXT: Final[str] = "The drive list failed to load. Reconnect the drive and rescan."
-NO_DRIVES_TEXT: Final[str] = "No removable drives found. Connect a drive and rescan."
+NO_DRIVES_TEXT: Final[str] = "No USB drives or memory cards found. Connect a drive and rescan."
 SELECT_PROMPT_TEXT: Final[str] = "Select the export drive."
 NOT_MOUNTED_TEXT: Final[str] = "not mounted"
 ROW_SEPARATOR: Final[str] = " - "
@@ -53,7 +53,8 @@ def describe_candidate(candidate: TargetCandidate) -> str:
     inspection = candidate.inspection
     if inspection is None:
         return ROW_SEPARATOR.join((candidate.name, candidate.error or ""))
-    refusals = evaluate_preflight(inspection, EMPTY_REQUEST).refusals
+    result = evaluate_preflight(inspection, EMPTY_REQUEST)
+    refusals = result.refusals
     if refusals and refusals[0].code in SAFETY_REFUSAL_CODES:
         return ROW_SEPARATOR.join((candidate.name, refusals[0].message))
     partition = inspection.partitions[0] if inspection.partitions else None
@@ -62,11 +63,12 @@ def describe_candidate(candidate: TargetCandidate) -> str:
     parts = [title, mount_points[0] if mount_points else NOT_MOUNTED_TEXT]
     if refusals:
         parts.append(refusals[0].message)
+    parts.extend(note.message for note in result.notes)
     return ROW_SEPARATOR.join(parts)
 
 
 class UsbDrivePickerDialog(QDialog):
-    """Modal dialog listing removable-class drives for one export target choice."""
+    """Modal dialog listing USB and memory card drives for one export target choice."""
 
     def __init__(
         self,

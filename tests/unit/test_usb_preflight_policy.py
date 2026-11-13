@@ -92,7 +92,7 @@ class SafetyRefusalTests(unittest.TestCase):
             SAFETY_REFUSAL_CODES,
             frozenset(
                 {
-                    RefusalCode.NOT_REMOVABLE,
+                    RefusalCode.UNSUPPORTED_BUS,
                     RefusalCode.SYSTEM_VOLUME,
                     RefusalCode.SYSTEM_STATE_UNKNOWN,
                     RefusalCode.ACTIVE_PARTITION,
@@ -100,16 +100,12 @@ class SafetyRefusalTests(unittest.TestCase):
             ),
         )
 
-    def test_fixed_flag_on_usb_bus_is_refused(self) -> None:
-        inspection = build_inspection(drive=build_drive(is_removable=False))
-        self.assertEqual(refusal_codes(evaluate_default(inspection)), (RefusalCode.NOT_REMOVABLE,))
-
     def test_removable_flag_on_other_bus_is_refused(self) -> None:
         for bus_type in ("sata", "nvme", None):
             with self.subTest(bus_type=bus_type):
                 inspection = build_inspection(drive=build_drive(bus_type=bus_type))
                 codes = refusal_codes(evaluate_default(inspection))
-                self.assertEqual(codes, (RefusalCode.NOT_REMOVABLE,))
+                self.assertEqual(codes, (RefusalCode.UNSUPPORTED_BUS,))
 
     def test_system_or_boot_volume_is_refused(self) -> None:
         inspection = build_inspection(drive=build_drive(is_system=True))
@@ -131,20 +127,6 @@ class SafetyRefusalTests(unittest.TestCase):
             drive=build_drive(is_system=True), partitions=(partition,), available_bytes=0
         )
         self.assertEqual(refusal_codes(evaluate_default(inspection)), (RefusalCode.SYSTEM_VOLUME,))
-
-    def test_several_safety_refusals_return_together(self) -> None:
-        inspection = build_inspection(
-            drive=build_drive(is_removable=False, is_system=True),
-            partitions=(build_partition(is_active=True),),
-        )
-        self.assertEqual(
-            refusal_codes(evaluate_default(inspection)),
-            (
-                RefusalCode.NOT_REMOVABLE,
-                RefusalCode.SYSTEM_VOLUME,
-                RefusalCode.ACTIVE_PARTITION,
-            ),
-        )
 
 
 class MediaAndLayoutRefusalTests(unittest.TestCase):
