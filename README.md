@@ -1,4 +1,8 @@
-# InfinitePrep
+<p align="center">
+  <img src="docs/infiniteprep-logo.png" alt="InfinitePrep logo" width="320">
+</p>
+
+<h1 align="center">InfinitePrep</h1>
 
 **InfinitePrep** is a cross-platform desktop application (**Windows, macOS, and Linux**) built for DJs to identify, correct, enrich, and safely organize music files (**MP3, FLAC, WAV, and AIFF** write-enabled; **M4A/OGG** read-only and convertible).
 
