@@ -164,7 +164,9 @@ class MainWindow(QMainWindow):
         self.import_controller = FolderImportController(
             self.import_service, self, show_progress_dialog=False
         )
-        self.batch_queue = BatchQueueController(self.import_controller, self.repo.db.close, self)
+        self.batch_queue = BatchQueueController(
+            self.import_controller, self.repo.db.close, self, prompt_parent=self
+        )
         self.batch_dock = BatchQueueDock(self.batch_queue, self)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.batch_dock)
         self._close_after_queue = False

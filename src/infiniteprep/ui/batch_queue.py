@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final, cast
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot
+from PySide6.QtWidgets import QWidget
 
 from infiniteprep.services.import_service import ImportBatchReport, ImportOutcome
 from infiniteprep.services.job_orchestrator import (
@@ -19,7 +21,8 @@ from infiniteprep.services.job_orchestrator import (
     QueuedBatch,
 )
 from infiniteprep.services.write_service import WriteBatchResult
-from infiniteprep.ui.folder_import import FolderImportController
+from infiniteprep.ui.folder_import import STUCK_EXIT_CODE, FolderImportController
+from infiniteprep.ui.stuck_file_watcher import StuckFileWatcher, StuckPrompt
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,25 @@ ProgressReport = Callable[[int, int, str], None]
 BatchRun = Callable[[CancelCheck, ProgressReport], object]
 
 CANCELLING_TEXT: Final[str] = "Cancelling after the current file."
+# Analysis decodes and processes whole tracks, so one long mix needs more time than a
+# write or an import read.
+ANALYZE_STUCK_TIMEOUT_MS: Final[int] = 300_000
+WRITE_STUCK_TIMEOUT_MS: Final[int] = 120_000
+ANALYZE_STUCK_PROMPT: Final[StuckPrompt] = StuckPrompt(
+    "Analysis Not Responding",
+    "One file has taken more than 5 minutes and the analysis is not responding. "
+    "Quit Now ends InfinitePrep at once. Files analyzed so far keep their results. "
+    "Keep Waiting lets the analysis continue.",
+    ANALYZE_STUCK_TIMEOUT_MS,
+)
+WRITE_STUCK_PROMPT: Final[StuckPrompt] = StuckPrompt(
+    "Write Not Responding",
+    "One file has taken more than 2 minutes and the write is not responding. "
+    "Quit Now ends InfinitePrep at once. Files written so far stay written. "
+    "At the next launch, Recover Interrupted Writes offers to restore or finish the "
+    "interrupted file. Keep Waiting lets the write continue.",
+    WRITE_STUCK_TIMEOUT_MS,
+)
 MAX_LISTED_FAILURES: Final[int] = 10
 STATE_TEXT: Final[dict[BatchState, str]] = {
     BatchState.WAITING: "Waiting",
@@ -135,7 +157,8 @@ class BatchQueueController(QObject):
     """Start queued batches in order, one at a time, and report every state change.
 
     Import batches run through the FolderImportController, which keeps its stuck-file
-    prompt. Other batches run a BatchRun on a BatchWorker thread.
+    prompt. Other batches run a BatchRun on a BatchWorker thread, with a stuck-file
+    prompt of their own.
     """
 
     changed = Signal()
@@ -148,14 +171,35 @@ class BatchQueueController(QObject):
         import_controller: FolderImportController,
         close_connection: Callable[[], None],
         parent: QObject | None = None,
+        *,
+        prompt_parent: QWidget | None = None,
+        stuck_prompts: dict[BatchKind, StuckPrompt] | None = None,
+        exit_process: Callable[[int], object] = os._exit,
     ) -> None:
-        """Keep the import controller and the per-thread database close call."""
+        """Keep the import controller and the per-thread database close call.
+
+        prompt_parent owns the stuck prompt of an Analyze or write batch. stuck_prompts
+        replaces the default limit and wording per batch kind. Quit Now calls
+        exit_process, which ends the process at once.
+        """
         super().__init__(parent)
         self.queue = BatchQueue()
         self.import_controller = import_controller
         self._close_connection = close_connection
         self._thread: QThread | None = None
         self._worker: BatchWorker | None = None
+        self._stuck_prompts = stuck_prompts or {
+            BatchKind.ANALYZE: ANALYZE_STUCK_PROMPT,
+            BatchKind.WRITE: WRITE_STUCK_PROMPT,
+        }
+        self.stuck_watcher = StuckFileWatcher(
+            prompt_parent,
+            ANALYZE_STUCK_PROMPT,
+            self._worker_is_running,
+            exit_code=STUCK_EXIT_CODE,
+            exit_process=exit_process,
+            owner=self,
+        )
         import_controller.completed.connect(self._on_import_completed)
         import_controller.progress.connect(self._on_import_progress)
 
@@ -243,7 +287,13 @@ class BatchQueueController(QObject):
         self._worker.finished.connect(self._on_worker_finished)
         self._worker.failed.connect(self._on_worker_failed)
         self._thread.start()
+        self.stuck_watcher.use_prompt(self._stuck_prompts[batch.kind])
+        self.stuck_watcher.start()
         return True
+
+    def _worker_is_running(self) -> bool:
+        """Return True while an Analyze or write batch runs on its worker thread."""
+        return self._thread is not None
 
     def _show_progress(self, kind_is_import: bool, done: int, total: int, path: str) -> None:
         """Store the progress text on the running batch unless a cancel is pending."""
@@ -262,7 +312,8 @@ class BatchQueueController(QObject):
 
     @Slot(int, int, str)
     def _on_worker_progress(self, done: int, total: int, path: str) -> None:
-        """Show the progress of the running worker batch."""
+        """Restart the stuck-file limit, then show the progress of the running worker batch."""
+        self.stuck_watcher.start()
         self._show_progress(False, done, total, path)
 
     @Slot(object)
@@ -294,7 +345,8 @@ class BatchQueueController(QObject):
         self._finish(BatchState.FAILED, message)
 
     def _join_worker(self) -> None:
-        """Stop the worker thread and wait for it."""
+        """Stop the stuck-file limit and the worker thread, and wait for the thread."""
+        self.stuck_watcher.stop()
         thread, worker = self._thread, self._worker
         self._thread = None
         self._worker = None
