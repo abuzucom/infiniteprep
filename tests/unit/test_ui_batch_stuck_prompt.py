@@ -26,8 +26,8 @@ SIGNAL_TIMEOUT_MS = 10_000
 SHORT_TIMEOUT_MS = 100
 # Long enough that no prompt appears while a test checks for its absence.
 QUIET_WAIT_MS = 300
-ANALYZE_TITLE = "Analysis Stuck (test)"
-WRITE_TITLE = "Write Stuck (test)"
+ANALYZE_TEXT = "analyze text"
+WRITE_TEXT = "write text"
 
 StuckParts = tuple[BatchQueueController, GatedJobs, list[int]]
 
@@ -37,10 +37,11 @@ def stuck_parts(qtbot: Any, tmp_path: Path) -> Iterator[StuckParts]:
     """Build a queue with short limits whose exit call only records the code.
 
     Teardown opens the gate and waits for the queue, so no worker thread outlives
-    its test.
+    its test. The parent widget stays out of qtbot.addWidget on purpose. pytest-qt
+    deletes those widgets before fixture teardown, and deleting the parent would
+    destroy a worker thread that still waits on the gate.
     """
     parent = QWidget()
-    qtbot.addWidget(parent)
     repository = Repository(DatabaseManager(tmp_path / "stuck.sqlite3"))
     import_controller = FolderImportController(
         ImportService(repository), parent, show_progress_dialog=False
@@ -52,8 +53,8 @@ def stuck_parts(qtbot: Any, tmp_path: Path) -> Iterator[StuckParts]:
         parent,
         prompt_parent=parent,
         stuck_prompts={
-            BatchKind.ANALYZE: StuckPrompt(ANALYZE_TITLE, "analyze text", SHORT_TIMEOUT_MS),
-            BatchKind.WRITE: StuckPrompt(WRITE_TITLE, "write text", SHORT_TIMEOUT_MS),
+            BatchKind.ANALYZE: StuckPrompt("Analysis", ANALYZE_TEXT, SHORT_TIMEOUT_MS),
+            BatchKind.WRITE: StuckPrompt("Write", WRITE_TEXT, SHORT_TIMEOUT_MS),
         },
         exit_process=exit_codes.append,
     )
@@ -71,19 +72,20 @@ def wait_for_prompt(qtbot: Any, controller: BatchQueueController) -> Any:
 
 
 @pytest.mark.parametrize(
-    "kind_case", [(BatchKind.ANALYZE, ANALYZE_TITLE), (BatchKind.WRITE, WRITE_TITLE)]
+    "kind_case", [(BatchKind.ANALYZE, ANALYZE_TEXT), (BatchKind.WRITE, WRITE_TEXT)]
 )
 def test_a_stuck_file_offers_quit_now(
     qtbot: Any, stuck_parts: StuckParts, kind_case: tuple[BatchKind, str]
 ) -> None:
     """A file past the limit raises the prompt for its batch kind, and Quit Now exits."""
-    kind, expected_title = kind_case
+    kind, expected_text = kind_case
     controller, jobs, exit_codes = stuck_parts
     controller.enqueue_job(kind, "stuck", jobs.make("stuck"))
 
     box = wait_for_prompt(qtbot, controller)
 
-    assert box.windowTitle() == expected_title
+    # The text identifies the prompt. macOS drops message box window titles.
+    assert box.text() == expected_text
     controller.stuck_watcher.quit_now_button.click()
     assert exit_codes == [STUCK_EXIT_CODE]
     assert controller.stuck_watcher.stuck_box is None
