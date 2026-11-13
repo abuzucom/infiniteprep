@@ -5,7 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.57.5] (2026-11-13)
+## [0.57.6] (2026-11-13)
+
+### Fixed
+
+- A push to `main` no longer cancels the running `os-tests.yml` run of the previous `main` commit. Each `main` commit gets its own group and its platform tests always complete. A newer pull request commit still replaces the older run.
 
 ### Changed
 

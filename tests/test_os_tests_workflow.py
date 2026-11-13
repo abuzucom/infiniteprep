@@ -27,6 +27,9 @@ NOT_CANCELLED = "!cancelled()"
 JOB_NOT_LIGHT = "needs.changes.outputs.light != 'true'"
 STEP_NOT_LIGHT = "steps.classify.outputs.light != 'true'"
 AGENT_LINT_ACTION = "0xmariowu/AgentLint@"
+PULL_REQUEST_ONLY = "${{ github.event_name == 'pull_request' }}"
+PULL_REQUEST_NUMBER = "github.event.pull_request.number"
+COMMIT_SHA = "github.sha"
 # os-tests.yml quotes its `on` key. sync-check.yml leaves it bare, and PyYAML
 # reads the bare key as the boolean True.
 OS_TESTS_TRIGGER_KEY = "on"
@@ -64,8 +67,13 @@ class OsTestsTriggerTest(unittest.TestCase):
         self.assertEqual(pull_request["types"], CODE_EVENT_TYPES)
 
     def test_newer_run_replaces_the_older_run(self) -> None:
-        """One run per branch stays active."""
-        self.assertIs(self.workflow["concurrency"]["cancel-in-progress"], True)
+        """A newer pull request commit replaces the older run, and a main run completes."""
+        concurrency = self.workflow["concurrency"]
+        self.assertEqual(concurrency["cancel-in-progress"], PULL_REQUEST_ONLY)
+        group = concurrency["group"]
+        self.assertIn(PULL_REQUEST_NUMBER, group)
+        self.assertIn(COMMIT_SHA, group)
+        self.assertLess(group.index(PULL_REQUEST_NUMBER), group.index(COMMIT_SHA))
 
     def test_token_is_read_only(self) -> None:
         """The workflow token reads repository contents and nothing else."""
