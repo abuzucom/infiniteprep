@@ -5,10 +5,15 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.57.6] (2026-11-13)
+## [0.57.7] (2026-11-13)
 
 ### Fixed
 
+- A queued Analyze or write batch that hung on one file had no way out after **Cancel and Exit**. The window waited on that file until an outside kill ended the process. Analyze and write batches now raise the same Quit Now or Keep Waiting prompt that imports raise under D244.
+  - Analysis allows 5 minutes per file. Writes allow 2 minutes per file. Imports keep 2 minutes.
+  - The write prompt states that files written so far stay written and that **Recover Interrupted Writes** offers the interrupted file at the next launch.
+- `ui/stuck_file_watcher.py` holds the shared time limit and prompt. `FolderImportController` and `BatchQueueController` both use it. `BatchQueueController` accepts optional `prompt_parent`, `stuck_prompts`, and `exit_process` arguments.
+- Added `tests/unit/test_ui_batch_stuck_prompt.py`.
 - A push to `main` no longer cancels the running `os-tests.yml` run of the previous `main` commit. Each `main` commit gets its own group and its platform tests always complete. A newer pull request commit still replaces the older run.
 
 ### Changed

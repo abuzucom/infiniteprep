@@ -254,6 +254,10 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
      or write batch at its first failed file** in **Settings & Providers**
      to change that. Imports ignore the setting.
    - A finished batch stays in the dock. **View Result** opens its report.
+   - One file that runs too long raises a **Quit Now** or **Keep Waiting**
+     prompt. The limit is 5 minutes per file for analysis and 2 minutes for
+     imports and writes. After a Quit Now during a write, **Recover
+     Interrupted Writes** offers the interrupted file at the next launch.
    - While a batch runs or waits, transcode, journal restore, Bulk Approve,
      field edits, and data deletion stay disabled.
    - Closing the window during a batch offers **Keep Working** or **Cancel
