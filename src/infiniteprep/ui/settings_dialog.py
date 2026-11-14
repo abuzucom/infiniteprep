@@ -1,4 +1,4 @@
-"""Provider credentials, consent-gated binary setup, and transcode settings dialog."""
+"""Tabbed Settings dialog for provider credentials, transcode, storage, and app options."""
 
 from __future__ import annotations
 
@@ -6,44 +6,53 @@ from typing import Final
 
 from PySide6.QtWidgets import (
     QApplication,
-    QCheckBox,
-    QComboBox,
     QDialog,
-    QDoubleSpinBox,
-    QFormLayout,
     QHBoxLayout,
-    QLineEdit,
     QPushButton,
-    QSpinBox,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from infiniteprep import storage_paths
-from infiniteprep.adapters.llm.ollama_openai import RECOMMENDED_MODELS
-from infiniteprep.adapters.transcoder.safe_transcoder import TranscodeMode, TranscodePreset
 from infiniteprep.config.credentials import CredentialStore
-from infiniteprep.config.settings import (
-    BYTES_PER_MIB,
-    MAX_USB_RESERVE_MIB,
-    MAX_USB_RESERVE_PERCENT,
-    AppSettings,
-    SettingsManager,
-)
+from infiniteprep.config.settings import AppSettings, SettingsManager
 from infiniteprep.data_cleanup import CleanupChoice, data_folders
 from infiniteprep.storage_paths import StorageLocations
 from infiniteprep.ui.cleanup_dialog import CleanupDialog
-from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
+from infiniteprep.ui.settings.analysis import STOP_ON_FAILURE_LABEL, AnalysisTab
+from infiniteprep.ui.settings.base import SettingsTab
+from infiniteprep.ui.settings.general import GeneralTab
+from infiniteprep.ui.settings.identification import IdentificationTab
+from infiniteprep.ui.settings.playback import PlaybackTab
+from infiniteprep.ui.settings.storage import (
+    CLEANUP_BUTTON_LABEL,
+    USB_RESERVE_PERCENT_DECIMALS,
+    StorageTab,
+)
+from infiniteprep.ui.settings.transcode import TranscodeTab
+from infiniteprep.ui.settings.updates import UpdatesTab
+from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme
+
+__all__ = [
+    "CLEANUP_BUTTON_LABEL",
+    "SETTINGS_DIALOG_HEIGHT",
+    "SETTINGS_DIALOG_WIDTH",
+    "STOP_ON_FAILURE_LABEL",
+    "USB_RESERVE_PERCENT_DECIMALS",
+    "SettingsDialog",
+]
 
 SETTINGS_DIALOG_WIDTH: Final[int] = 620
 SETTINGS_DIALOG_HEIGHT: Final[int] = 460
-CLEANUP_BUTTON_LABEL: Final[str] = "Delete InfinitePrep Data..."
-USB_RESERVE_PERCENT_DECIMALS: Final[int] = 1
-STOP_ON_FAILURE_LABEL: Final[str] = "Stop an Analyze or write batch at its first failed file"
 
 
 class SettingsDialog(QDialog):
-    """Modal dialog for managing API keys, Ollama/fpcalc setup, and XDJ-RX3 transcode options."""
+    """Modal tabbed dialog for every user setting, one tab per area (D351).
+
+    The widget attributes from the single-form dialog stay on the dialog as
+    references to the widgets on each tab.
+    """
 
     def __init__(
         self,
@@ -70,72 +79,60 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("InfinitePrep Settings & Providers")
         self.resize(SETTINGS_DIALOG_WIDTH, SETTINGS_DIALOG_HEIGHT)
 
-        self.acoustid_key_input = QLineEdit(self.creds.get_secret("acoustid_api_key") or "", self)
-        self.discogs_token_input = QLineEdit(self.creds.get_secret("discogs_token") or "", self)
-        self.enable_llm_checkbox = QCheckBox("Enable Closed-World LLM Arbitration", self)
-        self.ollama_url_input = QLineEdit(self.current_settings.ollama_base_url, self)
-        self.ollama_model_combo = QComboBox(self)
-        self.transcode_mode_combo = QComboBox(self)
-        self.transcode_preset_combo = QComboBox(self)
-        self.playlist_relative_checkbox = QCheckBox("Write paths relative to the playlist", self)
-        self.stop_on_failure_checkbox = QCheckBox(STOP_ON_FAILURE_LABEL, self)
-        self.theme_combo = QComboBox(self)
-        self.usb_reserve_percent_spin = QDoubleSpinBox(self)
-        self.usb_reserve_mib_spin = QSpinBox(self)
+        self.tabs = QTabWidget(self)
+        self.setting_tabs: list[SettingsTab] = self._create_tabs(cleanup_enabled)
+        for tab in self.setting_tabs:
+            self.tabs.addTab(tab, tab.TITLE)
+        self._expose_tab_widgets()
+
         self.save_btn = QPushButton("Save Settings", self)
         self.cancel_btn = QPushButton("Cancel", self)
-        self.cleanup_btn = QPushButton(CLEANUP_BUTTON_LABEL, self)
-        self.cleanup_btn.setEnabled(cleanup_enabled)
-
         self._build_layout()
 
+    def _create_tabs(self, cleanup_enabled: bool) -> list[SettingsTab]:
+        """Create every tab in display order. A new area adds one entry here."""
+        settings = self.current_settings
+        # Settings from an older file can lack a theme. This module resolves the
+        # fallback theme and passes the result to the General tab.
+        theme = getattr(settings, "theme", DEFAULT_DARK_THEME)
+        self.general_tab = GeneralTab(theme)
+        self.playback_tab = PlaybackTab()
+        self.analysis_tab = AnalysisTab(settings)
+        self.transcode_tab = TranscodeTab(settings)
+        self.identification_tab = IdentificationTab(settings, self.creds)
+        self.updates_tab = UpdatesTab()
+        self.storage_tab = StorageTab(settings, cleanup_enabled)
+        return [
+            self.general_tab,
+            self.playback_tab,
+            self.analysis_tab,
+            self.transcode_tab,
+            self.identification_tab,
+            self.updates_tab,
+            self.storage_tab,
+        ]
+
+    def _expose_tab_widgets(self) -> None:
+        """Keep the single-form widget attributes as references to the tab widgets."""
+        self.theme_combo = self.general_tab.theme_combo
+        self.stop_on_failure_checkbox = self.analysis_tab.stop_on_failure_checkbox
+        self.transcode_mode_combo = self.transcode_tab.transcode_mode_combo
+        self.transcode_preset_combo = self.transcode_tab.transcode_preset_combo
+        self.playlist_relative_checkbox = self.transcode_tab.playlist_relative_checkbox
+        self.acoustid_key_input = self.identification_tab.acoustid_key_input
+        self.discogs_token_input = self.identification_tab.discogs_token_input
+        self.enable_llm_checkbox = self.identification_tab.enable_llm_checkbox
+        self.ollama_url_input = self.identification_tab.ollama_url_input
+        self.ollama_model_combo = self.identification_tab.ollama_model_combo
+        self.usb_reserve_percent_spin = self.storage_tab.usb_reserve_percent_spin
+        self.usb_reserve_mib_spin = self.storage_tab.usb_reserve_mib_spin
+        self.cleanup_btn = self.storage_tab.cleanup_btn
+
     def _build_layout(self) -> None:
-        """Construct the settings form layout."""
+        """Place the tabs above the Save and Cancel buttons and connect the actions."""
         root = QVBoxLayout(self)
-        form = QFormLayout()
-
-        self.acoustid_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.discogs_token_input.setEchoMode(QLineEdit.EchoMode.Password)
-        form.addRow("AcoustID API Key:", self.acoustid_key_input)
-        form.addRow("Discogs Personal Token:", self.discogs_token_input)
-
-        self.enable_llm_checkbox.setChecked(self.current_settings.enable_llm_arbitration)
-        form.addRow("Optional Local LLM:", self.enable_llm_checkbox)
-        form.addRow("Ollama / OpenAI Base URL:", self.ollama_url_input)
-
-        self.ollama_model_combo.setEditable(True)
-        for model in RECOMMENDED_MODELS:
-            self.ollama_model_combo.addItem(model)
-        self.ollama_model_combo.setCurrentText(self.current_settings.ollama_model)
-        form.addRow("Ollama Model:", self.ollama_model_combo)
-
-        for mode in TranscodeMode:
-            self.transcode_mode_combo.addItem(mode.value)
-        self.transcode_mode_combo.setCurrentText(self.current_settings.transcode_mode)
-        form.addRow("XDJ Transcode Mode:", self.transcode_mode_combo)
-
-        for preset in TranscodePreset:
-            self.transcode_preset_combo.addItem(preset.value)
-        self.transcode_preset_combo.setCurrentText(self.current_settings.transcode_preset)
-        form.addRow("XDJ Transcode Preset:", self.transcode_preset_combo)
-
-        self.playlist_relative_checkbox.setChecked(self.current_settings.playlist_relative_paths)
-        form.addRow("Playlist Export:", self.playlist_relative_checkbox)
-
-        self.stop_on_failure_checkbox.setChecked(self.current_settings.stop_batch_on_first_failure)
-        form.addRow("Batch Queue:", self.stop_on_failure_checkbox)
-
-        for theme_name in get_available_themes():
-            self.theme_combo.addItem(theme_name)
-        self.theme_combo.addItem("system")
-        current_theme = getattr(self.current_settings, "theme", DEFAULT_DARK_THEME)
-        self.theme_combo.setCurrentText(current_theme)
-        form.addRow("UI Theme:", self.theme_combo)
-        self._add_usb_reserve_rows(form)
-
-        root.addLayout(form)
+        root.addWidget(self.tabs)
         buttons = QHBoxLayout()
-        buttons.addWidget(self.cleanup_btn)
         buttons.addStretch()
         buttons.addWidget(self.save_btn)
         buttons.addWidget(self.cancel_btn)
@@ -144,19 +141,6 @@ class SettingsDialog(QDialog):
         self.save_btn.clicked.connect(self.save_settings)
         self.cancel_btn.clicked.connect(self.reject)
         self.cleanup_btn.clicked.connect(self.open_cleanup_dialog)
-
-    def _add_usb_reserve_rows(self, form: QFormLayout) -> None:
-        """Add the two USB export reserve inputs. The larger reserve kind applies."""
-        self.usb_reserve_percent_spin.setDecimals(USB_RESERVE_PERCENT_DECIMALS)
-        self.usb_reserve_percent_spin.setRange(0.0, MAX_USB_RESERVE_PERCENT)
-        self.usb_reserve_percent_spin.setValue(self.current_settings.usb_reserve_percent)
-        form.addRow("USB Export Reserve (% of export size):", self.usb_reserve_percent_spin)
-
-        self.usb_reserve_mib_spin.setRange(0, MAX_USB_RESERVE_MIB)
-        # A partial MiB rounds up. A save never shrinks the stored reserve.
-        stored_mib = -(-self.current_settings.usb_reserve_bytes // BYTES_PER_MIB)
-        self.usb_reserve_mib_spin.setValue(stored_mib)
-        form.addRow("USB Export Reserve (MiB):", self.usb_reserve_mib_spin)
 
     def open_cleanup_dialog(self) -> None:
         """Open the cleanup dialog. A confirmed choice closes Settings without saving."""
@@ -168,23 +152,9 @@ class SettingsDialog(QDialog):
 
     def save_settings(self) -> None:
         """Persist updated settings to JSON and secrets to CredentialStore."""
-        if self.acoustid_key_input.text().strip():
-            self.creds.set_secret("acoustid_api_key", self.acoustid_key_input.text().strip())
-        if self.discogs_token_input.text().strip():
-            self.creds.set_secret("discogs_token", self.discogs_token_input.text().strip())
-
-        self.current_settings.enable_llm_arbitration = self.enable_llm_checkbox.isChecked()
-        self.current_settings.ollama_base_url = self.ollama_url_input.text().strip()
-        self.current_settings.ollama_model = self.ollama_model_combo.currentText().strip()
-        self.current_settings.transcode_mode = self.transcode_mode_combo.currentText()
-        self.current_settings.transcode_preset = self.transcode_preset_combo.currentText()
-        self.current_settings.playlist_relative_paths = self.playlist_relative_checkbox.isChecked()
-        self.current_settings.stop_batch_on_first_failure = (
-            self.stop_on_failure_checkbox.isChecked()
-        )
-        self.current_settings.theme = self.theme_combo.currentText()
-        self.current_settings.usb_reserve_percent = self.usb_reserve_percent_spin.value()
-        self.current_settings.usb_reserve_bytes = self.usb_reserve_mib_spin.value() * BYTES_PER_MIB
+        self.identification_tab.store_secrets()
+        for tab in self.setting_tabs:
+            tab.apply_to(self.current_settings)
         self.settings_mgr.save(self.current_settings)
         app = QApplication.instance()
         if app is not None:
