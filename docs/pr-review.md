@@ -13,8 +13,8 @@ euler.
 
 | Reviewer | Release | Commit |
 |---|---|---|
-| foucault | 3.6.1 | `308e964350f2ca2571d27832172dd47f5c4ee47d` |
-| euler | 0.6.5 | `1a3f67cba9d6ed7f45af4822f9ca27dd14db6a46` |
+| foucault | 3.8.1 | `3ec8d0e332f4c778c66a6aed1b9b56a3be92e716` |
+| euler | 0.9.0 | `940c53a39b7cc7345b1f6232d43bec7c4d7623df` |
 
 Each caller pins the reusable workflow `uses:` reference and the policy ref
 (`audit_ref` or `quality_ref`) to the same full commit SHA. Upgrade both
@@ -39,10 +39,12 @@ this wiring reaches `main`. Renaming the `ci` workflow stops both reviews.
 - `.github/workflows/quality-review-pr.yml` copies the euler caller. It calls
   the pinned remote workflow. It grants `actions: read` because the reusable
   review job requests that permission. `exclude_paths` stays empty.
-- `ci/build_pr_case.py`, `ci/run_model_command.py`, `ci/call_model.py`,
-  `ci/model_providers.json`, and `scripts/check_pr_review_response.py` match
-  the pinned foucault commit byte for byte. The foucault reusable workflow
-  runs those files from this repository's checkout.
+- `ci/build_pr_case.py`, `ci/build_retry_case.py`, `ci/run_model_command.py`,
+  `ci/call_model.py`, `ci/model_providers.json`, and
+  `scripts/check_pr_review_response.py` match the pinned foucault commit byte
+  for byte. The foucault reusable workflow runs those files from this
+  repository's checkout. The upstream preflight names three of the six files.
+  Copy all six. A missing `ci/build_retry_case.py` fails the retry step.
 - Euler loads its adapter from its own checkout at `quality_ref`. This
   repository holds no euler file copies.
 - `tests/test_review_wiring.py` checks the triggers, the pins, the secret
@@ -51,12 +53,15 @@ this wiring reaches `main`. Renaming the `ci` workflow stops both reviews.
 
 ## Large diffs
 
-`ci/model_providers.json` sends review input above the `kimi-k2.7-code`
-budget to the `ollama-large` profile with `minimax-m3.1-flash`. Both profiles
-use the same `MODEL_API_KEY` mapping. Input above every budget skips the model
-call. The foucault workflow then records a fixed `NEEDS-HUMAN` verdict. With
-`fail_on_block: true`, that verdict fails the `security-review` check. A human
-reviewer must assess the complete diff.
+`ci/model_providers.json` carries one active profile, `ollama-large`, with
+`minimax-m3.1-flash`. Input above that profile's 900000 token budget exits
+with code 3 and sends no request. The foucault workflow then records a fixed
+`NEEDS-HUMAN` verdict. With `fail_on_block: true`, that verdict fails the
+`security-review` check. A human reviewer must assess the complete diff. A
+diff above 3 MB takes the same path.
+
+The adapter keeps its `large_input_provider` routing for registries that set
+the key. The shipped registry sets no such key.
 
 ## Repository settings
 
@@ -78,6 +83,6 @@ conclusion of `skipped`. Fork pull requests receive no repository secret.
 
 1. Pick the new foucault or euler commit on its `main` branch.
 2. Update the `uses:` pin, the policy ref, and the release comment together.
-3. For foucault, copy the five adapter files from the new commit.
+3. For foucault, copy the six adapter files from the new commit.
 4. Update the commit and digest constants in `tests/test_review_wiring.py`.
 5. Update the pin table above and `CHANGELOG.md`.

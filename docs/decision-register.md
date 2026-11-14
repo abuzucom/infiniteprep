@@ -381,6 +381,23 @@ This comes from the owner choice of a separate favicon file and packaged icons.
 | --- | --- |
 | D393 | The README logo is the window icon, the Windows exe icon, the macOS app icon, the AppImage icon, the Windows installer and uninstaller icon, and the website favicon. Pillow 13.0.0 joins the dev dependencies for the PyInstaller icon conversion and `packaging/make_icon.py`. The converter refuses any other Pillow release. This replaces D287. |
 
+## D394 to D401: user stories from another DJ tool (2026-11-14)
+
+The owner compared the roadmap with `jydiw/crater`, a GPL-3.0 tool by an
+intended user. Its features count as user stories only. No code from it
+enters this repository.
+
+| ID | Decision |
+| --- | --- |
+| D394 | Research comes before new metadata sources. Issue 222 surveys Deezer, iTunes Search, MusicBrainz genres, and Cover Art Archive, and proposes a per-field source priority with per-value provenance. The owner then picks the adapters. |
+| D395 | A Settings list and a per-track lock both protect a field. A protected field with a value gets no proposal. A manual edit still changes it (issue 223). |
+| D396 | A setting picks fingerprint first, name first, or both as the identification order. Fingerprint first stays the default (issue 224). |
+| D397 | A Possible Duplicates view groups files by matching fingerprint or shared MusicBrainz recording ID. It only flags, and never changes a file (issue 225). |
+| D398 | Check Library reports missing, changed, and unreadable files. Relink finds a moved file by hash. Row removal for missing files takes a database backup and a confirmation first, and never deletes audio (issue 226). |
+| D399 | Watched folders, off by default, queue an import and then Identify & Analyze for new audio files while the app runs. Proposals still wait for review (issue 227). |
+| D400 | Number-key hotkeys set Energy during review and playback. A set-position label from an owner-approved list joins each track (issue 228). |
+| D401 | A Settings confidence threshold preselects proposals in review. Nothing writes before Apply. No threshold is set by default (issue 229). |
+
 ## Open questions
 
 | Source | Question |

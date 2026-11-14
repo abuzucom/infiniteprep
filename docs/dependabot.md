@@ -14,10 +14,8 @@ Two ecosystems run on a weekly schedule.
 
 The `github-actions` ecosystem also covers the two reusable review workflows.
 Dependabot updates a reusable workflow reference when the referenced workflow
-file changes. The `abuzucom/foucault` repository changed its security review
-workflow. A proposal moves that reference to a newer commit. The
-`abuzucom/euler` repository left its quality review workflow unchanged. That
-reference has no proposal.
+file changes. A changed upstream workflow file yields a proposal. An unchanged
+file yields none.
 
 A proposal that moves a reusable workflow reference changes the `uses:` line
 only. The `audit_ref:` input beside it keeps the old commit. A reviewer sets

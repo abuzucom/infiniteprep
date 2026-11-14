@@ -12,7 +12,7 @@ import yaml
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github/workflows/deploy-pages.yml"
 SITE_FOLDER = "website"
-SITE_FILES = ("CNAME", "favicon.png", "index.html", "robots.txt")
+SITE_FILES = ("CNAME", "favicon.png", "index.html", "logo.png", "robots.txt")
 EXPECTED_PERMISSIONS = {
     "contents": "read",
     "pages": "write",
@@ -80,10 +80,18 @@ class PagesDeploymentWorkflowTest(unittest.TestCase):
         self.assertEqual(len(uploads), 1)
         self.assertEqual(uploads[0]["with"]["path"], f"./{SITE_FOLDER}")
 
-    def test_the_site_folder_holds_the_four_site_files(self) -> None:
-        """The site folder holds the page, its favicon, the crawler preferences, and the domain."""
+    def test_the_site_folder_holds_the_five_site_files(self) -> None:
+        """The site folder holds the page, its images, the crawler preferences, and the domain."""
         published = sorted(path.name for path in (REPOSITORY_ROOT / SITE_FOLDER).iterdir())
         self.assertEqual(published, list(SITE_FILES))
+
+    def test_the_page_shows_the_project_logo(self) -> None:
+        """The page displays the published logo with descriptive alternative text."""
+        logo_path = REPOSITORY_ROOT / SITE_FOLDER / "logo.png"
+        source_logo = REPOSITORY_ROOT / "docs/infiniteprep-logo.png"
+        self.assertEqual(logo_path.read_bytes(), source_logo.read_bytes())
+        page = (REPOSITORY_ROOT / SITE_FOLDER / "index.html").read_text(encoding="utf-8")
+        self.assertRegex(page, r'<img[^>]*src="logo\.png"[^>]*alt="InfinitePrep logo"')
 
     def test_the_project_documents_stay_in_docs(self) -> None:
         """The documents stay under docs/, and no site file remains there."""

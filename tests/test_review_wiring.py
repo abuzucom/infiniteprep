@@ -11,8 +11,8 @@ CI_WORKFLOW = WORKFLOWS / "ci.yml"
 SECURITY_CALLER = WORKFLOWS / "security-review-pr.yml"
 QUALITY_CALLER = WORKFLOWS / "quality-review-pr.yml"
 
-FOUCAULT_COMMIT = "308e964350f2ca2571d27832172dd47f5c4ee47d"
-EULER_COMMIT = "1a3f67cba9d6ed7f45af4822f9ca27dd14db6a46"
+FOUCAULT_COMMIT = "3ec8d0e332f4c778c66a6aed1b9b56a3be92e716"
+EULER_COMMIT = "940c53a39b7cc7345b1f6232d43bec7c4d7623df"
 FOUCAULT_USES = (
     "abuzucom/foucault/.github/workflows/security-review.yml@" + FOUCAULT_COMMIT
 )
@@ -24,14 +24,16 @@ PROVIDER_SECRET_MAPPING = "MODEL_API_KEY: ${{ secrets.OLLAMA_API_KEY }}"
 FOUCAULT_ADAPTER_DIGESTS = {
     "ci/build_pr_case.py":
         "3a9ba03c30b254041ae24889ec9d1ce24bdaed48df2b38cd8c679eac003ba727",
+    "ci/build_retry_case.py":
+        "fc7b3dbbecf574da3b0571dc85fa6ac72639a23f535722bd7e71e4190d6d2670",
     "ci/call_model.py":
-        "a29caca77908a448b5393158d6dea7c12a7dc6c779bade58d3e1a8f6546bee2e",
+        "e716883fe961c1b3c50e0ebce8197af52f6da823479db2113549e5fafa6423e2",
     "ci/model_providers.json":
-        "4b5215ac55bf3ca59b630e912d975f94a435c2d0636eb4bab9e859265bebfd7c",
+        "c7e8e9e35b0c1dd24e26979372a0d40628df1e148bc33b56525b50e1950b3ee3",
     "ci/run_model_command.py":
         "494cb0bfd49b6d490c87f009a0b252cb988c2fa74c1a6efe11435e72173899e5",
     "scripts/check_pr_review_response.py":
-        "699716c81f718c39f4afccb9139f84de2e7c26fde5cf030a009f1dd6abbeec90",
+        "cb6421b7c67b7a666d053d4260101b25e69f0f460c3713acd01d5190a0bcad5a",
 }
 
 USES_LINE = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)", re.MULTILINE)
