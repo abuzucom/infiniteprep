@@ -5,6 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.58.1] (2026-11-14)
+
+### Fixed
+
+- The Windows, macOS, and Linux bundles shipped Pillow and its native libraries, and `packaging/check_bundle.py` failed every bundle job. scipy imports pytest, pytest imports pygments, and the pygments hook collects `pygments.formatters.img`. That formatter imports `PIL` inside a `try`/`except ImportError` block. `infiniteprep.spec` now excludes `PIL` through `BUILD_ONLY_PACKAGES`. Pillow stays a build-only dependency for the icon conversion (D393).
+- Added `tests/test_bundle_excludes_pillow.py`.
+
 ## [0.58.0] (2026-11-13)
 
 ### Added
