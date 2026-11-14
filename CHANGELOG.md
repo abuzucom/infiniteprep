@@ -31,6 +31,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     and the capacity path.
   - `docs/dependabot.md` states the reusable workflow rule without the stale
     euler claim.
+- The version advances to 0.59.1. `pyproject.toml` and
+  `src/infiniteprep/__init__.py` hold the new value.
 
 ## [0.58.0] (2026-11-13)
 
