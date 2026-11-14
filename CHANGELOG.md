@@ -5,10 +5,14 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.57.8] (2026-11-13)
+## [0.58.0] (2026-11-13)
 
 ### Added
 
+- Added fake-lossless audio detection under `src/infiniteprep/services/fake_lossless.py` (D332, #99). The detector analyzes lossless tracks for spectral cutoff, MP3 lowpass shelf, and AAC SBR gap traces behind a pluggable `FakeLosslessDetector` interface.
+- Added user-selectable `fake_lossless_method` in `AppSettings` and `SettingsDialog`.
+- Wired fake-lossless diagnostics into `WaveformAnalysisPool`, `DetailPanel`, `MainWindow`, and non-blocking transcode preflight notices in `action_handlers.py`.
+- Added generated-fixture tests in `tests/unit/test_fake_lossless.py`.
 - `docs/decision-register.md` records D390 to D392, the stuck-file choices of PR 213. D244 points to the new entries. D240 points to D380 for when its report opens. D388 and D389 stay unused.
 
 ### Fixed

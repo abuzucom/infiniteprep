@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 
 from infiniteprep import storage_paths
 from infiniteprep.domain.enums import KeyDisplayNotation
+from infiniteprep.services.fake_lossless import FakeLosslessMethod, available_methods
 
 logger = logging.getLogger(__name__)
 DEFAULT_WAVEFORM_ZOOM_SECONDS: Final[int] = 8
@@ -160,6 +161,7 @@ class AppSettings:
     fpcalc_custom_path: str = ""
     transcode_mode: str = "sibling_export"
     transcode_preset: str = "XDJ_LOSSLESS_AUTO"
+    fake_lossless_method: str = FakeLosslessMethod.SIGNAL_ANALYSIS.value
     playlist_relative_paths: bool = True
     # Ends an Analyze or write batch at its first failed file. Imports ignore it.
     stop_batch_on_first_failure: bool = False
@@ -179,6 +181,13 @@ def _find_setting_value_problem(name: str, value: object, default: object) -> st
         return "an invalid type"
     if name == "waveform_zoom_seconds" and value not in SUPPORTED_WAVEFORM_ZOOM_SECONDS:
         return "an unsupported waveform zoom duration"
+    if name == "fake_lossless_method" and value not in available_methods():
+        return "an unsupported fake-lossless detection method"
+    return _find_numeric_setting_problem(name, value)
+
+
+def _find_numeric_setting_problem(name: str, value: object) -> str | None:
+    """Return why a numeric setting value is out of range, or None when valid."""
     if name in NONNEGATIVE_COUNT_SETTINGS and value < 0:
         return "a negative count"
     if name == "usb_reserve_percent" and not _is_supported_reserve_percent(value):

@@ -333,10 +333,17 @@ class MainWindow(QMainWindow):
             self._populate_table_row(row_idx, asset)
         self.file_table.blockSignals(False)
 
+    def _asset_warnings(self, asset: FileAsset) -> list[str]:
+        """Collect technical and analysis warnings for one library asset."""
+        warnings: list[str] = list(asset.original_tags.get("technical", {}).get("warnings", []))
+        for ana in self.repo.list_analysis_results(asset.id):
+            warnings.extend(ana.warnings)
+        return warnings
+
     def _matches_active_filters(self, asset: FileAsset) -> bool:
         """Return True if asset matches the search query and status filter dropdown."""
         status_choice = self.status_filter_combo.currentText()
-        tech_warnings = asset.original_tags.get("technical", {}).get("warnings", [])
+        tech_warnings = self._asset_warnings(asset)
         if status_choice == "Has Warnings (XDJ-RX3 / Rip)" and not tech_warnings:
             return False
         status_map = {
@@ -373,7 +380,7 @@ class MainWindow(QMainWindow):
         lbl_str = self._effective_val(std, approved, top_by_field, FieldName.LABEL.value)
         cat_str = self._effective_val(std, approved, top_by_field, FieldName.CATALOG_NUMBER.value)
         raw_key = self._effective_val(std, approved, top_by_field, FieldName.KEY.value)
-        warnings = asset.original_tags.get("technical", {}).get("warnings", [])
+        warnings = self._asset_warnings(asset)
 
         return [
             Path(asset.current_path).name,

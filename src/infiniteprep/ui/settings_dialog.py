@@ -31,6 +31,7 @@ from infiniteprep.config.settings import (
     SettingsManager,
 )
 from infiniteprep.data_cleanup import CleanupChoice, data_folders
+from infiniteprep.services.fake_lossless import available_methods
 from infiniteprep.storage_paths import StorageLocations
 from infiniteprep.ui.cleanup_dialog import CleanupDialog
 from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
@@ -77,6 +78,7 @@ class SettingsDialog(QDialog):
         self.ollama_model_combo = QComboBox(self)
         self.transcode_mode_combo = QComboBox(self)
         self.transcode_preset_combo = QComboBox(self)
+        self.fake_lossless_method_combo = QComboBox(self)
         self.playlist_relative_checkbox = QCheckBox("Write paths relative to the playlist", self)
         self.stop_on_failure_checkbox = QCheckBox(STOP_ON_FAILURE_LABEL, self)
         self.theme_combo = QComboBox(self)
@@ -118,6 +120,11 @@ class SettingsDialog(QDialog):
             self.transcode_preset_combo.addItem(preset.value)
         self.transcode_preset_combo.setCurrentText(self.current_settings.transcode_preset)
         form.addRow("XDJ Transcode Preset:", self.transcode_preset_combo)
+
+        for method in available_methods():
+            self.fake_lossless_method_combo.addItem(method)
+        self.fake_lossless_method_combo.setCurrentText(self.current_settings.fake_lossless_method)
+        form.addRow("Fake-Lossless Method:", self.fake_lossless_method_combo)
 
         self.playlist_relative_checkbox.setChecked(self.current_settings.playlist_relative_paths)
         form.addRow("Playlist Export:", self.playlist_relative_checkbox)
@@ -178,6 +185,7 @@ class SettingsDialog(QDialog):
         self.current_settings.ollama_model = self.ollama_model_combo.currentText().strip()
         self.current_settings.transcode_mode = self.transcode_mode_combo.currentText()
         self.current_settings.transcode_preset = self.transcode_preset_combo.currentText()
+        self.current_settings.fake_lossless_method = self.fake_lossless_method_combo.currentText()
         self.current_settings.playlist_relative_paths = self.playlist_relative_checkbox.isChecked()
         self.current_settings.stop_batch_on_first_failure = (
             self.stop_on_failure_checkbox.isChecked()

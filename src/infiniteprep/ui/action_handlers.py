@@ -60,15 +60,37 @@ def ask_plain_question(parent: QWidget | None, title: str, text: str) -> bool:
     return box.exec() == QMessageBox.StandardButton.Yes
 
 
+def collect_transcode_preflight_warnings(repo: Repository, file_ids: list[str]) -> list[str]:
+    """Return non-blocking fake-lossless or analysis warnings for queued transcode files."""
+    notices: list[str] = []
+    for file_id in file_ids:
+        asset = repo.get_file_by_id(file_id)
+        name = Path(asset.current_path).name if asset is not None else file_id
+        for ana in repo.list_analysis_results(file_id):
+            if ana.analyzer_name == "fake_lossless":
+                for warning in ana.warnings:
+                    notices.append(f"{name}: {warning}")
+    return notices
+
+
 def build_transcode_confirmation_text(
-    file_count: int, mode: TranscodeMode, preset: TranscodePreset
+    file_count: int,
+    mode: TranscodeMode,
+    preset: TranscodePreset,
+    preflight_warnings: list[str] | None = None,
 ) -> str:
     """Return the confirmation prompt naming the file count, mode, and preset."""
     note = IN_PLACE_WARNING if mode == TranscodeMode.IN_PLACE_BACKED_UP else SIBLING_EXPORT_NOTE
-    return (
+    base = (
         f"Transcode {file_count} visible file(s) with preset {preset.value} "
         f"in mode {mode.value}?\n\n{note}\n\nChange the mode and preset in Settings & Providers."
     )
+    if not preflight_warnings:
+        return base
+    listed = "\n".join(f"- {item}" for item in preflight_warnings[:MAX_LISTED_FAILURES])
+    extra = len(preflight_warnings) - MAX_LISTED_FAILURES
+    suffix = f"\n- ...and {extra} more warning(s)." if extra > 0 else ""
+    return f"{base}\n\nPreflight notices (non-blocking):\n{listed}{suffix}"
 
 
 def build_transcode_summary_text(repo: Repository, summary: TranscodeBatchSummary) -> str:
@@ -98,10 +120,13 @@ def run_transcode_with_confirmation(
         return None
     settings = settings_manager.load()
     mode, preset = resolve_transcode_options(settings.transcode_mode, settings.transcode_preset)
+    preflight_warnings = collect_transcode_preflight_warnings(repo, file_ids)
     answer = QMessageBox.question(
         parent,
         TRANSCODE_DIALOG_TITLE,
-        build_transcode_confirmation_text(len(file_ids), mode, preset),
+        build_transcode_confirmation_text(
+            len(file_ids), mode, preset, preflight_warnings=preflight_warnings
+        ),
         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         QMessageBox.StandardButton.No,
     )
