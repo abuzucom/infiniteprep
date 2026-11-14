@@ -5,7 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.59.1] (2026-11-14)
+## [0.59.2] (2026-11-14)
+
+### Added
+
+- `docs/decision-register.md` records D394 to D401. The entries turn user stories from another DJ tool into issues 222 to 229. The entries cover source research, protected fields, identification order, duplicate and health checks, watched folders, Energy hotkeys, and preselected proposals.
 
 ### Changed
 
