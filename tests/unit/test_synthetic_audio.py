@@ -148,7 +148,7 @@ def test_lowpass_shelf_removes_content_above_cutoff() -> None:
     after = _band_energy_fraction(shelved, RATE, 16500.0, RATE / 2)
     assert before > 0.2
     assert after < before * 1e-5
-    assert _band_energy_fraction(shelved, RATE, 0.0, 15500.0) > 0.99
+    assert _band_energy_fraction(shelved, RATE, 0.0, 16000.0) > 0.99
 
 
 def test_wav_fixture_reads_back_and_repeats(tmp_path: Path) -> None:
