@@ -26,8 +26,28 @@ MAX_RETRY_DELAY_SECONDS = 30
 # Code and JSON-escaped text average more than three characters per token
 # in common tokenizers. This estimate therefore overcounts.
 CHARS_PER_TOKEN_ESTIMATE = 3
-# Providers reject a request above the context window with one of these.
-CONTEXT_OVERFLOW_STATUS_CODES = {400, 413}
+# 413 always reports an oversized request. Providers also use 400 for
+# context overflow, but 400 covers every malformed request too. A 400 counts
+# as overflow only when its body names the context or token limit.
+PAYLOAD_TOO_LARGE_STATUS_CODE = 413
+BAD_REQUEST_STATUS_CODE = 400
+MAX_ERROR_BODY_BYTES = 4096
+# Phrases from the OpenAI, Anthropic, Google, and Ollama overflow errors.
+# Each phrase names a context or prompt limit. A bare field name such as
+# "token count" also appears in malformed-parameter errors and would send
+# the diff to the large model for an unrelated rejection.
+CONTEXT_OVERFLOW_MARKERS = (
+    "context length",
+    "context_length",
+    "context window",
+    "context size",
+    "available context size",
+    "maximum context",
+    "prompt is too long",
+    "prompt too long",
+    "too many tokens",
+    "input length exceeds",
+)
 # The workflow reads this exit code as "no configured model can hold the
 # review input" and records a NEEDS-HUMAN verdict instead of failing.
 CAPACITY_EXIT_CODE = 3
@@ -44,6 +64,27 @@ ENDPOINTS_BY_PROTOCOL = {
     "anthropic": "https://api.anthropic.com/v1",
     "google": "https://generativelanguage.googleapis.com/v1beta",
 }
+# Every review response must satisfy the report contract in sections 1, 6,
+# and 9 of the loaded policy. Ten consecutive review runs before this
+# constant failed the response validator on first-person openers, so the
+# policy wording alone did not hold. The suffix repeats the binding parts
+# verbatim in the trusted system channel.
+REPORT_FORMAT_SUFFIX = (
+    "\n\nReport format contract:\n"
+    "- Open the report body with the **Mode:** line. Never open the report "
+    "with a first-person sentence, a plan statement, or a review "
+    "announcement.\n"
+    "- Never write process narration anywhere in the report. First-person "
+    "openers, walkthrough steps, and self-directed questions are process "
+    "narration.\n"
+    "- State only declared context, findings with file and line, evidence, "
+    "and conclusions.\n"
+    "- End the report with exactly two consecutive lines at column zero. "
+    "The first line starts `VERDICT:`. The second line starts "
+    "`VERDICT_JSON:` and ends after the JSON object. Write no blank line, "
+    "no code fence, and no other character between the two lines, and no "
+    "line after the JSON object.\n"
+)
 
 
 class ProviderError(RuntimeError):
@@ -315,6 +356,23 @@ def _retry_delay_seconds(retry_after: str | None) -> float:
     )
 
 
+def _is_context_overflow(error: HTTPError) -> bool:
+    """Return whether a provider rejection reports context overflow.
+
+    The body is read once with a byte bound and never logged or echoed.
+    """
+    if error.code == PAYLOAD_TOO_LARGE_STATUS_CODE:
+        return True
+    if error.code != BAD_REQUEST_STATUS_CODE:
+        return False
+    try:
+        raw_body = error.read(MAX_ERROR_BODY_BYTES)
+    except (OSError, ValueError):
+        return False
+    body = raw_body.decode("utf-8", errors="replace").casefold()
+    return any(marker in body for marker in CONTEXT_OVERFLOW_MARKERS)
+
+
 def _request_once(request: Request) -> tuple[dict[str, Any], int | None, str | None]:
     try:
         with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
@@ -324,7 +382,7 @@ def _request_once(request: Request) -> tuple[dict[str, Any], int | None, str | N
             retry_after = error.headers.get("Retry-After") if error.headers else None
             return {}, error.code, retry_after
         message = f"provider request failed with HTTP {error.code}"
-        if error.code in CONTEXT_OVERFLOW_STATUS_CODES:
+        if _is_context_overflow(error):
             raise ContextOverflowError(message) from error
         raise ProviderError(message) from error
     except URLError as error:
@@ -364,12 +422,17 @@ def _send_large(profile: dict[str, Any], system_prompt: str, case_text: str,
 def call_model(system_prompt: str, mode: str, case_text: str) -> str:
     """Return the configured provider response for one evaluator request."""
     del mode
+    policy_prompt = system_prompt
+    system_prompt = system_prompt + REPORT_FORMAT_SUFFIX
     if len(system_prompt) + len(case_text) > MAX_INPUT_CHARS:
         raise InputTooLargeError("review input exceeds the configured limit")
     api_key = os.environ.get("MODEL_API_KEY")
     if not api_key:
         raise ProviderError("MODEL_API_KEY is not configured")
-    estimated_tokens = estimate_tokens(system_prompt, case_text)
+    # Routing budgets measure the policy and the review case. The suffix is
+    # a fixed contract note, and every profile's safety margin already
+    # covers it.
+    estimated_tokens = estimate_tokens(policy_prompt, case_text)
     profile = select_profile(estimated_tokens)
     large = _large_profile()
     if large is not None and large["name"] == profile["name"]:

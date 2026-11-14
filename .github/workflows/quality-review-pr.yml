@@ -114,15 +114,15 @@ jobs:
       ${{ !cancelled() && needs.resolve.outputs.found == 'true' &&
       needs.resolve.outputs.same_repo == 'true' &&
       needs.classify.outputs.change_class != 'docs' }}
-    # Euler 0.6.5. Keep the uses: pin and quality_ref on the same commit.
-    uses: abuzucom/euler/.github/workflows/quality-review.yml@1a3f67cba9d6ed7f45af4822f9ca27dd14db6a46
+    # Euler 0.9.0. Keep the uses: pin and quality_ref on the same commit.
+    uses: abuzucom/euler/.github/workflows/quality-review.yml@940c53a39b7cc7345b1f6232d43bec7c4d7623df
     with:
       pr_number: ${{ fromJSON(needs.resolve.outputs.number) }}
       base_sha: ${{ needs.resolve.outputs.base_sha }}
       head_sha: ${{ needs.resolve.outputs.head_sha }}
       pr_title: ${{ needs.resolve.outputs.title }}
       pr_body: ${{ needs.resolve.outputs.body }}
-      quality_ref: "1a3f67cba9d6ed7f45af4822f9ca27dd14db6a46"
+      quality_ref: "940c53a39b7cc7345b1f6232d43bec7c4d7623df"
       fail_on_block: true
       exclude_paths: ""
     secrets:
