@@ -31,13 +31,23 @@ def read_list_constants(tree: ast.Module) -> dict[str, list[str]]:
 
 
 def evaluate_list_expression(node: ast.expr, constants: dict[str, list[str]]) -> list[str]:
-    """Evaluate a list literal, a list constant name, or a sum of those."""
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+    """Evaluate a list literal, a list constant name, or a sum of those.
+
+    Raise ValueError for any other operator and for a part that is not a list. A string
+    part would otherwise let a substring match pass the PIL check.
+    """
+    if isinstance(node, ast.BinOp):
+        if not isinstance(node.op, ast.Add):
+            operator_name = type(node.op).__name__
+            raise ValueError(f"excludes uses the unsupported operator {operator_name}")
         left = evaluate_list_expression(node.left, constants)
         return left + evaluate_list_expression(node.right, constants)
     if isinstance(node, ast.Name):
         return constants[node.id]
-    return ast.literal_eval(node)
+    value = ast.literal_eval(node)
+    if not isinstance(value, list):
+        raise ValueError(f"excludes part is not a list: {type(value).__name__}")
+    return value
 
 
 def find_analysis_excludes(tree: ast.Module) -> ast.expr:
@@ -92,6 +102,35 @@ class SpecExcludesPillowTest(unittest.TestCase):
             if PILLOW_PACKAGE in imported_top_level_packages(path)
         )
         self.assertEqual(importers, [])
+
+
+class ListExpressionReaderTest(unittest.TestCase):
+    """The spec reader rejects excludes expressions it cannot read as a list."""
+
+    def _evaluate(self, source: str) -> list[str]:
+        """Evaluate one expression with a single list constant in scope."""
+        expression = ast.parse(source, mode="eval").body
+        return evaluate_list_expression(expression, {"KNOWN": ["setuptools"]})
+
+    def test_sum_of_literal_and_constant_reads_as_one_list(self) -> None:
+        """A literal list plus a list constant yields both names in order."""
+        self.assertEqual(self._evaluate('["readline"] + KNOWN'), ["readline", "setuptools"])
+
+    def test_string_literal_raises_value_error(self) -> None:
+        """A string never passes as a list. A substring match cannot pass the PIL check."""
+        with self.assertRaisesRegex(ValueError, "not a list"):
+            self._evaluate('"PIL"')
+
+    def test_tuple_literal_raises_value_error(self) -> None:
+        """A tuple is not the list form the spec uses."""
+        with self.assertRaisesRegex(ValueError, "not a list"):
+            self._evaluate('("PIL",)')
+
+    def test_operator_other_than_add_raises_value_error(self) -> None:
+        """Subtraction and repetition name no supported list form."""
+        for source in ('["PIL"] - KNOWN', '["PIL"] * 2'):
+            with self.subTest(source=source), self.assertRaisesRegex(ValueError, "operator"):
+                self._evaluate(source)
 
 
 if __name__ == "__main__":
