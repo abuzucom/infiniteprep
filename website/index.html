@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#0B0B0B">
+    <meta name="theme-color" content="#060A1A">
     <meta name="description" content="InfinitePrep helps DJs review and manage music metadata safely.">
     <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
     <link rel="canonical" href="https://infiniteprep.dev/">
@@ -12,11 +12,14 @@
     <style>
       :root {
         color-scheme: dark;
-        --background: #0B0B0B;
-        --surface: #242424;
-        --text: #EAE7E1;
-        --muted: #A6A39D;
-        --detail: #74777A;
+        /* The palette repeats the navy, royal blue, and sky blue of the logo. */
+        --background: #060A1A;
+        --surface: #0F1A33;
+        --text: #EEF3FF;
+        --muted: #A3B3D1;
+        --detail: #24365E;
+        --accent: #2EA8F2;
+        --accent-deep: #1E4FD8;
         --content-width: 1120px;
       }
 
@@ -43,7 +46,7 @@
       }
 
       a:focus-visible {
-        outline: 2px solid var(--text);
+        outline: 2px solid var(--accent);
         outline-offset: 5px;
       }
 
@@ -67,9 +70,28 @@
       }
 
       .site-name {
+        display: inline-flex;
+        gap: 10px;
+        align-items: center;
         font-size: 14px;
         font-weight: 500;
         text-decoration: none;
+      }
+
+      .site-mark {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+      }
+
+      .hero-logo {
+        display: block;
+        width: 100%;
+        max-width: 280px;
+        height: auto;
+        margin-bottom: 28px;
+        border: 1px solid var(--detail);
+        border-radius: 16px;
       }
 
       .nav-link {
@@ -89,7 +111,7 @@
       .eyebrow,
       .meta,
       .number {
-        color: var(--muted);
+        color: var(--accent);
         font-size: 12px;
         letter-spacing: 0.12em;
         text-transform: uppercase;
@@ -130,7 +152,7 @@
         min-height: 48px;
         align-items: center;
         padding: 0 20px;
-        background: var(--text);
+        background: var(--accent);
         color: var(--background);
         font-size: 14px;
         font-weight: 500;
@@ -139,12 +161,13 @@
 
       .text-link {
         font-size: 14px;
+        text-decoration-color: var(--accent);
         text-decoration-thickness: 1px;
       }
 
       .hero-note {
         padding: 20px 0 4px 22px;
-        border-left: 1px solid var(--detail);
+        border-left: 2px solid var(--accent-deep);
       }
 
       .hero-note p {
@@ -322,7 +345,7 @@
   </head>
   <body>
     <header class="wrap topbar">
-      <a class="site-name" href="#top">InfinitePrep</a>
+      <a class="site-name" href="#top"><img class="site-mark" src="favicon.png" alt="" width="28" height="28">InfinitePrep</a>
       <a class="nav-link" href="https://github.com/abuzucom/infiniteprep">View on GitHub</a>
     </header>
 
@@ -338,6 +361,7 @@
           </div>
         </div>
         <aside class="hero-note" aria-label="Project status">
+          <img class="hero-logo" src="logo.png" alt="InfinitePrep logo" width="576" height="576">
           <p class="meta">Today</p>
           <p>Build a clear workflow from file inventory to reviewed tags, verified writes, and recovery.</p>
         </aside>
