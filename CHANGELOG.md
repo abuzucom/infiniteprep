@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.59.0] (2026-11-14)
+## [0.59.1] (2026-11-14)
 
 ### Changed
 
@@ -13,6 +13,26 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `website/logo.png` holds a byte copy of `docs/infiniteprep-logo.png`. The hero note displays it. The header shows the favicon beside the site name.
   - The page colors move from neutral gray to the logo navy, royal blue, and sky blue. Labels, the primary links, and the focus outline use the sky blue accent.
 - `test_the_site_folder_holds_the_five_site_files` replaces the four-file name in `tests/test_pages_deployment_workflow.py`. `test_the_page_shows_the_project_logo` checks the logo copy and its image tag.
+- The two reusable review workflows move to the releases the pinned commits
+  name.
+  - The foucault caller moves to `3ec8d0e3`. The new pin names foucault 3.8.1.
+    Both caller jobs keep the same inputs and the same permissions.
+  - The euler caller moves to `940c53a3`. The new pin names euler 0.9.0.
+  - The foucault adapter files are byte copies of the pinned commit.
+    `ci/build_retry_case.py` is new. A response that fails validation retries
+    with the validator problems in trusted context. `REVIEW_TARGET` stays
+    byte-identical.
+  - `ci/model_providers.json` drops the unused `kimi-k2.7-code` profile and
+    the `large_input_provider` key. `ollama-large` with `minimax-m3.1-flash`
+    is the one active profile. Input above its budget still ends at exit code
+    3 and a fixed `NEEDS-HUMAN` verdict.
+  - `tests/test_review_wiring.py` pins the new commits and the six adapter
+    digests. `docs/pr-review.md` records the new releases, the adapter list,
+    and the capacity path.
+  - `docs/dependabot.md` states the reusable workflow rule without the stale
+    euler claim.
+- The version advances to 0.59.1. `pyproject.toml` and
+  `src/infiniteprep/__init__.py` hold the new value.
 
 ## [0.58.0] (2026-11-13)
 
