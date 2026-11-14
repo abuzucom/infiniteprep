@@ -5,6 +5,15 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.59.0] (2026-11-14)
+
+### Changed
+
+- The landing site shows the InfinitePrep logo and uses the logo palette.
+  - `website/logo.png` holds a byte copy of `docs/infiniteprep-logo.png`. The hero note displays it. The header shows the favicon beside the site name.
+  - The page colors move from neutral gray to the logo navy, royal blue, and sky blue. Labels, the primary links, and the focus outline use the sky blue accent.
+- `test_the_site_folder_holds_the_five_site_files` replaces the four-file name in `tests/test_pages_deployment_workflow.py`. `test_the_page_shows_the_project_logo` checks the logo copy and its image tag.
+
 ## [0.58.0] (2026-11-13)
 
 ### Added
