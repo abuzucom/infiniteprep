@@ -19,6 +19,9 @@ from infiniteprep.services.reconciliation import ReconciliationService
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "itunes_search"
 FILE_ID = "file-1"
+RATE_LIMIT_INTERVAL_SEC = 0.2
+# The Windows scheduler returns from a sleep early by up to one timer tick.
+RATE_LIMIT_TOLERANCE_SEC = 0.02
 
 
 def _recorded(name: str) -> dict[str, Any]:
@@ -136,7 +139,7 @@ def test_the_rate_limit_holds_the_next_request_back() -> None:
     adapter = _adapter(
         _repository(),
         _recorded("match_with_genre_and_date"),
-        min_interval_sec=0.05,
+        min_interval_sec=RATE_LIMIT_INTERVAL_SEC,
     )
 
     started = time.monotonic()
@@ -144,7 +147,7 @@ def test_the_rate_limit_holds_the_next_request_back() -> None:
     adapter.search(MetadataSearchQuery(artist="Deep Dish", title="Flashdance"), file_id=FILE_ID)
     elapsed = time.monotonic() - started
 
-    assert elapsed >= 0.05
+    assert elapsed >= RATE_LIMIT_INTERVAL_SEC - RATE_LIMIT_TOLERANCE_SEC
 
 
 def test_the_request_carries_the_shared_user_agent_and_the_search_terms() -> None:
