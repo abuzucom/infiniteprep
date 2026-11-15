@@ -5,10 +5,14 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.60.4] (2026-11-15)
+## [0.61.0] (2026-11-15)
 
 ### Added
 
+- Added fake-lossless audio detection under `src/infiniteprep/services/fake_lossless.py` (D332, issue 99). The detector analyzes lossless tracks for spectral cutoff, MP3 lowpass shelf, and AAC SBR gap traces behind a pluggable `FakeLosslessDetector` interface.
+- Added user-selectable `fake_lossless_method` in `AppSettings`, `AnalysisTab`, and `SettingsDialog`.
+- Wired fake-lossless diagnostics into `WaveformAnalysisPool`, `DetailPanel`, `MainWindow`, and non-blocking transcode preflight notices in `action_handlers.py`.
+- Added generated-fixture tests in `tests/unit/test_fake_lossless.py`.
 - `docs/decision-register.md` records D402 to D406. The entries close the issue 222 source research. MusicBrainz keeps CC0 core data only. Cover Art Archive supplies artwork. iTunes Search supplies a genre and release-date fallback. Deezer leaves the roadmap.
 - The Settings dialog splits into tabs, one module per area (D351, issue 176).
   - The new `ui/settings/` package holds one tab module each for General, Playback, Analysis, Transcode, Identification, Updates, and Storage. A later setting edits one tab module.
@@ -22,7 +26,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tests/unit/test_synthetic_audio.py` passes each container through its app reader. The ADTS test walks the frame chain because the app has no ADTS reader. `tests/unit/test_synthetic_audio_opus_toc.py` pins the Opus TOC bytes to RFC 6716.
 - `packaging/release.py` gains `RELEASE_JOB_PERMISSIONS`, a read-only mapping of the release job permissions (D355).
 - `tests/test_release_constants.py` pins the six release package names, the Sigstore bundle names, and the five release job permissions by hand (D355). The file also checks that `RELEASE_JOB_PERMISSIONS` matches the release job permissions in `build-packages.yml`.
-- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, to 0.60.3 for the source research decisions, and to 0.60.4 for the release test constants. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, to 0.60.3 for the source research decisions, to 0.60.4 for the release test constants, and to 0.61.0 for fake-lossless audio detection. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 
 ### Changed
 

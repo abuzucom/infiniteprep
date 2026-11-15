@@ -25,6 +25,7 @@ from infiniteprep.ui.audio_player import (
     MAX_PREVIEW_DURATION_SEC,
     MAX_PREVIEW_FILE_BYTES,
     STREAM_BLOCK_FRAMES,
+    bounded_frame_count,
 )
 
 ANALYZER_VERSION = 1
@@ -118,7 +119,12 @@ def _decode_waveform(source: Path, cancel_event: threading.Event | None = None) 
     with sf.SoundFile(source) as audio:
         if audio.samplerate <= MIN_SAMPLE_RATE_HZ:
             raise ValueError("Sample rate must exceed 6000 Hz. Resample the track first.")
-        frame_count = min(audio.frames, int(audio.samplerate * MAX_PREVIEW_DURATION_SEC))
+        frame_count = bounded_frame_count(
+            int(audio.samplerate),
+            int(audio.channels),
+            int(audio.frames),
+            MAX_PREVIEW_DURATION_SEC,
+        )
         duration = frame_count / audio.samplerate
         count = math.ceil(frame_count * COLUMNS_PER_SECOND / audio.samplerate)
         peaks = np.zeros((len(FIELDS), count), dtype=np.float32)
