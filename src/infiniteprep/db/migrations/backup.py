@@ -177,14 +177,17 @@ def create_verified_backup(
     """Copy the library beside itself, verify the copy, and return the backup path.
 
     The copy carries its own record. One rename publishes both. The previous backup stays in
-    place until the new copy passes verification.
+    place until the new copy passes verification. source may hold the write lock. The copy
+    then reads through a second connection, since SQLite refuses a backup from a connection
+    that holds the write lock. The lock still keeps other writers out during the copy.
     """
     backup = backup_path_for(db_path)
     # A unique name per run keeps two instances from writing one temporary file.
     temp = backup.with_name(f"{backup.name}.{uuid.uuid4().hex}{TEMP_SUFFIX}")
     counts = table_row_counts(source)
     try:
-        copy_database(source, temp)
+        with closing(sqlite3.connect(db_path)) as reader:
+            copy_database(reader, temp)
         _record_in_copy(temp, source_version, counts)
         verify_backup_file(temp, expected_version=source_version, expected_counts=counts)
         os.replace(temp, backup)
