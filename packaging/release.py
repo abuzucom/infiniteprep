@@ -23,8 +23,9 @@ import hashlib
 import re
 import sys
 import tomllib
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final
 
 ROOT: Final[Path] = Path(__file__).resolve().parent.parent
@@ -45,6 +46,18 @@ ASSET_SUFFIXES: Final[tuple[str, ...]] = (
     "macos-arm64.dmg",
 )
 BUNDLE_SUFFIX: Final[str] = ".sigstore.json"
+# The permissions of the release job in build-packages, the only job that writes
+# (D315, D325, D328). The release tests compare the workflow against this mapping.
+# The proxy keeps any caller from widening the expected set in place.
+RELEASE_JOB_PERMISSIONS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "contents": "write",
+        "actions": "read",
+        "id-token": "write",
+        "attestations": "write",
+        "artifact-metadata": "write",
+    }
+)
 VERSION_LINE: Final[re.Pattern[str]] = re.compile(r'^__version__ = "([^"]+)"$', re.MULTILINE)
 # A CHANGELOG release heading, such as "## [0.47.0] (2026-11-08)".
 RELEASE_HEADING: Final[re.Pattern[str]] = re.compile(r"^## \[([^\]]+)\]", re.MULTILINE)

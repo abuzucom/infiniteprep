@@ -23,16 +23,6 @@ PYPROJECT_TEXT = f'[project]\nname = "infiniteprep"\nversion = "{VERSION}"\n'
 CHANGELOG_TEXT = f"# Changelog\n\n## [{VERSION}] (2026-11-09)\n\n- The feature.\n"
 # Three MiB spans several reads for any chunked digest.
 LARGE_FILE_BYTES = 3 * 1024 * 1024 + 17
-SIX_ASSETS = (
-    f"InfinitePrep-{VERSION}-windows-x64-portable.zip",
-    f"InfinitePrep-{VERSION}-windows-x64-setup.exe",
-    f"InfinitePrep-{VERSION}-linux-x86_64.AppImage",
-    f"InfinitePrep-{VERSION}-linux-x86_64.tar.gz",
-    f"InfinitePrep-{VERSION}-linux-x86_64-portable.tar.gz",
-    f"InfinitePrep-{VERSION}-macos-arm64.dmg",
-)
-SIX_BUNDLES = tuple(f"{name}.sigstore.json" for name in SIX_ASSETS)
-TWELVE_ASSETS = SIX_ASSETS + SIX_BUNDLES
 
 
 def _load_release() -> ModuleType:
@@ -45,6 +35,11 @@ def _load_release() -> ModuleType:
 
 
 RELEASE = _load_release()
+# The expected names come from the release constants (D355).
+# tests/test_release_constants.py pins the current names by hand.
+PACKAGES = tuple(sorted(RELEASE.expected_packages(VERSION)))
+BUNDLES = tuple(sorted(RELEASE.expected_bundles(VERSION)))
+PACKAGES_AND_BUNDLES = PACKAGES + BUNDLES
 
 
 def _make_repo(root: Path, init: str | None, pyproject: str | None, changelog: str | None) -> None:
@@ -145,12 +140,12 @@ class FileDigestTest(unittest.TestCase):
 
 
 class AssetNameTest(unittest.TestCase):
-    """check-assets requires the six package names and nothing else."""
+    """check-assets requires the expected package names and nothing else."""
 
-    def test_six_expected_names_pass(self) -> None:
-        """The six names for the version pass."""
+    def test_expected_package_names_pass(self) -> None:
+        """The expected package names for the version pass."""
         with tempfile.TemporaryDirectory() as folder:
-            _make_assets(Path(folder), SIX_ASSETS)
+            _make_assets(Path(folder), PACKAGES)
             self.assertEqual(RELEASE.asset_problems(Path(folder), VERSION), [])
             exit_code, _ = _run_main(["check-assets", folder, VERSION])
         self.assertEqual(exit_code, 0)
@@ -158,33 +153,33 @@ class AssetNameTest(unittest.TestCase):
     def test_missing_name_fails(self) -> None:
         """A missing package is named and fails the check."""
         with tempfile.TemporaryDirectory() as folder:
-            _make_assets(Path(folder), SIX_ASSETS[1:])
+            _make_assets(Path(folder), PACKAGES[1:])
             problems = RELEASE.asset_problems(Path(folder), VERSION)
             exit_code, output = _run_main(["check-assets", folder, VERSION])
         self.assertEqual(len(problems), 1, problems)
-        self.assertIn(SIX_ASSETS[0], problems[0])
+        self.assertIn(PACKAGES[0], problems[0])
         self.assertEqual(exit_code, RELEASE.CHECK_FAILED)
-        self.assertIn(SIX_ASSETS[0], output)
+        self.assertIn(PACKAGES[0], output)
 
     def test_wrong_version_fails(self) -> None:
-        """Six packages of another version all fail, in both directions."""
+        """Packages of another version all fail, in both directions."""
         with tempfile.TemporaryDirectory() as folder:
-            _make_assets(Path(folder), tuple(name.replace(VERSION, "1.1.9") for name in SIX_ASSETS))
+            _make_assets(Path(folder), tuple(name.replace(VERSION, "1.1.9") for name in PACKAGES))
             problems = RELEASE.asset_problems(Path(folder), VERSION)
-        self.assertEqual(len(problems), 2 * len(SIX_ASSETS), problems)
+        self.assertEqual(len(problems), 2 * len(PACKAGES), problems)
 
     def test_extra_name_fails(self) -> None:
         """An extra file is named and fails the check."""
         with tempfile.TemporaryDirectory() as folder:
-            _make_assets(Path(folder), (*SIX_ASSETS, "stray.txt"))
+            _make_assets(Path(folder), (*PACKAGES, "stray.txt"))
             problems = RELEASE.asset_problems(Path(folder), VERSION)
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("stray.txt", problems[0])
 
-    def test_twelve_expected_names_pass(self) -> None:
-        """The six packages and six Sigstore bundles pass (D328)."""
+    def test_expected_package_and_bundle_names_pass(self) -> None:
+        """The packages and the matching Sigstore bundles pass (D328)."""
         with tempfile.TemporaryDirectory() as folder:
-            _make_assets(Path(folder), TWELVE_ASSETS)
+            _make_assets(Path(folder), PACKAGES_AND_BUNDLES)
             problems = RELEASE.asset_problems(Path(folder), VERSION, require_bundles=True)
             self.assertEqual(problems, [])
             exit_code, _ = _run_main(["check-assets", folder, VERSION, "--require-bundles"])
@@ -193,13 +188,13 @@ class AssetNameTest(unittest.TestCase):
     def test_missing_bundle_fails(self) -> None:
         """A missing bundle is named and fails when bundles are required."""
         with tempfile.TemporaryDirectory() as folder:
-            _make_assets(Path(folder), (*SIX_ASSETS, *SIX_BUNDLES[1:]))
+            _make_assets(Path(folder), (*PACKAGES, *BUNDLES[1:]))
             problems = RELEASE.asset_problems(Path(folder), VERSION, require_bundles=True)
             exit_code, output = _run_main(["check-assets", folder, VERSION, "--require-bundles"])
         self.assertEqual(len(problems), 1, problems)
-        self.assertIn(SIX_BUNDLES[0], problems[0])
+        self.assertIn(BUNDLES[0], problems[0])
         self.assertEqual(exit_code, RELEASE.CHECK_FAILED)
-        self.assertIn(SIX_BUNDLES[0], output)
+        self.assertIn(BUNDLES[0], output)
 
 
 class ReleaseJobReviewFixTest(unittest.TestCase):
