@@ -18,10 +18,12 @@ from urllib.parse import urlparse
 
 from infiniteprep import storage_paths
 from infiniteprep.domain.enums import KeyDisplayNotation
+from infiniteprep.domain.tag_output import BPM_DECIMAL_PLACES, TagOutputFormat
 
 logger = logging.getLogger(__name__)
 DEFAULT_FAKE_LOSSLESS_METHOD: Final[str] = "signal_analysis"
 SUPPORTED_FAKE_LOSSLESS_METHODS: Final[frozenset[str]] = frozenset({DEFAULT_FAKE_LOSSLESS_METHOD})
+SUPPORTED_TAG_KEY_NOTATIONS: Final[frozenset[str]] = frozenset(KeyDisplayNotation)
 DEFAULT_WAVEFORM_ZOOM_SECONDS: Final[int] = 8
 SUPPORTED_WAVEFORM_ZOOM_SECONDS: Final[tuple[int, ...]] = (
     2,
@@ -174,6 +176,9 @@ class AppSettings:
     waveform_zoom_seconds: int = DEFAULT_WAVEFORM_ZOOM_SECONDS
     usb_reserve_percent: float = 0.0  # Percent of the estimated export size.
     usb_reserve_bytes: int = 0
+    tag_key_notation: str = KeyDisplayNotation.CAMELOT.value
+    tag_key_leading_zero: bool = False
+    tag_bpm_decimals: int = 0
 
 
 def _find_setting_value_problem(name: str, value: object, default: object) -> str | None:
@@ -184,6 +189,10 @@ def _find_setting_value_problem(name: str, value: object, default: object) -> st
         return "an unsupported waveform zoom duration"
     if name == "fake_lossless_method" and value not in SUPPORTED_FAKE_LOSSLESS_METHODS:
         return "an unsupported fake-lossless detection method"
+    if name == "tag_key_notation" and value not in SUPPORTED_TAG_KEY_NOTATIONS:
+        return "an unsupported written key notation"
+    if name == "tag_bpm_decimals" and value not in BPM_DECIMAL_PLACES:
+        return "an unsupported BPM precision"
     return _find_numeric_setting_problem(name, value)
 
 
@@ -226,6 +235,15 @@ class SettingsManager:
         """Load AppSettings from disk or return defaults if not present."""
         with self._lock:
             return self._load_unlocked()
+
+    def load_tag_output(self) -> TagOutputFormat:
+        """Read the saved key and BPM tag output preferences."""
+        settings = self.load()
+        return TagOutputFormat(
+            KeyDisplayNotation(settings.tag_key_notation),
+            settings.tag_key_leading_zero,
+            settings.tag_bpm_decimals,
+        )
 
     def _load_unlocked(self) -> AppSettings:
         """Load settings while the manager lock is held."""

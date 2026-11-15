@@ -95,7 +95,7 @@ class SettingsDialog(QDialog):
         # Settings from an older file can lack a theme. This module resolves the
         # fallback theme and passes the result to the General tab.
         theme = getattr(settings, "theme", DEFAULT_DARK_THEME)
-        self.general_tab = GeneralTab(theme)
+        self.general_tab = GeneralTab(theme, settings=settings)
         self.playback_tab = PlaybackTab()
         self.analysis_tab = AnalysisTab(settings)
         self.transcode_tab = TranscodeTab(settings)
