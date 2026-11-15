@@ -295,6 +295,7 @@ def test_failed_backup_stops_migration(
     library: Path, opened: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A backup that fails verification stops every step."""
+
     def refuse_copy(source: sqlite3.Connection, target: Path) -> None:
         """Simulate a copy that leaves an unreadable file."""
         _ = source

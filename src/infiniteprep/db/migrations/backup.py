@@ -172,8 +172,7 @@ def _is_count_map(value: object) -> bool:
     if not isinstance(value, dict):
         return False
     return all(
-        isinstance(name, str) and type(count) is int and count >= 0
-        for name, count in value.items()
+        isinstance(name, str) and type(count) is int and count >= 0 for name, count in value.items()
     )
 
 
