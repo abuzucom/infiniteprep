@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from infiniteprep.db.connection import DatabaseManager
-from infiniteprep.db.migrations import LATEST_VERSION, MIGRATIONS, ROW_COUNT_QUERIES
+from infiniteprep.db.migrations import LATEST_VERSION, MIGRATIONS
 from infiniteprep.db.migrations.backup import (
     RECORD_TABLE,
     BackupVerificationError,
@@ -50,7 +50,7 @@ def library(tmp_path: Path) -> Path:
 
 def test_backup_holds_its_record_and_no_sidecar_exists(library: Path) -> None:
     """The record travels inside the backup file. No second file needs publishing."""
-    expected_counts = dict.fromkeys(ROW_COUNT_QUERIES, 0)
+    expected_counts = dict.fromkeys(MIGRATIONS[0].row_count_queries, 0)
     expected_counts["source_groups"] = 1
 
     assert read_backup_record(library) == (0, expected_counts)

@@ -48,6 +48,8 @@
 
 These modules exist under `src/infiniteprep/` with tests. The desktop launcher and `evaluate-sample` do not call these modules.
 
+- Library storage for ordered playlists and unique-track crates in folders up to eight levels deep.
+  Playlist sorting uses key and BPM. One undo restores the prior order across restarts.
 - Chromaprint (`fpcalc`) and AcoustID fingerprinting, with the consent-gated, SHA-256 verified `FpcalcBootstrapService` for Windows and macOS.
 - MusicBrainz (`ws/2`) and Discogs adapters with rate limits of 1 request per second and 60 requests per minute, plus a SQLite TTL response cache.
 - Closed-world LLM arbitration through Ollama or an OpenAI-compatible endpoint. `ClosedWorldValidator` limits the model to the supplied candidates. `OllamaBootstrapService` requires explicit consent.
@@ -297,9 +299,8 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
      The batch applies the previewed plans when its turn comes. Each write first
      records an in-progress journal entry, then takes a verified backup.
      Each write keeps its own backup, named with its operation id.
-   - The tags go to a copy next to the file. The copy replaces the original
-     only after it reads back every written tag. A failed write leaves the
-     original untouched and records the journal entry as rolled back.
+   - The app verifies the staged audio payload with SHA-256 and reads back tags before replacement.
+     On a payload verification failure the app discards the copy and records a failed journal entry.
    - Preflight blocks a file with more than one hard link or another owner.
    - A crash or power loss can stop a write before it finishes. At the next
      launch, **Recover Interrupted Writes** lists each such write.

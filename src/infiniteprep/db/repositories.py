@@ -11,6 +11,7 @@ from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from infiniteprep.db.collections import CollectionRepository
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.domain.enums import (
     ApprovalOrigin,
@@ -91,12 +92,14 @@ class Repository:
         self.db = db
         # Each thread has its own connection, so batch state is per thread too.
         self._batch_state = threading.local()
+        self.collections = CollectionRepository(self)
 
     @contextmanager
-    def batch(self) -> Iterator[RepositoryBatch]:
+    def batch(self, *, immediate: bool = False) -> Iterator[RepositoryBatch]:
         """Hold every write on this thread in one transaction until the block ends.
 
         A clean exit commits. Any exception rolls the whole batch back and propagates.
+        Use immediate when writes depend on data read earlier in the same transaction.
         """
         if getattr(self._batch_state, "active", False):
             raise RuntimeError(
@@ -111,15 +114,14 @@ class Repository:
                 "This thread's connection has an uncommitted transaction; commit or roll "
                 "it back before opening a batch."
             )
-        conn.execute("BEGIN")
+        conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
         self._batch_state.active = True
         try:
             yield RepositoryBatch(conn)
+            conn.commit()
         except BaseException:
             self._rollback_batch(conn)
             raise
-        else:
-            conn.commit()
         finally:
             self._batch_state.active = False
 

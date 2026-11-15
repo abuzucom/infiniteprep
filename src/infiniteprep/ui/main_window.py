@@ -37,6 +37,7 @@ from infiniteprep.domain.enums import (
     format_canonical_key,
     parse_key_string,
 )
+from infiniteprep.domain.metadata_values import resolve_effective_value
 from infiniteprep.domain.models import FileAsset
 from infiniteprep.services.import_service import ImportBatchReport, ImportService
 from infiniteprep.services.job_orchestrator import BatchKind, BatchState, QueuedBatch
@@ -422,9 +423,7 @@ class MainWindow(QMainWindow):
         field_name: str,
     ) -> str:
         """Return approved value, top proposal, or existing standard tag."""
-        if field_name in approved:
-            return approved[field_name].approved_value
-        return top_by_field.get(field_name) or std.get(field_name, "")
+        return resolve_effective_value(std, approved, top_by_field, field_name)
 
     def _format_key_cell(self, raw_key: str) -> str:
         """Format musical key according to active KeyDisplayNotation."""

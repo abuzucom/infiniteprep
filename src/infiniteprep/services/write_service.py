@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from infiniteprep import storage_paths
+from infiniteprep.adapters.metadata_io.audio_payload import AudioPayloadVerificationError
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
     SourceChangedDuringWriteError,
@@ -252,8 +253,8 @@ class WriteService:
     def _roll_back_failed_write(self, pending: ChangeRecord, failure: Exception) -> None:
         """Record a failed write as FAILED or ROLLED_BACK, or keep it pending for recovery."""
         pending.error_message = f"{failure.__class__.__name__}: {failure}"
-        if isinstance(failure, SourceChangedDuringWriteError):
-            # The source holds another program's newer edit and none of this write.
+        if isinstance(failure, (SourceChangedDuringWriteError, AudioPayloadVerificationError)):
+            # The staged write never reached the source. Restoring could overwrite a newer file.
             pending.operation_status = OperationStatus.FAILED
             self.repo.upsert_change_record(pending)
             return

@@ -5,11 +5,14 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.63.0] (2026-11-15)
+## [0.64.0] (2026-11-15)
 
 ### Added
 
 - USB exports persist `.infiniteprep/manifest.in-progress.json` and `.infiniteprep/manifest.json` with a canonical SHA-256 `My Tags` digest (D116 to D121, D139 to D148, D179, D200, issue 157). The computer-side recovery journal at `usb_recovery_journal.json` matches reconnecting USB drives and gates changed paths behind confirmation (D166, D191, D192, issue 157). `UsbRecoveryDialog` offers Resume, Restore, and Leave unchanged actions with plain-text drive labels. `StorageTab` adds 30-day expiry settings, 1-day advance warning notices, launch overdue cleanup notices, and manual journal cleanup (D193 to D198, issue 157).
+- Library storage supports named playlists, crates, and nested folders (issue 139).
+  - Playlists keep track order and support optional repeats. Crates contain unique tracks.
+  - Playlists can sort by key or BPM and restore the previous order after a restart.
 - The README roadmap lists the 20 stage issues in order, with links and a pointer to the task index (D356, issue 179). The 24-item list goes away. The settings walkthrough names the field on each Settings tab.
 
 - Library schema migrations track the schema version in SQLite `user_version` (D349, issue 175).
@@ -45,6 +48,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- MP3, FLAC, WAV, and AIFF tag writes verify the audio payload with SHA-256 (issue 131).
+  A mismatch discards the staged write, preserves the source, and records a failure.
 - The Windows, macOS, and Linux bundles no longer carry pytest or pygments.
   - scipy imports pytest inside `PytestTester`. The pytest hook collected all of pytest and pygments into every bundle. The app never runs the scipy test runner and never imports either package.
   - `infiniteprep.spec` now excludes `pytest`, `_pytest`, and `pygments` through `TEST_ONLY_PACKAGES`. Both packages stay dev dependencies for the test suite.
