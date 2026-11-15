@@ -14,6 +14,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
+from infiniteprep import storage_paths
 from infiniteprep.services.usb.manifest import (
     ExportScope,
     UsbExportManifest,
@@ -84,9 +85,7 @@ class UsbExpiryScanResult:
 
 
 def _default_journal_path() -> Path:
-    """Resolve the default computer journal path lazily to avoid eager UI/path imports."""
-    from infiniteprep import storage_paths
-
+    """Resolve the default computer journal path."""
     return storage_paths.current().data_dir / JOURNAL_FILE_NAME
 
 

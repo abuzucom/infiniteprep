@@ -120,11 +120,7 @@ class UsbRecoveryDialog(QDialog):
     ) -> None:
         """Add plain-text drive, volume, export, and match-reason labels."""
         inspection = match.candidate.inspection
-        drive = (
-            inspection.drive
-            if inspection is not None
-            else match.entry.drive_identity
-        )
+        drive = inspection.drive if inspection is not None else match.entry.drive_identity
         self._add_plain_label(layout, _describe_scope(match.entry))
         self._add_plain_label(layout, _describe_drive_identity(drive))
         self._add_plain_label(layout, _describe_volume(match))

@@ -123,9 +123,7 @@ def compute_my_tags_digest(
         key=lambda row: str(row["relative_path"]),
     )
     payload = {"assignments": assign_rows, "vocabulary": vocab_rows}
-    canonical = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    )
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 

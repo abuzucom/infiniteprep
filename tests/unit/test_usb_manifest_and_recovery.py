@@ -375,9 +375,10 @@ class UsbReconnectChoiceTests(unittest.TestCase):
     def test_unconfirmed_choice_raises_when_confirmation_required(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
+            partition = build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),))
             inspection = build_inspection(
                 drive=build_drive(model="Moved Port"),
-                partitions=(build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),)),),
+                partitions=(partition,),
             )
             match = store.match_reconnected_target(
                 TargetCandidate(name="sdb", inspection=inspection, error=None)
@@ -394,9 +395,10 @@ class UsbReconnectChoiceTests(unittest.TestCase):
     def test_leave_unchanged_preserves_marker_and_journal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
+            partition = build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),))
             inspection = build_inspection(
                 drive=entry.drive_identity,
-                partitions=(build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),)),),
+                partitions=(partition,),
             )
             match = store.match_reconnected_target(
                 TargetCandidate(name="sdb", inspection=inspection, error=None)
@@ -414,9 +416,10 @@ class UsbReconnectChoiceTests(unittest.TestCase):
     def test_resume_removes_usb_in_progress_marker_and_keeps_journal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
+            partition = build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),))
             inspection = build_inspection(
                 drive=entry.drive_identity,
-                partitions=(build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),)),),
+                partitions=(partition,),
             )
             match = store.match_reconnected_target(
                 TargetCandidate(name="sdb", inspection=inspection, error=None)
@@ -434,9 +437,10 @@ class UsbReconnectChoiceTests(unittest.TestCase):
     def test_restore_runs_callback_removes_marker_and_keeps_journal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
+            partition = build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),))
             inspection = build_inspection(
                 drive=entry.drive_identity,
-                partitions=(build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),)),),
+                partitions=(partition,),
             )
             match = store.match_reconnected_target(
                 TargetCandidate(name="sdb", inspection=inspection, error=None)
@@ -458,7 +462,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
 
 
 class UsbRecoveryExpiryTests(unittest.TestCase):
-    """Configurable 30-day default expiry, 1-day warning, overdue launch cleanup, and manual cleanup."""
+    """Verify 30-day default expiry, 1-day warning, overdue cleanup, and manual deletion."""
 
     def test_default_recovery_expiry_constant_is_30_days(self) -> None:
         self.assertEqual(DEFAULT_RECOVERY_EXPIRY_DAYS, 30)
