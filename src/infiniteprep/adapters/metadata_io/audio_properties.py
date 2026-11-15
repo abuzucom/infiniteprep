@@ -21,6 +21,9 @@ CHUNK_HEADER_SIZE: Final[int] = 8
 FORM_HEADER_SIZE: Final[int] = 12
 MAX_CHUNKS: Final[int] = 4096
 ID3_CHUNK_IDS: Final[frozenset[bytes]] = frozenset({b"id3 ", b"ID3 "})
+WAV_FORM_TYPES: Final[frozenset[bytes]] = frozenset({b"WAVE"})
+AIFF_FORM_TYPES: Final[frozenset[bytes]] = frozenset({b"AIFF", b"AIFC"})
+AIFF_SSND_HEADER_SIZE: Final[int] = 8
 # A WAV fmt chunk holds format tag, channels, rate, byte rate, block align, and bits per sample.
 WAV_FMT_LAYOUT: Final[str] = "<HHIIHH"
 WAV_FMT_SIZE: Final[int] = struct.calcsize(WAV_FMT_LAYOUT)
@@ -146,7 +149,7 @@ class _MpegHeader:
 
 def read_wav_stream(data: bytes) -> StreamRead:
     """Read WAV properties from the fmt and data chunks, plus the first id3 chunk body."""
-    chunks = _walk_form(data, b"RIFF", frozenset({b"WAVE"}), "<I")
+    chunks = _walk_form(data, b"RIFF", WAV_FORM_TYPES, "<I")
     fmt = _first_chunk(chunks, frozenset({b"fmt "}))
     if fmt is None or fmt.size < WAV_FMT_SIZE:
         raise AudioPropertiesError("The WAV file has no usable fmt chunk; the file is damaged.")
@@ -160,7 +163,7 @@ def read_wav_stream(data: bytes) -> StreamRead:
 
 def read_aiff_stream(data: bytes) -> StreamRead:
     """Read AIFF or AIFC properties from the COMM chunk, plus the first ID3 chunk body."""
-    chunks = _walk_form(data, b"FORM", frozenset({b"AIFF", b"AIFC"}), ">I")
+    chunks = _walk_form(data, b"FORM", AIFF_FORM_TYPES, ">I")
     comm = _first_chunk(chunks, frozenset({b"COMM"}))
     if comm is None or comm.size < AIFF_COMM_FIELDS + EXTENDED_FLOAT_SIZE:
         raise AudioPropertiesError("The AIFF file has no usable COMM chunk; the file is damaged.")
@@ -173,18 +176,78 @@ def read_aiff_stream(data: bytes) -> StreamRead:
 
 def read_flac_stream(data: bytes) -> StreamRead:
     """Read FLAC properties from STREAMINFO, plus the first Vorbis comment block body."""
-    start = mp3_audio_offset(data)
-    if data[start : start + len(FLAC_MAGIC)] != FLAC_MAGIC:
-        raise AudioPropertiesError("Data is not a FLAC stream; check the file type.")
-    blocks, audio_offset = _walk_flac_blocks(data, start + len(FLAC_MAGIC))
-    if not blocks or blocks[0][0] != FLAC_STREAMINFO or blocks[0][2] < FLAC_STREAMINFO_SIZE:
-        raise AudioPropertiesError("The FLAC stream does not start with STREAMINFO.")
+    blocks, audio_offset = _read_flac_layout(data)
     info_start = blocks[0][1]
     info = data[info_start : info_start + FLAC_STREAMINFO_SIZE]
     properties = _decode_streaminfo(info, len(data) - audio_offset)
     comment = next((block for block in blocks if block[0] == FLAC_VORBIS_COMMENT), None)
     tag_body = data[comment[1] : comment[1] + comment[2]] if comment else None
     return StreamRead(properties, tag_body)
+
+
+def _read_flac_layout(data: bytes) -> tuple[list[tuple[int, int, int]], int]:
+    """Locate the FLAC metadata blocks and the start of the encoded audio."""
+    start = mp3_audio_offset(data)
+    if data[start : start + len(FLAC_MAGIC)] != FLAC_MAGIC:
+        raise AudioPropertiesError("Data is not a FLAC stream; check the file type.")
+    blocks, audio_offset = _walk_flac_blocks(data, start + len(FLAC_MAGIC))
+    if not blocks or blocks[0][0] != FLAC_STREAMINFO or blocks[0][2] < FLAC_STREAMINFO_SIZE:
+        raise AudioPropertiesError("The FLAC stream does not start with STREAMINFO.")
+    return blocks, audio_offset
+
+
+def find_flac_payload(data: bytes) -> tuple[tuple[int, int], ...]:
+    """Return the byte range after the FLAC metadata blocks."""
+    _, start = _read_flac_layout(data)
+    return ((start, len(data)),)
+
+
+def find_mp3_payload(data: bytes) -> tuple[tuple[int, int], ...]:
+    """Return a byte range that covers all MPEG frames outside leading ID3v2 tags."""
+    start = mp3_audio_offset(data)
+    _find_first_frame(data, start)
+    # The tag writer only replaces leading ID3v2. Include the rest of the file so gaps
+    # or trailing bytes cannot hide a changed frame.
+    return ((start, len(data)),)
+
+
+def find_wav_payload(data: bytes) -> tuple[tuple[int, int], ...]:
+    """Return the byte ranges of every WAVE data chunk and waveform list."""
+    chunks = _walk_form(data, b"RIFF", WAV_FORM_TYPES, "<I", verify_bounds=True)
+    spans = tuple(
+        (chunk.start - CHUNK_HEADER_SIZE, chunk.start + chunk.size)
+        for chunk in chunks
+        if chunk.chunk_id == b"data"
+        or (
+            chunk.chunk_id == b"LIST"
+            and chunk.size >= UINT32_SIZE
+            and data[chunk.start : chunk.start + UINT32_SIZE] == b"wavl"
+        )
+    )
+    if not spans:
+        raise AudioPropertiesError("The WAV file has no waveform data.")
+    return spans
+
+
+def find_aiff_payload(data: bytes) -> tuple[tuple[int, int], ...]:
+    """Return the sound data ranges after each AIFF or AIFC sound chunk's offset."""
+    chunks = _walk_form(data, b"FORM", AIFF_FORM_TYPES, ">I", verify_bounds=True)
+    spans = tuple(_aiff_sound_range(data, chunk) for chunk in chunks if chunk.chunk_id == b"SSND")
+    if not spans:
+        raise AudioPropertiesError("The AIFF file has no sound data chunk.")
+    return spans
+
+
+def _aiff_sound_range(data: bytes, chunk: _ChunkSpan) -> tuple[int, int]:
+    """Skip the SSND offset and block size fields plus the alignment bytes."""
+    if chunk.size < AIFF_SSND_HEADER_SIZE:
+        raise AudioPropertiesError("The AIFF sound data header is truncated.")
+    offset = int.from_bytes(data[chunk.start : chunk.start + UINT32_SIZE], "big")
+    start = chunk.start + AIFF_SSND_HEADER_SIZE + offset
+    end = chunk.start + chunk.size
+    if start > end:
+        raise AudioPropertiesError("The AIFF sound data offset runs past its chunk.")
+    return start, end
 
 
 def _decode_streaminfo(info: bytes, audio_bytes: int) -> AudioProperties:
@@ -230,7 +293,12 @@ def _pcm_properties(channels: int, rate: int, bits: int, frames: int) -> AudioPr
 
 
 def _walk_form(
-    data: bytes, magic: bytes, form_types: frozenset[bytes], size_format: str
+    data: bytes,
+    magic: bytes,
+    form_types: frozenset[bytes],
+    size_format: str,
+    *,
+    verify_bounds: bool = False,
 ) -> list[_ChunkSpan]:
     """List the chunks of a RIFF or IFF form without copying their bodies."""
     if data[: len(magic)] != magic or data[CHUNK_HEADER_SIZE:FORM_HEADER_SIZE] not in form_types:
@@ -243,10 +311,14 @@ def _walk_form(
         size_field = data[offset + UINT32_SIZE : offset + CHUNK_HEADER_SIZE]
         size = struct.unpack(size_format, size_field)[0]
         start = offset + CHUNK_HEADER_SIZE
+        if verify_bounds and start + size > end:
+            raise AudioPropertiesError("An audio container chunk runs past the end of the form.")
         # A truncated recording can declare more bytes than exist. Count only the real ones.
         chunk_id = data[offset : offset + UINT32_SIZE]
         chunks.append(_ChunkSpan(chunk_id, start, min(size, end - start)))
         offset = start + size + size % 2
+    if verify_bounds and offset + CHUNK_HEADER_SIZE <= end:
+        raise AudioPropertiesError("The audio container has too many chunks to verify.")
     return chunks
 
 

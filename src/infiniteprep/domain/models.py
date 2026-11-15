@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Any
 
 from infiniteprep.domain.enums import (
@@ -25,6 +26,33 @@ from infiniteprep.domain.enums import (
 def utc_now_iso() -> str:
     """Return current UTC timestamp in ISO-8601 format."""
     return datetime.now(UTC).isoformat()
+
+
+class CollectionKind(StrEnum):
+    """Distinguish ordered playlists from unordered crates."""
+
+    PLAYLIST = "playlist"
+    CRATE = "crate"
+
+
+@dataclass(frozen=True)
+class CollectionFolder:
+    """A named folder with a stable identity and an optional parent."""
+
+    id: str
+    name: str
+    parent_id: str | None = None
+
+
+@dataclass(frozen=True)
+class TrackCollection:
+    """A named playlist or crate in the root or a collection folder."""
+
+    id: str
+    name: str
+    kind: CollectionKind
+    folder_id: str | None = None
+    allow_repeats: bool = False
 
 
 @dataclass

@@ -5,9 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.62.2] (2026-11-15)
+## [0.63.2] (2026-11-15)
 
 ### Added
+
+- Library storage supports named playlists, crates, and nested folders (issue 139).
+  - Playlists keep track order and support optional repeats. Crates contain unique tracks.
+  - Playlists can sort by key or BPM and restore the previous order after a restart.
 
 - The README roadmap lists the 20 stage issues in order, with links and a pointer to the task index (D356, issue 179). The 24-item list goes away. The settings walkthrough names the field on each Settings tab.
 
@@ -47,12 +51,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The agent policy security section goes away. The file ends with the disclosure policy.
   - `docs/agent-policy/security.md` points at `SECURITY.md` instead of `SECURITY.md.example`.
   - `docs/template-drift.md` records both divergences from the source template.
-  - The version advances to 0.62.2. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+  - The version advances to 0.63.2. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 - `tests/test_release_workflow.py` reads the release job permissions and the package count from `packaging/release.py` (D355). `test_release_gathers_every_package_and_writes_checksums` replaces the six-package test name.
 - `tests/test_release_review_fixes.py` reads the package and bundle names from `expected_packages` and `expected_bundles` (D355). `PACKAGES`, `BUNDLES`, and `PACKAGES_AND_BUNDLES` replace the literal six-name lists. Two test names drop the counts six and twelve.
 
 ### Fixed
 
+- MP3, FLAC, WAV, and AIFF tag writes verify the audio payload with SHA-256 (issue 131).
+  A mismatch discards the staged write, preserves the source, and records a failure.
 - The Windows, macOS, and Linux bundles no longer carry pytest or pygments.
   - scipy imports pytest inside `PytestTester`. The pytest hook collected all of pytest and pygments into every bundle. The app never runs the scipy test runner and never imports either package.
   - `infiniteprep.spec` now excludes `pytest`, `_pytest`, and `pygments` through `TEST_ONLY_PACKAGES`. Both packages stay dev dependencies for the test suite.
