@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_ENVELOPE_BINS: Final[int] = 120
 MAX_PREVIEW_FILE_BYTES: Final[int] = 524_288_000  # 500 MiB
 MAX_PREVIEW_DURATION_SEC: Final[float] = 1800.0  # 30 minutes
+MAX_ANALYSIS_CHANNELS: Final[int] = 8
+MAX_ANALYSIS_SAMPLE_RATE_HZ: Final[int] = 384_000
+MAX_DECODED_SAMPLES: Final[int] = 200_000_000
 STREAM_BLOCK_FRAMES: Final[int] = 65_536
 INTRO_MAX_SEC: Final[float] = 15.0
 SHORT_TRACK_THRESHOLD_SEC: Final[float] = 30.0
@@ -129,6 +132,22 @@ def _stream_block_peaks(
     return block_peaks
 
 
+def bounded_frame_count(
+    sample_rate: int,
+    channels: int,
+    declared_frames: int,
+    max_duration_sec: float = MAX_PREVIEW_DURATION_SEC,
+) -> int:
+    """Validate decoded audio metadata and return a bounded frame count."""
+    if channels <= 0 or channels > MAX_ANALYSIS_CHANNELS:
+        raise ValueError(f"Channel count must be between 1 and {MAX_ANALYSIS_CHANNELS}.")
+    if sample_rate <= 0 or sample_rate > MAX_ANALYSIS_SAMPLE_RATE_HZ:
+        raise ValueError(f"Sample rate must be between 1 and {MAX_ANALYSIS_SAMPLE_RATE_HZ} Hz.")
+    duration_cap = int(sample_rate * max_duration_sec)
+    sample_cap = MAX_DECODED_SAMPLES // channels
+    return min(max(0, declared_frames), duration_cap, sample_cap)
+
+
 def extract_waveform_envelope(
     file_path: Path,
     bins: int = DEFAULT_ENVELOPE_BINS,
@@ -148,7 +167,15 @@ def extract_waveform_envelope(
             logger.warning("Audio preview file %s exceeds size cap (%d B).", file_path, size_bytes)
             return [FALLBACK_ENVELOPE_ERROR] * bins
         info = sf.info(str(file_path))
-        max_frames = max(1, round(max(1, int(info.samplerate)) * MAX_PREVIEW_DURATION_SEC))
+        max_frames = max(
+            1,
+            bounded_frame_count(
+                int(info.samplerate),
+                int(info.channels),
+                int(info.frames),
+                MAX_PREVIEW_DURATION_SEC,
+            ),
+        )
         raw_peaks = _stream_block_peaks(file_path, max_frames, cancel_event)
     except (OSError, ValueError, RuntimeError) as exc:
         logger.warning("Waveform extraction failed for %s: %s", file_path, exc)

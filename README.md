@@ -214,7 +214,7 @@ Click **Settings & Providers**. The dialog holds one tab per area:
 
 - **General:** the UI theme.
 - **Analysis:** the batch queue option to stop a batch at its first failed
-  file.
+  file, and the fake-lossless detection method.
 - **Transcode:** the XDJ transcode mode and preset, and **Write paths
   relative to the playlist**, on by default, for playlist export.
 - **Identification:** the AcoustID API key, the Discogs personal token, the

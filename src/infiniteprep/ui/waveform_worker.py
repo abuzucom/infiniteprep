@@ -8,6 +8,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal, Slot
 
+from infiniteprep.services.fake_lossless import detect_fake_lossless
 from infiniteprep.services.waveform_analysis import (
     WaveformAnalysisCancelled,
     analyze_waveform,
@@ -20,6 +21,8 @@ UNEXPECTED_FAILURE_MESSAGE = "Spectrum analysis failed unexpectedly. Check the a
 UNREADABLE_SOURCE_MESSAGE = (
     "Unable to read the selected audio file. Check that it exists and is accessible."
 )
+# soundfile raises LibsndfileError, a RuntimeError subclass, for undecodable audio.
+EXPECTED_DETECTION_ERRORS: tuple[type[Exception], ...] = (OSError, ValueError, RuntimeError)
 logger = logging.getLogger(__name__)
 
 
@@ -37,6 +40,8 @@ class _WorkerSignals(QObject):
 
     overview_ready = Signal(str, int, object)
     completed = Signal(str, int, object)
+    fake_lossless_ready = Signal(str, int, object)
+    fake_lossless_failed = Signal(str, int, str)
     failed = Signal(str, int, str)
 
 
@@ -49,12 +54,14 @@ class _AnalysisTask(QRunnable):
         generation: int,
         path: Path,
         cancel_event: threading.Event,
+        fake_lossless_method: str | None = None,
     ) -> None:
         super().__init__()
         self.file_id = file_id
         self.generation = generation
         self.path = path
         self.cancel_event = cancel_event
+        self.fake_lossless_method = fake_lossless_method
         self.signals = _WorkerSignals()
         self.setAutoDelete(True)
 
@@ -81,6 +88,33 @@ class _AnalysisTask(QRunnable):
         else:
             if not self.cancel_event.is_set():
                 self.signals.completed.emit(self.file_id, self.generation, waveform)
+        self._run_fake_lossless()
+
+    def _run_fake_lossless(self) -> None:
+        """Run fake-lossless detection and report its result or an expected failure.
+
+        Decode and file errors become a failure signal. The panel then replaces
+        any earlier verdict. Other exceptions are defects and propagate.
+        """
+        if self.cancel_event.is_set():
+            return
+        try:
+            result = detect_fake_lossless(
+                self.path,
+                method=self.fake_lossless_method,
+                cancel_event=self.cancel_event,
+            )
+        except WaveformAnalysisCancelled:
+            return
+        except EXPECTED_DETECTION_ERRORS as error:
+            logger.warning("Fake-lossless detection failed for %s: %s", self.path, error)
+            if not self.cancel_event.is_set():
+                self.signals.fake_lossless_failed.emit(
+                    self.file_id, self.generation, _failure_message(error)
+                )
+            return
+        if not self.cancel_event.is_set():
+            self.signals.fake_lossless_ready.emit(self.file_id, self.generation, result)
 
 
 class WaveformAnalysisPool(QObject):
@@ -88,6 +122,8 @@ class WaveformAnalysisPool(QObject):
 
     overview_ready = Signal(str, int, object)
     completed = Signal(str, int, object)
+    fake_lossless_ready = Signal(str, int, object)
+    fake_lossless_failed = Signal(str, int, str)
     failed = Signal(str, int, str)
 
     def __init__(self, parent: QObject | None = None) -> None:
@@ -96,21 +132,43 @@ class WaveformAnalysisPool(QObject):
         self._pool.setMaxThreadCount(MAX_WAVEFORM_WORKERS)
         self._pool.setExpiryTimeout(-1)
         self._cancel_events: list[threading.Event] = []
+        # A worker can emit just before cancellation. The queued signal then arrives
+        # afterwards. Forwarders drop results for requests absent from this set.
+        self._active_requests: set[tuple[str, int]] = set()
         self._shutdown = False
 
-    def submit(self, path: Path, file_id: str, generation: int) -> None:
+    def submit(
+        self,
+        path: Path,
+        file_id: str,
+        generation: int,
+        fake_lossless_method: str | None = None,
+    ) -> None:
         """Cancel stale work and queue analysis for the current selection only."""
         if self._shutdown:
             return
         self._cancel_tasks()
         cancel_event = threading.Event()
-        task = _AnalysisTask(file_id, generation, Path(path), cancel_event)
+        task = _AnalysisTask(
+            file_id,
+            generation,
+            Path(path),
+            cancel_event,
+            fake_lossless_method=fake_lossless_method,
+        )
         task.signals.overview_ready.connect(
             self._forward_overview_ready, Qt.ConnectionType.QueuedConnection
         )
         task.signals.completed.connect(self._forward_completed, Qt.ConnectionType.QueuedConnection)
+        task.signals.fake_lossless_ready.connect(
+            self._forward_fake_lossless_ready, Qt.ConnectionType.QueuedConnection
+        )
+        task.signals.fake_lossless_failed.connect(
+            self._forward_fake_lossless_failed, Qt.ConnectionType.QueuedConnection
+        )
         task.signals.failed.connect(self._forward_failed, Qt.ConnectionType.QueuedConnection)
         self._cancel_events.append(cancel_event)
+        self._active_requests.add((file_id, generation))
         self._pool.start(task)
 
     def _cancel_tasks(self) -> None:
@@ -119,21 +177,41 @@ class WaveformAnalysisPool(QObject):
             cancel_event.set()
         self._pool.clear()
         self._cancel_events.clear()
+        self._active_requests.clear()
+
+    def _is_active(self, file_id: str, generation: int) -> bool:
+        """Return whether a request is still current and not cancelled."""
+        return (file_id, generation) in self._active_requests
 
     @Slot(str, int, object)
     def _forward_overview_ready(self, file_id: str, generation: int, envelope: object) -> None:
         """Forward a fallback overview on the pool object's thread."""
-        self.overview_ready.emit(file_id, generation, envelope)
+        if self._is_active(file_id, generation):
+            self.overview_ready.emit(file_id, generation, envelope)
 
     @Slot(str, int, object)
     def _forward_completed(self, file_id: str, generation: int, waveform: object) -> None:
         """Forward a completed waveform on the pool object's thread."""
-        self.completed.emit(file_id, generation, waveform)
+        if self._is_active(file_id, generation):
+            self.completed.emit(file_id, generation, waveform)
+
+    @Slot(str, int, object)
+    def _forward_fake_lossless_ready(self, file_id: str, generation: int, result: object) -> None:
+        """Forward fake-lossless results on the pool object's thread."""
+        if self._is_active(file_id, generation):
+            self.fake_lossless_ready.emit(file_id, generation, result)
+
+    @Slot(str, int, str)
+    def _forward_fake_lossless_failed(self, file_id: str, generation: int, message: str) -> None:
+        """Forward a fake-lossless failure on the pool object's thread."""
+        if self._is_active(file_id, generation):
+            self.fake_lossless_failed.emit(file_id, generation, message)
 
     @Slot(str, int, str)
     def _forward_failed(self, file_id: str, generation: int, message: str) -> None:
         """Forward a worker failure on the pool object's thread."""
-        self.failed.emit(file_id, generation, message)
+        if self._is_active(file_id, generation):
+            self.failed.emit(file_id, generation, message)
 
     def wait_for_done(self, milliseconds: int = -1) -> bool:
         """Wait for every submitted task to finish."""
