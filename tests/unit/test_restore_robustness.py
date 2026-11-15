@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -28,7 +29,7 @@ STAGED_SUFFIX = ".restore.tmp"
 
 def _version_of(db_path: Path) -> int:
     """Read user_version through a separate connection."""
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         return int(conn.execute("PRAGMA user_version").fetchone()[0])
 
 
@@ -49,7 +50,7 @@ def library(tmp_path: Path) -> Path:
     finally:
         conn.close()
     DatabaseManager(db_path).close()
-    with sqlite3.connect(db_path) as newer:
+    with closing(sqlite3.connect(db_path)) as newer, newer:
         newer.execute(f"PRAGMA user_version = {LATEST_VERSION + 1}")
     return db_path
 
@@ -74,7 +75,7 @@ def _assert_library_untouched(db_path: Path) -> None:
 
 def test_restore_rejects_backup_with_changed_rows(library: Path) -> None:
     """A backup edited after creation fails the row counts recorded at backup time."""
-    with sqlite3.connect(backup_path_for(library)) as conn:
+    with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         conn.execute("DELETE FROM source_groups")
 
     with pytest.raises(BackupVerificationError):
@@ -136,5 +137,5 @@ def test_stale_staging_file_from_a_crash_is_replaced(library: Path) -> None:
     restore_pre_migration_backup(library, now=RESTORE_TIME)
 
     assert _version_of(library) == 0
-    with sqlite3.connect(library) as conn:
+    with closing(sqlite3.connect(library)) as conn, conn:
         assert conn.execute("SELECT COUNT(*) FROM source_groups").fetchone()[0] == 1

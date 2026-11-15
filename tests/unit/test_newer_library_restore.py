@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -42,14 +43,14 @@ SIDE_FILE_SUFFIXES = ("-wal", "-shm")
 
 def _version_of(db_path: Path) -> int:
     """Read user_version through a separate connection."""
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         return int(conn.execute("PRAGMA user_version").fetchone()[0])
 
 
 def _make_migrated_library(db_path: Path) -> None:
     """Leave a library at the latest version with a backup from version 0 beside it."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         conn.execute("CREATE TABLE legacy (id INTEGER PRIMARY KEY)")
         conn.execute("INSERT INTO legacy (id) VALUES (1)")
     DatabaseManager(db_path).close()
@@ -57,7 +58,7 @@ def _make_migrated_library(db_path: Path) -> None:
 
 def _upgrade_to_newer_version(db_path: Path) -> None:
     """Simulate a newer app: add a table and raise user_version past this app."""
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         conn.execute(f"CREATE TABLE {NEWER_ONLY_TABLE} (id INTEGER PRIMARY KEY)")
         conn.execute(f"PRAGMA user_version = {LATEST_VERSION + 1}")
 
@@ -79,7 +80,7 @@ def test_restore_puts_backup_in_place_and_keeps_newer_copy(library: Path) -> Non
     assert kept.name == f"{DATABASE_FILE_NAME}.newer-20261115T093005Z"
     assert _version_of(kept) == LATEST_VERSION + 1
     assert _version_of(library) == 0
-    with sqlite3.connect(library) as conn:
+    with closing(sqlite3.connect(library)) as conn, conn:
         assert conn.execute("SELECT id FROM legacy").fetchone()[0] == 1
 
 
@@ -109,7 +110,7 @@ def test_restored_library_opens_and_migrates(library: Path) -> None:
 def test_restore_without_backup_changes_nothing(tmp_path: Path) -> None:
     """With no backup, restore raises and leaves the library where it was."""
     db_path = tmp_path / DATABASE_FILE_NAME
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         conn.execute(f"PRAGMA user_version = {LATEST_VERSION + 1}")
 
     with pytest.raises(FileNotFoundError):
@@ -121,7 +122,7 @@ def test_restore_without_backup_changes_nothing(tmp_path: Path) -> None:
 
 def test_restore_rejects_backup_that_disagrees_with_sidecar(library: Path) -> None:
     """A backup whose version differs from its sidecar is never installed."""
-    with sqlite3.connect(backup_path_for(library)) as conn:
+    with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         conn.execute("PRAGMA user_version = 7")
 
     with pytest.raises(BackupVerificationError):

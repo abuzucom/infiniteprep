@@ -293,15 +293,17 @@ def restore_pre_migration_backup(
     A backup newer than known_version stays unused. Returns the kept copy of the library,
     or None when no library file existed.
     """
-    verified_backup_record(db_path, known_version=known_version)
+    version, counts = verified_backup_record(db_path, known_version=known_version)
     kept = newer_copy_path_for(db_path, now or _utc_now())
     _check_kept_names_free(kept)
     staged = db_path.with_name(db_path.name + RESTORE_TEMP_SUFFIX)
     staged.unlink(missing_ok=True)
     try:
         shutil.copyfile(backup_path_for(db_path), staged)
+        # The swap installs the staged file. A backup changed after its check fails here.
+        verify_backup_file(staged, expected_version=version, expected_counts=counts)
         return _swap_in_staged_copy(db_path, kept, staged)
-    except OSError:
+    except (OSError, sqlite3.Error):
         staged.unlink(missing_ok=True)
         raise
 
