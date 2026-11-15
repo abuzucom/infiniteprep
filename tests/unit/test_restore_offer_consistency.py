@@ -103,8 +103,6 @@ def test_restore_honors_a_lower_known_version(tmp_path: Path) -> None:
     _write_backup(db_path, LATEST_VERSION, {"source_version": LATEST_VERSION, "row_counts": {}})
 
     with pytest.raises(BackupVerificationError):
-        restore_pre_migration_backup(
-            db_path, now=RESTORE_TIME, known_version=PRE_MIGRATION_VERSION
-        )
+        restore_pre_migration_backup(db_path, now=RESTORE_TIME, known_version=PRE_MIGRATION_VERSION)
 
     assert _version_of(db_path) == LATEST_VERSION + 1
