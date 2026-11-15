@@ -14,7 +14,19 @@ from infiniteprep.domain.enums import (
     ReviewStatus,
     format_canonical_key,
 )
-from infiniteprep.domain.models import AnalysisResult, CandidateMatch, FieldProposal, FileAsset
+from infiniteprep.domain.models import (
+    AnalysisResult,
+    ApprovedField,
+    CandidateMatch,
+    FieldProposal,
+    FileAsset,
+)
+from infiniteprep.domain.source_priority import (
+    USER_VALUE_ORIGINS,
+    outranks,
+    priority_rank,
+    provider_may_supply,
+)
 from infiniteprep.services.matching_engine import MatchingEngine, parse_dj_title_and_mix
 
 MIN_DURATION_FOR_PITCH_DRIFT_SEC: Final[float] = 10.0
@@ -96,11 +108,77 @@ class ReconciliationService:
         for ana in analyses:
             generated.extend(self._proposals_from_analysis(asset.id, ana))
 
-        for prop in generated:
+        kept = self._apply_source_priority(asset.id, generated)
+        for prop in kept:
             self.repo.upsert_field_proposal(prop)
+        self._supersede_dropped_proposals(asset.id, generated, kept)
 
-        self._update_review_status_after_reconcile(asset.id, generated)
+        self._update_review_status_after_reconcile(asset.id, kept)
         return self.repo.list_field_proposals(asset.id)
+
+    def _apply_source_priority(
+        self, file_id: str, proposals: list[FieldProposal]
+    ) -> list[FieldProposal]:
+        """Keep only the proposals of the highest ranked source for each ordered field.
+
+        A field that the priority table does not list keeps every proposal. A
+        provider that the table does not rank never loses a proposal and never
+        wins one.
+        """
+        approved = self.repo.get_approved_fields_map(file_id)
+        kept: list[FieldProposal] = []
+        for proposal in proposals:
+            if self._is_suppressed(proposal, proposals, approved):
+                continue
+            kept.append(proposal)
+        return kept
+
+    def _is_suppressed(
+        self,
+        proposal: FieldProposal,
+        proposals: list[FieldProposal],
+        approved: dict[str, ApprovedField],
+    ) -> bool:
+        """Return whether a higher ranked source or an approved value already supplied the field."""
+        field_name = proposal.field_name
+        if priority_rank(field_name, proposal.provider) is None:
+            return False
+
+        approved_field = approved.get(field_name)
+        if approved_field is not None:
+            if approved_field.approval_origin in USER_VALUE_ORIGINS:
+                return True
+            approved_provider = str(approved_field.provider_attribution.get("provider", ""))
+            if outranks(field_name, approved_provider, proposal.provider):
+                return True
+
+        for other in proposals:
+            if other.id == proposal.id or other.field_name != field_name:
+                continue
+            if outranks(field_name, other.provider, proposal.provider):
+                return True
+        return False
+
+    def _supersede_dropped_proposals(
+        self,
+        file_id: str,
+        proposals: list[FieldProposal],
+        kept: list[FieldProposal],
+    ) -> None:
+        """Mark the stored proposals of a dropped source as superseded."""
+        kept_ids = {proposal.id for proposal in kept}
+        dropped = [
+            (proposal.field_name, proposal.provider)
+            for proposal in proposals
+            if proposal.id not in kept_ids
+        ]
+        if not dropped:
+            return
+        for stored in self.repo.list_field_proposals(file_id):
+            if stored.review_status != ProposalReviewStatus.PENDING:
+                continue
+            if (stored.field_name, stored.provider) in dropped:
+                self.repo.update_proposal_status(stored.id, ProposalReviewStatus.SUPERSEDED)
 
     def _proposals_from_candidate(
         self, asset: FileAsset, cand: CandidateMatch, app_score: float
@@ -119,7 +197,7 @@ class ReconciliationService:
             (FieldName.REMIXER.value, effective_remixer),
         ]
         for f_name, val in rec_fields:
-            if val:
+            if val and provider_may_supply(f_name, cand.provider):
                 props.append(self._make_proposal(asset.id, f_name, val, cand, app_score))
 
         # Rule 1 & 2: Release-specific fields come only from RELEASE entities or verified details
@@ -145,7 +223,7 @@ class ReconciliationService:
         return [
             self._make_proposal(file_id, f_name, val, cand, app_score)
             for f_name, val in rel_fields
-            if val
+            if val and provider_may_supply(f_name, cand.provider)
         ]
 
     def _make_proposal(

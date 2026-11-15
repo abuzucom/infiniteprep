@@ -1,0 +1,21 @@
+{
+  "resultCount": 1,
+  "results": [
+    {
+      "wrapperType": "track",
+      "kind": "song",
+      "trackId": 123456789,
+      "collectionId": 987654321,
+      "artistName": "Deep Dish",
+      "collectionName": "The Dream",
+      "trackName": "The Dream",
+      "primaryGenreName": "Dance",
+      "releaseDate": "1994-06-13T12:00:00Z",
+      "trackTimeMillis": 480000,
+      "country": "USA",
+      "artworkUrl60": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/60x60bb.jpg",
+      "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/100x100bb.jpg",
+      "trackViewUrl": "https://itunes.apple.com/us/song/123456789"
+    }
+  ]
+}

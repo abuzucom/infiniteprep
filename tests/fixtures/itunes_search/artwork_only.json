@@ -1,0 +1,19 @@
+{
+  "resultCount": 1,
+  "results": [
+    {
+      "wrapperType": "track",
+      "kind": "song",
+      "trackId": 555666777,
+      "collectionId": 222333444,
+      "artistName": "Deep Dish",
+      "collectionName": "The Dream",
+      "trackName": "The Dream",
+      "primaryGenreName": "Dance",
+      "releaseDate": "1994-06-13T12:00:00Z",
+      "trackTimeMillis": 480000,
+      "artworkUrl60": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/60x60bb.jpg",
+      "artworkUrl100": "https://is1-ssl.mzstatic.com/image/thumb/Music/v4/100x100bb.jpg"
+    }
+  ]
+}

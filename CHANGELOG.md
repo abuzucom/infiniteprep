@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.63.2] (2026-11-15)
+## [0.64.0] (2026-11-15)
 
 ### Added
 
@@ -39,7 +39,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tests/unit/test_synthetic_audio.py` passes each container through its app reader. The ADTS test walks the frame chain because the app has no ADTS reader. `tests/unit/test_synthetic_audio_opus_toc.py` pins the Opus TOC bytes to RFC 6716.
 - `packaging/release.py` gains `RELEASE_JOB_PERMISSIONS`, a read-only mapping of the release job permissions (D355).
 - `tests/test_release_constants.py` pins the six release package names, the Sigstore bundle names, and the five release job permissions by hand (D355). The file also checks that `RELEASE_JOB_PERMISSIONS` matches the release job permissions in `build-packages.yml`.
-- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, to 0.60.3 for the source research decisions, to 0.60.4 for the release test constants, to 0.61.0 for fake-lossless audio detection, and to 0.62.0 for the schema migrations. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+- The iTunes Search adapter supplies a coarse genre and a release-date fallback (D404, issue 243).
+  - The new `adapters/catalog/itunes.py` queries `https://itunes.apple.com/search` with the shared D221 User-Agent. The lookup sends the artist name and the track title as the search term, plus the storefront country.
+  - The adapter waits 3 seconds between calls for the published limit of about 20 calls per minute. It caches every response in the shared SQLite cache for 24 hours.
+  - The matching engine ranks the rows over the artist and the title. The earliest release date wins among the rows that tie for the best match.
+  - The adapter reads `primaryGenreName` and `releaseDate`. It keeps no artwork from the response because Apple limits promotional content, album art included, to promoting store content.
+  - Every proposal records iTunes Search as its source. The provider name is `itunes` and the entity id is the track id.
+- The new `domain/source_priority.py` holds the per-field order of the sources (D394, issue 243).
+  - The genre order is Discogs, then iTunes. The release date order is MusicBrainz, then Discogs, then iTunes.
+  - A higher ranked source keeps the field. A lower ranked proposal for that field never reaches the proposal table. A value the owner set outranks every provider.
+  - The table also limits the fields a provider may supply. The iTunes adapter proposes the genre and the release year only.
+  - A dropped proposal turns superseded in the proposal table.
+- The text similarity helper moves to `domain/similarity.py`. `services/matching_engine.py` keeps its name and its behavior.
+- The Identification settings tab names the host and the query data of the iTunes Search lookup. The README holds the same disclosure in a new section.
+- `tests/unit/test_itunes_search_adapter.py`, `tests/unit/test_source_priority_filter.py`, and `tests/unit/test_itunes_disclosure.py` cover a match with a genre and a date, the empty response, a field another source already supplied, a response with artwork, the rate limit, the cache, and the provenance on each proposal. The recorded responses live under `tests/fixtures/itunes_search/`.
+- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, to 0.60.3 for the source research decisions, to 0.60.4 for the release test constants, to 0.61.0 for fake-lossless audio detection, to 0.62.0 for the schema migrations, and to 0.64.0 for the iTunes Search fallback. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 
 ### Changed
 
@@ -51,7 +65,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The agent policy security section goes away. The file ends with the disclosure policy.
   - `docs/agent-policy/security.md` points at `SECURITY.md` instead of `SECURITY.md.example`.
   - `docs/template-drift.md` records both divergences from the source template.
-  - The version advances to 0.63.2. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+  - The version advances to 0.64.0. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 - `tests/test_release_workflow.py` reads the release job permissions and the package count from `packaging/release.py` (D355). `test_release_gathers_every_package_and_writes_checksums` replaces the six-package test name.
 - `tests/test_release_review_fixes.py` reads the package and bundle names from `expected_packages` and `expected_bundles` (D355). `PACKAGES`, `BUNDLES`, and `PACKAGES_AND_BUNDLES` replace the literal six-name lists. Two test names drop the counts six and twelve.
 

@@ -1,0 +1,29 @@
+{
+  "resultCount": 2,
+  "results": [
+    {
+      "wrapperType": "track",
+      "kind": "song",
+      "trackId": 444555666,
+      "collectionId": 111222333,
+      "artistName": "Deep Dish",
+      "collectionName": "The Dream (Deep Dish Remixes)",
+      "trackName": "The Dream",
+      "primaryGenreName": "Electronic",
+      "releaseDate": "2004-05-10T12:00:00Z",
+      "trackTimeMillis": 481000
+    },
+    {
+      "wrapperType": "track",
+      "kind": "song",
+      "trackId": 777888999,
+      "collectionId": 444555666,
+      "artistName": "Deep Dish",
+      "collectionName": "The Dream",
+      "trackName": "The Dream",
+      "primaryGenreName": "Dance",
+      "releaseDate": "1994-06-13T12:00:00Z",
+      "trackTimeMillis": 480000
+    }
+  ]
+}
