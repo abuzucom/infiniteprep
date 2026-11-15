@@ -29,6 +29,14 @@ PINNED_PACKAGES = frozenset(
     }
 )
 PINNED_BUNDLE_SUFFIX = ".sigstore.json"
+# The release job permissions, pinned by hand (D315, D325, D328).
+PINNED_RELEASE_PERMISSIONS = {
+    "contents": "write",
+    "actions": "read",
+    "id-token": "write",
+    "attestations": "write",
+    "artifact-metadata": "write",
+}
 
 
 def _load_release() -> ModuleType:
@@ -58,6 +66,10 @@ class PackageNamePinTest(unittest.TestCase):
 
 class ReleasePermissionConstantTest(unittest.TestCase):
     """RELEASE_JOB_PERMISSIONS states the release job's permissions as an immutable mapping."""
+
+    def test_constant_matches_the_pin(self) -> None:
+        """The constant states exactly the hand-pinned permissions."""
+        self.assertEqual(dict(RELEASE.RELEASE_JOB_PERMISSIONS), PINNED_RELEASE_PERMISSIONS)
 
     def test_constant_is_read_only(self) -> None:
         """A test or caller cannot change the constant in place."""

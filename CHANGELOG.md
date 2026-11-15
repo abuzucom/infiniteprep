@@ -10,7 +10,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - `packaging/release.py` gains `RELEASE_JOB_PERMISSIONS`, a read-only mapping of the release job permissions (D355).
-- `tests/test_release_constants.py` pins the six release package names and the Sigstore bundle names by hand (D355). The file also checks that `RELEASE_JOB_PERMISSIONS` matches the release job permissions in `build-packages.yml`.
+- `tests/test_release_constants.py` pins the six release package names, the Sigstore bundle names, and the five release job permissions by hand (D355). The file also checks that `RELEASE_JOB_PERMISSIONS` matches the release job permissions in `build-packages.yml`.
 
 ## [0.59.2] (2026-11-14)
 
