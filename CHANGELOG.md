@@ -27,7 +27,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The signal builders cover click tracks with tempo changes and downbeat accents, tones, chords, full-band and band-limited noise, and an MP3-like lowpass shelf at 16 kHz. `write_wav_fixture` writes PCM_16 WAV through soundfile.
   - The container builders cover ADTS AAC LC, AAC and ALAC M4A, STEM.MP4, Ogg Vorbis, and Ogg Opus. A STEM.MP4 holds a mixdown, four stems, and a stem manifest. Ogg pages carry real CRCs. Codec payloads are PCG64 filler. Opus packets are valid empty CELT frames.
 - `tests/unit/test_synthetic_audio.py` passes each container through its app reader. The ADTS test walks the frame chain because the app has no ADTS reader. `tests/unit/test_synthetic_audio_opus_toc.py` pins the Opus TOC bytes to RFC 6716.
-- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, to 0.60.3 for the source research decisions, and to 0.61.0 for the schema migrations. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+- `packaging/release.py` gains `RELEASE_JOB_PERMISSIONS`, a read-only mapping of the release job permissions (D355).
+- `tests/test_release_constants.py` pins the six release package names, the Sigstore bundle names, and the five release job permissions by hand (D355). The file also checks that `RELEASE_JOB_PERMISSIONS` matches the release job permissions in `build-packages.yml`.
+- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, to 0.60.3 for the source research decisions, to 0.60.4 for the release test constants, and to 0.61.0 for the schema migrations. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+
+### Changed
+
+- `tests/test_release_workflow.py` reads the release job permissions and the package count from `packaging/release.py` (D355). `test_release_gathers_every_package_and_writes_checksums` replaces the six-package test name.
+- `tests/test_release_review_fixes.py` reads the package and bundle names from `expected_packages` and `expected_bundles` (D355). `PACKAGES`, `BUNDLES`, and `PACKAGES_AND_BUNDLES` replace the literal six-name lists. Two test names drop the counts six and twelve.
 
 ### Fixed
 
