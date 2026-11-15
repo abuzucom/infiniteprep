@@ -44,6 +44,9 @@ class IdentificationTab(FormSettingsTab):
         self.ollama_model_combo.setCurrentText(settings.ollama_model)
         self.form.addRow("Ollama Model:", self.ollama_model_combo)
 
+        self.itunes_endpoint_input = QLineEdit(settings.itunes_search_endpoint, self)
+        self.form.addRow("iTunes Search Endpoint:", self.itunes_endpoint_input)
+
         # The disclosure names the host and the data that leaves the machine.
         self.disclosure_label = QLabel(DISCLOSURE_TEXT, self)
         self.disclosure_label.setWordWrap(True)
@@ -72,10 +75,11 @@ class IdentificationTab(FormSettingsTab):
                 self.creds.set_secret(entry_name, value)
 
     def apply_to(self, settings: AppSettings) -> None:
-        """Copy the LLM arbitration inputs into settings."""
+        """Copy the LLM arbitration inputs and the endpoint into settings."""
         settings.enable_llm_arbitration = self.enable_llm_checkbox.isChecked()
         settings.ollama_base_url = self.ollama_url_input.text().strip()
         settings.ollama_model = self.ollama_model_combo.currentText().strip()
+        settings.itunes_search_endpoint = self.itunes_endpoint_input.text().strip()
 
 
 TAB_CLASS = IdentificationTab

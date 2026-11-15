@@ -151,9 +151,7 @@ def test_the_superseded_proposal_is_marked_in_the_database() -> None:
     stored = repository.list_field_proposals(FILE_ID)
     itunes_proposals = [item for item in stored if item.provider == "itunes"]
     assert itunes_proposals
-    assert all(
-        item.review_status == ProposalReviewStatus.SUPERSEDED for item in itunes_proposals
-    )
+    assert all(item.review_status == ProposalReviewStatus.SUPERSEDED for item in itunes_proposals)
 
 
 def test_a_field_without_an_order_keeps_every_provider_proposal() -> None:

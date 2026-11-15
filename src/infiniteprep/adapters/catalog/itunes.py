@@ -16,6 +16,7 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any, Final
 
+from infiniteprep.config.settings import DEFAULT_ITUNES_SEARCH_ENDPOINT, validate_endpoint_url
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
 from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
@@ -23,7 +24,7 @@ from infiniteprep.domain.ports import MetadataSearchQuery
 from infiniteprep.domain.similarity import string_similarity
 from infiniteprep.user_agent import USER_AGENT
 
-ITUNES_SEARCH_URL: Final[str] = "https://itunes.apple.com/search"
+ITUNES_SEARCH_URL: Final[str] = DEFAULT_ITUNES_SEARCH_ENDPOINT
 ITUNES_USER_AGENT: Final[str] = USER_AGENT
 ITUNES_CACHE_TTL_SEC: Final[int] = 86400
 # The published limit is about 20 calls per minute. The adapter waits 3 seconds
@@ -60,12 +61,21 @@ class ItunesSearchAdapter:
         http_get_json: Callable[[str, dict[str, str]], dict[str, Any]] | None = None,
         min_interval_sec: float = ITUNES_MIN_INTERVAL_SEC,
         country: str = DEFAULT_COUNTRY,
+        endpoint: str = ITUNES_SEARCH_URL,
     ) -> None:
-        """Initialize ItunesSearchAdapter with Repository cache, rate limiter, and country."""
+        """Initialize ItunesSearchAdapter with Repository cache, rate limiter, and country.
+
+        The endpoint comes from the application settings. It must pass the shared
+        endpoint rules, so only a public HTTPS host is reachable.
+        """
+        valid, reason = validate_endpoint_url(endpoint)
+        if not valid:
+            raise ValueError(f"Invalid iTunes Search endpoint {endpoint!r}: {reason}")
         self.repo = repository
         self.http_get_json = http_get_json or self._default_http_get_json
         self.min_interval_sec = min_interval_sec
         self.country = country
+        self.endpoint = endpoint
         self._last_request_ts: float = 0.0
 
     def is_available(self) -> tuple[bool, str | None]:
@@ -88,7 +98,7 @@ class ItunesSearchAdapter:
         payload = self.repo.get_cached_response(cache_key)
         if payload is None:
             self._respect_rate_limit()
-            payload = self.http_get_json(ITUNES_SEARCH_URL, params)
+            payload = self.http_get_json(self.endpoint, params)
             self.repo.set_cached_response(
                 cache_key=cache_key,
                 provider=self.provider_name,
@@ -130,9 +140,7 @@ class ItunesSearchAdapter:
             time.sleep(self.min_interval_sec - elapsed)
         self._last_request_ts = time.monotonic()
 
-    def _select_row(
-        self, results: list[Any], query: MetadataSearchQuery
-    ) -> dict[str, Any] | None:
+    def _select_row(self, results: list[Any], query: MetadataSearchQuery) -> dict[str, Any] | None:
         """Return the best matching row, keeping the earliest date among tied rows."""
         scored = [(self._row_score(row, query), row) for row in results if isinstance(row, dict)]
         if not scored:
@@ -182,7 +190,7 @@ class ItunesSearchAdapter:
                 "itunes_track_id": track_id,
                 "itunes_collection_id": collection_id,
                 "itunes_release_date": release_date,
-                "source_url": ITUNES_SEARCH_URL,
+                "source_url": self.endpoint,
             },
             match_score=ITUNES_MATCH_SCORE,
         )

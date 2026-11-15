@@ -221,9 +221,9 @@ Click **Settings & Providers**. The dialog holds one tab per area:
 - **Transcode:** the XDJ transcode mode and preset, and **Write paths
   relative to the playlist**, on by default, for playlist export.
 - **Identification:** the AcoustID API key, the Discogs personal token, the
-  closed-world LLM toggle, the Ollama or OpenAI-compatible base URL, and the
-  model. The tab also names the host and the query data of every external
-  lookup.
+  closed-world LLM toggle, the Ollama or OpenAI-compatible base URL, the model,
+  and the iTunes Search endpoint. The tab also names the host and the query
+  data of every external lookup.
 - **Storage:** the USB export reserve as a percentage and in MiB, and the
   application data cleanup action.
 - **Playback** and **Updates** hold no settings yet.
@@ -253,6 +253,10 @@ The lookup sends the artist name and the track title as well.
 
 The iTunes Search adapter keeps no artwork from the response. Apple limits
 promotional content, album art included, to promoting store content.
+
+The iTunes Search endpoint comes from the **Identification** settings. The
+default is `https://itunes.apple.com/search`. The endpoint must pass the same
+rules as every other endpoint URL.
 
 ## Usage Walkthrough
 
