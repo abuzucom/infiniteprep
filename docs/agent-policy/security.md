@@ -34,7 +34,7 @@ adoption and redistribution. Third-party mirrors remain responsible for their
 own legal compliance. This repository cannot enforce or verify their local
 practices.
 
-Report vulnerabilities through the process in `SECURITY.md.example`. Do not
+Report vulnerabilities through the process in `SECURITY.md`. Do not
 use public issues or pull requests for private vulnerability details.
 
 Avoid nested quantifiers such as `(x+)+` and overlapping patterns.

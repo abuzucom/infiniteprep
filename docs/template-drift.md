@@ -19,6 +19,12 @@ The earlier record named `b452348`. The copied files matched `59c6d95`.
 - The workflows `agents-compliance.yml`, `agents-md-compliance.yml`,
   `sync-check.yml`, `immutable-conflict-check.yml`, and `gate-integrity.yml`.
 - `CONTRIBUTING.md` and `SECURITY.md` from the template examples.
+  - `SECURITY.md` diverges from the template. The file drops the agent policy
+    security section, names the supported builds, and adds an application
+    security section. `docs/template-drift.md` records the divergence.
+  - `docs/agent-policy/security.md` diverges from the template. The
+    vulnerability reporting reference names `SECURITY.md` instead of
+    `SECURITY.md.example`.
 - `.github/PULL_REQUEST_TEMPLATE.md` and `.github/ISSUE_TEMPLATE.md`.
 
 ## Declined

@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.63.1] (2026-11-15)
+## [0.63.2] (2026-11-15)
 
 ### Added
 
@@ -43,6 +43,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- `SECURITY.md` names the supported builds, the scope, the application surfaces, the credential storage, and the report hygiene.
+  - The supported builds are the latest `main` branch build and the latest tagged release. Pre-releases and earlier tagged releases receive no support.
+  - The scope section replaces the repeated template sentences with prose that covers the same ground.
+  - The new application section names audio and tag parsing, tag writing to disk, the network services, the local LLM endpoint, update downloads, and the `fpcalc` bootstrap. Each line names the data the surface handles.
+  - The AcoustID key and the Discogs token live in the OS credential store. Reporters must exclude credentials, tokens, and personal data from report attachments.
+  - The agent policy security section goes away. The file ends with the disclosure policy.
+  - `docs/agent-policy/security.md` points at `SECURITY.md` instead of `SECURITY.md.example`.
+  - `docs/template-drift.md` records both divergences from the source template.
+  - The version advances to 0.63.2. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 - `tests/test_release_workflow.py` reads the release job permissions and the package count from `packaging/release.py` (D355). `test_release_gathers_every_package_and_writes_checksums` replaces the six-package test name.
 - `tests/test_release_review_fixes.py` reads the package and bundle names from `expected_packages` and `expected_bundles` (D355). `PACKAGES`, `BUNDLES`, and `PACKAGES_AND_BUNDLES` replace the literal six-name lists. Two test names drop the counts six and twelve.
 
