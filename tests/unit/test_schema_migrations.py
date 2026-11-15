@@ -111,10 +111,9 @@ def opened(library: Path) -> Iterator[sqlite3.Connection]:
     """Open a raw connection the way DatabaseManager does, and close it afterward."""
     library.parent.mkdir(parents=True, exist_ok=True)
     _create_version_zero_library(library)
-    conn = sqlite3.connect(library)
-    conn.execute("PRAGMA journal_mode = WAL")
-    yield conn
-    conn.close()
+    with closing(sqlite3.connect(library)) as conn:
+        conn.execute("PRAGMA journal_mode = WAL")
+        yield conn
 
 
 def test_migration_one_is_the_current_schema() -> None:
