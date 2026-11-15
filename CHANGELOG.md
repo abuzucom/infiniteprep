@@ -5,9 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.62.1] (2026-11-15)
+## [0.63.0] (2026-11-15)
 
 ### Added
+
+- Library storage supports named playlists, crates, and nested folders (issue 139).
+  - Playlists keep track order and support optional repeats. Crates contain unique tracks.
+  - Playlists can sort by key or BPM and restore the previous order after a restart.
 
 - The README roadmap lists the 20 stage issues in order, with links and a pointer to the task index (D356, issue 179). The 24-item list goes away. The settings walkthrough names the field on each Settings tab.
 
