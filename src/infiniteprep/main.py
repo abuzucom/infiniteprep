@@ -183,6 +183,17 @@ def queue_safe_writes(
     window.queue_batch(BatchKind.WRITE, f"Apply writes to {len(plans)} file(s)", run_write_batch)
 
 
+def apply_saved_theme(app: QApplication) -> None:
+    """Apply the stored theme and store the theme in effect when it cannot apply."""
+    settings_mgr = SettingsManager()
+    settings = settings_mgr.load()
+    result = apply_application_theme(app, settings.theme)
+    if result.applied:
+        return
+    settings.theme = result.theme
+    settings_mgr.save(settings)
+
+
 def launch_desktop_app() -> int:
     """Launch the PySide6 desktop GUI application."""
     # Qt reads the logging rules when QApplication starts.
@@ -206,8 +217,7 @@ def launch_desktop_app() -> int:
     reconciler = ReconciliationService(repo)
     transcoder = SafeTranscoderAdapter(repo, backup_dir=opened.locations.backup_dir)
     exporter = PlaylistExporter(repo)
-    saved_theme = SettingsManager().load().theme
-    apply_application_theme(qt_app, saved_theme)
+    apply_saved_theme(qt_app)
 
     window = MainWindow(
         repository=repo,

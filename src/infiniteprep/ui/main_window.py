@@ -52,7 +52,12 @@ from infiniteprep.ui.batch_queue import (
 from infiniteprep.ui.batch_queue_dock import BatchQueueDock
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.folder_import import FolderImportController, ImportReportDialog
-from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
+from infiniteprep.ui.theme import (
+    DEFAULT_DARK_THEME,
+    NATIVE_THEME,
+    apply_application_theme,
+    get_theme_choices,
+)
 from infiniteprep.ui.time_format import split_time_seconds
 
 TABLE_COLUMNS: Final[tuple[str, ...]] = (
@@ -146,6 +151,7 @@ class MainWindow(QMainWindow):
         self.status_filter_combo = QComboBox(self)
         self.key_notation_combo = QComboBox(self)
         self.theme_combo = QComboBox(self)
+        self._applied_theme = NATIVE_THEME
         self.file_table = QTableWidget(0, len(TABLE_COLUMNS), self)
         self.detail_panel = DetailPanel(
             repository=self.repo,
@@ -225,13 +231,20 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
         toolbar.addWidget(QLabel(" Theme: ", self))
-        for theme_name in get_available_themes():
+        for theme_name in get_theme_choices():
             self.theme_combo.addItem(theme_name)
-        self.theme_combo.addItem("system")
         current_theme = getattr(SettingsManager().load(), "theme", DEFAULT_DARK_THEME)
-        self.theme_combo.setCurrentText(current_theme)
+        self._applied_theme = self._selectable_theme(current_theme)
+        self.theme_combo.setCurrentText(self._applied_theme)
         self.theme_combo.currentTextChanged.connect(self._on_theme_changed)
         toolbar.addWidget(self.theme_combo)
+
+    def _selectable_theme(self, theme: str) -> str:
+        """Return the theme to show, falling back to a theme the picker offers."""
+        choices = get_theme_choices()
+        if theme in choices:
+            return theme
+        return choices[0] if choices else NATIVE_THEME
 
     def _setup_central_widget(self) -> None:
         """Build filter bar, file table, and vertical/horizontal splitter with DetailPanel."""
@@ -451,14 +464,23 @@ class MainWindow(QMainWindow):
         self.refresh_file_table()
 
     def _on_theme_changed(self, text: str) -> None:
-        """Update and persist application UI theme."""
+        """Apply the chosen theme and keep the picker on the theme in effect."""
+        app = QApplication.instance()
+        result = apply_application_theme(app, text)
+        if not result.applied:
+            self._restore_applied_theme()
+            return
+        self._applied_theme = text
         settings_mgr = SettingsManager()
         settings = settings_mgr.load()
         settings.theme = text
         settings_mgr.save(settings)
-        app = QApplication.instance()
-        if app is not None:
-            apply_application_theme(app, text)
+
+    def _restore_applied_theme(self) -> None:
+        """Point the picker back at the theme that is in effect."""
+        self.theme_combo.blockSignals(True)
+        self.theme_combo.setCurrentText(self._applied_theme)
+        self.theme_combo.blockSignals(False)
 
     def _prompt_import_folder(self) -> None:
         """Open a folder picker and import the chosen folder in the background."""

@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QComboBox, QWidget
 
 from infiniteprep.config.settings import AppSettings
 from infiniteprep.ui.settings.base import FormSettingsTab
-from infiniteprep.ui.theme import SYSTEM_THEME, get_available_themes
+from infiniteprep.ui.theme import get_theme_choices
 
 
 class GeneralTab(FormSettingsTab):
@@ -22,11 +22,17 @@ class GeneralTab(FormSettingsTab):
         """
         super().__init__(parent)
         self.theme_combo = QComboBox(self)
-        for theme_name in get_available_themes():
+        choices = get_theme_choices()
+        for theme_name in choices:
             self.theme_combo.addItem(theme_name)
-        self.theme_combo.addItem(SYSTEM_THEME)
-        self.theme_combo.setCurrentText(theme)
+        if theme in choices:
+            self.theme_combo.setCurrentText(theme)
         self.form.addRow("UI Theme:", self.theme_combo)
+
+    def set_theme(self, theme: str) -> None:
+        """Point the theme picker at the given theme."""
+        if theme in get_theme_choices():
+            self.theme_combo.setCurrentText(theme)
 
     def apply_to(self, settings: AppSettings) -> None:
         """Copy the selected theme into settings."""

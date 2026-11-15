@@ -68,8 +68,11 @@ a = Analysis(
         "scipy.signal",
         "soundfile",
         "keyring",
+        # The theme package is imported by name at run time, so PyInstaller needs the
+        # hidden import. The hook in packaging/pyinstaller_hooks collects its data files.
+        "qt_material",
     ],
-    hookspath=[],
+    hookspath=[str(project_root / "packaging" / "pyinstaller_hooks")],
     hooksconfig={},
     runtime_hooks=[],
     # Python's readline module links GNU Readline (GPL-3) on Linux (D302). The exclusion

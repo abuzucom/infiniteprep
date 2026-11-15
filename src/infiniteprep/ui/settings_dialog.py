@@ -154,10 +154,14 @@ class SettingsDialog(QDialog):
     def save_settings(self) -> None:
         """Persist updated settings to JSON and secrets to CredentialStore."""
         self.identification_tab.store_secrets()
+        previous_theme = getattr(self.current_settings, "theme", DEFAULT_DARK_THEME)
         for tab in self.setting_tabs:
             tab.apply_to(self.current_settings)
-        self.settings_mgr.save(self.current_settings)
         app = QApplication.instance()
-        if app is not None:
-            apply_application_theme(app, self.current_settings.theme)
+        chosen_theme = getattr(self.current_settings, "theme", DEFAULT_DARK_THEME)
+        result = apply_application_theme(app, chosen_theme)
+        if not result.applied:
+            self.current_settings.theme = previous_theme
+            self.general_tab.set_theme(previous_theme)
+        self.settings_mgr.save(self.current_settings)
         self.accept()
