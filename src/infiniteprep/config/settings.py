@@ -53,6 +53,9 @@ MAX_USB_RESERVE_PERCENT: Final[float] = 100.0
 # One TiB. No FAT32 volume holds more than 2 TiB.
 MAX_USB_RESERVE_MIB: Final[int] = 1024 * 1024
 MAX_USB_RESERVE_BYTES: Final[int] = MAX_USB_RESERVE_MIB * BYTES_PER_MIB
+DEFAULT_USB_RECOVERY_EXPIRY_DAYS: Final[int] = 30
+MIN_USB_RECOVERY_EXPIRY_DAYS: Final[int] = 1
+MAX_USB_RECOVERY_EXPIRY_DAYS: Final[int] = 365
 
 
 def _is_disallowed_ip(ip_text: str) -> bool:
@@ -174,6 +177,8 @@ class AppSettings:
     waveform_zoom_seconds: int = DEFAULT_WAVEFORM_ZOOM_SECONDS
     usb_reserve_percent: float = 0.0  # Percent of the estimated export size.
     usb_reserve_bytes: int = 0
+    usb_recovery_expiry_enabled: bool = True
+    usb_recovery_expiry_days: int = DEFAULT_USB_RECOVERY_EXPIRY_DAYS
 
 
 def _find_setting_value_problem(name: str, value: object, default: object) -> str | None:
@@ -195,6 +200,15 @@ def _find_numeric_setting_problem(name: str, value: object) -> str | None:
         return "a reserve percentage outside 0 to 100"
     if name == "usb_reserve_bytes" and not 0 <= value <= MAX_USB_RESERVE_BYTES:
         return "a reserve size outside the supported range"
+    if name == "usb_recovery_expiry_days" and (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not MIN_USB_RECOVERY_EXPIRY_DAYS <= value <= MAX_USB_RECOVERY_EXPIRY_DAYS
+    ):
+        return (
+            f"an expiry window outside {MIN_USB_RECOVERY_EXPIRY_DAYS} to "
+            f"{MAX_USB_RECOVERY_EXPIRY_DAYS} days"
+        )
     return None
 
 
