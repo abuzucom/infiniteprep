@@ -210,14 +210,19 @@ On first launch the application creates these per-user locations through
 
 ### 6. Configure settings and credentials
 
-Click **Settings & Providers**. The dialog holds these fields:
+Click **Settings & Providers**. The dialog holds one tab per area:
 
-- AcoustID API key and Discogs personal token.
-- The closed-world LLM toggle, the Ollama or OpenAI-compatible base URL, and
-  the model.
-- The XDJ transcode mode and preset.
-- **Write paths relative to the playlist**, on by default, for playlist
-  export.
+- **General:** the UI theme.
+- **Analysis:** the batch queue option to stop a batch at its first failed
+  file.
+- **Transcode:** the XDJ transcode mode and preset, and **Write paths
+  relative to the playlist**, on by default, for playlist export.
+- **Identification:** the AcoustID API key, the Discogs personal token, the
+  closed-world LLM toggle, the Ollama or OpenAI-compatible base URL, and the
+  model.
+- **Storage:** the USB export reserve as a percentage and in MiB, and the
+  application data cleanup action.
+- **Playback** and **Updates** hold no settings yet.
 
 Click **Save Settings**. Secrets go to the OS keyring under the
 `InfinitePrep` service. The application refuses a plaintext fallback when the
@@ -382,65 +387,52 @@ Interface:
 
 ## Roadmap
 
-Each stage ships as one reviewed pull request. The order reflects current
-priority. Stages that add a dependency wait for an approved dependency
-proposal.
+The roadmap lives in GitHub issues. Each stage issue lists its task issues.
+The [task index](https://github.com/abuzucom/infiniteprep/issues/182) shows
+which tasks can start now. `docs/decision-register.md` records every
+numbered decision. The stages run in this order:
 
-Preview and analysis:
-
-1. **Tempo control with key lock.** A target BPM for the preview, applied
-   through the Qt playback rate. Key lock uses Qt pitch compensation. Rate
-   range presets run from 4% to 50%.
-2. **A/B looping.** Loop points snap to the beat, with halve and double.
-3. **BPM accuracy.** A selectable detector: a wavelet beat histogram, a comb
-   filter, or both combined. Half and double tempo correction, a separate
-   confidence score, and user-set ranges.
-4. **Energy rating.** A 1 to 10 score from BS.1770 loudness, onset density,
-   and spectral brightness, written to `TXXX:ENERGY` and the FLAC `ENERGY`
-   comment.
-5. **Configurable tag output.** Key notation for written tags, integer BPM, a
-   comment template with `{key}`, `{bpm}`, and `{energy}`, and an audio
-   payload digest check on every write.
-
-Fixes and infrastructure:
-
-6. **Field editing.** Saving one field keeps unsaved edits in other rows.
-7. **Transcode preflight.** Skip compatible files, reuse unchanged output, and
-   flag fake-lossless sources by spectral cutoff.
-8. **Background analysis.** A worker thread with a process pool, progress,
-   cancellation, and versioned results.
-9. **MP3 320 CBR output.** Requires an approved LAME dependency.
-10. **`fpcalc` install button.** A consent-gated install from Settings.
-11. **Live identification.** AcoustID, MusicBrainz, and Discogs replace the
-    mock adapters.
-12. **Local LLM arbitration.** The local model flags one recommended proposal
-    per conflict. A person still approves.
-
-Preparation and export:
-
-13. **Two-deck preview.** Pairing auditions with a crossfader, sync, and a
-    harmonic compatibility hint.
-14. **Beat grid.** Beat and downbeat detection with variable tempo, stored as
-    anchors. Uncertain grids appear in a filter for review.
-15. **Neural key detection.** A neural key model that analyzes the full track.
-16. **Beat grid editor.** Set the downbeat, nudge, tap, halve, double, warp
-    markers, a metronome, lock, and undo.
-17. **Cue templates.** A user-defined rule set places up to 8 cues per track.
-    Generated cues never overwrite existing cues.
-18. **Cue templates from a prompt.** The local LLM converts a plain-text
-    description into a validated template. A person confirms it before use.
-19. **Cue review.** Cue markers on the waveform, audition, drag, and nudge by
-    beat.
-20. **Cue and grid export.** rekordbox XML, Serato markers, and Traktor NML.
-    Each export writes a report of every cue it moved, merged, or dropped.
-21. **Playlists and crates.** Ordered playlists, unordered crates, and next
-    track suggestions scored on key, tempo, and energy.
-22. **Pitch shift in the preview.** Semitone shifts with tempo held, through a
-    dedicated time-stretch library.
-23. **Library import.** rekordbox XML and USB exports, Serato, Traktor NML,
-    and iTunes XML. Import never overwrites user data.
-24. **XDJ and CDJ USB export.** A device database and analysis files that the
-    players read directly. Requires testing on hardware.
+1. [REL](https://github.com/abuzucom/infiniteprep/issues/66) covers release
+   attestations, the SBOM, and bundle checks.
+2. [UPD](https://github.com/abuzucom/infiniteprep/issues/67) covers the
+   Windows online installer and the in-app updater.
+3. [WAVE](https://github.com/abuzucom/infiniteprep/issues/68) covers waveform
+   views and fake-lossless detection.
+4. [PREV](https://github.com/abuzucom/infiniteprep/issues/69) covers preview
+   tempo with key lock.
+5. [FMT](https://github.com/abuzucom/infiniteprep/issues/70) covers more
+   formats and safe conversion.
+6. [INFRA](https://github.com/abuzucom/infiniteprep/issues/71) covers batches,
+   background analysis, live identification, and library upkeep.
+7. [GRID](https://github.com/abuzucom/infiniteprep/issues/72) covers BPM modes
+   and adaptive beat grids.
+8. [KEY](https://github.com/abuzucom/infiniteprep/issues/73) covers key
+   detection modes and compatible keys.
+9. [TAG](https://github.com/abuzucom/infiniteprep/issues/74) covers tag
+   output, manual Energy, and protected fields.
+10. [LOOP and PITCH](https://github.com/abuzucom/infiniteprep/issues/75) covers
+    preview loops and pitch shift.
+11. [ENERGY](https://github.com/abuzucom/infiniteprep/issues/76) covers energy
+    proposals and next-track suggestions.
+12. [CUE](https://github.com/abuzucom/infiniteprep/issues/77) covers the cue
+    model, cue review, and cue templates.
+13. [LIST](https://github.com/abuzucom/infiniteprep/issues/78) covers
+    playlists and crates.
+14. [PHRASE](https://github.com/abuzucom/infiniteprep/issues/79) covers phrase
+    analysis and review.
+15. [IMPORT](https://github.com/abuzucom/infiniteprep/issues/80) covers DJ
+    library import from rekordbox, Traktor, and Serato.
+16. [EXPORT](https://github.com/abuzucom/infiniteprep/issues/81) covers cue and
+    grid export to DJ software.
+17. [USB](https://github.com/abuzucom/infiniteprep/issues/82) covers XDJ and
+    CDJ removable-drive export.
+18. [META](https://github.com/abuzucom/infiniteprep/issues/83) covers
+    DJ-specific USB metadata such as Hot Cue Auto Load, cue colors, and
+    rekordbox tag lists.
+19. [STEM](https://github.com/abuzucom/infiniteprep/issues/84) covers stem
+    separation.
+20. [SIGN](https://github.com/abuzucom/infiniteprep/issues/85) covers signed
+    installers, after the signing certificates exist.
 
 ## Testing, Linting & Packaging
 

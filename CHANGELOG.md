@@ -5,9 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.60.4] (2026-11-15)
+## [0.60.5] (2026-11-15)
 
 ### Added
+
+- The README roadmap lists the 20 stage issues in order, with links and a pointer to the task index (D356, issue 179). The 24-item list goes away. The settings walkthrough names the field on each Settings tab.
 
 - `docs/decision-register.md` records D402 to D406. The entries close the issue 222 source research. MusicBrainz keeps CC0 core data only. Cover Art Archive supplies artwork. iTunes Search supplies a genre and release-date fallback. Deezer leaves the roadmap.
 - The Settings dialog splits into tabs, one module per area (D351, issue 176).
