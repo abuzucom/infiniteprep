@@ -54,24 +54,43 @@ def _has_tables(conn: sqlite3.Connection) -> bool:
     return row is not None
 
 
-def _apply_in_transaction(
+def _apply_steps(
     conn: sqlite3.Connection, pending: Sequence[Migration], backup_path: Path | None
 ) -> None:
-    """Run every pending step and the version stamp. Any error rolls back the whole run."""
+    """Run every pending step and the version stamp inside the caller's open transaction."""
     target_version = pending[-1].version
     failed_version = pending[0].version
-    conn.execute("BEGIN IMMEDIATE")
     try:
         for migration in pending:
             failed_version = migration.version
             migration.apply(conn)
         # PRAGMA accepts no bound parameters. The value is an int from the registry.
         conn.execute(f"PRAGMA user_version = {int(target_version)}")
-        conn.commit()
     except Exception as error:
         # A step can raise any error type. Every one must undo the whole run.
-        conn.rollback()
         raise MigrationFailedError(failed_version, backup_path) from error
+
+
+def _migrate_locked(
+    conn: sqlite3.Connection, db_path: Path | None, migrations: Sequence[Migration]
+) -> tuple[int, bool]:
+    """Read the version and run pending steps under the caller's write lock.
+
+    Returns the version reached and whether any step ran. Commits nothing.
+    """
+    known_version = migrations[-1].version
+    current_version = read_user_version(conn)
+    if current_version > known_version:
+        backup = None if db_path is None else usable_backup_path(db_path, known_version)
+        raise NewerLibraryError(current_version, known_version, backup)
+    pending = [migration for migration in migrations if migration.version > current_version]
+    if not pending:
+        return current_version, False
+    backup_path = None
+    if db_path is not None and _has_tables(conn):
+        backup_path = create_verified_backup(conn, db_path, source_version=current_version)
+    _apply_steps(conn, pending, backup_path)
+    return known_version, True
 
 
 def migrate_database(
@@ -86,18 +105,15 @@ def migrate_database(
     pending deletes the backup the previous migrating start left.
     """
     _check_order(migrations)
-    known_version = migrations[-1].version
-    current_version = read_user_version(conn)
-    if current_version > known_version:
-        backup = None if db_path is None else usable_backup_path(db_path, known_version)
-        raise NewerLibraryError(current_version, known_version, backup)
-    pending = [migration for migration in migrations if migration.version > current_version]
-    if not pending:
-        if db_path is not None:
-            remove_backup(db_path)
-        return current_version
-    backup_path = None
-    if db_path is not None and _has_tables(conn):
-        backup_path = create_verified_backup(conn, db_path, source_version=current_version)
-    _apply_in_transaction(conn, pending, backup_path)
-    return known_version
+    # The write lock comes before the version read. A second instance waits here. It then
+    # finds the steps the first instance ran and skips each one.
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        reached_version, migrated = _migrate_locked(conn, db_path, migrations)
+    except Exception:
+        conn.rollback()
+        raise
+    conn.commit()
+    if not migrated and db_path is not None:
+        remove_backup(db_path)
+    return reached_version

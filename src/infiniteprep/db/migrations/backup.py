@@ -11,6 +11,7 @@ import logging
 import os
 import shutil
 import sqlite3
+import uuid
 from collections.abc import Mapping
 from contextlib import closing
 from datetime import UTC, datetime
@@ -179,8 +180,8 @@ def create_verified_backup(
     place until the new copy passes verification.
     """
     backup = backup_path_for(db_path)
-    temp = backup.with_name(backup.name + TEMP_SUFFIX)
-    temp.unlink(missing_ok=True)
+    # A unique name per run keeps two instances from writing one temporary file.
+    temp = backup.with_name(f"{backup.name}.{uuid.uuid4().hex}{TEMP_SUFFIX}")
     counts = table_row_counts(source)
     try:
         copy_database(source, temp)
