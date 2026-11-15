@@ -5,6 +5,19 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.60.0] (2026-11-15)
+
+### Added
+
+- The Settings dialog splits into tabs, one module per area (D351, issue 176).
+  - The new `ui/settings/` package holds one tab module each for General, Playback, Analysis, Transcode, Identification, Updates, and Storage. A later setting edits one tab module.
+  - General holds the UI theme. Analysis holds the batch stop rule. Transcode holds the transcode mode, the preset, and the playlist relative paths. Identification holds the AcoustID key, the Discogs token, and the local LLM inputs. Storage holds both USB export reserve inputs and the data cleanup button.
+  - Playback and Updates each show a one-line note until a setting joins the tab.
+  - Every setting keeps its stored value and its save behavior. `SettingsDialog` keeps its constructor, its widget attributes, and its module constants.
+  - `tests/unit/test_settings_tabs.py` opens each tab, finds every existing setting on its tab, and saves and reloads each setting unchanged.
+- The version advances to 0.60.0. `pyproject.toml` and
+  `src/infiniteprep/__init__.py` hold the new value.
+
 ## [0.59.3] (2026-11-14)
 
 ### Added
