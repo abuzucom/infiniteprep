@@ -398,6 +398,19 @@ enters this repository.
 | D400 | Number-key hotkeys set Energy during review and playback. A set-position label from an owner-approved list joins each track (issue 228). |
 | D401 | A Settings confidence threshold preselects proposals in review. Nothing writes before Apply. No threshold is set by default (issue 229). |
 
+## D402 to D406: source research decisions (2026-11-15)
+
+Issue 222 surveyed metadata sources under D394. The owner picked the
+adapters after the sample runs on the research branch.
+
+| ID | Decision |
+| --- | --- |
+| D402 | The MusicBrainz adapter takes CC0 core data only. That covers ISRC lookup, release dates, and release-group IDs. Genre associations stay out under CC BY-NC-SA 3.0 (issue 222). |
+| D403 | Cover Art Archive supplies artwork by release MBID. Release-group art fills a release without art (issue 222). |
+| D404 | iTunes Search supplies a coarse genre and release-date fallback. iTunes artwork stays out under Apple's promotional-use terms (issue 222). |
+| D405 | Deezer leaves the roadmap. BPM stays local analysis only (issue 222). |
+| D406 | SOURCE-R ends without a tag-based ISRC test. The research branch stays unmerged under D227 (issue 222). |
+
 ## Open questions
 
 | Source | Question |
