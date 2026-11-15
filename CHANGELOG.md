@@ -5,10 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.60.2] (2026-11-15)
+## [0.60.3] (2026-11-15)
 
 ### Added
 
+- `docs/decision-register.md` records D402 to D406. The entries close the issue 222 source research. MusicBrainz keeps CC0 core data only. Cover Art Archive supplies artwork. iTunes Search supplies a genre and release-date fallback. Deezer leaves the roadmap.
 - The Settings dialog splits into tabs, one module per area (D351, issue 176).
   - The new `ui/settings/` package holds one tab module each for General, Playback, Analysis, Transcode, Identification, Updates, and Storage. A later setting edits one tab module.
   - General holds the UI theme. Analysis holds the batch stop rule. Transcode holds the transcode mode, the preset, and the playlist relative paths. Identification holds the AcoustID key, the Discogs token, and the local LLM inputs. Storage holds both USB export reserve inputs and the data cleanup button.
@@ -19,7 +20,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The signal builders cover click tracks with tempo changes and downbeat accents, tones, chords, full-band and band-limited noise, and an MP3-like lowpass shelf at 16 kHz. `write_wav_fixture` writes PCM_16 WAV through soundfile.
   - The container builders cover ADTS AAC LC, AAC and ALAC M4A, STEM.MP4, Ogg Vorbis, and Ogg Opus. A STEM.MP4 holds a mixdown, four stems, and a stem manifest. Ogg pages carry real CRCs. Codec payloads are PCG64 filler. Opus packets are valid empty CELT frames.
 - `tests/unit/test_synthetic_audio.py` passes each container through its app reader. The ADTS test walks the frame chain because the app has no ADTS reader. `tests/unit/test_synthetic_audio_opus_toc.py` pins the Opus TOC bytes to RFC 6716.
-- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, and to 0.60.2 for the bundle trim. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, and to 0.60.3 for the source research decisions. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 
 ### Fixed
 
