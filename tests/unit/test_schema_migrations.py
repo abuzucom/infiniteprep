@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Iterator
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -46,13 +47,13 @@ class InjectedMigrationError(RuntimeError):
 
 def _user_version(db_path: Path) -> int:
     """Read user_version through a separate connection."""
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         return int(conn.execute("PRAGMA user_version").fetchone()[0])
 
 
 def _table_names(db_path: Path) -> set[str]:
     """Return the names of the application tables in the library at db_path."""
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         rows = conn.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
         ).fetchall()
@@ -61,7 +62,7 @@ def _table_names(db_path: Path) -> set[str]:
 
 def _column_names(db_path: Path, table: str) -> set[str]:
     """Return the column names of a table that the test itself created."""
-    with sqlite3.connect(db_path) as conn:
+    with closing(sqlite3.connect(db_path)) as conn, conn:
         rows = conn.execute("SELECT name FROM pragma_table_info(?)", (table,)).fetchall()
     return {row[0] for row in rows}
 
@@ -162,7 +163,7 @@ def test_existing_version_zero_library_keeps_data_and_gets_backup(library: Path)
     assert backup_path_for(library).is_file()
     assert _user_version(backup_path_for(library)) == 0
     assert read_backup_version(library) == 0
-    with sqlite3.connect(backup_path_for(library)) as conn:
+    with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         assert conn.execute("SELECT COUNT(*) FROM source_groups").fetchone()[0] == 1
 
 
@@ -208,7 +209,7 @@ def test_failed_migration_rolls_back_and_keeps_backup(
     assert isinstance(caught.value.__cause__, InjectedMigrationError)
     assert _user_version(library) == 0
     assert not {"crate_notes", "half_done"} & _table_names(library)
-    with sqlite3.connect(backup_path_for(library)) as conn:
+    with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert conn.execute("SELECT COUNT(*) FROM source_groups").fetchone()[0] == 1
     assert read_backup_version(library) == 0
@@ -218,9 +219,9 @@ def test_newer_library_is_refused_untouched(library: Path) -> None:
     """A library from a newer app raises before any change and names the usable backup."""
     library.parent.mkdir(parents=True)
     newer_version = LATEST_VERSION + 1
-    with sqlite3.connect(library) as conn:
+    with closing(sqlite3.connect(library)) as conn, conn:
         conn.execute(f"PRAGMA user_version = {newer_version}")
-    with sqlite3.connect(backup_path_for(library)) as conn:
+    with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         conn.execute(f"PRAGMA user_version = {LATEST_VERSION}")
     sidecar_path_for(library).write_text(
         json.dumps({"source_version": LATEST_VERSION, "row_counts": {}}), encoding="utf-8"
@@ -242,9 +243,9 @@ def test_newer_library_without_usable_backup_offers_none(library: Path) -> None:
     """A backup that is itself newer than the app is never offered."""
     library.parent.mkdir(parents=True)
     newer_version = LATEST_VERSION + 2
-    with sqlite3.connect(library) as conn:
+    with closing(sqlite3.connect(library)) as conn, conn:
         conn.execute(f"PRAGMA user_version = {newer_version}")
-    with sqlite3.connect(backup_path_for(library)) as conn:
+    with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         conn.execute(f"PRAGMA user_version = {LATEST_VERSION + 1}")
     sidecar_path_for(library).write_text(
         json.dumps({"source_version": LATEST_VERSION + 1}), encoding="utf-8"
@@ -259,7 +260,7 @@ def test_newer_library_without_usable_backup_offers_none(library: Path) -> None:
 def test_refused_open_releases_the_library_file(library: Path) -> None:
     """A refused open closes its connection. A later rename of the file succeeds."""
     library.parent.mkdir(parents=True)
-    with sqlite3.connect(library) as conn:
+    with closing(sqlite3.connect(library)) as conn, conn:
         conn.execute(f"PRAGMA user_version = {LATEST_VERSION + 1}")
 
     with pytest.raises(NewerLibraryError):
@@ -279,7 +280,7 @@ def test_backup_verification_rejects_a_mismatched_copy(
     def copy_then_drop_row(source: sqlite3.Connection, target: Path) -> None:
         """Copy faithfully, then damage the copy."""
         real_copy(source, target)
-        with sqlite3.connect(target) as damaged:
+        with closing(sqlite3.connect(target)) as damaged, damaged:
             damaged.execute("DELETE FROM source_groups")
 
     monkeypatch.setattr(backup_module, "copy_database", copy_then_drop_row)
