@@ -3,6 +3,8 @@
 </p>
 
 # InfinitePrep
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fabuzucom%2Finfiniteprep.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fabuzucom%2Finfiniteprep?ref=badge_shield)
+
 
 **InfinitePrep** is a cross-platform desktop application (**Windows, macOS, and Linux**) built for DJs to identify, correct, enrich, and safely organize music files (**MP3, FLAC, WAV, and AIFF** write-enabled; **M4A/OGG** read-only and convertible).
 
@@ -499,3 +501,7 @@ To verify using the downloaded Sigstore bundle file directly:
 ```bash
 gh attestation verify <package-file> --bundle <package-file>.sigstore.json --repo abuzucom/infiniteprep
 ```
+
+
+## License
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fabuzucom%2Finfiniteprep.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fabuzucom%2Finfiniteprep?ref=badge_large)
