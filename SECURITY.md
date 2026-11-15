@@ -2,23 +2,45 @@
 
 ## Supported Versions
 
-| Version | Supported |
-|---------|-----------|
-| `0.2.x` | Yes |
-| `0.1.x` | No |
+| Build | Supported |
+|-------|-----------|
+| Latest `main` branch build | Yes |
+| Latest tagged release | Yes |
+| Pre-releases | No |
+| Earlier tagged releases | No |
+
+The supported builds receive security fixes.
 
 ## Scope
 
-Scope includes code in this repository. Scope includes configuration in this
-repository. Scope includes third-party vulnerabilities when a selected version
-causes the defect. Scope includes third-party vulnerabilities when a selected
-pin causes the defect. Scope includes third-party vulnerabilities when
-configuration causes the defect. Scope includes third-party vulnerabilities
-when permissions cause the defect. Scope includes third-party vulnerabilities
-when an integration causes the defect. Route purely upstream defects to the
-upstream maintainers.
+Scope includes:
 
-Scope excludes social engineering. Scope excludes physical attacks.
+- Code in this repository.
+- Configuration in this repository.
+- Third-party defects caused by a selected version, a selected pin,
+  configuration, permissions, or an integration.
+
+Purely upstream defects route to the upstream maintainers.
+
+Scope excludes social engineering and physical attacks.
+
+## Application security
+
+InfinitePrep reads and writes user-selected media and metadata. The surfaces
+below handle input from outside the application.
+
+- Audio and tag file parsing. Handles user-selected media and metadata.
+- Tag writing to disk. Handles library files and exported media.
+- Network requests to MusicBrainz, Cover Art Archive, iTunes Search,
+  AcoustID, and Discogs. Handle query metadata.
+- Local LLM endpoint. Handles user prompts and library metadata.
+- Update downloads from GitHub releases. Handle executable artifacts.
+- The `fpcalc` bootstrap. Handles a downloaded binary.
+
+The AcoustID key and the Discogs token live in the OS credential store.
+
+Reporters must exclude credentials, tokens, and personal data from report
+attachments.
 
 ## Reporting a Vulnerability
 
@@ -34,20 +56,4 @@ Remediation target: 90 days.
 
 Coordinate disclosure with the maintainers. Keep the report private before a
 disclosure event. A shipped fix defines one disclosure event. Passage of
-90 days defines another disclosure event. Use the earlier
-event.
-
-## Agent policy security
-
-`AGENTS.md` is the canonical policy. Supporting policy documents live under
-`docs/agent-policy/`. The loader reads local files only. It rejects missing,
-malformed, non-ASCII, oversized, symlinked, special, absolute, and escaping
-paths. It assembles deterministic content and fails closed.
-
-Repository hooks provide defense in depth. Repository writers can modify those
-hooks.
-Use an external harness, filesystem isolation, or server-side controls for
-tamper resistance.
-
-Every repository change requires a versioned SemVer changelog entry. This repo 
-does not use `[Unreleased]`.
+90 days defines another disclosure event. The earlier event applies.
