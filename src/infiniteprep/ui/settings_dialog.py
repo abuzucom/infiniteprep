@@ -116,6 +116,7 @@ class SettingsDialog(QDialog):
         """Keep the single-form widget attributes as references to the tab widgets."""
         self.theme_combo = self.general_tab.theme_combo
         self.stop_on_failure_checkbox = self.analysis_tab.stop_on_failure_checkbox
+        self.fake_lossless_method_combo = self.analysis_tab.fake_lossless_method_combo
         self.transcode_mode_combo = self.transcode_tab.transcode_mode_combo
         self.transcode_preset_combo = self.transcode_tab.transcode_preset_combo
         self.playlist_relative_checkbox = self.transcode_tab.playlist_relative_checkbox

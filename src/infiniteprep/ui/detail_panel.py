@@ -34,7 +34,9 @@ from infiniteprep.domain.enums import (
     format_canonical_key,
     parse_key_string,
 )
-from infiniteprep.domain.models import ApprovedField, FieldProposal, FileAsset
+from infiniteprep.domain.models import AnalysisResult, ApprovedField, FieldProposal, FileAsset
+from infiniteprep.services.fake_lossless import ANALYZER_VERSION as FAKE_LOSSLESS_VERSION
+from infiniteprep.services.fake_lossless import FakeLosslessResult
 from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
 from infiniteprep.ui.audio_player import AudioPreviewWidget
 from infiniteprep.ui.waveform_worker import CANCEL_WAIT_MS, WaveformAnalysisPool
@@ -47,6 +49,8 @@ CANDIDATE_BOX_STRETCH: Final[int] = 1
 OTHER_TAGS_COLUMN_COUNT: Final[int] = 2
 COL_OTHER_KEY: Final[int] = 0
 COL_OTHER_VALUE: Final[int] = 1
+# Stored in the fake-lossless record configuration when the newest run fails.
+FAKE_LOSSLESS_FAILED_STATUS: Final[str] = "failed"
 # Longer values show cut short in the cell. The tooltip holds the full text.
 OTHER_TAG_DISPLAY_LIMIT: Final[int] = 200
 TRUNCATION_MARK: Final[str] = "..."
@@ -181,6 +185,7 @@ class DetailPanel(QWidget):
         self._analysis_generation = 0
         self._analysis_file_id: str | None = None
         self._analysis_path: Path | None = None
+        self._latest_generation_by_file: dict[str, int] = {}
         self.key_notation: KeyDisplayNotation = KeyDisplayNotation.CAMELOT
 
         self.header_label = QLabel("Select a track to inspect metadata and proposals.", self)
@@ -195,6 +200,8 @@ class DetailPanel(QWidget):
         self.waveform_pool = WaveformAnalysisPool(self)
         self.waveform_pool.overview_ready.connect(self._on_overview_ready)
         self.waveform_pool.completed.connect(self._on_waveform_completed)
+        self.waveform_pool.fake_lossless_ready.connect(self._on_fake_lossless_ready)
+        self.waveform_pool.fake_lossless_failed.connect(self._on_fake_lossless_failed)
         self.waveform_pool.failed.connect(self._on_waveform_failed)
         application = QApplication.instance()
         if application is not None:
@@ -303,8 +310,15 @@ class DetailPanel(QWidget):
         self._analysis_generation += 1
         self._analysis_file_id = asset.id
         self._analysis_path = path
+        self._latest_generation_by_file[asset.id] = self._analysis_generation
         self.audio_player.show_analysis_pending()
-        self.waveform_pool.submit(path, asset.id, self._analysis_generation)
+        method = self.settings_manager.load().fake_lossless_method
+        self.waveform_pool.submit(
+            path,
+            asset.id,
+            self._analysis_generation,
+            fake_lossless_method=method,
+        )
 
     def _on_overview_ready(self, file_id: str, generation: int, envelope: object) -> None:
         """Display only a fallback overview that matches the selected track generation."""
@@ -324,6 +338,72 @@ class DetailPanel(QWidget):
         if file_id != self.current_file_id or generation != self._analysis_generation:
             return
         self.audio_player.show_analysis_failure(message)
+
+    def _on_fake_lossless_ready(self, file_id: str, generation: int, result: object) -> None:
+        """Persist fake-lossless diagnostics and refresh warnings for the active track."""
+        if not isinstance(result, FakeLosslessResult):
+            return
+        if generation != self._latest_generation_by_file.get(file_id):
+            return
+        warning = result.format_warning()
+        self._store_fake_lossless(
+            file_id,
+            generation,
+            configuration={
+                "method": result.method,
+                "sample_rate": result.sample_rate,
+                "cutoff_hz": result.cutoff_hz,
+                "traces": list(result.traces),
+            },
+            strength=result.confidence,
+            warnings=[warning] if warning is not None else [],
+        )
+
+    def _on_fake_lossless_failed(self, file_id: str, generation: int, message: str) -> None:
+        """Replace stored fake-lossless diagnostics when the newest re-analysis fails.
+
+        A failed run leaves no current verdict. Keeping the earlier warning would
+        show a stale diagnosis as current in the panel and in transcode preflight.
+        """
+        if generation != self._latest_generation_by_file.get(file_id):
+            return
+        self._store_fake_lossless(
+            file_id,
+            generation,
+            configuration={"status": FAKE_LOSSLESS_FAILED_STATUS, "error": message},
+            strength=None,
+            warnings=[],
+        )
+
+    def _store_fake_lossless(
+        self,
+        file_id: str,
+        generation: int,
+        *,
+        configuration: dict[str, object],
+        strength: float | None,
+        warnings: list[str],
+    ) -> None:
+        """Upsert the single fake-lossless record and refresh warnings for the active track."""
+        self.repo.upsert_analysis_result(
+            AnalysisResult(
+                id=f"fake-lossless-{file_id}",
+                file_id=file_id,
+                analyzer_name="fake_lossless",
+                analyzer_version=str(FAKE_LOSSLESS_VERSION),
+                configuration=configuration,
+                bpm=None,
+                key_tonic=None,
+                key_mode=None,
+                analysis_strength=strength,
+                warnings=warnings,
+            )
+        )
+        if file_id != self.current_file_id or generation != self._analysis_generation:
+            return
+        asset = self.repo.get_file_by_id(file_id)
+        if asset is not None:
+            self._populate_warnings(asset)
 
     def _populate_other_tags(self, asset: FileAsset) -> None:
         """Fill the read-only Other Tags table from the file's raw custom tags."""
