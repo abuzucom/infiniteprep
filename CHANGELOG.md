@@ -15,6 +15,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - `tests/test_release_workflow.py` reads the release job permissions and the package count from `packaging/release.py` (D355). `test_release_gathers_every_package_and_writes_checksums` replaces the six-package test name.
+- `tests/test_release_review_fixes.py` reads the package and bundle names from `expected_packages` and `expected_bundles` (D355). `PACKAGES`, `BUNDLES`, and `PACKAGES_AND_BUNDLES` replace the literal six-name lists. Two test names drop the counts six and twelve.
 
 ## [0.59.2] (2026-11-14)
 
