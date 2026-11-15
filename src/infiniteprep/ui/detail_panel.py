@@ -49,6 +49,8 @@ CANDIDATE_BOX_STRETCH: Final[int] = 1
 OTHER_TAGS_COLUMN_COUNT: Final[int] = 2
 COL_OTHER_KEY: Final[int] = 0
 COL_OTHER_VALUE: Final[int] = 1
+# Stored in the fake-lossless record configuration when the newest run fails.
+FAKE_LOSSLESS_FAILED_STATUS: Final[str] = "failed"
 # Longer values show cut short in the cell. The tooltip holds the full text.
 OTHER_TAG_DISPLAY_LIMIT: Final[int] = 200
 TRUNCATION_MARK: Final[str] = "..."
@@ -199,6 +201,7 @@ class DetailPanel(QWidget):
         self.waveform_pool.overview_ready.connect(self._on_overview_ready)
         self.waveform_pool.completed.connect(self._on_waveform_completed)
         self.waveform_pool.fake_lossless_ready.connect(self._on_fake_lossless_ready)
+        self.waveform_pool.fake_lossless_failed.connect(self._on_fake_lossless_failed)
         self.waveform_pool.failed.connect(self._on_waveform_failed)
         application = QApplication.instance()
         if application is not None:
@@ -343,23 +346,57 @@ class DetailPanel(QWidget):
         if generation != self._latest_generation_by_file.get(file_id):
             return
         warning = result.format_warning()
+        self._store_fake_lossless(
+            file_id,
+            generation,
+            configuration={
+                "method": result.method,
+                "sample_rate": result.sample_rate,
+                "cutoff_hz": result.cutoff_hz,
+                "traces": list(result.traces),
+            },
+            strength=result.confidence,
+            warnings=[warning] if warning is not None else [],
+        )
+
+    def _on_fake_lossless_failed(self, file_id: str, generation: int, message: str) -> None:
+        """Replace stored fake-lossless diagnostics when the newest re-analysis fails.
+
+        A failed run leaves no current verdict. Keeping the earlier warning would
+        show a stale diagnosis as current in the panel and in transcode preflight.
+        """
+        if generation != self._latest_generation_by_file.get(file_id):
+            return
+        self._store_fake_lossless(
+            file_id,
+            generation,
+            configuration={"status": FAKE_LOSSLESS_FAILED_STATUS, "error": message},
+            strength=None,
+            warnings=[],
+        )
+
+    def _store_fake_lossless(
+        self,
+        file_id: str,
+        generation: int,
+        *,
+        configuration: dict[str, object],
+        strength: float | None,
+        warnings: list[str],
+    ) -> None:
+        """Upsert the single fake-lossless record and refresh warnings for the active track."""
         self.repo.upsert_analysis_result(
             AnalysisResult(
                 id=f"fake-lossless-{file_id}",
                 file_id=file_id,
                 analyzer_name="fake_lossless",
                 analyzer_version=str(FAKE_LOSSLESS_VERSION),
-                configuration={
-                    "method": result.method,
-                    "sample_rate": result.sample_rate,
-                    "cutoff_hz": result.cutoff_hz,
-                    "traces": list(result.traces),
-                },
+                configuration=configuration,
                 bpm=None,
                 key_tonic=None,
                 key_mode=None,
-                analysis_strength=result.confidence,
-                warnings=[warning] if warning is not None else [],
+                analysis_strength=strength,
+                warnings=warnings,
             )
         )
         if file_id != self.current_file_id or generation != self._analysis_generation:

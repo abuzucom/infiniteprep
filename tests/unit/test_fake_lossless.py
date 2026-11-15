@@ -263,9 +263,11 @@ class FakeLosslessDetectionTests(unittest.TestCase):
                     current_path=str(track),
                     format=AudioFormat.FLAC,
                     file_size=11,
-                    file_hash="hash-1",
+                    content_hash="hash-1",
                     duration=120.0,
-                    sample_rate=44100,
+                    original_tags={},
+                    import_batch_id="batch-1",
+                    source_group_id=None,
                 )
                 repo.upsert_file_asset(asset)
 
@@ -329,9 +331,11 @@ class FakeLosslessDetectionTests(unittest.TestCase):
                     current_path=str(track),
                     format=AudioFormat.FLAC,
                     file_size=11,
-                    file_hash="hash-1",
+                    content_hash="hash-1",
                     duration=120.0,
-                    sample_rate=44100,
+                    original_tags={},
+                    import_batch_id="batch-1",
+                    source_group_id=None,
                 )
                 repo.upsert_file_asset(asset)
 

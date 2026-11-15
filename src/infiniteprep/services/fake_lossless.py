@@ -210,7 +210,12 @@ def _relative_db_profile(spectra: np.ndarray, sample_rate: int) -> tuple[np.ndar
 
 
 def _smooth_profile(freqs: np.ndarray, rel_db: np.ndarray) -> np.ndarray:
-    """Apply a uniform frequency smoothing kernel of roughly SMOOTH_BAND_HZ."""
+    """Apply a uniform frequency smoothing kernel of roughly SMOOTH_BAND_HZ.
+
+    The profile is in dB relative to the reference band. Zero padding mixes
+    0 dB into the edge bins. That lift moves a deep stopband near Nyquist above
+    the cutoff threshold. Edge padding repeats each edge value instead.
+    """
     if len(freqs) < 2:
         return rel_db
     bin_hz = float(freqs[1] - freqs[0])
@@ -218,7 +223,10 @@ def _smooth_profile(freqs: np.ndarray, rel_db: np.ndarray) -> np.ndarray:
     if kernel_len <= 1:
         return rel_db
     kernel = np.ones(kernel_len, dtype=np.float64) / kernel_len
-    return np.convolve(rel_db, kernel, mode="same")
+    pad_before = kernel_len // 2
+    pad_after = kernel_len - 1 - pad_before
+    padded = np.pad(rel_db, (pad_before, pad_after), mode="edge")
+    return np.convolve(padded, kernel, mode="valid")
 
 
 def _detect_spectral_cutoff(
