@@ -299,9 +299,8 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
      The batch applies the previewed plans when its turn comes. Each write first
      records an in-progress journal entry, then takes a verified backup.
      Each write keeps its own backup, named with its operation id.
-   - The tags go to a copy next to the file. The copy replaces the original
-     only after it reads back every written tag. A failed write leaves the
-     original untouched and records the journal entry as rolled back.
+   - The app verifies the staged audio payload with SHA-256 and reads back tags before replacement.
+     On a payload verification failure the app discards the copy and records a failed journal entry.
    - Preflight blocks a file with more than one hard link or another owner.
    - A crash or power loss can stop a write before it finishes. At the next
      launch, **Recover Interrupted Writes** lists each such write.

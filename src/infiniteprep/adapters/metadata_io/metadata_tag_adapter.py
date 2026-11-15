@@ -19,6 +19,10 @@ from pathlib import Path
 from typing import Any, Final
 
 from infiniteprep import __version__
+from infiniteprep.adapters.metadata_io.audio_payload import (
+    AudioPayloadVerificationError,
+    compute_audio_payload_digest,
+)
 from infiniteprep.adapters.metadata_io.audio_properties import (
     AudioProperties,
     read_aiff_stream,
@@ -942,7 +946,7 @@ class MetadataTagAdapter:
         return write_plan.destination_path
 
     def _write_tags_by_format(self, file_path: Path, tags_to_write: dict[str, str]) -> None:
-        """Write approved tags in-place for MP3, WAV, AIFF, or FLAC.
+        """Write approved tags to a staged file and verify its audio payload.
 
         Each writer reads the whole file into memory, so files past the rewrite limit are
         refused before any read.
@@ -954,19 +958,22 @@ class MetadataTagAdapter:
                 "write limit; no tags were written. Split or re-encode the file, then retry."
             )
         fmt = self.detect_format(file_path)
-        if fmt == AudioFormat.MP3:
-            self._write_mp3_tags(file_path, tags_to_write)
-            return
-        if fmt == AudioFormat.WAV:
-            self._write_wav_tags(file_path, tags_to_write)
-            return
-        if fmt == AudioFormat.AIFF:
-            self._write_aiff_tags(file_path, tags_to_write)
-            return
-        if fmt == AudioFormat.FLAC:
-            self._write_flac_tags(file_path, tags_to_write)
-            return
-        raise ValueError(f"Unsupported write format {fmt}; use MP3, FLAC, WAV, or AIFF.")
+        writer = {
+            AudioFormat.MP3: self._write_mp3_tags,
+            AudioFormat.WAV: self._write_wav_tags,
+            AudioFormat.AIFF: self._write_aiff_tags,
+            AudioFormat.FLAC: self._write_flac_tags,
+        }.get(fmt)
+        if writer is None:
+            raise ValueError(f"Unsupported write format {fmt}; use MP3, FLAC, WAV, or AIFF.")
+        before = compute_audio_payload_digest(file_path, fmt)
+        writer(file_path, tags_to_write)
+        after = compute_audio_payload_digest(file_path, fmt)
+        if before != after:
+            raise AudioPayloadVerificationError(
+                "The audio payload changed during the tag write. "
+                "The app discarded the tag write. Check the file with another tag editor."
+            )
 
     def _write_mp3_tags(self, file_path: Path, tags_to_write: dict[str, str]) -> None:
         """Write ID3v2.3 UTF-16 tags to an MP3 file. Every byte after the tag stays the same."""
