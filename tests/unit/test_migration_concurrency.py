@@ -38,7 +38,7 @@ def _migrate_in_thread(
     db_path: Path, start: threading.Barrier, results: list[int], errors: list[BaseException]
 ) -> None:
     """Open a separate connection and migrate once the other instance is ready too."""
-    steps = (*MIGRATIONS, Migration(2, _count_runs))
+    steps = (MIGRATIONS[0], Migration(2, _count_runs))
     conn = sqlite3.connect(db_path, timeout=LOCK_TIMEOUT_SECONDS)
     try:
         start.wait()
