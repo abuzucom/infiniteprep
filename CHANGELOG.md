@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.60.1] (2026-11-15)
+## [0.60.2] (2026-11-15)
 
 ### Added
 
@@ -15,8 +15,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Playback and Updates each show a one-line note until a setting joins the tab.
   - Every setting keeps its stored value and its save behavior. `SettingsDialog` keeps its constructor, its widget attributes, and its module constants.
   - `tests/unit/test_settings_tabs.py` opens each tab, finds every existing setting on its tab, and saves and reloads each setting unchanged.
-- The version advances to 0.60.1. `pyproject.toml` and
-  `src/infiniteprep/__init__.py` hold the new value.
+- `tests/fixtures/synthetic_audio.py` builds seeded audio fixtures at test time (D359). Later tasks build audio test files with this module.
+  - The signal builders cover click tracks with tempo changes and downbeat accents, tones, chords, full-band and band-limited noise, and an MP3-like lowpass shelf at 16 kHz. `write_wav_fixture` writes PCM_16 WAV through soundfile.
+  - The container builders cover ADTS AAC LC, AAC and ALAC M4A, STEM.MP4, Ogg Vorbis, and Ogg Opus. A STEM.MP4 holds a mixdown, four stems, and a stem manifest. Ogg pages carry real CRCs. Codec payloads are PCG64 filler. Opus packets are valid empty CELT frames.
+- `tests/unit/test_synthetic_audio.py` passes each container through its app reader. The ADTS test walks the frame chain because the app has no ADTS reader. `tests/unit/test_synthetic_audio_opus_toc.py` pins the Opus TOC bytes to RFC 6716.
+- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, and to 0.60.2 for the bundle trim. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 
 ### Fixed
 
