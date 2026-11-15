@@ -413,7 +413,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             self.assertIsNotNone(read_in_progress_manifest(mount_root))
             self.assertEqual(len(store.load_entries()), 1)
 
-    def test_resume_removes_usb_in_progress_marker_and_keeps_journal(self) -> None:
+    def test_resume_runs_callback_removes_marker_and_keeps_journal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
             partition = build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),))
@@ -425,14 +425,54 @@ class UsbReconnectChoiceTests(unittest.TestCase):
                 TargetCandidate(name="sdb", inspection=inspection, error=None)
             )
             assert match is not None
+            calls: list[tuple[str, Path]] = []
 
-            updated = store.apply_reconnect_choice(match, ReconnectChoice.RESUME, mount_root)
+            updated = store.apply_reconnect_choice(
+                match,
+                ReconnectChoice.RESUME,
+                mount_root,
+                resume_callback=lambda item, path: calls.append((item.export_id, path)),
+            )
 
+            self.assertEqual(calls, [(entry.export_id, mount_root)])
             self.assertEqual(updated.last_recovery_action, ReconnectChoice.RESUME.value)
             self.assertIsNone(read_in_progress_manifest(mount_root))
             persisted = store.load_entries()
             self.assertEqual(len(persisted), 1)
             self.assertEqual(persisted[0].last_recovery_action, ReconnectChoice.RESUME.value)
+
+    def test_resume_and_restore_require_callback_before_marking_recovered(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store, mount_root, entry = self._setup_store(tmp_dir)
+            partition = build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),))
+            inspection = build_inspection(
+                drive=entry.drive_identity,
+                partitions=(partition,),
+            )
+            candidate = TargetCandidate(name="sdb", inspection=inspection, error=None)
+            match = store.match_reconnected_target(candidate)
+            assert match is not None
+
+            for choice in (ReconnectChoice.RESUME, ReconnectChoice.RESTORE):
+                with self.assertRaises(ValueError):
+                    store.apply_reconnect_choice(match, choice, mount_root)
+                self.assertIsNotNone(read_in_progress_manifest(mount_root))
+                self.assertEqual(store.load_entries()[0].last_recovery_action, "")
+                self.assertIsNotNone(store.match_reconnected_target(candidate))
+
+            def _failing_handler(item: UsbJournalEntry, path: Path) -> None:
+                raise OSError("disk disconnected")
+
+            with self.assertRaises(OSError):
+                store.apply_reconnect_choice(
+                    match,
+                    ReconnectChoice.RESUME,
+                    mount_root,
+                    resume_callback=_failing_handler,
+                )
+            self.assertIsNotNone(read_in_progress_manifest(mount_root))
+            self.assertEqual(store.load_entries()[0].last_recovery_action, "")
+            self.assertIsNotNone(store.match_reconnected_target(candidate))
 
     def test_restore_runs_callback_removes_marker_and_keeps_journal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -166,10 +166,8 @@ def _entry_from_dict(raw: object) -> UsbJournalEntry:
     volume_uuid = raw.get("volume_uuid")
     mount_point = raw.get("mount_point")
     scope = raw.get("scope")
-    if not all(
-        isinstance(item, str)
-        for item in (export_id, started_at, volume_uuid, mount_point, scope)
-    ):
+    required_fields = (export_id, started_at, volume_uuid, mount_point, scope)
+    if not all(isinstance(item, str) for item in required_fields):
         raise ValueError("Required USB recovery journal string fields are missing.")
     return UsbJournalEntry(
         export_id=str(export_id),
@@ -271,6 +269,18 @@ def _validate_expiry_inputs(now_utc: datetime, expiry_days: int) -> datetime:
     return now_utc.astimezone(UTC)
 
 
+def _run_required_recovery_callback(
+    action: str,
+    callback: Callable[[UsbJournalEntry, Path], None] | None,
+    entry: UsbJournalEntry,
+    mount_root: Path,
+) -> None:
+    """Execute a required recovery handler before retiring an interrupted export marker."""
+    if callback is None:
+        raise ValueError(f"Recovery action '{action}' requires a callback.")
+    callback(entry, mount_root)
+
+
 class UsbRecoveryJournalStore:
     """Reads, updates, matches, and expires computer-side USB export journal entries."""
 
@@ -343,6 +353,7 @@ class UsbRecoveryJournalStore:
         *,
         confirmed: bool = False,
         restore_callback: Callable[[UsbJournalEntry, Path], None] | None = None,
+        resume_callback: Callable[[UsbJournalEntry, Path], None] | None = None,
     ) -> UsbJournalEntry:
         """Execute Resume, Restore, or Leave unchanged on a matched USB drive (D139, D166)."""
         if (
@@ -352,10 +363,10 @@ class UsbRecoveryJournalStore:
         ):
             raise ValueError("Confirm the matched drive before modifying it.")
         if choice == ReconnectChoice.RESTORE:
-            if restore_callback is not None:
-                restore_callback(match.entry, mount_root)
+            _run_required_recovery_callback("restore", restore_callback, match.entry, mount_root)
             remove_in_progress_manifest(mount_root)
         elif choice == ReconnectChoice.RESUME:
+            _run_required_recovery_callback("resume", resume_callback, match.entry, mount_root)
             remove_in_progress_manifest(mount_root)
         return self._record_recovery_action(match.entry, choice)
 

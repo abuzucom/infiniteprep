@@ -70,9 +70,7 @@ def _build_match(*, requires_confirmation: bool, html_text: bool = False) -> Usb
         backup_path="backups/exp-100",
     )
     candidate = TargetCandidate(name=drive.name, inspection=inspection, error=None)
-    reason = (
-        "Mount path changed since export started." if requires_confirmation else "Exact match."
-    )
+    reason = "Mount path changed since export started." if requires_confirmation else "Exact match."
     return UsbReconnectMatch(
         entry=entry,
         candidate=candidate,

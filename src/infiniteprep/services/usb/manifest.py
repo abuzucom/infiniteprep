@@ -116,10 +116,7 @@ def compute_my_tags_digest(
         key=lambda row: (row["category"], row["name"], row["parent"]),
     )
     assign_rows = sorted(
-        (
-            {"relative_path": item.relative_path, "tags": sorted(item.tags)}
-            for item in assignments
-        ),
+        ({"relative_path": item.relative_path, "tags": sorted(item.tags)} for item in assignments),
         key=lambda row: str(row["relative_path"]),
     )
     payload = {"assignments": assign_rows, "vocabulary": vocab_rows}

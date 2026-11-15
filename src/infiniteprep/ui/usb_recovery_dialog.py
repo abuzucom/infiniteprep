@@ -115,9 +115,7 @@ class UsbRecoveryDialog(QDialog):
         layout.addWidget(label)
         return label
 
-    def _populate_summary_labels(
-        self, layout: QVBoxLayout, match: UsbReconnectMatch
-    ) -> None:
+    def _populate_summary_labels(self, layout: QVBoxLayout, match: UsbReconnectMatch) -> None:
         """Add plain-text drive, volume, export, and match-reason labels."""
         inspection = match.candidate.inspection
         drive = inspection.drive if inspection is not None else match.entry.drive_identity
