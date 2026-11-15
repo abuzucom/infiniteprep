@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import importlib.util
 import unittest
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import yaml
 
 WORKFLOW_PATH = Path(__file__).resolve().parent.parent / ".github/workflows/build-packages.yml"
+RELEASE_PATH = Path(__file__).resolve().parent.parent / "packaging" / "release.py"
 # A manual run started on a tag also has ref_type tag. The event must also be a push.
 TAG_CONDITION = "github.event_name == 'push' && github.ref_type == 'tag'"
 PACKAGE_ARTIFACTS = (
@@ -17,6 +20,19 @@ PACKAGE_ARTIFACTS = (
     "InfinitePrep-macos-dmg",
 )
 FIRST_PARTY_ACTIONS = ("actions/checkout@", "actions/setup-python@", "actions/attest@")
+
+
+def _load_release() -> ModuleType:
+    """Import packaging/release.py by file path, as CI runs it."""
+    spec = importlib.util.spec_from_file_location("release_workflow_target", RELEASE_PATH)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# The expected permissions and package count come from the release constants (D355).
+RELEASE = _load_release()
 
 
 class ReleaseWorkflowTest(unittest.TestCase):
@@ -66,16 +82,7 @@ class ReleaseWorkflowTest(unittest.TestCase):
         release = self.jobs["release"]
         self.assertEqual(release["needs"], "bundle")
         self.assertEqual(release["if"], TAG_CONDITION)
-        self.assertEqual(
-            release["permissions"],
-            {
-                "contents": "write",
-                "actions": "read",
-                "id-token": "write",
-                "attestations": "write",
-                "artifact-metadata": "write",
-            },
-        )
+        self.assertEqual(release["permissions"], dict(RELEASE.RELEASE_JOB_PERMISSIONS))
         for name, job in self.jobs.items():
             if name != "release":
                 self.assertNotIn("permissions", job, name)
@@ -90,12 +97,12 @@ class ReleaseWorkflowTest(unittest.TestCase):
             if step.get("uses", "").startswith("actions/checkout@"):
                 self.assertIs(step["with"]["persist-credentials"], False)
 
-    def test_release_gathers_all_six_packages_and_writes_checksums(self) -> None:
+    def test_release_gathers_every_package_and_writes_checksums(self) -> None:
         """All three package artifacts download, then the checksums and notes are written."""
         download = self._step("release", "Download package artifacts")["run"]
         for artifact in PACKAGE_ARTIFACTS:
             self.assertIn(artifact, download)
-        self.assertIn("-ne 6 ]", download)
+        self.assertIn(f"-ne {len(RELEASE.ASSET_SUFFIXES)} ]", download)
         written = self._step("release", "Write checksums and release notes")["run"]
         self.assertIn("release.py checksums", written)
         self.assertIn('release.py notes "${GITHUB_REF_NAME#v}"', written)
