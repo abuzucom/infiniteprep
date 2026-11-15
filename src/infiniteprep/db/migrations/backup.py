@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
 
-from infiniteprep.db.migrations import ROW_COUNT_QUERIES
+from infiniteprep.db.migrations import LATEST_VERSION, ROW_COUNT_QUERIES
 
 logger = logging.getLogger(__name__)
 
@@ -207,12 +207,16 @@ def read_backup_version(db_path: Path) -> int | None:
 
 
 def usable_backup_path(db_path: Path, known_version: int) -> Path | None:
-    """Return the backup path when a backup exists that this app can open, else None."""
-    version = read_backup_version(db_path)
-    backup = backup_path_for(db_path)
-    if version is None or version > known_version or not backup.is_file():
+    """Return the backup path when restore would accept the backup, else None.
+
+    The check matches the restore check. The app therefore never offers a failing Restore.
+    """
+    try:
+        verified_backup_record(db_path, known_version=known_version)
+    except (OSError, sqlite3.Error) as error:
+        logger.info("The app offers no Restore. %s", type(error).__name__)
         return None
-    return backup
+    return backup_path_for(db_path)
 
 
 def _library_moves(db_path: Path, kept: Path) -> list[tuple[Path, Path]]:
@@ -255,8 +259,12 @@ def _swap_in_staged_copy(db_path: Path, kept: Path, staged: Path) -> Path | None
     return kept if moves else None
 
 
-def _verified_backup_record(db_path: Path) -> tuple[int, dict[str, int]]:
-    """Return the backup's recorded version and row counts once the file matches the record."""
+def verified_backup_record(db_path: Path, *, known_version: int) -> tuple[int, dict[str, int]]:
+    """Return the backup's recorded version and row counts once every check passes.
+
+    The backup must exist, hold a complete record, match that record, and sit at a version
+    no newer than known_version.
+    """
     backup = backup_path_for(db_path)
     if not backup.is_file():
         raise FileNotFoundError(f"No library backup exists at {backup}.")
@@ -266,18 +274,26 @@ def _verified_backup_record(db_path: Path) -> tuple[int, dict[str, int]]:
         raise BackupVerificationError(
             f"The library backup at {backup} has no usable version and row-count record."
         )
+    if record[0] > known_version:
+        raise BackupVerificationError(
+            f"The library backup at {backup} holds version {record[0]}. This app opens "
+            f"versions up to {known_version}."
+        )
     verify_backup_file(backup, expected_version=record[0], expected_counts=counts)
     return record[0], counts
 
 
-def restore_pre_migration_backup(db_path: Path, *, now: datetime | None = None) -> Path | None:
+def restore_pre_migration_backup(
+    db_path: Path, *, now: datetime | None = None, known_version: int = LATEST_VERSION
+) -> Path | None:
     """Put the verified backup in place of the library and keep the library under a new name.
 
     Close every connection to the library first. The backup stays beside the library until
     the next clean open removes it. A failed restore leaves the library under its own name.
-    Returns the kept copy of the library, or None when no library file existed.
+    A backup newer than known_version stays unused. Returns the kept copy of the library,
+    or None when no library file existed.
     """
-    _verified_backup_record(db_path)
+    verified_backup_record(db_path, known_version=known_version)
     kept = newer_copy_path_for(db_path, now or _utc_now())
     _check_kept_names_free(kept)
     staged = db_path.with_name(db_path.name + RESTORE_TEMP_SUFFIX)

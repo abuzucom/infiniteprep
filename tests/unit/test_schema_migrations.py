@@ -223,7 +223,7 @@ def test_newer_library_is_refused_untouched(library: Path) -> None:
     with sqlite3.connect(backup_path_for(library)) as conn:
         conn.execute(f"PRAGMA user_version = {LATEST_VERSION}")
     sidecar_path_for(library).write_text(
-        json.dumps({"source_version": LATEST_VERSION}), encoding="utf-8"
+        json.dumps({"source_version": LATEST_VERSION, "row_counts": {}}), encoding="utf-8"
     )
 
     with pytest.raises(NewerLibraryError) as caught:
