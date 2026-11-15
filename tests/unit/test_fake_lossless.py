@@ -111,7 +111,9 @@ class FakeLosslessDetectionTests(unittest.TestCase):
         """A 16 kHz band-limited FLAC fixture is flagged with spectral_cutoff."""
         with tempfile.TemporaryDirectory() as tmp:
             samples = _broadband_signal(SAMPLE_RATE_44K)
-            sos = butter(8, 16000.0, btype="lowpass", fs=SAMPLE_RATE_44K, output="sos")
+            # Encoder lowpass filters are steep. An 8th-order filter still sits above
+            # -45 dB until about 18.7 kHz and misrepresents a 16 kHz encoder cutoff.
+            sos = butter(24, 16000.0, btype="lowpass", fs=SAMPLE_RATE_44K, output="sos")
             filtered = sosfilt(sos, samples).astype(np.float32)
             source = _write_flac(Path(tmp) / "band_limited.flac", filtered, SAMPLE_RATE_44K)
 

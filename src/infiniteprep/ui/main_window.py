@@ -561,6 +561,9 @@ class MainWindow(QMainWindow):
         close requests during that wait ask nothing.
         """
         if not self.batch_queue.is_busy():
+            # A child widget gets no closeEvent of its own. Closing the panel cancels
+            # its analysis so no late result writes after the window closes.
+            self.detail_panel.close()
             super().closeEvent(event)
             return
         event.ignore()
