@@ -5,10 +5,17 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.60.3] (2026-11-15)
+## [0.61.0] (2026-11-15)
 
 ### Added
 
+- Library schema migrations track the schema version in SQLite `user_version` (D349, issue 175).
+  - The new `db/migrations/` package lists numbered steps in order. Migration 1 runs the existing `schema.sql`. A library from an earlier release reads as version 0 and reaches version 1 with no schema change.
+  - Every pending step and the version stamp run in one transaction. A failed step rolls back the whole run and raises `MigrationFailedError`.
+  - Each migration run first writes one verified backup beside the library as `infiniteprep.sqlite3.pre-migration-backup`. A JSON record beside it holds the source version and per-table row counts. Verification checks `integrity_check`, the version, and the row counts from a literal query registry. The next start with nothing pending deletes the backup.
+  - A library from a newer app raises `NewerLibraryError` before any change. The startup prompt offers Restore when a usable backup exists. Restore keeps the newer library and its WAL and SHM files as `infiniteprep.sqlite3.newer-<UTC timestamp>` and installs the backup. A failed rename moves every file back.
+  - `restore_pre_migration_backup()` serves the update rollback in UPD-3 (issue 92). `open_storage` takes an optional `confirm_restore` callback.
+  - `tests/unit/test_schema_migrations.py`, `tests/unit/test_newer_library_restore.py`, `tests/unit/test_restore_robustness.py`, and `tests/unit/test_row_count_registry.py` cover a fresh library, an existing version-0 library, a two-step migration, a failed migration with the backup intact, a refused newer library, backup verification, cleanup, and restore.
 - `docs/decision-register.md` records D402 to D406. The entries close the issue 222 source research. MusicBrainz keeps CC0 core data only. Cover Art Archive supplies artwork. iTunes Search supplies a genre and release-date fallback. Deezer leaves the roadmap.
 - The Settings dialog splits into tabs, one module per area (D351, issue 176).
   - The new `ui/settings/` package holds one tab module each for General, Playback, Analysis, Transcode, Identification, Updates, and Storage. A later setting edits one tab module.
@@ -20,7 +27,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The signal builders cover click tracks with tempo changes and downbeat accents, tones, chords, full-band and band-limited noise, and an MP3-like lowpass shelf at 16 kHz. `write_wav_fixture` writes PCM_16 WAV through soundfile.
   - The container builders cover ADTS AAC LC, AAC and ALAC M4A, STEM.MP4, Ogg Vorbis, and Ogg Opus. A STEM.MP4 holds a mixdown, four stems, and a stem manifest. Ogg pages carry real CRCs. Codec payloads are PCG64 filler. Opus packets are valid empty CELT frames.
 - `tests/unit/test_synthetic_audio.py` passes each container through its app reader. The ADTS test walks the frame chain because the app has no ADTS reader. `tests/unit/test_synthetic_audio_opus_toc.py` pins the Opus TOC bytes to RFC 6716.
-- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, and to 0.60.3 for the source research decisions. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, to 0.60.3 for the source research decisions, and to 0.61.0 for the schema migrations. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 
 ### Fixed
 
