@@ -45,7 +45,11 @@ from infiniteprep.ui.journal_dialog import JournalDialog
 from infiniteprep.ui.main_window import AnalyzeRunner, MainWindow
 from infiniteprep.ui.recovery_dialog import RecoveryDialog
 from infiniteprep.ui.settings_dialog import SettingsDialog
-from infiniteprep.ui.storage_prompt import confirm_storage_fallback, show_storage_error
+from infiniteprep.ui.storage_prompt import (
+    confirm_library_restore,
+    confirm_storage_fallback,
+    show_storage_error,
+)
 from infiniteprep.ui.theme import apply_application_theme
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 
@@ -192,6 +196,7 @@ def launch_desktop_app() -> int:
         confirm_fallback=confirm_storage_fallback,
         show_error=show_storage_error,
         appimage=appimage_launch_from_environment(os.environ),
+        confirm_restore=confirm_library_restore,
     )
     if isinstance(opened, int):
         return opened

@@ -8,11 +8,13 @@ import uuid
 from pathlib import Path
 from types import TracebackType
 
+from infiniteprep.db.migrations.m0001_initial import read_schema_sql
+from infiniteprep.db.migrations.runner import migrate_database
+
 
 def get_schema_sql() -> str:
     """Load the SQLite schema DDL from schema.sql."""
-    schema_path = Path(__file__).with_name("schema.sql")
-    return schema_path.read_text(encoding="utf-8")
+    return read_schema_sql()
 
 
 class DatabaseManager:
@@ -45,10 +47,16 @@ class DatabaseManager:
         return self._local.conn
 
     def initialize(self) -> None:
-        """Apply schema.sql idempotently on the current thread's connection."""
+        """Bring the library to the latest schema version on this thread's connection (D349).
+
+        A refused or failed open closes the connection. A restore can then rename the file.
+        """
         conn = self.connect()
-        conn.executescript(get_schema_sql())
-        conn.commit()
+        try:
+            migrate_database(conn, None if self._is_memory else self.db_path)
+        except (sqlite3.Error, OSError):
+            self.close()
+            raise
 
     def close(self) -> None:
         """Close the current thread's SQLite connection and release file handles."""

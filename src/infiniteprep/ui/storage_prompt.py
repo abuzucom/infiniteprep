@@ -21,6 +21,8 @@ USE_PER_USER_LABEL: Final[str] = "Use my user profile"
 QUIT_LABEL: Final[str] = "Quit"
 REMEMBER_LABEL: Final[str] = "Remember this for this folder"
 STORAGE_ERROR_TITLE: Final[str] = "InfinitePrep Cannot Start"
+RESTORE_TITLE: Final[str] = "Library From a Newer Version"
+RESTORE_LABEL: Final[str] = "Restore"
 
 
 @dataclass(frozen=True)
@@ -62,6 +64,36 @@ def build_storage_error_box(message: str) -> QMessageBox:
 def show_storage_error(message: str) -> None:
     """Show why storage could not open, and wait until it is closed."""
     build_storage_error_box(message).exec()
+
+
+@dataclass(frozen=True)
+class RestorePrompt:
+    """The newer-library prompt with the button that confirms a restore (D349)."""
+
+    box: QMessageBox
+    restore_button: QAbstractButton
+
+    def confirmed(self) -> bool:
+        """Return whether the person clicked Restore."""
+        return self.box.clickedButton() is self.restore_button
+
+
+def build_restore_prompt(message: str) -> RestorePrompt:
+    """Return the prompt. Its text is plain, since it shows file paths. Quit is the default."""
+    box = QMessageBox(QMessageBox.Icon.Warning, RESTORE_TITLE, "")
+    box.setTextFormat(Qt.TextFormat.PlainText)
+    box.setText(message)
+    restore_button = box.addButton(RESTORE_LABEL, QMessageBox.ButtonRole.AcceptRole)
+    quit_button = box.addButton(QUIT_LABEL, QMessageBox.ButtonRole.RejectRole)
+    box.setDefaultButton(quit_button)
+    return RestorePrompt(box, restore_button)
+
+
+def confirm_library_restore(message: str) -> bool:
+    """Ask whether to restore the backup in place of a library from a newer version."""
+    prompt = build_restore_prompt(message)
+    prompt.box.exec()
+    return prompt.confirmed()
 
 
 def confirm_storage_fallback(folder: Path) -> FallbackAnswer:

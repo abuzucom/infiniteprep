@@ -5,10 +5,17 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.61.0] (2026-11-15)
+## [0.62.0] (2026-11-15)
 
 ### Added
 
+- Library schema migrations track the schema version in SQLite `user_version` (D349, issue 175).
+  - The new `db/migrations/` package lists numbered steps in order. Migration 1 runs the existing `schema.sql`. A library from an earlier release reads as version 0 and reaches version 1 with no schema change.
+  - Every pending step and the version stamp run in one transaction. A failed step rolls back the whole run and raises `MigrationFailedError`.
+  - Each migration run first writes one verified backup beside the library as `infiniteprep.sqlite3.pre-migration-backup`. A one-row record table inside the backup holds the source version and per-table row counts. One rename publishes the copy and its record. Restore removes that table from the copy it installs. Verification checks `integrity_check`, the version, and the row counts from a literal query registry. The next start with nothing pending deletes the backup.
+  - A library from a newer app raises `NewerLibraryError` before any change. The startup prompt offers Restore when a usable backup exists. Restore keeps the newer library and its WAL and SHM files as `infiniteprep.sqlite3.newer-<UTC timestamp>` and installs the backup. A failed rename moves every file back.
+  - `restore_pre_migration_backup()` serves the update rollback in UPD-3 (issue 92). `open_storage` takes an optional `confirm_restore` callback.
+  - `tests/unit/test_schema_migrations.py`, `tests/unit/test_newer_library_restore.py`, `tests/unit/test_restore_robustness.py`, and `tests/unit/test_row_count_registry.py` cover a fresh library, an existing version-0 library, a two-step migration, a failed migration with the backup intact, a refused newer library, backup verification, cleanup, and restore.
 - Added fake-lossless audio detection under `src/infiniteprep/services/fake_lossless.py` (D332, issue 99). The detector analyzes lossless tracks for spectral cutoff, MP3 lowpass shelf, and AAC SBR gap traces behind a pluggable `FakeLosslessDetector` interface.
 - Added user-selectable `fake_lossless_method` in `AppSettings`, `AnalysisTab`, and `SettingsDialog`.
 - Wired fake-lossless diagnostics into `WaveformAnalysisPool`, `DetailPanel`, `MainWindow`, and non-blocking transcode preflight notices in `action_handlers.py`.
@@ -26,7 +33,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tests/unit/test_synthetic_audio.py` passes each container through its app reader. The ADTS test walks the frame chain because the app has no ADTS reader. `tests/unit/test_synthetic_audio_opus_toc.py` pins the Opus TOC bytes to RFC 6716.
 - `packaging/release.py` gains `RELEASE_JOB_PERMISSIONS`, a read-only mapping of the release job permissions (D355).
 - `tests/test_release_constants.py` pins the six release package names, the Sigstore bundle names, and the five release job permissions by hand (D355). The file also checks that `RELEASE_JOB_PERMISSIONS` matches the release job permissions in `build-packages.yml`.
-- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, to 0.60.3 for the source research decisions, to 0.60.4 for the release test constants, and to 0.61.0 for fake-lossless audio detection. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, to 0.60.3 for the source research decisions, to 0.60.4 for the release test constants, to 0.61.0 for fake-lossless audio detection, and to 0.62.0 for the schema migrations. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 
 ### Changed
 
