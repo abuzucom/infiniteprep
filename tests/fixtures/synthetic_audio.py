@@ -50,6 +50,17 @@ ADTS_SAMPLE_RATE_INDEX: Final[dict[int, int]] = {
     22050: 7, 16000: 8, 12000: 9, 11025: 10, 8000: 11, 7350: 12,
 }  # fmt: skip
 ADTS_HEADER_SIZE: Final[int] = 7
+# Field shifts count from the least significant bit of the 56-bit header. The fields from
+# most to least significant: syncword (12 bits), ID (1), layer (2), protection_absent (1),
+# profile (2), sampling index (4), private (1), channel config (3), four copy flags (1 each),
+# frame length (13), buffer fullness (11), and raw block count (2).
+ADTS_SYNCWORD_SHIFT: Final[int] = 44
+ADTS_PROTECTION_ABSENT_SHIFT: Final[int] = 40
+ADTS_PROFILE_SHIFT: Final[int] = 38
+ADTS_RATE_INDEX_SHIFT: Final[int] = 34
+ADTS_CHANNELS_SHIFT: Final[int] = 30
+ADTS_FRAME_LENGTH_SHIFT: Final[int] = 13
+ADTS_FULLNESS_SHIFT: Final[int] = 2
 ADTS_SYNCWORD: Final[int] = 0xFFF
 ADTS_AAC_LC_PROFILE: Final[int] = 1
 ADTS_MAX_FRAME_LENGTH: Final[int] = 0x1FFF
@@ -266,13 +277,13 @@ def write_wav_fixture(
 def _adts_header(rate_index: int, channels: int, frame_length: int) -> bytes:
     """Return a 7-byte MPEG-4 ADTS header for one AAC LC frame without CRC."""
     fields = (
-        (ADTS_SYNCWORD, 44),
-        (1, 40),  # protection_absent: no CRC follows the header.
-        (ADTS_AAC_LC_PROFILE, 38),
-        (rate_index, 34),
-        (channels, 30),
-        (frame_length, 13),
-        (ADTS_VBR_FULLNESS, 2),
+        (ADTS_SYNCWORD, ADTS_SYNCWORD_SHIFT),
+        (1, ADTS_PROTECTION_ABSENT_SHIFT),  # No CRC follows the header.
+        (ADTS_AAC_LC_PROFILE, ADTS_PROFILE_SHIFT),
+        (rate_index, ADTS_RATE_INDEX_SHIFT),
+        (channels, ADTS_CHANNELS_SHIFT),
+        (frame_length, ADTS_FRAME_LENGTH_SHIFT),
+        (ADTS_VBR_FULLNESS, ADTS_FULLNESS_SHIFT),
     )
     value = 0
     for field, shift in fields:

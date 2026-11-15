@@ -18,7 +18,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tests/fixtures/synthetic_audio.py` builds seeded audio fixtures at test time (D359). Later tasks build audio test files with this module.
   - The signal builders cover click tracks with tempo changes and downbeat accents, tones, chords, full-band and band-limited noise, and an MP3-like lowpass shelf at 16 kHz. `write_wav_fixture` writes PCM_16 WAV through soundfile.
   - The container builders cover ADTS AAC LC, AAC and ALAC M4A, STEM.MP4, Ogg Vorbis, and Ogg Opus. A STEM.MP4 holds a mixdown, four stems, and a stem manifest. Ogg pages carry real CRCs. Codec payloads are PCG64 filler. Opus packets are valid empty CELT frames.
-- `tests/unit/test_synthetic_audio.py` passes each container through its app reader. The ADTS test walks the frame chain because the app has no ADTS reader.
+- `tests/unit/test_synthetic_audio.py` passes each container through its app reader. The ADTS test walks the frame chain because the app has no ADTS reader. `tests/unit/test_synthetic_audio_opus_toc.py` pins the Opus TOC bytes to RFC 6716.
 - The version advances to 0.60.0 for the Settings tabs and to 0.60.1 for the synthetic audio fixtures. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 
 ## [0.59.3] (2026-11-14)
