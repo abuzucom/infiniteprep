@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.63.0] (2026-11-15)
+## [0.63.1] (2026-11-15)
 
 ### Added
 
@@ -48,6 +48,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- MP3, FLAC, WAV, and AIFF tag writes verify the audio payload with SHA-256 (issue 131).
+  A mismatch discards the staged write, preserves the source, and records a failure.
 - The Windows, macOS, and Linux bundles no longer carry pytest or pygments.
   - scipy imports pytest inside `PytestTester`. The pytest hook collected all of pytest and pygments into every bundle. The app never runs the scipy test runner and never imports either package.
   - `infiniteprep.spec` now excludes `pytest`, `_pytest`, and `pygments` through `TEST_ONLY_PACKAGES`. Both packages stay dev dependencies for the test suite.
