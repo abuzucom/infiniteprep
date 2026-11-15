@@ -48,6 +48,8 @@
 
 These modules exist under `src/infiniteprep/` with tests. The desktop launcher and `evaluate-sample` do not call these modules.
 
+- Library storage for ordered playlists and unique-track crates in folders up to eight levels deep.
+  Playlist sorting uses key and BPM. One undo restores the prior order across restarts.
 - Chromaprint (`fpcalc`) and AcoustID fingerprinting, with the consent-gated, SHA-256 verified `FpcalcBootstrapService` for Windows and macOS.
 - MusicBrainz (`ws/2`) and Discogs adapters with rate limits of 1 request per second and 60 requests per minute, plus a SQLite TTL response cache.
 - Closed-world LLM arbitration through Ollama or an OpenAI-compatible endpoint. `ClosedWorldValidator` limits the model to the supplied candidates. `OllamaBootstrapService` requires explicit consent.

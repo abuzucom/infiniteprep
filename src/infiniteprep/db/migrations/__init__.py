@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Final
 
-from infiniteprep.db.migrations import m0001_initial
+from infiniteprep.db.migrations import m0001_initial, m0002_collections
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,9 @@ class Migration:
 # Append each new step with the next version number. The runner rejects gaps and reordering.
 MIGRATIONS: Final[tuple[Migration, ...]] = (
     Migration(m0001_initial.VERSION, m0001_initial.apply, m0001_initial.ROW_COUNT_QUERIES),
+    Migration(
+        m0002_collections.VERSION, m0002_collections.apply, m0002_collections.ROW_COUNT_QUERIES
+    ),
 )
 LATEST_VERSION: Final[int] = MIGRATIONS[-1].version
 ROW_COUNT_QUERIES: Final[Mapping[str, str]] = MappingProxyType(

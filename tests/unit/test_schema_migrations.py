@@ -71,8 +71,7 @@ def _create_version_zero_library(db_path: Path) -> None:
     """Build a library the way every release before D349 left it: schema, data, version 0."""
     manager_conn = sqlite3.connect(db_path)
     try:
-        for migration in MIGRATIONS:
-            migration.apply(manager_conn)
+        MIGRATIONS[0].apply(manager_conn)
         manager_conn.execute(
             "INSERT INTO source_groups (id, user_label, grouping_basis, original_folder) "
             "VALUES (?, ?, ?, ?)",
@@ -183,7 +182,7 @@ def test_next_clean_open_removes_the_backup(library: Path) -> None:
 
 def test_two_step_migration_runs_in_order(library: Path, opened: sqlite3.Connection) -> None:
     """Steps 2 and 3 run in order in one start, after one backup of version 0."""
-    steps = (*MIGRATIONS, Migration(2, _add_notes_table), Migration(3, _add_notes_column))
+    steps = (MIGRATIONS[0], Migration(2, _add_notes_table), Migration(3, _add_notes_column))
 
     reached = migrate_database(opened, library, migrations=steps)
 
@@ -198,7 +197,7 @@ def test_failed_migration_rolls_back_and_keeps_backup(
     library: Path, opened: sqlite3.Connection
 ) -> None:
     """A step that fails undoes every step of the run and leaves the backup intact."""
-    steps = (*MIGRATIONS, Migration(2, _add_notes_table), Migration(3, _fail_after_ddl))
+    steps = (MIGRATIONS[0], Migration(2, _add_notes_table), Migration(3, _fail_after_ddl))
 
     with pytest.raises(MigrationFailedError) as caught:
         migrate_database(opened, library, migrations=steps)
@@ -298,7 +297,7 @@ def test_failed_backup_stops_migration(
         target.write_bytes(b"not a database")
 
     monkeypatch.setattr(backup_module, "copy_database", refuse_copy)
-    steps = (*MIGRATIONS, Migration(2, _add_notes_table))
+    steps = (MIGRATIONS[0], Migration(2, _add_notes_table))
 
     with pytest.raises(BackupVerificationError):
         migrate_database(opened, library, migrations=steps)
