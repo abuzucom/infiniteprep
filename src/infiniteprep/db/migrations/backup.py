@@ -12,6 +12,7 @@ import os
 import shutil
 import sqlite3
 from collections.abc import Mapping
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
@@ -27,9 +28,19 @@ RESTORE_TEMP_SUFFIX: Final[str] = ".restore.tmp"
 NEWER_COPY_INFIX: Final[str] = ".newer-"
 NEWER_COPY_TIME_FORMAT: Final[str] = "%Y%m%dT%H%M%SZ"
 SIDE_FILE_SUFFIXES: Final[tuple[str, ...]] = ("-wal", "-shm")
-SOURCE_VERSION_KEY: Final[str] = "source_version"
-ROW_COUNTS_KEY: Final[str] = "row_counts"
 INTEGRITY_OK: Final[str] = "ok"
+# The record lives inside the backup file. One rename then publishes the copy and its record.
+RECORD_TABLE: Final[str] = "infiniteprep_backup_record"
+CREATE_RECORD_SQL: Final[str] = (
+    "CREATE TABLE infiniteprep_backup_record "
+    "(source_version INTEGER NOT NULL, row_counts TEXT NOT NULL)"
+)
+INSERT_RECORD_SQL: Final[str] = (
+    "INSERT INTO infiniteprep_backup_record (source_version, row_counts) VALUES (?, ?)"
+)
+SELECT_RECORD_SQL: Final[str] = "SELECT source_version, row_counts FROM infiniteprep_backup_record"
+DROP_RECORD_SQL: Final[str] = "DROP TABLE IF EXISTS infiniteprep_backup_record"
+HAS_TABLE_SQL: Final[str] = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"
 
 
 class BackupVerificationError(sqlite3.DatabaseError):
@@ -42,7 +53,7 @@ def backup_path_for(db_path: Path) -> Path:
 
 
 def sidecar_path_for(db_path: Path) -> Path:
-    """Return the sidecar path that records the backup's source version."""
+    """Return the separate record path the app never writes. Cleanup removes a stray file."""
     return db_path.with_name(db_path.name + SIDECAR_SUFFIX)
 
 
@@ -130,17 +141,33 @@ def _unlink_quietly(paths: list[Path]) -> None:
 
 
 def remove_backup(db_path: Path) -> None:
-    """Delete the backup and its sidecar once a later start opens cleanly."""
+    """Delete the backup and any stray record file once a later start opens cleanly."""
     _unlink_quietly([backup_path_for(db_path), sidecar_path_for(db_path)])
 
 
-def _write_sidecar_temp(db_path: Path, source_version: int, counts: dict[str, int]) -> Path:
-    """Write the backup record to a temporary file and return its path."""
-    sidecar = sidecar_path_for(db_path)
-    temp = sidecar.with_name(sidecar.name + TEMP_SUFFIX)
-    record = {SOURCE_VERSION_KEY: source_version, ROW_COUNTS_KEY: counts}
-    temp.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
-    return temp
+def write_backup_record(path: Path, *, source_version: int, row_counts: Mapping[str, int]) -> None:
+    """Store the source version and row counts as a one-row table inside the backup file."""
+    with closing(sqlite3.connect(path)) as conn, conn:
+        conn.execute(DROP_RECORD_SQL)
+        conn.execute(CREATE_RECORD_SQL)
+        conn.execute(INSERT_RECORD_SQL, (source_version, json.dumps(dict(row_counts))))
+
+
+def _record_in_copy(path: Path, source_version: int, counts: Mapping[str, int]) -> None:
+    """Write the record into a fresh copy. An unwritable copy fails verification."""
+    try:
+        write_backup_record(path, source_version=source_version, row_counts=counts)
+    except sqlite3.DatabaseError as error:
+        raise BackupVerificationError(
+            f"SQLite cannot write the record into the library backup at {path} ({error}). "
+            "Free disk space and start InfinitePrep again."
+        ) from error
+
+
+def _drop_backup_record(path: Path) -> None:
+    """Remove the record table from a staged copy before the swap installs it."""
+    with closing(sqlite3.connect(path)) as conn, conn:
+        conn.execute(DROP_RECORD_SQL)
 
 
 def create_verified_backup(
@@ -148,8 +175,8 @@ def create_verified_backup(
 ) -> Path:
     """Copy the library beside itself, verify the copy, and return the backup path.
 
-    The previous backup stays in place until the new copy passes verification. A crash between
-    the two final renames leaves a backup and record that disagree. Restore refuses that pair.
+    The copy carries its own record. One rename publishes both. The previous backup stays in
+    place until the new copy passes verification.
     """
     backup = backup_path_for(db_path)
     temp = backup.with_name(backup.name + TEMP_SUFFIX)
@@ -157,13 +184,13 @@ def create_verified_backup(
     counts = table_row_counts(source)
     try:
         copy_database(source, temp)
+        _record_in_copy(temp, source_version, counts)
         verify_backup_file(temp, expected_version=source_version, expected_counts=counts)
-        sidecar_temp = _write_sidecar_temp(db_path, source_version, counts)
+        os.replace(temp, backup)
     except (sqlite3.Error, OSError):
         temp.unlink(missing_ok=True)
         raise
-    os.replace(temp, backup)
-    os.replace(sidecar_temp, sidecar_path_for(db_path))
+    sidecar_path_for(db_path).unlink(missing_ok=True)
     return backup
 
 
@@ -176,27 +203,38 @@ def _is_count_map(value: object) -> bool:
     )
 
 
-def read_backup_record(db_path: Path) -> tuple[int, dict[str, int] | None] | None:
-    """Return the recorded source version and row counts, or None for an unusable record.
+def _read_record_rows(backup: Path) -> list[tuple[object, object]] | None:
+    """Return the record table rows of the backup, or None when the table is absent."""
+    with closing(_open_read_only(backup)) as conn:
+        if conn.execute(HAS_TABLE_SQL, (RECORD_TABLE,)).fetchone() is None:
+            return None
+        return [tuple(row) for row in conn.execute(SELECT_RECORD_SQL).fetchall()]
 
-    The counts are None when the record holds none. Restore refuses such a record.
+
+def read_backup_record(db_path: Path) -> tuple[int, dict[str, int] | None] | None:
+    """Return the source version and row counts the backup records, or None if unusable.
+
+    The counts are None when the record holds no valid count map. Restore refuses that record.
     """
-    sidecar = sidecar_path_for(db_path)
-    if not sidecar.is_file():
+    backup = backup_path_for(db_path)
+    if not backup.is_file():
         return None
     try:
-        record = json.loads(sidecar.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        rows = _read_record_rows(backup)
+    except sqlite3.DatabaseError:
         logger.warning("The backup record is unreadable. The app offers no Restore.")
         return None
-    if not isinstance(record, dict):
-        logger.warning("The backup record has the wrong shape. The app offers no Restore.")
+    if rows is None or len(rows) != 1:
+        logger.warning("The backup holds no single record row. The app offers no Restore.")
         return None
-    version = record.get(SOURCE_VERSION_KEY)
-    if type(version) is not int or version < 0:
-        logger.warning("The backup record holds no valid version. The app offers no Restore.")
+    version, counts_text = rows[0]
+    if type(version) is not int or version < 0 or not isinstance(counts_text, str):
+        logger.warning("The backup record holds invalid values. The app offers no Restore.")
         return None
-    counts = record.get(ROW_COUNTS_KEY)
+    try:
+        counts = json.loads(counts_text)
+    except ValueError:
+        return version, None
     return version, counts if _is_count_map(counts) else None
 
 
@@ -300,6 +338,7 @@ def restore_pre_migration_backup(
     staged.unlink(missing_ok=True)
     try:
         shutil.copyfile(backup_path_for(db_path), staged)
+        _drop_backup_record(staged)
         # The swap installs the staged file. A backup changed after its check fails here.
         verify_backup_file(staged, expected_version=version, expected_counts=counts)
         return _swap_in_staged_copy(db_path, kept, staged)

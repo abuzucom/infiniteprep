@@ -19,7 +19,6 @@ from infiniteprep.db.migrations.backup import (
     backup_path_for,
     newer_copy_path_for,
     restore_pre_migration_backup,
-    sidecar_path_for,
 )
 from infiniteprep.startup_storage import (
     DATABASE_FILE_NAME,
@@ -129,7 +128,7 @@ def test_restore_rejects_backup_that_disagrees_with_sidecar(library: Path) -> No
         restore_pre_migration_backup(library, now=RESTORE_TIME)
 
     assert _version_of(library) == LATEST_VERSION + 1
-    assert sidecar_path_for(library).is_file()
+    assert backup_path_for(library).is_file()
 
 
 def test_restore_refuses_to_overwrite_an_existing_copy(library: Path) -> None:
@@ -211,7 +210,6 @@ def test_open_storage_without_confirmer_shows_error(env: dict[str, Any]) -> None
 def test_open_storage_without_backup_shows_error(env: dict[str, Any]) -> None:
     """With no usable backup the app offers no Restore. The storage error shows."""
     backup_path_for(env["db"]).unlink()
-    sidecar_path_for(env["db"]).unlink()
 
     assert _open(env, restore=True) == STORAGE_ERROR_EXIT_CODE
 

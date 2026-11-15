@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,7 +14,7 @@ from infiniteprep.db.migrations.backup import (
     BackupVerificationError,
     backup_path_for,
     restore_pre_migration_backup,
-    sidecar_path_for,
+    write_backup_record,
 )
 from infiniteprep.db.migrations.runner import NewerLibraryError
 
@@ -37,11 +36,12 @@ def _write_newer_library(db_path: Path) -> None:
         conn.execute(f"PRAGMA user_version = {LATEST_VERSION + 1}")
 
 
-def _write_backup(db_path: Path, version: int, record: dict[str, object]) -> None:
-    """Write an empty backup at version and its JSON record."""
+def _write_backup(db_path: Path, version: int, counts: dict[str, int] | None) -> None:
+    """Write an empty backup at version. None for counts leaves the backup without a record."""
     with sqlite3.connect(backup_path_for(db_path)) as conn:
         conn.execute(f"PRAGMA user_version = {version}")
-    sidecar_path_for(db_path).write_text(json.dumps(record), encoding="utf-8")
+    if counts is not None:
+        write_backup_record(backup_path_for(db_path), source_version=version, row_counts=counts)
 
 
 def _offered_backup(db_path: Path) -> Path | None:
@@ -55,7 +55,7 @@ def test_record_without_row_counts_is_not_offered(tmp_path: Path) -> None:
     """Restore needs the row counts. A record that lacks the counts gets no offer."""
     db_path = tmp_path / LIBRARY_NAME
     _write_newer_library(db_path)
-    _write_backup(db_path, LATEST_VERSION, {"source_version": LATEST_VERSION})
+    _write_backup(db_path, LATEST_VERSION, None)
 
     assert _offered_backup(db_path) is None
 
@@ -65,9 +65,6 @@ def test_unreadable_backup_file_is_not_offered(tmp_path: Path) -> None:
     db_path = tmp_path / LIBRARY_NAME
     _write_newer_library(db_path)
     backup_path_for(db_path).write_bytes(b"not a database")
-    sidecar_path_for(db_path).write_text(
-        json.dumps({"source_version": LATEST_VERSION, "row_counts": {}}), encoding="utf-8"
-    )
 
     assert _offered_backup(db_path) is None
 
@@ -76,7 +73,7 @@ def test_complete_backup_is_offered(tmp_path: Path) -> None:
     """A verified backup at a version this app opens gets the offer."""
     db_path = tmp_path / LIBRARY_NAME
     _write_newer_library(db_path)
-    _write_backup(db_path, LATEST_VERSION, {"source_version": LATEST_VERSION, "row_counts": {}})
+    _write_backup(db_path, LATEST_VERSION, {})
 
     assert _offered_backup(db_path) == backup_path_for(db_path)
 
@@ -87,7 +84,7 @@ def test_restore_refuses_a_backup_newer_than_the_app(tmp_path: Path) -> None:
     newer = LATEST_VERSION + 1
     with sqlite3.connect(db_path) as conn:
         conn.execute(f"PRAGMA user_version = {newer + 1}")
-    _write_backup(db_path, newer, {"source_version": newer, "row_counts": {}})
+    _write_backup(db_path, newer, {})
 
     with pytest.raises(BackupVerificationError):
         restore_pre_migration_backup(db_path, now=RESTORE_TIME)
@@ -100,7 +97,7 @@ def test_restore_honors_a_lower_known_version(tmp_path: Path) -> None:
     """A caller that knows fewer versions refuses a backup past its own."""
     db_path = tmp_path / LIBRARY_NAME
     _write_newer_library(db_path)
-    _write_backup(db_path, LATEST_VERSION, {"source_version": LATEST_VERSION, "row_counts": {}})
+    _write_backup(db_path, LATEST_VERSION, {})
 
     with pytest.raises(BackupVerificationError):
         restore_pre_migration_backup(db_path, now=RESTORE_TIME, known_version=PRE_MIGRATION_VERSION)

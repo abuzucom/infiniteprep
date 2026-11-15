@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
@@ -19,6 +18,7 @@ from infiniteprep.db.migrations.backup import (
     create_verified_backup,
     read_backup_version,
     sidecar_path_for,
+    write_backup_record,
 )
 from infiniteprep.db.migrations.runner import (
     MigrationFailedError,
@@ -223,9 +223,7 @@ def test_newer_library_is_refused_untouched(library: Path) -> None:
         conn.execute(f"PRAGMA user_version = {newer_version}")
     with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         conn.execute(f"PRAGMA user_version = {LATEST_VERSION}")
-    sidecar_path_for(library).write_text(
-        json.dumps({"source_version": LATEST_VERSION, "row_counts": {}}), encoding="utf-8"
-    )
+    write_backup_record(backup_path_for(library), source_version=LATEST_VERSION, row_counts={})
 
     with pytest.raises(NewerLibraryError) as caught:
         DatabaseManager(library)
@@ -247,9 +245,7 @@ def test_newer_library_without_usable_backup_offers_none(library: Path) -> None:
         conn.execute(f"PRAGMA user_version = {newer_version}")
     with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         conn.execute(f"PRAGMA user_version = {LATEST_VERSION + 1}")
-    sidecar_path_for(library).write_text(
-        json.dumps({"source_version": LATEST_VERSION + 1}), encoding="utf-8"
-    )
+    write_backup_record(backup_path_for(library), source_version=LATEST_VERSION + 1, row_counts={})
 
     with pytest.raises(NewerLibraryError) as caught:
         DatabaseManager(library)
