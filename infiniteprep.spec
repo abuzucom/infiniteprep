@@ -46,10 +46,11 @@ UNUSED_PYTHON_PACKAGES = ["setuptools", "pkg_resources"]
 # converts the PNG to .ico and .icns with Pillow.
 APP_ICON_SOURCE = src_dir / "infiniteprep" / "ui" / "app-icon.png"
 # Pillow serves only the build-time icon conversion, and the app never imports it (D393).
-# scipy imports pytest, pytest imports pygments, and the pygments hook collects
-# pygments.formatters.img. That formatter imports PIL inside try/except ImportError.
-# The exclusion leaves pygments working and keeps Pillow out of every bundle.
+# The exclusion keeps Pillow out of every bundle even if another optional import names it.
 BUILD_ONLY_PACKAGES = ["PIL"]
+# scipy imports pytest inside PytestTester. The pytest hook then collects all of pytest
+# and pygments. The app never runs the scipy test runner and never imports either package.
+TEST_ONLY_PACKAGES = ["pytest", "_pytest", "pygments"]
 
 a = Analysis(
     [str(src_dir / "infiniteprep" / "main.py")],
@@ -73,7 +74,7 @@ a = Analysis(
     runtime_hooks=[],
     # Python's readline module links GNU Readline (GPL-3) on Linux (D302). The exclusion
     # applies on every OS, because no InfinitePrep code uses the module.
-    excludes=["readline"] + UNUSED_PYTHON_PACKAGES + BUILD_ONLY_PACKAGES,
+    excludes=["readline"] + UNUSED_PYTHON_PACKAGES + BUILD_ONLY_PACKAGES + TEST_ONLY_PACKAGES,
     noarchive=False,
 )
 

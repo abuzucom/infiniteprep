@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.60.1] (2026-11-15)
+## [0.60.3] (2026-11-15)
 
 ### Added
 
@@ -16,8 +16,20 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Playback and Updates each show a one-line note until a setting joins the tab.
   - Every setting keeps its stored value and its save behavior. `SettingsDialog` keeps its constructor, its widget attributes, and its module constants.
   - `tests/unit/test_settings_tabs.py` opens each tab, finds every existing setting on its tab, and saves and reloads each setting unchanged.
-- The version advances to 0.60.1. `pyproject.toml` and
-  `src/infiniteprep/__init__.py` hold the new value.
+- `tests/fixtures/synthetic_audio.py` builds seeded audio fixtures at test time (D359). Later tasks build audio test files with this module.
+  - The signal builders cover click tracks with tempo changes and downbeat accents, tones, chords, full-band and band-limited noise, and an MP3-like lowpass shelf at 16 kHz. `write_wav_fixture` writes PCM_16 WAV through soundfile.
+  - The container builders cover ADTS AAC LC, AAC and ALAC M4A, STEM.MP4, Ogg Vorbis, and Ogg Opus. A STEM.MP4 holds a mixdown, four stems, and a stem manifest. Ogg pages carry real CRCs. Codec payloads are PCG64 filler. Opus packets are valid empty CELT frames.
+- `tests/unit/test_synthetic_audio.py` passes each container through its app reader. The ADTS test walks the frame chain because the app has no ADTS reader. `tests/unit/test_synthetic_audio_opus_toc.py` pins the Opus TOC bytes to RFC 6716.
+- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, and to 0.60.3 for the source research decisions. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+
+### Fixed
+
+- The Windows, macOS, and Linux bundles no longer carry pytest or pygments.
+  - scipy imports pytest inside `PytestTester`. The pytest hook collected all of pytest and pygments into every bundle. The app never runs the scipy test runner and never imports either package.
+  - `infiniteprep.spec` now excludes `pytest`, `_pytest`, and `pygments` through `TEST_ONLY_PACKAGES`. Both packages stay dev dependencies for the test suite.
+- The 0.59.3 entry names its own version. It previously named 0.59.1.
+- The `requirements-lock.txt` header names v0.58.0. That release last changed the pins when it added Pillow. The header previously named v0.57.0.
+- Added `tests/test_bundle_excludes_test_tools.py`.
 
 ## [0.59.3] (2026-11-14)
 
@@ -49,7 +61,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     and the capacity path.
   - `docs/dependabot.md` states the reusable workflow rule without the stale
     euler claim.
-- The version advances to 0.59.1. `pyproject.toml` and
+- The version advances to 0.59.3. `pyproject.toml` and
   `src/infiniteprep/__init__.py` hold the new value.
 
 ### Fixed
@@ -57,7 +69,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The Windows, macOS, and Linux bundles shipped Pillow and its native libraries. `packaging/check_bundle.py` failed every bundle job.
   - scipy imports pytest. The pytest hook pulls in pygments. The pygments hook collects `pygments.formatters.img`. That formatter imports `PIL` inside a `try`/`except ImportError` block.
   - `infiniteprep.spec` now excludes `PIL` through `BUILD_ONLY_PACKAGES`. Pillow stays a build-only dependency for the icon conversion (D393).
-  - The version advances to 0.59.3.
 - Added `tests/test_bundle_excludes_pillow.py`. Its spec reader raises `ValueError` for an `excludes` part that is not a list and for any operator other than `+`.
 
 ## [0.58.0] (2026-11-13)
