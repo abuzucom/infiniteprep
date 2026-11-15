@@ -25,9 +25,9 @@ class IdentificationTab(FormSettingsTab):
         super().__init__(parent)
         self.creds = credential_store
         # Credential store entry name for each masked input.
-        self._credential_inputs: dict[str, QLineEdit] = {}
-        self.acoustid_key_input = self._add_secret_row("AcoustID API Key:", "acoustid_api_key")
-        self.discogs_token_input = self._add_secret_row("Discogs Personal Token:", "discogs_token")
+        self._masked_inputs: dict[str, QLineEdit] = {}
+        self.acoustid_key_input = self._add_masked_row("AcoustID API Key:", "acoustid_api_key")
+        self.discogs_token_input = self._add_masked_row("Discogs Personal Token:", "discogs_token")
 
         self.enable_llm_checkbox = QCheckBox("Enable Closed-World LLM Arbitration", self)
         self.enable_llm_checkbox.setChecked(settings.enable_llm_arbitration)
@@ -43,12 +43,16 @@ class IdentificationTab(FormSettingsTab):
         self.ollama_model_combo.setCurrentText(settings.ollama_model)
         self.form.addRow("Ollama Model:", self.ollama_model_combo)
 
-    def _add_secret_row(self, label: str, secret_name: str) -> QLineEdit:
-        """Add a masked input that shows the stored secret, and return it."""
-        line_edit = QLineEdit(self.creds.get_secret(secret_name) or "", self)
+    def _add_masked_row(self, label: str, entry_name: str) -> QLineEdit:
+        """Add a masked input that shows the stored value of a store entry, and return it.
+
+        entry_name names the credential store entry. The value itself never leaves
+        the input and the store.
+        """
+        line_edit = QLineEdit(self.creds.get_secret(entry_name) or "", self)
         line_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.form.addRow(label, line_edit)
-        self._credential_inputs[secret_name] = line_edit
+        self._masked_inputs[entry_name] = line_edit
         return line_edit
 
     def store_secrets(self) -> None:
@@ -56,10 +60,10 @@ class IdentificationTab(FormSettingsTab):
 
         A blank input keeps the stored secret.
         """
-        for secret_name, line_edit in self._credential_inputs.items():
+        for entry_name, line_edit in self._masked_inputs.items():
             value = line_edit.text().strip()
             if value:
-                self.creds.set_secret(secret_name, value)
+                self.creds.set_secret(entry_name, value)
 
     def apply_to(self, settings: AppSettings) -> None:
         """Copy the LLM arbitration inputs into settings."""
