@@ -139,8 +139,8 @@ def test_the_rate_limit_holds_the_next_request_back() -> None:
         min_interval_sec=0.05,
     )
 
-    adapter.search(_query(), file_id=FILE_ID)
     started = time.monotonic()
+    adapter.search(_query(), file_id=FILE_ID)
     adapter.search(MetadataSearchQuery(artist="Deep Dish", title="Flashdance"), file_id=FILE_ID)
     elapsed = time.monotonic() - started
 
