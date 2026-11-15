@@ -5,9 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.62.0] (2026-11-15)
+## [0.62.1] (2026-11-15)
 
 ### Added
+
+- The README roadmap lists the 20 stage issues in order, with links and a pointer to the task index (D356, issue 179). The 24-item list goes away. The settings walkthrough names the field on each Settings tab.
 
 - Library schema migrations track the schema version in SQLite `user_version` (D349, issue 175).
   - The new `db/migrations/` package lists numbered steps in order. Migration 1 runs the existing `schema.sql`. A library from an earlier release reads as version 0 and reaches version 1 with no schema change.
