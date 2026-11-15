@@ -28,6 +28,7 @@ NEWER_COPY_INFIX: Final[str] = ".newer-"
 NEWER_COPY_TIME_FORMAT: Final[str] = "%Y%m%dT%H%M%SZ"
 SIDE_FILE_SUFFIXES: Final[tuple[str, ...]] = ("-wal", "-shm")
 SOURCE_VERSION_KEY: Final[str] = "source_version"
+ROW_COUNTS_KEY: Final[str] = "row_counts"
 INTEGRITY_OK: Final[str] = "ok"
 
 
@@ -133,12 +134,13 @@ def remove_backup(db_path: Path) -> None:
     _unlink_quietly([backup_path_for(db_path), sidecar_path_for(db_path)])
 
 
-def _write_sidecar(db_path: Path, source_version: int) -> None:
-    """Record the backup's source version beside it, replacing any earlier record."""
+def _write_sidecar_temp(db_path: Path, source_version: int, counts: dict[str, int]) -> Path:
+    """Write the backup record to a temporary file and return its path."""
     sidecar = sidecar_path_for(db_path)
     temp = sidecar.with_name(sidecar.name + TEMP_SUFFIX)
-    temp.write_text(json.dumps({SOURCE_VERSION_KEY: source_version}), encoding="utf-8")
-    os.replace(temp, sidecar)
+    record = {SOURCE_VERSION_KEY: source_version, ROW_COUNTS_KEY: counts}
+    temp.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
+    return temp
 
 
 def create_verified_backup(
@@ -146,42 +148,63 @@ def create_verified_backup(
 ) -> Path:
     """Copy the library beside itself, verify the copy, and return the backup path.
 
-    The previous backup stays in place until the new copy passes verification.
+    The previous backup stays in place until the new copy passes verification. A crash between
+    the two final renames leaves a backup and record that disagree. Restore refuses that pair.
     """
     backup = backup_path_for(db_path)
     temp = backup.with_name(backup.name + TEMP_SUFFIX)
     temp.unlink(missing_ok=True)
+    counts = table_row_counts(source)
     try:
         copy_database(source, temp)
-        verify_backup_file(
-            temp, expected_version=source_version, expected_counts=table_row_counts(source)
-        )
+        verify_backup_file(temp, expected_version=source_version, expected_counts=counts)
+        sidecar_temp = _write_sidecar_temp(db_path, source_version, counts)
     except (sqlite3.Error, OSError):
         temp.unlink(missing_ok=True)
         raise
-    sidecar_path_for(db_path).unlink(missing_ok=True)
     os.replace(temp, backup)
-    _write_sidecar(db_path, source_version)
+    os.replace(sidecar_temp, sidecar_path_for(db_path))
     return backup
 
 
-def read_backup_version(db_path: Path) -> int | None:
-    """Return the source version the sidecar records, or None when no usable record exists."""
+def _is_count_map(value: object) -> bool:
+    """Return whether value maps table names to non-negative integer counts."""
+    if not isinstance(value, dict):
+        return False
+    return all(
+        isinstance(name, str) and type(count) is int and count >= 0
+        for name, count in value.items()
+    )
+
+
+def read_backup_record(db_path: Path) -> tuple[int, dict[str, int] | None] | None:
+    """Return the recorded source version and row counts, or None for an unusable record.
+
+    The counts are None when the record holds none. Restore refuses such a record.
+    """
     sidecar = sidecar_path_for(db_path)
     if not sidecar.is_file():
         return None
     try:
         record = json.loads(sidecar.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        logger.warning("The library backup record is unreadable. The app offers no Restore.")
+        logger.warning("The backup record is unreadable. The app offers no Restore.")
         return None
-    version = record.get(SOURCE_VERSION_KEY) if isinstance(record, dict) else None
-    if not isinstance(version, int) or isinstance(version, bool) or version < 0:
-        logger.warning(
-            "The library backup record holds no valid version. The app offers no Restore."
-        )
+    if not isinstance(record, dict):
+        logger.warning("The backup record has the wrong shape. The app offers no Restore.")
         return None
-    return version
+    version = record.get(SOURCE_VERSION_KEY)
+    if type(version) is not int or version < 0:
+        logger.warning("The backup record holds no valid version. The app offers no Restore.")
+        return None
+    counts = record.get(ROW_COUNTS_KEY)
+    return version, counts if _is_count_map(counts) else None
+
+
+def read_backup_version(db_path: Path) -> int | None:
+    """Return the source version the sidecar records, or None when no usable record exists."""
+    record = read_backup_record(db_path)
+    return None if record is None else record[0]
 
 
 def usable_backup_path(db_path: Path, known_version: int) -> Path | None:
@@ -193,49 +216,79 @@ def usable_backup_path(db_path: Path, known_version: int) -> Path | None:
     return backup
 
 
-def _move_newer_library(db_path: Path, kept: Path) -> Path | None:
-    """Rename the library and its side files to the kept name. Return None with no library."""
+def _library_moves(db_path: Path, kept: Path) -> list[tuple[Path, Path]]:
+    """Return the renames that move the library first, then each side file that exists."""
+    moves = [(db_path, kept)]
+    for suffix in SIDE_FILE_SUFFIXES:
+        side = _side_file(db_path, suffix)
+        if side.exists():
+            moves.append((side, _side_file(kept, suffix)))
+    return moves
+
+
+def _check_kept_names_free(kept: Path) -> None:
+    """Raise FileExistsError when a kept copy from an earlier restore holds the name."""
     targets = [kept, *(_side_file(kept, suffix) for suffix in SIDE_FILE_SUFFIXES)]
     taken = [target for target in targets if target.exists()]
     if taken:
         raise FileExistsError(
             f"{taken[0]} already exists. Wait one second and choose Restore again."
         )
-    if not db_path.exists():
-        return None
-    for suffix in SIDE_FILE_SUFFIXES:
-        side = _side_file(db_path, suffix)
-        if side.exists():
-            os.replace(side, _side_file(kept, suffix))
-    os.replace(db_path, kept)
-    return kept
+
+
+def _swap_in_staged_copy(db_path: Path, kept: Path, staged: Path) -> Path | None:
+    """Move the library and side files to the kept name, then install the staged copy.
+
+    A rename that fails moves every earlier file back. The library and its side files then
+    keep the original names together. Returns None when no library file existed.
+    """
+    moves = _library_moves(db_path, kept) if db_path.exists() else []
+    done: list[tuple[Path, Path]] = []
+    try:
+        for source, target in moves:
+            os.replace(source, target)
+            done.append((source, target))
+        os.replace(staged, db_path)
+    except OSError:
+        for source, target in reversed(done):
+            os.replace(target, source)
+        raise
+    return kept if moves else None
+
+
+def _verified_backup_record(db_path: Path) -> tuple[int, dict[str, int]]:
+    """Return the backup's recorded version and row counts once the file matches the record."""
+    backup = backup_path_for(db_path)
+    if not backup.is_file():
+        raise FileNotFoundError(f"No library backup exists at {backup}.")
+    record = read_backup_record(db_path)
+    counts = None if record is None else record[1]
+    if record is None or counts is None:
+        raise BackupVerificationError(
+            f"The library backup at {backup} has no usable version and row-count record."
+        )
+    verify_backup_file(backup, expected_version=record[0], expected_counts=counts)
+    return record[0], counts
 
 
 def restore_pre_migration_backup(db_path: Path, *, now: datetime | None = None) -> Path | None:
     """Put the verified backup in place of the library and keep the library under a new name.
 
     Close every connection to the library first. The backup stays beside the library until
-    the next clean open removes it. An interrupted restore can therefore run again. Returns
-    the kept copy of the library, or None when no library file existed.
+    the next clean open removes it. A failed restore leaves the library under its own name.
+    Returns the kept copy of the library, or None when no library file existed.
     """
-    backup = backup_path_for(db_path)
-    if not backup.is_file():
-        raise FileNotFoundError(f"No library backup exists at {backup}.")
-    expected_version = read_backup_version(db_path)
-    if expected_version is None:
-        raise BackupVerificationError(
-            f"The library backup at {backup} has no readable version record."
-        )
-    verify_backup_file(backup, expected_version=expected_version, expected_counts=None)
+    _verified_backup_record(db_path)
+    kept = newer_copy_path_for(db_path, now or _utc_now())
+    _check_kept_names_free(kept)
     staged = db_path.with_name(db_path.name + RESTORE_TEMP_SUFFIX)
-    shutil.copyfile(backup, staged)
+    staged.unlink(missing_ok=True)
     try:
-        kept = _move_newer_library(db_path, newer_copy_path_for(db_path, now or _utc_now()))
+        shutil.copyfile(backup_path_for(db_path), staged)
+        return _swap_in_staged_copy(db_path, kept, staged)
     except OSError:
         staged.unlink(missing_ok=True)
         raise
-    os.replace(staged, db_path)
-    return kept
 
 
 def _utc_now() -> datetime:

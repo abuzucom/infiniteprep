@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +35,7 @@ from infiniteprep.ui.storage_prompt import (
 
 EXE_NAME = "InfinitePrep.exe"
 PER_USER_DIR_FUNCTIONS = ("user_data_dir", "user_config_dir", "user_cache_dir")
-RESTORE_TIME = datetime(2026, 11, 15, 9, 30, 5, tzinfo=timezone.utc)
+RESTORE_TIME = datetime(2026, 11, 15, 9, 30, 5, tzinfo=UTC)
 NEWER_ONLY_TABLE = "newer_only"
 SIDE_FILE_SUFFIXES = ("-wal", "-shm")
 

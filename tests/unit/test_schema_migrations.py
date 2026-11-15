@@ -11,6 +11,7 @@ import pytest
 
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.migrations import LATEST_VERSION, MIGRATIONS, Migration
+from infiniteprep.db.migrations import backup as backup_module
 from infiniteprep.db.migrations.backup import (
     BackupVerificationError,
     backup_path_for,
@@ -121,7 +122,7 @@ def test_migration_one_is_the_current_schema() -> None:
 
     assert versions[0] == 1
     assert versions == sorted(set(versions))
-    assert LATEST_VERSION == versions[-1]
+    assert versions[-1] == LATEST_VERSION
 
 
 def test_fresh_library_reaches_latest_without_backup(library: Path) -> None:
@@ -130,7 +131,7 @@ def test_fresh_library_reaches_latest_without_backup(library: Path) -> None:
         pass
 
     assert _user_version(library) == LATEST_VERSION
-    assert SCHEMA_TABLES <= _table_names(library)
+    assert _table_names(library) >= SCHEMA_TABLES
     assert not backup_path_for(library).exists()
     assert not sidecar_path_for(library).exists()
 
@@ -145,7 +146,7 @@ def test_in_memory_library_reaches_latest() -> None:
         }
 
     assert version == LATEST_VERSION
-    assert SCHEMA_TABLES <= tables
+    assert tables >= SCHEMA_TABLES
 
 
 def test_existing_version_zero_library_keeps_data_and_gets_backup(library: Path) -> None:
@@ -273,8 +274,6 @@ def test_backup_verification_rejects_a_mismatched_copy(
     library: Path, opened: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Verification rejects a copy whose row counts differ from the source. No backup remains."""
-    from infiniteprep.db.migrations import backup as backup_module
-
     real_copy = backup_module.copy_database
 
     def copy_then_drop_row(source: sqlite3.Connection, target: Path) -> None:
@@ -296,8 +295,6 @@ def test_failed_backup_stops_migration(
     library: Path, opened: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A backup that fails verification stops every step."""
-    from infiniteprep.db.migrations import backup as backup_module
-
     def refuse_copy(source: sqlite3.Connection, target: Path) -> None:
         """Simulate a copy that leaves an unreadable file."""
         _ = source
