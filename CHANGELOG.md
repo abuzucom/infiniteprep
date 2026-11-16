@@ -5,9 +5,22 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.67.1] (2026-11-16)
+## [0.68.0] (2026-11-16)
 
 ### Added
+
+- The pull request checks report the code coverage of the application.
+  - The Ubuntu leg of the test matrix runs the suite under `coverage run -m pytest`. The report costs no second suite run. The other legs run the plain suite.
+  - The coverage step writes a bounded JSON document with the total and the files with the least coverage. The new `scripts/build_coverage_summary.py` builds the document from the coverage report.
+  - A separate `coverage-comment` job posts the table as a pull request comment. The job updates the comment on every push and removes a second comment from the bot.
+  - A pull request from a fork receives a read-only token. The comment job skips those pull requests. The report stays in the artifacts.
+  - The job validates the document before it posts. The document holds only the expected fields. Every number sits in the allowed range. Every path holds only safe characters. The file list and the comment length stay inside the caps. The job builds the Markdown itself. A file name never ends the code fence.
+  - The job runs one at a time for a pull request. A newer push cancels the older job. The comment carries the run that wrote it. An older run never replaces a newer result.
+  - The job that runs the suite holds read-only permissions. The comment job holds `pull-requests: write` and checks out nothing. No test code can post on the pull request.
+  - The HTML report and the XML report go into artifacts with a three-day retention.
+  - The `coverage==7.17.3` development dependency carries the Apache-2.0 license. It stays out of the runtime dependencies and out of the app bundle.
+  - The coverage number never gates a pull request. No coverage threshold applies. The reporting and the comment run as ordinary steps. A failure in either fails the job like any other step.
+  - The version advances from 0.67.1 to 0.68.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - USB exports persist `.infiniteprep/manifest.in-progress.json` and `.infiniteprep/manifest.json` with a canonical SHA-256 `My Tags` digest (D116 to D121, D139 to D148, D179, D200, issue 157). The computer-side recovery journal at `usb_recovery_journal.json` matches reconnecting USB drives and gates changed paths behind confirmation (D166, D191, D192, issue 157). `UsbRecoveryDialog` offers Resume, Restore, and Leave unchanged actions with plain-text drive labels. `StorageTab` adds 30-day expiry settings, 1-day advance warning notices, launch overdue cleanup notices, and manual journal cleanup (D193 to D198, issue 157). The version advances from 0.65.1 to 0.66.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Written key tags use Camelot, Open Key, or Standard notation (issue 128).

@@ -1,8 +1,9 @@
-# Pinned direct and transitive dependency lockfile for InfinitePrep v0.58.0
-# Pins verified unchanged through v0.61.0; update together with pyproject.toml.
+# Pinned direct and transitive dependency lockfile for InfinitePrep v0.68.0
+# Pins verified unchanged through v0.67.1; update together with pyproject.toml.
 altgraph==0.17.5
 cffi==2.1.1
 colorama==0.4.6 ; sys_platform == "win32"
+coverage==7.17.3
 cryptography==50.0.2 ; sys_platform == "linux"
 iniconfig==2.3.1
 jaraco.classes==3.4.0
