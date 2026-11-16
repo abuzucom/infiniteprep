@@ -79,6 +79,7 @@ _internal/libssl.3.dylib
 
 # Package metadata that PyInstaller hooks keep
 _internal/keyring-*.dist-info/**
+_internal/markupsafe-*.dist-info/**
 _internal/numpy-*.dist-info/**
 _internal/pluggy-*.dist-info/**
 
@@ -103,6 +104,7 @@ _internal/PySide6/QtGui.abi3.so
 _internal/PySide6/QtMultimedia.abi3.so
 _internal/PySide6/QtMultimediaWidgets.abi3.so
 _internal/PySide6/QtNetwork.abi3.so
+_internal/PySide6/QtUiTools.abi3.so
 _internal/PySide6/QtWidgets.abi3.so
 
 # Qt frameworks and the top-level links PyInstaller places for them
@@ -114,7 +116,9 @@ _internal/QtMultimedia
 _internal/QtMultimediaWidgets
 _internal/QtNetwork
 _internal/QtOpenGL
+_internal/QtOpenGLWidgets
 _internal/QtSvg
+_internal/QtUiTools
 _internal/QtWidgets
 _internal/PySide6/Qt/lib/QtConcurrent.framework/QtConcurrent
 _internal/PySide6/Qt/lib/QtConcurrent.framework/Versions/A/QtConcurrent
@@ -140,9 +144,15 @@ _internal/PySide6/Qt/lib/QtNetwork.framework/Versions/A/Resources/Info.plist
 _internal/PySide6/Qt/lib/QtOpenGL.framework/QtOpenGL
 _internal/PySide6/Qt/lib/QtOpenGL.framework/Versions/A/QtOpenGL
 _internal/PySide6/Qt/lib/QtOpenGL.framework/Versions/A/Resources/Info.plist
+_internal/PySide6/Qt/lib/QtOpenGLWidgets.framework/QtOpenGLWidgets
+_internal/PySide6/Qt/lib/QtOpenGLWidgets.framework/Versions/A/QtOpenGLWidgets
+_internal/PySide6/Qt/lib/QtOpenGLWidgets.framework/Versions/A/Resources/Info.plist
 _internal/PySide6/Qt/lib/QtSvg.framework/QtSvg
 _internal/PySide6/Qt/lib/QtSvg.framework/Versions/A/QtSvg
 _internal/PySide6/Qt/lib/QtSvg.framework/Versions/A/Resources/Info.plist
+_internal/PySide6/Qt/lib/QtUiTools.framework/QtUiTools
+_internal/PySide6/Qt/lib/QtUiTools.framework/Versions/A/QtUiTools
+_internal/PySide6/Qt/lib/QtUiTools.framework/Versions/A/Resources/Info.plist
 _internal/PySide6/Qt/lib/QtWidgets.framework/QtWidgets
 _internal/PySide6/Qt/lib/QtWidgets.framework/Versions/A/QtWidgets
 _internal/PySide6/Qt/lib/QtWidgets.framework/Versions/A/Resources/Info.plist
@@ -186,3 +196,12 @@ _internal/PySide6/Qt/plugins/tls/libqsecuretransportbackend.dylib
 
 # Qt translations
 _internal/PySide6/Qt/translations/*.qm
+
+# qt-material theme data and the MarkupSafe extension its template engine uses
+_internal/markupsafe/_speedups.cpython-312-darwin.so
+_internal/qt_material/fonts/roboto/Apache-2.0.txt
+_internal/qt_material/fonts/roboto/*.ttf
+_internal/qt_material/material.qss.template
+_internal/qt_material/resources/source/*.svg
+_internal/qt_material/themes/dark_teal.xml
+_internal/qt_material/themes/light_teal.xml

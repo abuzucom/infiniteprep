@@ -55,7 +55,7 @@ from infiniteprep.ui.storage_prompt import (
     confirm_storage_fallback,
     show_storage_error,
 )
-from infiniteprep.ui.theme import apply_application_theme
+from infiniteprep.ui.theme import NATIVE_THEME, switch_application_theme
 from infiniteprep.ui.usb_recovery_dialog import (
     format_expiry_warning_text,
     format_overdue_cleanup_text,
@@ -194,6 +194,17 @@ def queue_safe_writes(
     window.queue_batch(BatchKind.WRITE, f"Apply writes to {len(plans)} file(s)", run_write_batch)
 
 
+def apply_saved_theme(app: QApplication) -> None:
+    """Apply the stored theme and store the theme in effect when it cannot apply."""
+    settings_mgr = SettingsManager()
+    settings = settings_mgr.load()
+    result = switch_application_theme(app, settings.theme, NATIVE_THEME)
+    if result.theme == settings.theme:
+        return
+    settings.theme = result.theme
+    settings_mgr.save(settings)
+
+
 def _show_usb_recovery_notice(parent: QWidget | None, title: str, message: str) -> None:
     """Display a plain-text desktop notice for USB recovery expiry events."""
     box = QMessageBox(parent)
@@ -259,7 +270,7 @@ def launch_desktop_app() -> int:
         repo, tag_adapter=tag_adapter, backup_dir=opened.locations.backup_dir
     )
     exporter = PlaylistExporter(repo)
-    apply_application_theme(qt_app, SettingsManager().load().theme)
+    apply_saved_theme(qt_app)
 
     window = MainWindow(
         repository=repo,

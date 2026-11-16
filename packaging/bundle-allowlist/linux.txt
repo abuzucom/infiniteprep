@@ -75,6 +75,7 @@ _internal/_cffi_backend.cpython-312-x86_64-linux-gnu.so
 # Package metadata that PyInstaller hooks keep
 _internal/cryptography-*.dist-info/**
 _internal/keyring-*.dist-info/**
+_internal/markupsafe-*.dist-info/**
 _internal/numpy-*.dist-info/**
 _internal/pluggy-*.dist-info/**
 
@@ -116,6 +117,7 @@ _internal/PySide6/QtGui.abi3.so
 _internal/PySide6/QtMultimedia.abi3.so
 _internal/PySide6/QtMultimediaWidgets.abi3.so
 _internal/PySide6/QtNetwork.abi3.so
+_internal/PySide6/QtUiTools.abi3.so
 _internal/PySide6/QtWidgets.abi3.so
 
 # Qt libraries, ICU, and FFmpeg from the PySide6 wheel. Each sits both in
@@ -133,12 +135,14 @@ _internal/libQt6Multimedia.so.6
 _internal/libQt6MultimediaWidgets.so.6
 _internal/libQt6Network.so.6
 _internal/libQt6OpenGL.so.6
+_internal/libQt6OpenGLWidgets.so.6
 _internal/libQt6Qml.so.6
 _internal/libQt6QmlMeta.so.6
 _internal/libQt6QmlModels.so.6
 _internal/libQt6QmlWorkerScript.so.6
 _internal/libQt6Quick.so.6
 _internal/libQt6Svg.so.6
+_internal/libQt6UiTools.so.6
 _internal/libQt6WaylandClient.so.6
 _internal/libQt6Widgets.so.6
 _internal/libQt6WlShellIntegration.so.6
@@ -164,12 +168,14 @@ _internal/PySide6/Qt/lib/libQt6Multimedia.so.6
 _internal/PySide6/Qt/lib/libQt6MultimediaWidgets.so.6
 _internal/PySide6/Qt/lib/libQt6Network.so.6
 _internal/PySide6/Qt/lib/libQt6OpenGL.so.6
+_internal/PySide6/Qt/lib/libQt6OpenGLWidgets.so.6
 _internal/PySide6/Qt/lib/libQt6Qml.so.6
 _internal/PySide6/Qt/lib/libQt6QmlMeta.so.6
 _internal/PySide6/Qt/lib/libQt6QmlModels.so.6
 _internal/PySide6/Qt/lib/libQt6QmlWorkerScript.so.6
 _internal/PySide6/Qt/lib/libQt6Quick.so.6
 _internal/PySide6/Qt/lib/libQt6Svg.so.6
+_internal/PySide6/Qt/lib/libQt6UiTools.so.6
 _internal/PySide6/Qt/lib/libQt6WaylandClient.so.6
 _internal/PySide6/Qt/lib/libQt6Widgets.so.6
 _internal/PySide6/Qt/lib/libQt6WlShellIntegration.so.6
@@ -220,6 +226,15 @@ _internal/PySide6/Qt/plugins/xcbglintegrations/libqxcb-glx-integration.so
 
 # Qt translations
 _internal/PySide6/Qt/translations/*.qm
+
+# qt-material theme data and the MarkupSafe extension its template engine uses
+_internal/markupsafe/_speedups.cpython-312-x86_64-linux-gnu.so
+_internal/qt_material/fonts/roboto/Apache-2.0.txt
+_internal/qt_material/fonts/roboto/*.ttf
+_internal/qt_material/material.qss.template
+_internal/qt_material/resources/source/*.svg
+_internal/qt_material/themes/dark_teal.xml
+_internal/qt_material/themes/light_teal.xml
 
 # Ubuntu 22.04 system libraries, each listed in NOTICE
 _internal/libFLAC.so.8

@@ -14,7 +14,7 @@ from infiniteprep.config.settings import (
 from infiniteprep.domain.enums import KeyDisplayNotation
 from infiniteprep.domain.tag_output import BPM_DECIMAL_PLACES
 from infiniteprep.ui.settings.base import FormSettingsTab
-from infiniteprep.ui.theme import SYSTEM_THEME, get_available_themes
+from infiniteprep.ui.theme import get_theme_choices
 
 UNSORTED_PLACEMENT_LABELS: Final[tuple[tuple[str, str], ...]] = (
     ("First", UNSORTED_PLACEMENT_FIRST),
@@ -43,10 +43,11 @@ class GeneralTab(FormSettingsTab):
         """
         super().__init__(parent)
         self.theme_combo = QComboBox(self)
-        for theme_name in get_available_themes():
+        choices = get_theme_choices()
+        for theme_name in choices:
             self.theme_combo.addItem(theme_name)
-        self.theme_combo.addItem(SYSTEM_THEME)
-        self.theme_combo.setCurrentText(theme)
+        if theme in choices:
+            self.theme_combo.setCurrentText(theme)
         self.form.addRow("UI Theme:", self.theme_combo)
         self.unsorted_rows_placement_combo = QComboBox(self)
         for label, value in UNSORTED_PLACEMENT_LABELS:
@@ -81,6 +82,11 @@ class GeneralTab(FormSettingsTab):
             self.tag_bpm_decimals_combo.findData(settings.tag_bpm_decimals)
         )
         self.form.addRow("Written BPM Precision:", self.tag_bpm_decimals_combo)
+
+    def set_theme(self, theme: str) -> None:
+        """Point the theme picker at the given theme."""
+        if theme in get_theme_choices():
+            self.theme_combo.setCurrentText(theme)
 
     def apply_to(self, settings: AppSettings) -> None:
         """Copy theme, sorting, and tag output preferences into settings."""

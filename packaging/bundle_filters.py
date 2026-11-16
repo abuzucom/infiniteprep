@@ -56,6 +56,10 @@ SHARED_LIBRARY_MARKER: Final[str] = ".so"
 # QtConcurrent and QtDBus bindings. The Qt libraries under those bindings stay. On
 # Windows, dropping QML and Quick is a trial: the smoke check fails when the
 # FFmpeg playback plugin cannot load without them.
+# The theme package imports the Qt interface loader binding, and that binding links
+# the OpenGL widgets library. The app never imports the OpenGL bindings, so they
+# leave every bundle. The OpenGL libraries under them stay, because the interface
+# loader links them.
 ORPHAN_QT_FILE_PREFIXES: Final[dict[str, tuple[str, ...]]] = {
     "linux": (
         "libqt6pdf.so",
@@ -64,8 +68,14 @@ ORPHAN_QT_FILE_PREFIXES: Final[dict[str, tuple[str, ...]]] = {
         "libqt6eglfskmssupport.so",
         "qtconcurrent.abi3.so",
         "qtdbus.abi3.so",
+        "qtopengl.abi3.so",
+        "qtopenglwidgets.abi3.so",
     ),
-    "darwin": ("libqpdf.dylib",),
+    "darwin": (
+        "libqpdf.dylib",
+        "qtopengl.abi3.so",
+        "qtopenglwidgets.abi3.so",
+    ),
     "win32": (
         "qt6pdf.dll",
         "qpdf.dll",
@@ -74,6 +84,8 @@ ORPHAN_QT_FILE_PREFIXES: Final[dict[str, tuple[str, ...]]] = {
         "qt6qmlmodels.dll",
         "qt6qmlworkerscript.dll",
         "qt6quick.dll",
+        "qtopengl.pyd",
+        "qtopenglwidgets.pyd",
     ),
 }
 # macOS ships Qt as frameworks. Nothing loads QML and Quick there, because the macOS

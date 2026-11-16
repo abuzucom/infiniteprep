@@ -51,6 +51,7 @@ _internal/api-ms-win-crt-*.dll
 
 # Package metadata that PyInstaller hooks keep
 _internal/keyring-*.dist-info/**
+_internal/markupsafe-*.dist-info/**
 _internal/numpy-*.dist-info/**
 _internal/pluggy-*.dist-info/**
 
@@ -79,6 +80,7 @@ _internal/PySide6/QtGui.pyd
 _internal/PySide6/QtMultimedia.pyd
 _internal/PySide6/QtMultimediaWidgets.pyd
 _internal/PySide6/QtNetwork.pyd
+_internal/PySide6/QtUiTools.pyd
 _internal/PySide6/QtWidgets.pyd
 _internal/PySide6/Qt6Core.dll
 _internal/PySide6/Qt6Gui.dll
@@ -86,7 +88,9 @@ _internal/PySide6/Qt6Multimedia.dll
 _internal/PySide6/Qt6MultimediaWidgets.dll
 _internal/PySide6/Qt6Network.dll
 _internal/PySide6/Qt6OpenGL.dll
+_internal/PySide6/Qt6OpenGLWidgets.dll
 _internal/PySide6/Qt6Svg.dll
+_internal/PySide6/Qt6UiTools.dll
 _internal/PySide6/Qt6Widgets.dll
 _internal/PySide6/opengl32sw.dll
 _internal/PySide6/MSVCP140.dll
@@ -128,3 +132,12 @@ _internal/PySide6/plugins/tls/qschannelbackend.dll
 
 # Qt translations
 _internal/PySide6/translations/*.qm
+
+# qt-material theme data and the MarkupSafe extension its template engine uses
+_internal/markupsafe/_speedups.cp312-win_amd64.pyd
+_internal/qt_material/fonts/roboto/Apache-2.0.txt
+_internal/qt_material/fonts/roboto/*.ttf
+_internal/qt_material/material.qss.template
+_internal/qt_material/resources/source/*.svg
+_internal/qt_material/themes/dark_teal.xml
+_internal/qt_material/themes/light_teal.xml
