@@ -11,6 +11,181 @@ permissions:
   contents: read
 
 jobs:
+  # The comment job holds the pull request write permission. The job that runs
+  # the scanners holds none, so no scanner can post a comment. The job reports
+  # a passed scan and a failed scan. A light change runs no scan, so the job
+  # skips it. A pull request from a fork receives a read-only token, so the
+  # job skips those pull requests.
+  scan-comment:
+    needs: msdo
+    if: >-
+      ${{ !cancelled() && github.event_name == 'pull_request' &&
+      needs.msdo.outputs.light != 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # One comment job runs at a time for a pull request. A newer push cancels
+    # the older job, so two runs never write the comment at the same time.
+    concurrency:
+      group: security-scan-comment-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      # A failed scan uploads no summary.
+      - name: Download the scan summary
+        if: needs.msdo.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: security-scan-summary
+          path: .
+
+      - name: Comment the scan result on the pull request
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+        env:
+          SCAN_RESULT: ${{ needs.msdo.result }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- infiniteprep-security-scan -->';
+            const runPattern = /infiniteprep-security-scan-run (\d+)/;
+            const botLogin = 'github-actions[bot]';
+            const resultLabels = { success: 'pass', failure: 'failure' };
+            const maxTools = 20;
+            const maxNameLength = 60;
+            const maxCommentLength = 4000;
+            const namePattern = /^[A-Za-z0-9_.\- ]+$/;
+
+            function fail(reason) {
+              throw new Error(reason);
+            }
+
+            function readTool(entry) {
+              if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+                fail('a scan tool record is not an object');
+              }
+              if (Object.keys(entry).sort().join(',') !== 'findings,name') {
+                fail('a scan tool record has unexpected fields');
+              }
+              const name = entry.name;
+              if (typeof name !== 'string' || name.length === 0 || name.length > maxNameLength) {
+                fail('a scan tool name has an invalid length');
+              }
+              if (!namePattern.test(name)) {
+                fail('a scan tool name holds an unsupported character');
+              }
+              const findings = entry.findings;
+              if (!Number.isSafeInteger(findings) || findings < 0) {
+                fail('a scan tool finding count is out of range');
+              }
+              return { name, findings };
+            }
+
+            function readSummary(text) {
+              let document;
+              try {
+                document = JSON.parse(text);
+              } catch (error) {
+                fail('the scan summary is not valid JSON');
+              }
+              if (typeof document !== 'object' || document === null || Array.isArray(document)) {
+                fail('the scan summary is not an object');
+              }
+              if (Object.keys(document).sort().join(',') !== 'tools,total') {
+                fail('the scan summary has unexpected fields');
+              }
+              const total = document.total;
+              if (!Number.isSafeInteger(total) || total < 0) {
+                fail('the scan finding total is out of range');
+              }
+              if (!Array.isArray(document.tools) || document.tools.length > maxTools) {
+                fail('the scan tool list is out of range');
+              }
+              return { total, tools: document.tools.map(readTool) };
+            }
+
+            function buildFindingLines(summary) {
+              const lines = [`Findings: ${summary.total}`];
+              if (summary.tools.length === 0) {
+                return lines;
+              }
+              lines.push('', 'Findings by tool:', '', '```text');
+              for (const tool of summary.tools) {
+                lines.push(`${tool.findings}  ${tool.name}`);
+              }
+              lines.push('```');
+              return lines;
+            }
+
+            function buildBody(scanResult, runUrl) {
+              const label = resultLabels[scanResult];
+              if (label === undefined) {
+                fail('the scan job result is not a known value');
+              }
+              const lines = ['Microsoft Security DevOps scan', '', `Result: ${label}`];
+              if (scanResult === 'success') {
+                const summary = readSummary(fs.readFileSync('security-scan-summary.json', 'utf8'));
+                lines.push(...buildFindingLines(summary));
+              }
+              lines.push('', `Workflow run: ${runUrl}`);
+              const text = lines.join('\n');
+              if (text.length > maxCommentLength) {
+                fail('the scan comment is too long');
+              }
+              return text;
+            }
+
+            function findBotComments(comments) {
+              return comments.filter(
+                (comment) =>
+                  comment.user?.login === botLogin &&
+                  typeof comment.body === 'string' &&
+                  comment.body.startsWith(marker),
+              );
+            }
+
+            async function main() {
+              const runId = context.runId;
+              const { owner, repo } = context.repo;
+              const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${runId}`;
+              const text = buildBody(process.env.SCAN_RESULT, runUrl);
+              const body = `${marker}\n<!-- infiniteprep-security-scan-run ${runId} -->\n${text}`;
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner,
+                repo,
+                issue_number: context.issue.number,
+                per_page: 100,
+              });
+              const matches = findBotComments(comments);
+              const postedRunIds = matches.map((comment) => {
+                const found = comment.body.match(runPattern);
+                return found ? Number(found[1]) : 0;
+              });
+              const newestPosted = postedRunIds.length ? Math.max(...postedRunIds) : 0;
+              if (newestPosted > runId) {
+                core.info('A newer run already posted the scan result.');
+                return;
+              }
+              const [target, ...extra] = matches;
+              if (target) {
+                await github.rest.issues.updateComment({ owner, repo, comment_id: target.id, body });
+              } else {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: context.issue.number,
+                  body,
+                });
+              }
+              for (const comment of extra) {
+                await github.rest.issues.deleteComment({ owner, repo, comment_id: comment.id });
+              }
+            }
+
+            main();
+
+  # The job order keeps the SARIF upload as the last step of the workflow.
   msdo:
     name: Microsoft Security DevOps
     runs-on: ubuntu-latest
@@ -19,6 +194,8 @@ jobs:
       contents: read
       security-events: write
       actions: read
+    outputs:
+      light: ${{ steps.classify.outputs.light }}
     steps:
       # The merge base lookup of the classifier needs the complete history.
       - name: Checkout repository
@@ -43,6 +220,22 @@ jobs:
         if: steps.classify.outputs.light != 'true'
         uses: microsoft/security-devops-action@cf28f87c67770dbaa208cce3665fafc849f77507  # v1.12.1
         id: msdo
+
+      # The comment job reads this bounded document, never the raw SARIF file.
+      - name: Build the scan summary
+        if: steps.classify.outputs.light != 'true'
+        env:
+          SARIF_FILE: ${{ steps.msdo.outputs.sarifFile }}
+        run: python3 scripts/build_security_scan_summary.py --sarif "$SARIF_FILE" --output security-scan-summary.json
+
+      - name: Upload the scan summary
+        if: steps.classify.outputs.light != 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: security-scan-summary
+          path: security-scan-summary.json
+          retention-days: 3
+          if-no-files-found: error
 
       - name: Upload results to Security tab
         if: steps.classify.outputs.light != 'true'
