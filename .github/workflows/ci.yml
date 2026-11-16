@@ -142,7 +142,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    # The Ubuntu leg runs the suite under coverage, which takes longer than the
+    # plain suite. The other legs keep the shorter limit.
+    timeout-minutes: 25
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
@@ -188,6 +190,109 @@ jobs:
           python -m pip install --no-deps -e .
 
       # Bash runs on every matrix OS. The checks job explains the unset.
+      # The coverage measurement runs on Ubuntu only, so the report costs no
+      # second suite run. The other legs run the plain suite.
       - name: Run full test suite
+        if: matrix.os != 'ubuntu-latest'
         shell: bash
         run: env -u GITHUB_EVENT_PATH pytest
+
+      - name: Run full test suite under coverage
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: env -u GITHUB_EVENT_PATH coverage run -m pytest
+
+      - name: Write the coverage report
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          coverage report --show-missing --skip-covered --sort=cover > coverage-files.txt
+          coverage xml -o coverage.xml
+          coverage html
+          total="$(coverage report --format=total)"
+          {
+            echo "## Code coverage"
+            echo ""
+            echo "Total coverage: ${total}%"
+            echo ""
+            echo "Files with the least coverage:"
+            echo ""
+            echo '```text'
+            sed -n '1,12p' coverage-files.txt
+            echo '```'
+          } > coverage-summary.md
+          cat coverage-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the coverage summary
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: coverage-summary
+          path: |
+            coverage-summary.md
+            coverage-files.txt
+            coverage.xml
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload the coverage HTML report
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: coverage-html
+          path: htmlcov
+          retention-days: 3
+          if-no-files-found: error
+
+  # The comment job holds the pull request write permission. The job that runs
+  # the suite keeps read-only permissions, so no test code can post a comment.
+  coverage-comment:
+    needs: [changes, test-matrix]
+    if: >-
+      ${{ !cancelled() && github.event_name == 'pull_request' &&
+      needs.test-matrix.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Download the coverage summary
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: coverage-summary
+          path: .
+
+      - name: Comment the coverage on the pull request
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3  # v9.0.0
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- infiniteprep-coverage -->';
+            const summary = fs.readFileSync('coverage-summary.md', 'utf8');
+            const body = `${marker}\n${summary}`;
+            const { owner, repo } = context.repo;
+            const comments = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const previous = comments.data.find(
+              (comment) => comment.body && comment.body.includes(marker),
+            );
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: previous.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
