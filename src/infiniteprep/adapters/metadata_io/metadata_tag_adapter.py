@@ -12,7 +12,7 @@ import os
 import re
 import shutil
 import struct
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -66,9 +66,11 @@ from infiniteprep.domain.enums import (
     AudioFormat,
     FieldName,
     OperationStatus,
+    parse_key_string,
 )
 from infiniteprep.domain.models import ApprovedField, ChangeRecord, FileAsset
 from infiniteprep.domain.ports import FileWritePlan, TechnicalAndTagMetadata
+from infiniteprep.domain.tag_output import TagOutputFormat
 from infiniteprep.hashing import compute_sha256
 
 XDJ_RX3_MAX_SAMPLE_RATE_HZ: Final[int] = 48000
@@ -406,18 +408,40 @@ def _parse_flac(data: bytes) -> _ParsedAudio:
     return _ParsedAudio(stream.properties, standard, raw)
 
 
+MP4_KEY_TEMPO_FIELDS: Final[dict[str, FieldName]] = {
+    "----:com.apple.itunes:initialkey": FieldName.KEY,
+    "tmpo": FieldName.BPM,
+}
+VORBIS_KEY_TEMPO_FIELDS: Final[dict[str, FieldName]] = {
+    VORBIS_FIELD_MAP[field].lower(): field for field in (FieldName.KEY, FieldName.BPM)
+}
+
+
+def _read_key_and_tempo(
+    values: Mapping[str, Sequence[str]], fields: Mapping[str, FieldName]
+) -> dict[str, str]:
+    """Expose the first nonempty value of each supported tag in the review fields."""
+    standard: dict[str, str] = {}
+    for tag_name, field in fields.items():
+        value = next((text.strip() for text in values.get(tag_name, ()) if text.strip()), "")
+        if value:
+            standard[field] = value
+    return standard
+
+
 def _parse_m4a(data: bytes) -> _ParsedAudio:
-    """Read M4A properties and keep every ilst item as a raw custom tag."""
+    """Read M4A key and tempo while preserving the original atom names."""
     info = read_mp4(data)
     properties = AudioProperties(
         info.duration, info.sample_rate, info.channels, info.bitrate, info.bit_depth
     )
     raw: dict[str, Any] = {tag.key: str(list(tag.values)) for tag in info.tags}
-    return _ParsedAudio(properties, {}, raw)
+    values = {tag.key.lower(): tag.values for tag in info.tags}
+    return _ParsedAudio(properties, _read_key_and_tempo(values, MP4_KEY_TEMPO_FIELDS), raw)
 
 
 def _parse_ogg(file_path: Path) -> _ParsedAudio:
-    """Read Ogg properties and keep every comment field as a raw custom tag.
+    """Read Ogg key and tempo while preserving the original comment fields.
 
     read_ogg accepts bytes or a path only, so the file is read whole. Ogg files are lossy and
     small next to WAV or AIFF.
@@ -427,7 +451,8 @@ def _parse_ogg(file_path: Path) -> _ParsedAudio:
         info.duration, info.sample_rate, info.channels, info.bitrate or None, None
     )
     grouped = _group_vorbis_fields(info.comment)
-    return _ParsedAudio(properties, {}, {key: str(values) for key, values in grouped.items()})
+    standard = _read_key_and_tempo(grouped, VORBIS_KEY_TEMPO_FIELDS)
+    return _ParsedAudio(properties, standard, {key: str(values) for key, values in grouped.items()})
 
 
 MAPPED_PARSERS: Final[dict[AudioFormat, Callable[[bytes], _ParsedAudio]]] = {
@@ -598,6 +623,16 @@ class MetadataTagAdapter:
 
     supported_write_formats: frozenset[AudioFormat] = WRITE_SUPPORTED_FORMATS
 
+    def __init__(self, load_tag_output: Callable[[], TagOutputFormat] = TagOutputFormat) -> None:
+        """Initialize the adapter with the preferences to use for newly prepared writes."""
+        self._load_tag_output = load_tag_output
+
+    def format_output_tags(self, tags: dict[str, str]) -> dict[str, str]:
+        """Prepare key and BPM text for the destination file."""
+        if FieldName.KEY not in tags and FieldName.BPM not in tags:
+            return tags.copy()
+        return self._load_tag_output().format_tags(tags)
+
     def detect_format(self, file_path: Path) -> AudioFormat:
         """Detect AudioFormat from file extension."""
         return EXTENSION_TO_FORMAT.get(file_path.suffix.lower(), AudioFormat.UNSUPPORTED)
@@ -635,6 +670,10 @@ class MetadataTagAdapter:
         raw_custom_tags = parsed.raw_custom_tags
         if props.bits_per_sample is not None:
             raw_custom_tags["_bits_per_sample"] = props.bits_per_sample
+        warnings = evaluate_xdj_rx3_warnings(fmt, props.sample_rate, props.bits_per_sample)
+        key = parsed.standard_tags.get(FieldName.KEY)
+        if key and parse_key_string(key) is None:
+            warnings.append("Key tag could not be parsed. The original text remains available.")
         return TechnicalAndTagMetadata(
             format=fmt,
             duration=props.duration,
@@ -643,7 +682,7 @@ class MetadataTagAdapter:
             bitrate=props.bitrate,
             standard_tags=parsed.standard_tags,
             raw_custom_tags=raw_custom_tags,
-            warnings=evaluate_xdj_rx3_warnings(fmt, props.sample_rate, props.bits_per_sample),
+            warnings=warnings,
         )
 
     def render_filename(
@@ -734,6 +773,10 @@ class MetadataTagAdapter:
         destination_path, collision_warnings = self._resolve_destination_path(
             source_path, effective_tags, rename_template, enable_rename
         )
+        try:
+            proposed_to_write = self.format_output_tags(proposed_to_write)
+        except ValueError as exc:
+            validation_errors.append(str(exc))
         backup_destination_path = backup_dir / f"{file_asset.id}_{source_path.name}"
 
         return FileWritePlan(

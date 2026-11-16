@@ -5,7 +5,33 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.64.1] (2026-11-15)
+## [0.65.2] (2026-11-16)
+
+### Added
+
+- Written key tags use Camelot, Open Key, or Standard notation (issue 128).
+  Camelot is the default. Camelot and Open Key can use a leading zero.
+  Written BPM supports integers or one or two decimal places with half-up rounding.
+  Import parses Beatport and Essentia key styles and warns about unreadable key text.
+  Settings > General exposes these write preferences to the desktop app.
+
+### Changed
+
+- The theme picker lists the themes the build can apply, and a theme that cannot apply stays out of the picker (issue 247).
+  - `apply_application_theme` returns a result that names the theme in effect and the reason a theme did not apply.
+  - The main window and the Settings dialog keep the picker on the theme in effect. A failed choice stays out of the settings file. A failed application logs a warning that names the theme and the reason.
+  - The theme picker reads one shared list of choices. The main window and the Settings dialog offer the same themes.
+  - The version advances to 0.65.2. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+
+### Fixed
+
+- The theme picker changes the app in a packaged build (issue 247).
+  - The packaged app shipped without the `qt-material` package. Every theme choice fell back to the native look. The picker showed a theme that the app never applied.
+  - `infiniteprep.spec` now names `qt_material` as a hidden import and points PyInstaller at `packaging/pyinstaller_hooks/`. The new `hook-qt_material.py` keeps the two theme files, the style sheet template, and the icon sources next to the package in every bundle.
+  - The Windows, macOS, and Linux bundle allowlists name the theme data, the Qt interface loader binding that the theme package imports, and the MarkupSafe extension that its template engine uses.
+  - The Roboto fonts ship beside the theme files in every bundle. The theme package does not ship the license text for the fonts. The bundle carries a pinned copy of the Apache-2.0 text next to the font files.
+
+## [0.64.0] (2026-11-15)
 
 ### Added
 
@@ -52,10 +78,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- The theme picker lists the themes the build can apply, and a theme that cannot apply stays out of the picker (issue 247).
-  - `apply_application_theme` returns a result that names the theme in effect and the reason a theme did not apply.
-  - The main window and the Settings dialog keep the picker on the theme in effect. A failed choice stays out of the settings file. A failed application logs a warning that names the theme and the reason.
-  - The theme picker reads one shared list of choices. The main window and the Settings dialog offer the same themes.
 - `SECURITY.md` names the supported builds, the scope, the application surfaces, the credential storage, and the report hygiene.
   - The supported builds are the latest `main` branch build and the latest tagged release. Pre-releases and earlier tagged releases receive no support.
   - The scope section replaces the repeated template sentences with prose that covers the same ground.
@@ -64,17 +86,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The agent policy security section goes away. The file ends with the disclosure policy.
   - `docs/agent-policy/security.md` points at `SECURITY.md` instead of `SECURITY.md.example`.
   - `docs/template-drift.md` records both divergences from the source template.
-  - The version advances to 0.64.1. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+  - The version advances to 0.63.2. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 - `tests/test_release_workflow.py` reads the release job permissions and the package count from `packaging/release.py` (D355). `test_release_gathers_every_package_and_writes_checksums` replaces the six-package test name.
 - `tests/test_release_review_fixes.py` reads the package and bundle names from `expected_packages` and `expected_bundles` (D355). `PACKAGES`, `BUNDLES`, and `PACKAGES_AND_BUNDLES` replace the literal six-name lists. Two test names drop the counts six and twelve.
 
 ### Fixed
 
-- The theme picker changes the app in a packaged build (issue 247).
-  - The packaged app shipped without the `qt-material` package. Every theme choice fell back to the native look. The picker showed a theme that the app never applied.
-  - `infiniteprep.spec` now names `qt_material` as a hidden import and points PyInstaller at `packaging/pyinstaller_hooks/`. The new `hook-qt_material.py` keeps the two theme files, the style sheet template, and the icon sources next to the package in every bundle.
-  - The Windows, macOS, and Linux bundle allowlists name the theme data, the Qt interface loader binding that the theme package imports, and the MarkupSafe extension that its template engine uses.
-  - The Roboto fonts ship beside the theme files in every bundle. The theme package does not ship the license text for the fonts. The bundle carries a pinned copy of the Apache-2.0 text next to the font files.
 - MP3, FLAC, WAV, and AIFF tag writes verify the audio payload with SHA-256 (issue 131).
   A mismatch discards the staged write, preserves the source, and records a failure.
 - The Windows, macOS, and Linux bundles no longer carry pytest or pygments.

@@ -100,7 +100,7 @@ class SettingsDialog(QDialog):
         # fallback theme and passes the result to the General tab.
         theme = getattr(settings, "theme", DEFAULT_DARK_THEME)
         placement = getattr(settings, "unsorted_rows_placement", UNSORTED_PLACEMENT_FIRST)
-        self.general_tab = GeneralTab(theme, unsorted_placement=placement)
+        self.general_tab = GeneralTab(theme, unsorted_placement=placement, settings=settings)
         self.playback_tab = PlaybackTab()
         self.analysis_tab = AnalysisTab(settings)
         self.transcode_tab = TranscodeTab(settings)

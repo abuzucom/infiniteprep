@@ -6,6 +6,12 @@ InfinitePrep is licensed under the BSD 3-Clause License. See LICENSE.
 The application depends on the third-party components below. Each keeps
 its own license. The license texts ship inside each component's package.
 
+Tag mapping reference
+- Key and BPM field identifiers follow the MIT-licensed `beetbox/mediafile` tables.
+  Copyright (c) 2015 Adrian Sampson. The reference tables include TKEY and TBPM
+  for ID3, initialkey and integer tmpo for MP4, INITIALKEY and BPM for Vorbis,
+  and INITIALKEY and WM/BeatsPerMinute for ASF.
+
 Desktop UI and playback
 - Qt 6 and PySide6 6.12.0 (QtCore, QtGui, QtWidgets, QtMultimedia):
   LGPL-3.0-only. InfinitePrep links Qt dynamically, and the packaged

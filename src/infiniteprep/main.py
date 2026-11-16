@@ -15,6 +15,7 @@ from infiniteprep import storage_paths
 from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
 from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapter
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.adapters.transcoder.safe_transcoder import SafeTranscoderAdapter
 from infiniteprep.config.credentials import CredentialStore, forget_all_credentials
 from infiniteprep.config.settings import SettingsManager
@@ -214,10 +215,13 @@ def launch_desktop_app() -> int:
     if isinstance(opened, int):
         return opened
     repo = opened.repository
-    write_svc = WriteService(repo, backup_dir=opened.locations.backup_dir)
+    tag_adapter = MetadataTagAdapter(SettingsManager().load_tag_output)
+    write_svc = WriteService(repo, tag_adapter=tag_adapter, backup_dir=opened.locations.backup_dir)
     orchestrator = JobOrchestrator(repository=repo, audio_analyzer=LocalDspAnalyzer())
     reconciler = ReconciliationService(repo)
-    transcoder = SafeTranscoderAdapter(repo, backup_dir=opened.locations.backup_dir)
+    transcoder = SafeTranscoderAdapter(
+        repo, tag_adapter=tag_adapter, backup_dir=opened.locations.backup_dir
+    )
     exporter = PlaylistExporter(repo)
     apply_saved_theme(qt_app)
 
