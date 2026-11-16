@@ -5,9 +5,15 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.68.0] (2026-11-16)
+## [0.68.1] (2026-11-16)
 
 ### Added
+
+- The new `tests/unit/test_keyboard_defaults.py` checks three keyboard paths (accessibility audit).
+  - Enter in the rename template field keeps the write preview open.
+  - Tab leaves the library table.
+  - Tab from a field edit box reaches the action buttons of the same row.
+  - The version advances from 0.68.0 to 0.68.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - The pull request checks report the code coverage of the application.
   - The Ubuntu leg of the test matrix runs the suite under `coverage run -m pytest`. The report costs no second suite run. The other legs run the plain suite.
