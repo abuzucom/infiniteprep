@@ -215,7 +215,10 @@ On first launch the application creates these per-user locations through
 
 Click **Settings & Providers**. The dialog holds one tab per area:
 
-- **General:** the UI theme.
+- **General** holds the UI theme and written tag formats. Key tags default to Camelot.
+  Open Key and Standard are also available. Camelot and Open Key can use a leading zero.
+  BPM tags default to integers. Choose one or two decimal places for finer precision.
+  Exact halves round up.
 - **Analysis:** the batch queue option to stop a batch at its first failed
   file, and the fake-lossless detection method.
 - **Transcode:** the XDJ transcode mode and preset, and **Write paths

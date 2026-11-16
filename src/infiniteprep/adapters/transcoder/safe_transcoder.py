@@ -290,4 +290,6 @@ class SafeTranscoderAdapter:
         }
         effective = {**std, **approved}
         if effective:
-            self.tag_adapter._write_tags_by_format(out_path, effective)
+            self.tag_adapter._write_tags_by_format(
+                out_path, self.tag_adapter.format_output_tags(effective)
+            )

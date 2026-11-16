@@ -189,13 +189,16 @@ _KEY_NOTATION_MAP: dict[tuple[PitchClass, KeyMode], tuple[str, str, str]] = {
 
 _ENHARMONIC_LOOKUP: dict[str, PitchClass] = {
     "c": PitchClass.C,
+    "b#": PitchClass.C,
     "c#": PitchClass.C_SHARP,
     "db": PitchClass.C_SHARP,
     "d": PitchClass.D,
     "d#": PitchClass.E_FLAT,
     "eb": PitchClass.E_FLAT,
     "e": PitchClass.E,
+    "fb": PitchClass.E,
     "f": PitchClass.F,
+    "e#": PitchClass.F,
     "f#": PitchClass.F_SHARP,
     "gb": PitchClass.F_SHARP,
     "g": PitchClass.G,
@@ -205,6 +208,21 @@ _ENHARMONIC_LOOKUP: dict[str, PitchClass] = {
     "a#": PitchClass.B_FLAT,
     "bb": PitchClass.B_FLAT,
     "b": PitchClass.B,
+    "cb": PitchClass.B,
+}
+
+_WHEEL_KEY_LOOKUP = {
+    notation.lower(): key
+    for key, (_, camelot, open_key) in _KEY_NOTATION_MAP.items()
+    for notation in (camelot, open_key)
+}
+_SHORT_WHEEL_KEY_LENGTH = 3
+_KEY_MODE_ALIASES = {
+    "m": KeyMode.MINOR,
+    "min": KeyMode.MINOR,
+    "minor": KeyMode.MINOR,
+    "maj": KeyMode.MAJOR,
+    "major": KeyMode.MAJOR,
 }
 
 
@@ -233,45 +251,35 @@ def format_canonical_key(
 def _parse_two_part_key(tonic_raw: str, mode_raw: str) -> tuple[PitchClass, KeyMode] | None:
     """Parse two-token key strings such as 'F# minor' or 'Eb major'."""
     pitch_class = _ENHARMONIC_LOOKUP.get(tonic_raw)
-    if not pitch_class:
-        return None
-    if mode_raw.startswith("min") or mode_raw == "m":
-        return (pitch_class, KeyMode.MINOR)
-    if mode_raw.startswith("maj"):
-        return (pitch_class, KeyMode.MAJOR)
+    mode = _KEY_MODE_ALIASES.get(mode_raw)
+    if pitch_class and mode:
+        return pitch_class, mode
     return None
 
 
 def _parse_single_token_key(token: str) -> tuple[PitchClass, KeyMode] | None:
     """Parse single-token key strings such as 'F#m', 'Dmin', 'Amaj', or 'C'."""
-    if token.endswith("min"):
-        pitch_class = _ENHARMONIC_LOOKUP.get(token[:-3])
-        return (pitch_class, KeyMode.MINOR) if pitch_class else None
-    if token.endswith("maj"):
-        pitch_class = _ENHARMONIC_LOOKUP.get(token[:-3])
-        return (pitch_class, KeyMode.MAJOR) if pitch_class else None
-    if token.endswith("m") and len(token) >= 2:
-        pitch_class = _ENHARMONIC_LOOKUP.get(token[:-1])
-        return (pitch_class, KeyMode.MINOR) if pitch_class else None
+    for suffix in _KEY_MODE_ALIASES:
+        if token.endswith(suffix):
+            return _parse_two_part_key(token[: -len(suffix)], suffix)
     pitch_class = _ENHARMONIC_LOOKUP.get(token)
     return (pitch_class, KeyMode.MAJOR) if pitch_class else None
 
 
 def parse_key_string(raw_key: str | None) -> tuple[PitchClass, KeyMode] | None:
     """Parse standard, Camelot, or Open Key strings into canonical (PitchClass, KeyMode)."""
-    if not raw_key:
-        return None
-    cleaned = raw_key.strip()
+    cleaned = (raw_key or "").strip().lower().replace("\u266f", "#").replace("\u266d", "b")
     if not cleaned:
         return None
-
-    upper = cleaned.upper()
-    for (pitch_class, key_mode), (std_v, cam_v, open_v) in _KEY_NOTATION_MAP.items():
-        if upper in (std_v.upper(), cam_v.upper(), open_v.upper()):
-            return (pitch_class, key_mode)
-
-    lower = cleaned.lower().replace("-", " ").replace("_", " ")
-    parts = lower.split()
+    wheel = cleaned
+    if len(wheel) == _SHORT_WHEEL_KEY_LENGTH and wheel.startswith("0"):
+        wheel = wheel[1:]
+    canonical = _WHEEL_KEY_LOOKUP.get(wheel)
+    if canonical is not None:
+        return canonical
+    if cleaned.startswith(("-", "_")) or cleaned.endswith(("-", "_")):
+        return None
+    parts = cleaned.replace("-", " ").replace("_", " ").split()
     if len(parts) == 2:
         return _parse_two_part_key(parts[0], parts[1])
     if len(parts) == 1:

@@ -5,14 +5,54 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.67.0] (2026-11-16)
+
+### Added
+
+- USB exports persist `.infiniteprep/manifest.in-progress.json` and `.infiniteprep/manifest.json` with a canonical SHA-256 `My Tags` digest (D116 to D121, D139 to D148, D179, D200, issue 157). The computer-side recovery journal at `usb_recovery_journal.json` matches reconnecting USB drives and gates changed paths behind confirmation (D166, D191, D192, issue 157). `UsbRecoveryDialog` offers Resume, Restore, and Leave unchanged actions with plain-text drive labels. `StorageTab` adds 30-day expiry settings, 1-day advance warning notices, launch overdue cleanup notices, and manual journal cleanup (D193 to D198, issue 157). The version advances from 0.65.1 to 0.66.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- Written key tags use Camelot, Open Key, or Standard notation (issue 128).
+  Camelot is the default. Camelot and Open Key can use a leading zero.
+  Written BPM supports integers or one or two decimal places with half-up rounding.
+  Import parses Beatport and Essentia key styles and warns about unreadable key text.
+  Settings > General exposes these write preferences to the desktop app.
+- The iTunes Search adapter supplies a coarse genre and a release-date fallback (D404, issue 243).
+  - The new `adapters/catalog/itunes.py` queries `https://itunes.apple.com/search` with the shared D221 User-Agent. The lookup sends the artist name and the track title as the search term, plus the storefront country.
+  - The adapter waits 3 seconds between calls for the published limit of about 20 calls per minute. It caches every response in the shared SQLite cache for 24 hours.
+  - The matching engine ranks the rows over the artist and the title. The earliest release date wins among the rows that tie for the best match.
+  - The adapter reads `primaryGenreName` and `releaseDate`. It keeps no artwork from the response because Apple limits promotional content, album art included, to promoting store content. The shared cache holds the read fields only. No artwork URL stays in it.
+  - A row supplies a value only when it matches the artist and the title. The mean of the two field similarities reaches the match score. The candidate keeps that score.
+  - The request path follows no redirect, and the request timeout is a named constant.
+  - The limiter lives in the process. A second adapter or a second thread waits for the same interval.
+  - The provider slot holds the cache check and the request together. A second thread that misses the cache finds the cached response and sends no second request.
+  - Every proposal records iTunes Search as its source. The provider name is `itunes` and the entity id is the track id.
+- The new `domain/source_priority.py` holds the per-field order of the sources (D394, issue 243).
+  - The genre order is Discogs, then iTunes. The release date order is MusicBrainz, then Discogs, then iTunes.
+  - A higher ranked source keeps the field. A lower ranked proposal for that field never reaches the proposal table. A value the owner set outranks every provider.
+  - The table also limits the fields a provider may supply. The iTunes adapter proposes the genre and the release year only.
+  - A stored proposal from a lower ranked source turns superseded when a higher ranked source holds the field. The rule also covers a source that no longer produces a proposal. An approved value from a higher ranked source holds the field too, and a value the owner set holds it on its own.
+- The text similarity helper moves to `domain/similarity.py`. `services/matching_engine.py` keeps its name and its behavior.
+- The Identification settings tab names the host and the query data of the iTunes Search lookup. The README holds the same disclosure in a new section.
+- `tests/unit/test_itunes_search_adapter.py`, `tests/unit/test_itunes_endpoint.py`, `tests/unit/test_source_priority_filter.py`, and `tests/unit/test_itunes_disclosure.py` cover a match with a genre and a date, the empty response, an unrelated row, a malformed duration, a field another source already supplied, a response with artwork, the rate limit, the cache, the redirect refusal, and the provenance on each proposal. The recorded responses live under `tests/fixtures/itunes_search/`.
+
+### Changed
+
+- The version advances to 0.67.0 for the iTunes Search fallback. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+
 ## [0.64.0] (2026-11-15)
 
 ### Added
 
+- Every library table column sorts in both directions (issue 248).
+  - A header click sorts that column ascending. A second click on the same header reverses the direction. The header shows the sort indicator for the active column and direction.
+  - The table opens sorted ascending by filename with a natural order. `Track 2` comes before `Track 10`.
+  - Duration sorts by seconds. BPM sorts by number and keeps the decimals. The key column sorts by the active notation. The Camelot notation sorts by the wheel position. The Open Key notation sorts by the number. The standard notation sorts by the pitch class upward from C like the piano keys. The review status column sorts by the workflow order. The remaining columns sort by a natural case-insensitive text order.
+  - Rows that tie order by title and then by file path. Two keys at one wheel position keep the minor key first in both directions.
+  - The file ID rides on the first cell of each row. A row click opens the file in that row. The sort column, the sort direction, and the selected file survive a search, a status filter, an import, an analysis, and a write.
+  - The new `unsorted_rows_placement` setting places the rows without a value for the sorted column. The setting holds `first` or `last`. The General tab of the Settings dialog holds the choice. The rows form one group that moves with the sort direction. A BPM that is not a finite number, such as `NaN`, counts as no value.
+  - `src/infiniteprep/ui/table_sort.py` holds the typed sort keys and the row order. `tests/unit/test_ui_library_table_sort.py` and `tests/unit/test_ui_unsorted_rows_placement.py` cover the sort of every column, the selection, the refresh, and the setting.
 - Library storage supports named playlists, crates, and nested folders (issue 139).
   - Playlists keep track order and support optional repeats. Crates contain unique tracks.
   - Playlists can sort by key or BPM and restore the previous order after a restart.
-
 - The README roadmap lists the 20 stage issues in order, with links and a pointer to the task index (D356, issue 179). The 24-item list goes away. The settings walkthrough names the field on each Settings tab.
 
 - Library schema migrations track the schema version in SQLite `user_version` (D349, issue 175).
@@ -39,25 +79,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tests/unit/test_synthetic_audio.py` passes each container through its app reader. The ADTS test walks the frame chain because the app has no ADTS reader. `tests/unit/test_synthetic_audio_opus_toc.py` pins the Opus TOC bytes to RFC 6716.
 - `packaging/release.py` gains `RELEASE_JOB_PERMISSIONS`, a read-only mapping of the release job permissions (D355).
 - `tests/test_release_constants.py` pins the six release package names, the Sigstore bundle names, and the five release job permissions by hand (D355). The file also checks that `RELEASE_JOB_PERMISSIONS` matches the release job permissions in `build-packages.yml`.
-- The iTunes Search adapter supplies a coarse genre and a release-date fallback (D404, issue 243).
-  - The new `adapters/catalog/itunes.py` queries `https://itunes.apple.com/search` with the shared D221 User-Agent. The lookup sends the artist name and the track title as the search term, plus the storefront country.
-  - The adapter waits 3 seconds between calls for the published limit of about 20 calls per minute. It caches every response in the shared SQLite cache for 24 hours.
-  - The matching engine ranks the rows over the artist and the title. The earliest release date wins among the rows that tie for the best match.
-  - The adapter reads `primaryGenreName` and `releaseDate`. It keeps no artwork from the response because Apple limits promotional content, album art included, to promoting store content. The shared cache holds the read fields only. No artwork URL stays in it.
-  - A row supplies a value only when it matches the artist and the title. The mean of the two field similarities reaches the match score. The candidate keeps that score.
-  - The request path follows no redirect, and the request timeout is a named constant.
-  - The limiter lives in the process. A second adapter or a second thread waits for the same interval.
-  - The provider slot holds the cache check and the request together. A second thread that misses the cache finds the cached response and sends no second request.
-  - Every proposal records iTunes Search as its source. The provider name is `itunes` and the entity id is the track id.
-- The new `domain/source_priority.py` holds the per-field order of the sources (D394, issue 243).
-  - The genre order is Discogs, then iTunes. The release date order is MusicBrainz, then Discogs, then iTunes.
-  - A higher ranked source keeps the field. A lower ranked proposal for that field never reaches the proposal table. A value the owner set outranks every provider.
-  - The table also limits the fields a provider may supply. The iTunes adapter proposes the genre and the release year only.
-  - A stored proposal from a lower ranked source turns superseded when a higher ranked source holds the field. The rule also covers a source that no longer produces a proposal. An approved value from a higher ranked source holds the field too, and a value the owner set holds it on its own.
-- The text similarity helper moves to `domain/similarity.py`. `services/matching_engine.py` keeps its name and its behavior.
-- The Identification settings tab names the host and the query data of the iTunes Search lookup. The README holds the same disclosure in a new section.
-- `tests/unit/test_itunes_search_adapter.py`, `tests/unit/test_itunes_endpoint.py`, `tests/unit/test_source_priority_filter.py`, and `tests/unit/test_itunes_disclosure.py` cover a match with a genre and a date, the empty response, an unrelated row, a malformed duration, a field another source already supplied, a response with artwork, the rate limit, the cache, the redirect refusal, and the provenance on each proposal. The recorded responses live under `tests/fixtures/itunes_search/`.
-- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, to 0.60.3 for the source research decisions, to 0.60.4 for the release test constants, to 0.61.0 for fake-lossless audio detection, to 0.62.0 for the schema migrations, and to 0.64.0 for the iTunes Search fallback. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+- The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, to 0.60.3 for the source research decisions, to 0.60.4 for the release test constants, to 0.61.0 for fake-lossless audio detection, and to 0.62.0 for the schema migrations. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 
 ### Changed
 

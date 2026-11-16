@@ -6,15 +6,19 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QWidget
 
 from infiniteprep import storage_paths
 from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
 from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapter
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.adapters.transcoder.safe_transcoder import SafeTranscoderAdapter
 from infiniteprep.config.credentials import CredentialStore, forget_all_credentials
 from infiniteprep.config.settings import SettingsManager
@@ -30,6 +34,7 @@ from infiniteprep.services.job_orchestrator import BatchKind, JobOrchestrator
 from infiniteprep.services.playlist_exporter import PlaylistExporter
 from infiniteprep.services.reconciliation import ReconciliationService
 from infiniteprep.services.review_service import ReviewService
+from infiniteprep.services.usb.recovery import UsbExpiryScanResult, UsbRecoveryJournalStore
 from infiniteprep.services.write_service import WriteService
 from infiniteprep.smoke_check import run_smoke_check
 from infiniteprep.startup_storage import open_storage
@@ -51,6 +56,10 @@ from infiniteprep.ui.storage_prompt import (
     show_storage_error,
 )
 from infiniteprep.ui.theme import apply_application_theme
+from infiniteprep.ui.usb_recovery_dialog import (
+    format_expiry_warning_text,
+    format_overdue_cleanup_text,
+)
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 
 SMOKE_CHECK_FLAG: Final[str] = "--smoke-check"
@@ -109,6 +118,8 @@ def open_settings_dialog(window: MainWindow, repo: Repository) -> None:
         cleanup_enabled=not window.batch_queue.is_busy(),
     )
     dialog.exec()
+    if dialog.result() == QDialog.DialogCode.Accepted:
+        window.reload_settings()
     if dialog.cleanup_choice is not None:
         delete_data_and_quit(window, repo, dialog.cleanup_choice)
 
@@ -183,6 +194,45 @@ def queue_safe_writes(
     window.queue_batch(BatchKind.WRITE, f"Apply writes to {len(plans)} file(s)", run_write_batch)
 
 
+def _show_usb_recovery_notice(parent: QWidget | None, title: str, message: str) -> None:
+    """Display a plain-text desktop notice for USB recovery expiry events."""
+    box = QMessageBox(parent)
+    box.setWindowTitle(title)
+    box.setIcon(QMessageBox.Icon.Information)
+    box.setTextFormat(Qt.TextFormat.PlainText)
+    box.setText(message)
+    box.exec()
+
+
+def process_usb_recovery_at_launch(
+    parent: QWidget | None = None,
+    *,
+    settings_manager: SettingsManager | None = None,
+    journal_store: UsbRecoveryJournalStore | None = None,
+    now_utc: datetime | None = None,
+    show_notice: Callable[[str, str], None] | None = None,
+) -> UsbExpiryScanResult:
+    """Scan unresolved USB recovery entries at launch and display notices (D194-D196)."""
+    active_settings = (settings_manager or SettingsManager()).load()
+    active_store = journal_store or UsbRecoveryJournalStore()
+    scan = active_store.evaluate_expiry(
+        now_utc or datetime.now(UTC),
+        expiry_enabled=active_settings.usb_recovery_expiry_enabled,
+        expiry_days=active_settings.usb_recovery_expiry_days,
+        at_launch=True,
+    )
+    notify = show_notice or (lambda title, body: _show_usb_recovery_notice(parent, title, body))
+    if scan.overdue_notice_entries:
+        notify("USB Recovery Cleanup", format_overdue_cleanup_text(scan.overdue_notice_entries))
+    if scan.warning_entries:
+        warning_text = format_expiry_warning_text(
+            scan.warning_entries,
+            expiry_days=active_settings.usb_recovery_expiry_days,
+        )
+        notify("USB Recovery Expiring Soon", warning_text)
+    return scan
+
+
 def launch_desktop_app() -> int:
     """Launch the PySide6 desktop GUI application."""
     # Qt reads the logging rules when QApplication starts.
@@ -201,13 +251,15 @@ def launch_desktop_app() -> int:
     if isinstance(opened, int):
         return opened
     repo = opened.repository
-    write_svc = WriteService(repo, backup_dir=opened.locations.backup_dir)
+    tag_adapter = MetadataTagAdapter(SettingsManager().load_tag_output)
+    write_svc = WriteService(repo, tag_adapter=tag_adapter, backup_dir=opened.locations.backup_dir)
     orchestrator = JobOrchestrator(repository=repo, audio_analyzer=LocalDspAnalyzer())
     reconciler = ReconciliationService(repo)
-    transcoder = SafeTranscoderAdapter(repo, backup_dir=opened.locations.backup_dir)
+    transcoder = SafeTranscoderAdapter(
+        repo, tag_adapter=tag_adapter, backup_dir=opened.locations.backup_dir
+    )
     exporter = PlaylistExporter(repo)
-    saved_theme = SettingsManager().load().theme
-    apply_application_theme(qt_app, saved_theme)
+    apply_application_theme(qt_app, SettingsManager().load().theme)
 
     window = MainWindow(
         repository=repo,
@@ -237,6 +289,7 @@ def launch_desktop_app() -> int:
     window.show()
     if write_svc.list_interrupted_operations():
         RecoveryDialog(write_svc, parent=window).exec()
+    process_usb_recovery_at_launch(parent=window)
     return int(qt_app.exec())
 
 
