@@ -45,8 +45,33 @@ PRIOR_FINDING_STATUS_PATTERN = re.compile(
 )
 
 
+VERDICT_JSON_PREFIX = "VERDICT_JSON:"
+VERDICT_JSON_KEYS = frozenset({"mode", "verdict", "findings"})
+
+
 class ResponseError(ValueError):
     """Report a response-contract failure."""
+
+
+def parse_verdict_json_line(line: str) -> dict[str, Any]:
+    """Return the JSON object on one VERDICT_JSON line.
+
+    The CI validator and the eval harness both parse the companion line
+    through this function, so a format change reaches both readers.
+    """
+    payload = line[len(VERDICT_JSON_PREFIX):].lstrip()
+    try:
+        result = json.loads(payload)
+    except json.JSONDecodeError as error:
+        raise ResponseError("VERDICT_JSON is not valid JSON") from error
+    if not isinstance(result, dict):
+        raise ResponseError("VERDICT_JSON is not an object")
+    return result
+
+
+def valid_line_number(value: Any) -> bool:
+    """Return whether a finding line is a positive integer and not a bool."""
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 1
 
 
 def _last_verdict(response: str) -> tuple[str, str]:
@@ -77,16 +102,10 @@ def _parse_json_line(lines: list[str]) -> dict[str, Any]:
     json_index = None
     for index in range(len(lines) - 1, -1, -1):
         line = lines[index]
-        if not line.startswith("VERDICT_JSON:"):
+        if not line.startswith(VERDICT_JSON_PREFIX):
             continue
         json_index = index
-        payload = line[len("VERDICT_JSON:"):].lstrip()
-        try:
-            result = json.loads(payload)
-        except json.JSONDecodeError as error:
-            raise ResponseError("VERDICT_JSON is not valid JSON") from error
-        if not isinstance(result, dict):
-            raise ResponseError("VERDICT_JSON is not an object")
+        result = parse_verdict_json_line(line)
         break
     if json_index is None:
         raise ResponseError("no VERDICT_JSON line")
@@ -138,11 +157,7 @@ def _validate_finding(finding: Any) -> None:
         raise ResponseError("finding has an invalid class")
     if not isinstance(finding["file"], str) or not finding["file"]:
         raise ResponseError("finding has an invalid file")
-    if (
-        not isinstance(finding["line"], int)
-        or isinstance(finding["line"], bool)
-        or finding["line"] < 1
-    ):
+    if not valid_line_number(finding["line"]):
         raise ResponseError("finding has an invalid line")
     if not isinstance(finding["title"], str) or not finding["title"]:
         raise ResponseError("finding has an invalid title")
@@ -160,7 +175,7 @@ def validate_response(response: str) -> tuple[str, dict[str, Any]]:
             f"process narration appears on report line(s): {line_numbers}"
         )
     payload = _parse_json_line(response.split("\n"))
-    if set(payload) != {"mode", "verdict", "findings"}:
+    if set(payload) != VERDICT_JSON_KEYS:
         raise ResponseError("VERDICT_JSON has an invalid shape")
     if payload["mode"] != "PR" or payload["verdict"] != verdict:
         raise ResponseError("VERDICT_JSON does not match the PR verdict")

@@ -18,6 +18,10 @@ from urllib.request import Request, urlopen
 MAX_METADATA_BYTES = 1_000_000
 MAX_DIFF_BYTES = 3_000_000
 DEFAULT_DIFF_TIMEOUT_SECONDS = 60
+METADATA_TIMEOUT_SECONDS = 30
+# A killed diff process closes its pipe at once. The reader thread then
+# finishes within this grace period.
+READER_JOIN_GRACE_SECONDS = 1.0
 SHA_PATTERN = re.compile(r"[0-9a-f]{40}")
 REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 # The workflow reads this exit code as "the diff exceeds review capacity"
@@ -58,7 +62,7 @@ def _read_pull_request_from_api() -> dict[str, object]:
         method="GET",
     )
     try:
-        with urlopen(request, timeout=30) as response:
+        with urlopen(request, timeout=METADATA_TIMEOUT_SECONDS) as response:
             raw = response.read(MAX_METADATA_BYTES + 1)
     except (HTTPError, URLError, OSError) as error:
         raise RuntimeError("pull request metadata request failed") from error
@@ -89,6 +93,19 @@ def _digest(text: str) -> str:
     return hashlib.sha256(text.replace("\r\n", "\n").encode()).hexdigest()
 
 
+def _terminate_reader(process: subprocess.Popen,
+                      thread: threading.Thread) -> None:
+    """Stop the diff process and give its reader thread time to finish.
+
+    The caller opens the process with stdout=PIPE and confirms that
+    process.stdout is set before starting the reader thread.
+    """
+    process.kill()
+    process.stdout.close()
+    process.wait()
+    thread.join(timeout=READER_JOIN_GRACE_SECONDS)
+
+
 def _read_bounded_stdout(
     command: list[str],
     maximum_bytes: int,
@@ -115,40 +132,21 @@ def _read_bounded_stdout(
         thread.start()
         thread.join(timeout=timeout)
         if thread.is_alive():
-            process.kill()
-            if process.stdout is not None:
-                process.stdout.close()
-            process.wait()
-            thread.join(timeout=1.0)
+            _terminate_reader(process, thread)
             raise RuntimeError(
                 "pull request diff timed out"
             ) from subprocess.TimeoutExpired(command, timeout)
         if read_error:
-            process.kill()
-            if process.stdout is not None:
-                process.stdout.close()
-            process.wait()
-            if thread.is_alive():
-                thread.join(timeout=1.0)
+            _terminate_reader(process, thread)
             raise RuntimeError("diff output could not be captured") from read_error[0]
         raw_output = output[0] if output else b""
         if len(raw_output) > maximum_bytes:
-            process.kill()
-            if process.stdout is not None:
-                process.stdout.close()
-            process.wait()
-            if thread.is_alive():
-                thread.join(timeout=1.0)
+            _terminate_reader(process, thread)
             raise DiffTooLargeError("pull request diff exceeds the configured limit")
         try:
             return_code = process.wait(timeout=timeout)
         except subprocess.TimeoutExpired as error:
-            process.kill()
-            if process.stdout is not None:
-                process.stdout.close()
-            process.wait()
-            if thread.is_alive():
-                thread.join(timeout=1.0)
+            _terminate_reader(process, thread)
             raise RuntimeError("pull request diff timed out") from error
     if return_code:
         raise RuntimeError("pull request diff could not be generated")
@@ -172,7 +170,10 @@ def _policy_digest() -> str:
 
 def build_case() -> dict[str, object]:
     """Build one PR envelope from trusted lifecycle data and target evidence."""
-    with open(os.environ["EVENT_PATH"], encoding="utf-8") as event_file:
+    event_path = os.environ.get("EVENT_PATH") or ""
+    if not event_path:
+        raise RuntimeError("EVENT_PATH is not configured")
+    with open(event_path, encoding="utf-8") as event_file:
         event = json.load(event_file)
     if not isinstance(event, dict):
         raise RuntimeError("event payload is not an object")
