@@ -24,8 +24,11 @@ from infiniteprep.domain.enums import (
 
 
 def utc_now_iso() -> str:
-    """Return current UTC timestamp in ISO-8601 format."""
-    return datetime.now(UTC).isoformat()
+    """Return current UTC timestamp in ISO-8601 format.
+
+    The text always carries microseconds. One fixed width keeps text order equal to time order.
+    """
+    return datetime.now(UTC).isoformat(timespec="microseconds")
 
 
 class CollectionKind(StrEnum):
@@ -227,3 +230,5 @@ class ChangeRecord:
     pre_write_hash: str | None = None
     post_write_hash: str | None = None
     error_message: str | None = None
+    # The repository sets this on every write. timestamp keeps the first write.
+    updated_at: str = ""

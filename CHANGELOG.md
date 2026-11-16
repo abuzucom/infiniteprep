@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.69.1] (2026-11-16)
+## [0.70.0] (2026-11-16)
 
 ### Added
 
@@ -77,6 +77,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The launch scan shows a "USB Recovery Clock Check" notice that lists the kept entries. Settings > Storage still removes them by hand.
   - `UsbExpiryScanResult` gains the optional `clock_suspect_entries` field. Three-argument construction keeps working.
   - The version advances from 0.68.1 to 0.69.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- The library database no longer depends on the computer clock for record order.
+  - A change journal record keeps the time of its first write. A later status update no longer replaces that time.
+  - The change journal and the pending job list follow insertion order. A backward clock step no longer reorders them.
+  - Schema migration 3 adds the `updated_at` column to the change journal. The column holds the time of the latest write. Each existing row starts at its own timestamp. `ChangeRecord` gains the optional `updated_at` field.
+  - `utc_now_iso` always emits microseconds. The fixed width keeps text comparison equal to time comparison.
+  - `Repository.upsert_change_record` converts a caller timestamp with any UTC offset to that stored form. A value without an offset raises `ValueError`.
+  - `Repository.set_cached_response` converts `expires_at_iso` the same way. A value without an offset raises `ValueError`.
+  - The version advances from 0.69.1 to 0.70.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The version advances from 0.69.0 to 0.69.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Hardened USB recovery journal launch and Storage settings cleanup against corrupt or unreadable journal files while preserving data on disk. Preserved resolved recovery records across expiry and manual cleanup, added bounded durable cleanup history records, confined journal parent directories under the storage root, and normalized manifest and journal timestamps to UTC. The version advances from 0.67.0 to 0.67.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The theme picker changes the app in a packaged build (issue 247).
