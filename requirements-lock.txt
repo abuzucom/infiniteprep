@@ -1,5 +1,7 @@
-# Pinned direct and transitive dependency lockfile for InfinitePrep v0.68.1
+# Pinned direct and transitive dependency lockfile for InfinitePrep v0.68.2
 # Pins verified unchanged through v0.67.1; update together with pyproject.toml.
+# requirements-sbom.txt locks the separate build-only SBOM tool environment.
+# The two files share no install target. A package can appear in only one.
 altgraph==0.17.5
 cffi==2.1.1
 colorama==0.4.6 ; sys_platform == "win32"
@@ -24,7 +26,7 @@ pluggy==1.7.0
 pycparser==3.12
 Pygments==2.21.0
 pyinstaller==6.22.3
-pyinstaller-hooks-contrib==2026.9
+pyinstaller-hooks-contrib==2026.10
 PySide6==6.12.0
 PySide6_Addons==6.12.0
 PySide6_Essentials==6.12.0

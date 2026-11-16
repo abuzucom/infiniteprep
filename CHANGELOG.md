@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.68.1] (2026-11-16)
+## [0.68.2] (2026-11-16)
 
 ### Added
 
@@ -49,6 +49,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Two pinned Python packages advance.
+  - `requirements-lock.txt` pins `pyinstaller-hooks-contrib` 2026.10 for the application environment. The previous pin was 2026.9.
+  - `requirements-sbom.txt` pins `jsonpointer` 3.12 with the SHA-256 of its wheel for the SBOM tool environment. The previous pin was 3.10.
+  - Both file headers state that the two files lock separate environments. A package can appear in only one of them.
+  - The version advances from 0.68.1 to 0.68.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The foucault security review pin advances from 3.8.1 to 3.8.8.
   - `.github/workflows/security-review-pr.yml` pins both `uses:` references and both `audit_ref` values to commit `d50c22c6589fa6843e1bf50d3da8b29b637a1395`.
   - `ci/build_pr_case.py`, `ci/call_model.py`, and `scripts/check_pr_review_response.py` match that commit byte for byte. The other three adapter files carry no upstream change.
