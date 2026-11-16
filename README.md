@@ -256,7 +256,8 @@ promotional content, album art included, to promoting store content.
 
 The iTunes Search endpoint comes from the **Identification** settings. The
 default is `https://itunes.apple.com/search`. The endpoint must pass the same
-rules as every other endpoint URL.
+rules as every other endpoint URL. The host is resolved before every lookup, and
+a host that points into a private network is refused.
 
 ## Usage Walkthrough
 

@@ -8,7 +8,11 @@ from typing import Any
 
 import pytest
 
-from infiniteprep.adapters.catalog.itunes import ITUNES_SEARCH_URL, ItunesSearchAdapter
+from infiniteprep.adapters.catalog.itunes import (
+    ITUNES_SEARCH_URL,
+    ItunesSearchAdapter,
+    validate_search_endpoint,
+)
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import (
     DEFAULT_ITUNES_SEARCH_ENDPOINT,
@@ -42,6 +46,7 @@ def _adapter(endpoint: str = ITUNES_SEARCH_URL) -> tuple[ItunesSearchAdapter, li
         http_get_json=fake_get,
         min_interval_sec=0.0,
         endpoint=endpoint,
+        endpoint_validator=lambda _url: (True, None),
     )
     return adapter, urls
 
@@ -77,6 +82,39 @@ def test_the_adapter_refuses_an_endpoint_that_breaks_the_endpoint_rules(endpoint
     """An endpoint that fails the shared rules never reaches the adapter."""
     with pytest.raises(ValueError, match="Invalid iTunes Search endpoint"):
         _adapter(endpoint)
+
+
+def test_an_endpoint_that_resolves_into_a_private_network_is_refused() -> None:
+    """An endpoint whose host resolves into a private network never reaches a request."""
+    calls: list[str] = []
+
+    def fake_get(url: str, _params: dict[str, str]) -> dict[str, Any]:
+        calls.append(url)
+        return _recorded("match_with_genre_and_date")
+
+    adapter = ItunesSearchAdapter(
+        repository=Repository(DatabaseManager(":memory:")),
+        http_get_json=fake_get,
+        min_interval_sec=0.0,
+        endpoint=CUSTOM_ENDPOINT,
+        endpoint_validator=lambda _url: (False, "Host resolved to a disallowed IP address."),
+    )
+
+    ready, reason = adapter.is_available()
+    matches = adapter.search(
+        MetadataSearchQuery(artist="Deep Dish", title="The Dream"), file_id="file-1"
+    )
+
+    assert ready is False
+    assert reason is not None
+    assert matches == []
+    assert calls == []
+
+
+def test_the_shared_validator_refuses_a_private_host() -> None:
+    """The shared validator refuses a private address and an internal hostname."""
+    assert validate_search_endpoint("https://10.0.0.1/search")[0] is False
+    assert validate_search_endpoint("https://service.internal/search")[0] is False
 
 
 def test_an_invalid_stored_endpoint_falls_back_to_the_default(tmp_path: Path) -> None:

@@ -72,6 +72,7 @@ def _adapter(
         repository=repository,
         http_get_json=fake_get,
         min_interval_sec=min_interval_sec,
+        endpoint_validator=lambda _url: (True, None),
     )
 
 

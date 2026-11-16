@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 import time
 import urllib.parse
@@ -49,6 +50,15 @@ RELEASE_YEAR_RE: Final[re.Pattern[str]] = re.compile(r"^(\d{4})")
 # A row without a release date sorts after every dated row.
 MISSING_RELEASE_DATE: Final[str] = "9999-99-99"
 
+logger = logging.getLogger(__name__)
+
+EndpointValidator = Callable[[str], "tuple[bool, str | None]"]
+
+
+def validate_search_endpoint(url: str) -> tuple[bool, str | None]:
+    """Validate an endpoint against the shared rules and the DNS rebinding rules."""
+    return validate_endpoint_url(url, resolve_dns=True)
+
 
 class ItunesSearchAdapter:
     """Queries iTunes Search for a coarse genre and a release date."""
@@ -59,14 +69,18 @@ class ItunesSearchAdapter:
         self,
         repository: Repository,
         http_get_json: Callable[[str, dict[str, str]], dict[str, Any]] | None = None,
+        *,
         min_interval_sec: float = ITUNES_MIN_INTERVAL_SEC,
         country: str = DEFAULT_COUNTRY,
         endpoint: str = ITUNES_SEARCH_URL,
+        endpoint_validator: EndpointValidator | None = None,
     ) -> None:
         """Initialize ItunesSearchAdapter with Repository cache, rate limiter, and country.
 
         The endpoint comes from the application settings. It must pass the shared
-        endpoint rules, so only a public HTTPS host is reachable.
+        endpoint rules, so only a public HTTPS host is reachable. The validator
+        also resolves the host, so a name that points into a private network
+        never reaches a request.
         """
         valid, reason = validate_endpoint_url(endpoint)
         if not valid:
@@ -76,14 +90,22 @@ class ItunesSearchAdapter:
         self.min_interval_sec = min_interval_sec
         self.country = country
         self.endpoint = endpoint
+        self.endpoint_validator = endpoint_validator or validate_search_endpoint
         self._last_request_ts: float = 0.0
 
     def is_available(self) -> tuple[bool, str | None]:
-        """Return availability status. iTunes Search needs no key."""
+        """Return the endpoint status. iTunes Search needs no key."""
+        valid, reason = self.endpoint_validator(self.endpoint)
+        if not valid:
+            return False, f"iTunes Search endpoint is not reachable: {reason}"
         return True, None
 
     def search(self, query: MetadataSearchQuery, file_id: str = "") -> list[CandidateMatch]:
         """Search iTunes Search for the track named by the query."""
+        ready, reason = self.is_available()
+        if not ready:
+            logger.warning("iTunes Search skipped: %s", reason)
+            return []
         term = self._search_term(query)
         if not term:
             return []
@@ -199,6 +221,9 @@ class ItunesSearchAdapter:
         """Perform HTTPS GET request to the iTunes Search endpoint."""
         if not url.startswith("https://"):
             raise ValueError(f"iTunes Search URL must use https:// scheme: {url}")
+        valid, reason = validate_search_endpoint(url)
+        if not valid:
+            raise ValueError(reason or "Blocked iTunes Search endpoint URL.")
         encoded = urllib.parse.urlencode(params)
         request = urllib.request.Request(
             f"{url}?{encoded}",
