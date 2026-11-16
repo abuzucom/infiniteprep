@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 from collections.abc import Callable
@@ -68,6 +69,7 @@ SMOKE_CHECK_ARG_COUNT: Final[int] = 2
 SMOKE_CHECK_USAGE_ERROR: Final[int] = 2
 # A hidden flag for the Windows uninstaller's saved-keys box (D266).
 FORGET_CREDENTIALS_FLAG: Final[str] = "--forget-credentials"
+logger = logging.getLogger(__name__)
 
 
 def run_evaluation_sample(input_dir: Path) -> dict[str, Any]:
@@ -226,13 +228,21 @@ def process_usb_recovery_at_launch(
     """Scan unresolved USB recovery entries at launch and display notices (D194-D196)."""
     active_settings = (settings_manager or SettingsManager()).load()
     active_store = journal_store or UsbRecoveryJournalStore()
-    scan = active_store.evaluate_expiry(
-        now_utc or datetime.now(UTC),
-        expiry_enabled=active_settings.usb_recovery_expiry_enabled,
-        expiry_days=active_settings.usb_recovery_expiry_days,
-        at_launch=True,
-    )
     notify = show_notice or (lambda title, body: _show_usb_recovery_notice(parent, title, body))
+    try:
+        scan = active_store.evaluate_expiry(
+            now_utc or datetime.now(UTC),
+            expiry_enabled=active_settings.usb_recovery_expiry_enabled,
+            expiry_days=active_settings.usb_recovery_expiry_days,
+            at_launch=True,
+        )
+    except (OSError, ValueError) as exc:
+        logger.warning("USB recovery journal launch scan failed: %s", type(exc).__name__)
+        notify(
+            "USB Recovery Journal Error",
+            "Unable to read the USB recovery journal. Existing journal data was preserved.",
+        )
+        return UsbExpiryScanResult((), (), ())
     if scan.overdue_notice_entries:
         notify("USB Recovery Cleanup", format_overdue_cleanup_text(scan.overdue_notice_entries))
     if scan.warning_entries:

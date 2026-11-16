@@ -17,6 +17,7 @@ from infiniteprep.services.usb.manifest import ExportScope
 from infiniteprep.services.usb.recovery import (
     DEFAULT_RECOVERY_EXPIRY_DAYS,
     ReconnectChoice,
+    UsbExpiryScanResult,
     UsbJournalEntry,
     UsbReconnectMatch,
     UsbRecoveryJournalStore,
@@ -42,6 +43,9 @@ def _ensure_qapp() -> QApplication:
     if isinstance(app, QApplication):
         return app
     return QApplication([])
+
+
+CORRUPT_LAUNCH_CHECK_UTC = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
 
 
 def _build_match(*, requires_confirmation: bool, html_text: bool = False) -> UsbReconnectMatch:
@@ -242,6 +246,39 @@ class StorageTabUsbRecoverySettingsTests(unittest.TestCase):
             saved = mgr.update(usb_recovery_expiry_enabled=False, usb_recovery_expiry_days=15)
             self.assertFalse(saved.usb_recovery_expiry_enabled)
             self.assertEqual(saved.usb_recovery_expiry_days, 15)
+
+    def test_launch_and_storage_cleanup_preserve_corrupt_journal_and_report_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            settings_mgr = SettingsManager(root / "settings.json")
+            journal_path = root / "usb_recovery_journal.json"
+            corrupt_text = "{corrupt-json"
+            journal_path.write_text(corrupt_text, encoding="utf-8")
+            store = UsbRecoveryJournalStore(journal_path, allowed_root=root)
+
+            launch_notices: list[tuple[str, str]] = []
+            scan = process_usb_recovery_at_launch(
+                settings_manager=settings_mgr,
+                journal_store=store,
+                now_utc=CORRUPT_LAUNCH_CHECK_UTC,
+                show_notice=lambda title, body: launch_notices.append((title, body)),
+            )
+            self.assertEqual(scan, UsbExpiryScanResult((), (), ()))
+            self.assertEqual(len(launch_notices), 1)
+            self.assertIn("Error", launch_notices[0][0])
+            self.assertEqual(journal_path.read_text(encoding="utf-8"), corrupt_text)
+
+            tab = StorageTab(AppSettings())
+            self.addCleanup(tab.close)
+            cleanup_errors: list[tuple[str, str]] = []
+            removed_count = tab.clean_usb_recovery_journal(
+                journal_store=store,
+                show_error=lambda title, body: cleanup_errors.append((title, body)),
+            )
+            self.assertIsNone(removed_count)
+            self.assertEqual(len(cleanup_errors), 1)
+            self.assertIn("Error", cleanup_errors[0][0])
+            self.assertEqual(journal_path.read_text(encoding="utf-8"), corrupt_text)
 
 
 if __name__ == "__main__":

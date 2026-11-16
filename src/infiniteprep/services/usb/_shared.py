@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import errno
 import importlib
 import json
 import os
@@ -18,7 +19,8 @@ import stat
 import subprocess
 import sys
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
@@ -316,12 +318,12 @@ def verify_fd_identity_and_parent(descriptor: int, target: Path, expected_parent
 
 
 def read_bounded_fd_utf8(descriptor: int, *, max_bytes: int = MAX_USB_JSON_BYTES) -> str | None:
-    """Read UTF-8 text from an open descriptor within max_bytes, returning None for non-files."""
+    """Read UTF-8 text from an open regular-file descriptor within max_bytes."""
     try:
         fd_stat = os.fstat(descriptor)
         if not stat.S_ISREG(fd_stat.st_mode):
             os.close(descriptor)
-            return None
+            raise ValueError("USB JSON target must be a regular file.")
         if fd_stat.st_size > max_bytes:
             os.close(descriptor)
             raise ValueError("USB JSON file exceeds maximum allowed size.")
@@ -340,7 +342,7 @@ def read_bounded_json_file(file_path: Path, *, max_bytes: int = MAX_USB_JSON_BYT
     """Read a regular local JSON file safely without following symlinks and within max_bytes."""
     if is_symlink_or_reparse_point(file_path):
         raise ValueError(f"Refusing symlink JSON file: {file_path}")
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
     descriptor = os.open(file_path, flags)
     try:
         verify_fd_identity_and_parent(descriptor, file_path, file_path.parent)
@@ -351,6 +353,180 @@ def read_bounded_json_file(file_path: Path, *, max_bytes: int = MAX_USB_JSON_BYT
     if content is None:
         raise ValueError(f"Expected regular JSON file: {file_path}")
     return content
+
+
+def supports_dir_fd_nofollow() -> bool:
+    """Return True when the platform supports dir_fd atomic operations with O_NOFOLLOW."""
+    return (
+        hasattr(os, "O_NOFOLLOW")
+        and hasattr(os, "O_DIRECTORY")
+        and os.open in os.supports_dir_fd
+        and os.replace in os.supports_dir_fd
+        and os.unlink in os.supports_dir_fd
+        and os.lstat in os.supports_dir_fd
+    )
+
+
+def parse_utc_datetime(raw_text: str, field_name: str = "timestamp") -> datetime:
+    """Parse a timezone-aware ISO-8601 timestamp string into a UTC datetime."""
+    parsed = datetime.fromisoformat(raw_text)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"Timestamp '{field_name}' must include a timezone offset.")
+    return parsed.astimezone(UTC)
+
+
+def normalize_iso_utc(raw_text: str, field_name: str = "timestamp") -> str:
+    """Validate and normalize an ISO-8601 timestamp with offset into canonical UTC Z text."""
+    return parse_utc_datetime(raw_text, field_name).isoformat().replace("+00:00", "Z")
+
+
+def _ensure_confined_root(allowed_root: Path, *, create: bool) -> Path:
+    """Verify allowed_root is not a symlink and return its resolved directory path."""
+    if is_symlink_or_reparse_point(allowed_root):
+        raise ValueError(f"Storage root cannot be a symbolic link: {allowed_root}")
+    if create:
+        allowed_root.mkdir(parents=True, exist_ok=True)
+    elif not allowed_root.exists():
+        raise FileNotFoundError(allowed_root)
+    if is_symlink_or_reparse_point(allowed_root):
+        raise ValueError(f"Storage root cannot be a symbolic link: {allowed_root}")
+    resolved_root = allowed_root.resolve(strict=True)
+    if not resolved_root.is_dir():
+        raise ValueError(f"Storage root is not a directory: {allowed_root}")
+    return resolved_root
+
+
+def validate_confined_ancestors(target_dir: Path, allowed_root: Path, *, create: bool) -> Path:
+    """Walk components from allowed_root to target_dir, rejecting symlinks and escapes."""
+    resolved_root = _ensure_confined_root(allowed_root, create=create)
+    try:
+        relative = target_dir.relative_to(allowed_root)
+    except ValueError as exc:
+        raise ValueError("Target directory must stay inside the allowed storage root.") from exc
+    current = allowed_root
+    for part in relative.parts:
+        current = current / part
+        if is_symlink_or_reparse_point(current):
+            raise ValueError(f"Path component cannot be a symbolic link: {current}")
+        if create and not current.exists():
+            current.mkdir(exist_ok=True)
+        elif not current.exists():
+            raise FileNotFoundError(current)
+    resolved_target = target_dir.resolve(strict=True)
+    if not resolved_target.is_relative_to(resolved_root):
+        raise ValueError("Target directory resolves outside the allowed storage root.")
+    return resolved_target
+
+
+def _open_posix_dir_step(current_fd: int, part: str, *, create: bool) -> int | None:
+    """Open one child directory relative to current_fd without following symlinks."""
+    if create:
+        with contextlib.suppress(FileExistsError):
+            os.mkdir(part, 0o755, dir_fd=current_fd)
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        return os.open(part, flags, dir_fd=current_fd)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise ValueError(f"Path component cannot be a symbolic link: {part}") from exc
+        raise
+
+
+def _open_posix_confined_dir(
+    target_dir: Path, allowed_root: Path, *, create: bool
+) -> tuple[Path, int] | None:
+    """Walk components with dir_fd + O_NOFOLLOW from allowed_root to target_dir."""
+    if is_symlink_or_reparse_point(allowed_root):
+        raise ValueError(f"Storage root cannot be a symbolic link: {allowed_root}")
+    if create:
+        allowed_root.mkdir(parents=True, exist_ok=True)
+    elif not allowed_root.exists():
+        return None
+    try:
+        relative = target_dir.relative_to(allowed_root)
+    except ValueError as exc:
+        raise ValueError("Target directory must stay inside the allowed storage root.") from exc
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        current_fd = os.open(allowed_root, flags)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise ValueError(f"Storage root cannot be a symbolic link: {allowed_root}") from exc
+        raise
+    for part in relative.parts:
+        try:
+            next_fd = _open_posix_dir_step(current_fd, part, create=create)
+        finally:
+            os.close(current_fd)
+        if next_fd is None:
+            return None
+        current_fd = next_fd
+    return target_dir, current_fd
+
+
+@contextlib.contextmanager
+def open_confined_directory_context(
+    target_dir: Path, allowed_root: Path, *, create: bool
+) -> Iterator[tuple[Path, int | None] | None]:
+    """Yield (resolved_dir, optional_dir_fd) confined strictly under allowed_root."""
+    if supports_dir_fd_nofollow():
+        opened = _open_posix_confined_dir(target_dir, allowed_root, create=create)
+        if opened is None:
+            yield None
+            return
+        confined_dir, dir_fd = opened
+        try:
+            yield confined_dir, dir_fd
+        finally:
+            os.close(dir_fd)
+        return
+    try:
+        resolved_dir = validate_confined_ancestors(target_dir, allowed_root, create=create)
+    except FileNotFoundError:
+        yield None
+        return
+    if sys.platform == "win32":
+        handle = open_win32_locked_dir(resolved_dir, resolved_dir)
+        if handle is None:
+            yield None
+            return
+        try:
+            yield resolved_dir, None
+        finally:
+            close_win32_handle(handle)
+        return
+    yield resolved_dir, None
+
+
+def read_confined_dir_json_text(
+    resolved_dir: Path, file_name: str, *, dir_fd: int | None, max_bytes: int = MAX_USB_JSON_BYTES
+) -> str | None:
+    """Read UTF-8 JSON text from file_name inside a confined directory handle or dir_fd."""
+    nonblock = getattr(os, "O_NONBLOCK", 0)
+    if dir_fd is not None:
+        flags = os.O_RDONLY | os.O_NOFOLLOW | nonblock
+        try:
+            descriptor = os.open(file_name, flags, dir_fd=dir_fd)
+        except FileNotFoundError:
+            return None
+        return read_bounded_fd_utf8(descriptor, max_bytes=max_bytes)
+    if sys.platform == "win32":
+        descriptor = open_win32_confined_read_fd(resolved_dir / file_name, resolved_dir)
+        return None if descriptor is None else read_bounded_fd_utf8(descriptor, max_bytes=max_bytes)
+    target = resolved_dir / file_name
+    reject_symlink_target(resolved_dir, file_name)
+    try:
+        descriptor = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | nonblock)
+    except FileNotFoundError:
+        return None
+    try:
+        verify_fd_identity_and_parent(descriptor, target, resolved_dir)
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return read_bounded_fd_utf8(descriptor, max_bytes=max_bytes)
 
 
 def _write_temp_json_via_fd(dir_fd: int, file_name: str, text: str) -> str:
