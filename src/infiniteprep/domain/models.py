@@ -230,3 +230,5 @@ class ChangeRecord:
     pre_write_hash: str | None = None
     post_write_hash: str | None = None
     error_message: str | None = None
+    # The repository sets this on every write. timestamp keeps the first write.
+    updated_at: str = ""

@@ -45,7 +45,7 @@ def test_migrate_populated_library(tmp_path):
     with DatabaseManager(library) as db:
         repo = Repository(db)
         assert repo.get_source_group("group").user_label == "Library"
-        assert db.connect().execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.connect().execute("PRAGMA user_version").fetchone()[0] == 3
         assert repo.collections.create_playlist("Warmup").name == "Warmup"
 
 

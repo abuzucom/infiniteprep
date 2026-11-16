@@ -49,12 +49,12 @@ def _format_utc_instant(moment: datetime) -> str:
     return moment.astimezone(UTC).isoformat(timespec="microseconds")
 
 
-def _normalize_expiry_text(expires_at_iso: str) -> str:
+def _normalize_instant_text(instant_text: str, field_name: str) -> str:
     """Convert caller ISO-8601 text with any UTC offset into the stored text form."""
-    parsed = datetime.fromisoformat(expires_at_iso)
+    parsed = datetime.fromisoformat(instant_text)
     if parsed.utcoffset() is None:
         raise ValueError(
-            "expires_at_iso must include a UTC offset. Pass a value such as "
+            f"{field_name} must include a UTC offset. Pass a value such as "
             "2026-01-01T00:00:00+00:00."
         )
     return _format_utc_instant(parsed)
@@ -607,24 +607,30 @@ class Repository:
         """Insert a journal record, or update the outcome fields of an existing one.
 
         The stored timestamp marks the first write of the operation. An update keeps it.
+        updated_at takes the current time on every write. A caller timestamp must carry a
+        UTC offset. Any offset form normalizes to the stored form.
         """
-        if not record.timestamp:
-            record.timestamp = utc_now_iso()
+        record.updated_at = utc_now_iso()
+        if record.timestamp:
+            record.timestamp = _normalize_instant_text(record.timestamp, "timestamp")
+        else:
+            record.timestamp = record.updated_at
         conn = self.db.connect()
         conn.execute(
             """
             INSERT INTO change_records (
                 operation_id, batch_operation_id, file_id, previous_path, new_path,
                 pre_write_hash, post_write_hash, previous_tags, written_tags,
-                backup_reference, operation_status, error_message, timestamp
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                backup_reference, operation_status, error_message, timestamp, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(operation_id) DO UPDATE SET
                 new_path = excluded.new_path,
                 post_write_hash = excluded.post_write_hash,
                 written_tags = excluded.written_tags,
                 backup_reference = excluded.backup_reference,
                 operation_status = excluded.operation_status,
-                error_message = excluded.error_message
+                error_message = excluded.error_message,
+                updated_at = excluded.updated_at
             """,
             (
                 record.operation_id,
@@ -640,6 +646,7 @@ class Repository:
                 str(record.operation_status),
                 record.error_message,
                 record.timestamp,
+                record.updated_at,
             ),
         )
         self._commit(conn)
@@ -741,7 +748,7 @@ class Repository:
         now_dt = datetime.now(UTC)
         now = _format_utc_instant(now_dt)
         if expires_at_iso:
-            exp = _normalize_expiry_text(expires_at_iso)
+            exp = _normalize_instant_text(expires_at_iso, "expires_at_iso")
         else:
             exp = _format_utc_instant(now_dt + timedelta(seconds=ttl_seconds))
         conn = self.db.connect()
@@ -886,4 +893,5 @@ class Repository:
             operation_status=OperationStatus(row["operation_status"]),
             error_message=row["error_message"],
             timestamp=row["timestamp"],
+            updated_at=row["updated_at"] or row["timestamp"],
         )

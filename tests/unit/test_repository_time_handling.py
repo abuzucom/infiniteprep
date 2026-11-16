@@ -6,17 +6,23 @@ never the wall clock. Cache expiry compares one fixed-width UTC text form.
 
 from __future__ import annotations
 
+import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
 from infiniteprep.db.connection import DatabaseManager
+from infiniteprep.db.migrations import m0001_initial, m0002_collections
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, OperationStatus
 from infiniteprep.domain.models import ChangeRecord, FileAsset, utc_now_iso
 
 FIRST_WRITE_TIME = "2026-11-16T12:00:00.000000+00:00"
 LATER_WRITE_TIME = "2026-11-16T12:05:00.000000+00:00"
+LAST_WRITE_TIME = "2026-11-16T12:10:00.000000+00:00"
+MIGRATION_THREE_VERSION = 3
 # A clock that stepped backward stamps a newer record with an older time.
 EARLIER_CLOCK_TIME = "2026-11-16T11:00:00.000000+00:00"
 FIXED_WIDTH_UTC_LENGTH = len(FIRST_WRITE_TIME)
@@ -77,6 +83,83 @@ def test_second_upsert_keeps_the_first_timestamp(repo: Repository) -> None:
     assert stored is not None
     assert stored.timestamp == FIRST_WRITE_TIME
     assert stored.operation_status == STATUSES[-1]
+
+
+def test_second_upsert_advances_updated_at_only(
+    repo: Repository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """updated_at takes the time of each write. The first write sets both columns apart."""
+    _add_file(repo, "file-a")
+    clock_readings = iter([LATER_WRITE_TIME, LAST_WRITE_TIME])
+    monkeypatch.setattr("infiniteprep.db.repositories.utc_now_iso", lambda: next(clock_readings))
+
+    repo.upsert_change_record(_record("op-1", "file-a", FIRST_WRITE_TIME))
+    after_insert = repo.get_change_record("op-1")
+    repo.upsert_change_record(_record("op-1", "file-a", FIRST_WRITE_TIME))
+    after_update = repo.get_change_record("op-1")
+
+    assert after_insert is not None
+    assert after_update is not None
+    assert after_insert.updated_at == LATER_WRITE_TIME
+    assert after_update.updated_at == LAST_WRITE_TIME
+    assert after_update.timestamp == FIRST_WRITE_TIME
+
+
+@pytest.mark.parametrize(
+    "supplied",
+    ["2026-11-16T12:00:00Z", "2026-11-16T17:00:00+05:00", "2026-11-16T12:00:00.000000+00:00"],
+)
+def test_supplied_journal_timestamp_normalizes_to_the_stored_form(
+    repo: Repository, supplied: str
+) -> None:
+    """A caller timestamp in any offset form reaches the journal as fixed-width UTC text."""
+    _add_file(repo, "file-a")
+
+    repo.upsert_change_record(_record("op-1", "file-a", supplied))
+
+    stored = repo.get_change_record("op-1")
+    assert stored is not None
+    assert stored.timestamp == FIRST_WRITE_TIME
+
+
+def test_journal_timestamp_without_an_offset_is_rejected(repo: Repository) -> None:
+    """A timestamp with no offset names no instant. The repository refuses it."""
+    _add_file(repo, "file-a")
+
+    with pytest.raises(ValueError, match="offset"):
+        repo.upsert_change_record(_record("op-1", "file-a", "2026-11-16T12:00:00"))
+
+    assert repo.get_change_record("op-1") is None
+
+
+def test_migration_three_backfills_updated_at_from_timestamp(tmp_path: Path) -> None:
+    """A version-2 library gains the column. Each existing row starts at its timestamp."""
+    library = tmp_path / "library.sqlite3"
+    with closing(sqlite3.connect(library)) as conn, conn:
+        m0001_initial.apply(conn)
+        m0002_collections.apply(conn)
+        conn.execute("PRAGMA user_version = 2")
+        conn.execute(
+            "INSERT INTO file_assets (id, current_path, original_path, file_size, content_hash, "
+            "format, import_batch_id, imported_at) "
+            "VALUES ('file-a', '/music/a.wav', '/music/a.wav', 1, 'hash-a', ?, 'batch', ?)",
+            (next(iter(AudioFormat)).value, FIRST_WRITE_TIME),
+        )
+        conn.execute(
+            "INSERT INTO change_records (operation_id, file_id, previous_path, new_path, "
+            "backup_reference, operation_status, timestamp) "
+            "VALUES ('op-1', 'file-a', '/music/a.wav', '/music/a.wav', 'backup', ?, ?)",
+            (STATUSES[0].value, FIRST_WRITE_TIME),
+        )
+
+    with DatabaseManager(library) as db:
+        stored = Repository(db).get_change_record("op-1")
+        version = db.connect().execute("PRAGMA user_version").fetchone()[0]
+
+    assert version == MIGRATION_THREE_VERSION
+    assert stored is not None
+    assert stored.timestamp == FIRST_WRITE_TIME
+    assert stored.updated_at == FIRST_WRITE_TIME
 
 
 def test_journal_order_follows_insertion_after_a_backward_clock_step(repo: Repository) -> None:
