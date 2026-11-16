@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import re
-from difflib import SequenceMatcher
 from typing import Final
 
 from infiniteprep.domain.models import CandidateMatch, FileAsset
+from infiniteprep.domain.similarity import SIMILARITY_PRECISION_DIGITS, string_similarity
 
 MIX_KEYWORDS: Final[tuple[str, ...]] = (
     "mix",
@@ -29,7 +29,6 @@ BY_REMIXER_PATTERN: Final[re.Pattern[str]] = re.compile(
 )
 PAREN_BASE_GROUP: Final[int] = 1
 PAREN_MIX_GROUP: Final[int] = 2
-SIMILARITY_PRECISION_DIGITS: Final[int] = 4
 DEFAULT_MISSING_DURATION_SCORE: Final[float] = 0.75
 DURATION_EXACT_THRESHOLD_SEC: Final[float] = 2.0
 DURATION_LARGE_DIFF_THRESHOLD_SEC: Final[float] = 30.0
@@ -72,17 +71,6 @@ def _infer_remixer_from_mix_name(mix_name: str) -> str | None:
         if candidate_remixer.lower() not in generic_prefixes:
             return candidate_remixer
     return None
-
-
-def string_similarity(left: str | None, right: str | None) -> float:
-    """Compute normalized case-insensitive similarity in [0.0, 1.0]."""
-    if not left or not right:
-        return 0.0
-    a = left.strip().lower()
-    b = right.strip().lower()
-    if a == b:
-        return 1.0
-    return round(SequenceMatcher(None, a, b).ratio(), SIMILARITY_PRECISION_DIGITS)
 
 
 def duration_similarity(file_dur: float | None, cand_dur: float | None) -> float:

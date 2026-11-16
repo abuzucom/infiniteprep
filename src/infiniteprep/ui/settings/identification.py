@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QCheckBox, QComboBox, QLineEdit, QWidget
+from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel, QLineEdit, QWidget
 
+from infiniteprep.adapters.catalog.itunes import DISCLOSURE_TEXT
 from infiniteprep.adapters.llm.ollama_openai import RECOMMENDED_MODELS
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import AppSettings
@@ -42,6 +43,11 @@ class IdentificationTab(FormSettingsTab):
             self.ollama_model_combo.addItem(model)
         self.ollama_model_combo.setCurrentText(settings.ollama_model)
         self.form.addRow("Ollama Model:", self.ollama_model_combo)
+
+        # The disclosure names the host and the data that leaves the machine.
+        self.disclosure_label = QLabel(DISCLOSURE_TEXT, self)
+        self.disclosure_label.setWordWrap(True)
+        self.form.addRow(self.disclosure_label)
 
     def _add_masked_row(self, label: str, entry_name: str) -> QLineEdit:
         """Add a masked input that shows the stored value of a store entry, and return it.

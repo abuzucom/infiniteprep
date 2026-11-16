@@ -1,0 +1,17 @@
+{
+  "resultCount": 1,
+  "results": [
+    {
+      "wrapperType": "track",
+      "kind": "song",
+      "trackId": 222333444,
+      "collectionId": 333444555,
+      "artistName": "Completely Different Artist",
+      "collectionName": "Nothing Alike",
+      "trackName": "Nothing Alike",
+      "primaryGenreName": "Soundtrack",
+      "releaseDate": "2019-01-01T12:00:00Z",
+      "trackTimeMillis": 200000
+    }
+  ]
+}
