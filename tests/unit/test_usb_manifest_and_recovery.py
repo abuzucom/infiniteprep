@@ -59,6 +59,11 @@ from tests.unit.usb_preflight_support import (
 )
 
 REPO_SRC = Path(__file__).resolve().parents[2] / "src"
+EXPIRY_BASELINE_UTC = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+OVERDUE_SCAN_OFFSET = timedelta(days=31)
+MANUAL_CLEANUP_OFFSET = timedelta(days=32)
+BULK_CLEANUP_OFFSET = timedelta(days=33)
+BULK_HISTORY_OVERFLOW_COUNT = 10
 
 
 def _sample_vocabulary() -> list[ManifestTagEntry]:
@@ -784,7 +789,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
             self.assertEqual(store.load_entries(), [])
 
     def test_expiry_and_manual_cleanup_preserve_resolved_and_record_history(self) -> None:
-        start = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+        start = EXPIRY_BASELINE_UTC
         with tempfile.TemporaryDirectory() as tmp_dir:
             store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
             resolved = replace(
@@ -802,7 +807,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
             )
             store.save_entries([resolved, expired, active])
 
-            scan = store.evaluate_expiry(start + timedelta(days=31), at_launch=True)
+            scan = store.evaluate_expiry(start + OVERDUE_SCAN_OFFSET, at_launch=True)
             self.assertEqual(
                 [item.export_id for item in scan.overdue_notice_entries], ["exp-expired"]
             )
@@ -811,7 +816,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
                 ["exp-resolved", "exp-active"],
             )
 
-            removed = store.cleanup_unresolved(now_utc=start + timedelta(days=32))
+            removed = store.cleanup_unresolved(now_utc=start + MANUAL_CLEANUP_OFFSET)
             self.assertEqual([item.export_id for item in removed], ["exp-active"])
             self.assertEqual([item.export_id for item in store.load_entries()], ["exp-resolved"])
 
@@ -829,12 +834,23 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
                     _build_journal_entry("/media/dj/STICK", export_id=f"exp-{idx}"),
                     started_at_utc="2026-10-01T12:00:00Z",
                 )
-                for idx in range(MAX_CLEANUP_HISTORY_RECORDS + 10)
+                for idx in range(MAX_CLEANUP_HISTORY_RECORDS + BULK_HISTORY_OVERFLOW_COUNT)
             ]
             store.save_entries([resolved, *bulk])
-            store.cleanup_unresolved(now_utc=start + timedelta(days=33))
+            store.cleanup_unresolved(now_utc=start + BULK_CLEANUP_OFFSET)
             self.assertEqual(len(store.load_cleanup_history()), MAX_CLEANUP_HISTORY_RECORDS)
             self.assertEqual([item.export_id for item in store.load_entries()], ["exp-resolved"])
+
+    def test_journal_store_rejects_posix_fifo_without_blocking(self) -> None:
+        if not hasattr(os, "mkfifo"):
+            return
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            fifo_path = root / "usb_recovery_journal.json"
+            os.mkfifo(fifo_path)
+            store = UsbRecoveryJournalStore(fifo_path, allowed_root=root)
+            with self.assertRaises(ValueError):
+                store.load_entries()
 
     def test_journal_store_rejects_symlink_parent_and_normalizes_offsets(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -243,8 +243,9 @@ def _open_confined_meta_dir(
 
 def _open_confined_read_fd(meta_dir: Path, file_name: str, *, dir_fd: int | None) -> int | None:
     """Open file_name for reading inside meta_dir or dir_fd without following symlinks."""
+    nonblock = getattr(os, "O_NONBLOCK", 0)
     if dir_fd is not None:
-        flags = os.O_RDONLY | os.O_NOFOLLOW
+        flags = os.O_RDONLY | os.O_NOFOLLOW | nonblock
         try:
             return os.open(file_name, flags, dir_fd=dir_fd)
         except FileNotFoundError:
@@ -260,7 +261,7 @@ def _open_confined_read_fd(meta_dir: Path, file_name: str, *, dir_fd: int | None
     reject_symlink_target(meta_dir, file_name)
     target = meta_dir / file_name
     try:
-        descriptor = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        descriptor = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | nonblock)
     except FileNotFoundError:
         return None
     try:

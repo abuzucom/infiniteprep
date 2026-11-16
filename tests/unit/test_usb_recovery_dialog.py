@@ -45,6 +45,9 @@ def _ensure_qapp() -> QApplication:
     return QApplication([])
 
 
+CORRUPT_LAUNCH_CHECK_UTC = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+
+
 def _build_match(*, requires_confirmation: bool, html_text: bool = False) -> UsbReconnectMatch:
     """Construct a UsbReconnectMatch fixture."""
     label = "<b>STICK</b>" if html_text else "STICK"
@@ -257,7 +260,7 @@ class StorageTabUsbRecoverySettingsTests(unittest.TestCase):
             scan = process_usb_recovery_at_launch(
                 settings_manager=settings_mgr,
                 journal_store=store,
-                now_utc=datetime(2026, 11, 15, 12, 0, tzinfo=UTC),
+                now_utc=CORRUPT_LAUNCH_CHECK_UTC,
                 show_notice=lambda title, body: launch_notices.append((title, body)),
             )
             self.assertEqual(scan, UsbExpiryScanResult((), (), ()))
