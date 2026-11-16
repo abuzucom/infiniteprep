@@ -10,7 +10,6 @@ import os
 import sys
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import asdict, dataclass
-from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Final
@@ -19,10 +18,12 @@ from infiniteprep.services.usb._shared import (
     MAX_USB_JSON_BYTES,
     close_win32_handle,
     is_symlink_or_reparse_point,
+    normalize_iso_utc,
     open_win32_confined_read_fd,
     open_win32_locked_dir,
     read_bounded_fd_utf8,
     reject_symlink_target,
+    supports_dir_fd_nofollow,
     unlink_win32_confined_file,
     verify_fd_identity_and_parent,
     write_json_atomic,
@@ -164,18 +165,6 @@ def _resolve_mount_root(mount_root: Path) -> Path:
     return base
 
 
-def _supports_dir_fd_nofollow() -> bool:
-    """Return True when the platform supports dir_fd atomic operations with O_NOFOLLOW."""
-    return (
-        hasattr(os, "O_NOFOLLOW")
-        and hasattr(os, "O_DIRECTORY")
-        and os.open in os.supports_dir_fd
-        and os.replace in os.supports_dir_fd
-        and os.unlink in os.supports_dir_fd
-        and os.lstat in os.supports_dir_fd
-    )
-
-
 def _open_meta_child_fd(base_fd: int, *, create: bool) -> int | None:
     """Open the USB metadata directory inside base_fd without following symbolic links."""
     if create:
@@ -225,7 +214,7 @@ def _open_confined_meta_dir(
     meta_dir = base / USB_METADATA_DIR_NAME
     if is_symlink_or_reparse_point(meta_dir):
         raise ValueError("USB metadata folder cannot be a symbolic link.")
-    if _supports_dir_fd_nofollow():
+    if supports_dir_fd_nofollow():
         base_fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY)
         try:
             meta_fd = _open_meta_child_fd(base_fd, create=create)
@@ -372,12 +361,9 @@ def _require_non_negative_int(raw: object, field_name: str) -> int:
 
 
 def _parse_iso_utc(raw: object, field_name: str) -> str:
-    """Validate that raw is a timezone-aware ISO-8601 UTC timestamp string."""
+    """Validate that raw is timezone-aware ISO-8601 text and normalize it to UTC."""
     text = _require_non_empty_str(raw, field_name)
-    parsed = datetime.fromisoformat(text)
-    if parsed.tzinfo is None:
-        raise ValueError(f"Manifest timestamp '{field_name}' must include a timezone offset.")
-    return text
+    return normalize_iso_utc(text, field_name)
 
 
 def _parse_str_dict(raw: object, field_name: str) -> dict[str, str]:

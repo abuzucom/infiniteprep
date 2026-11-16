@@ -35,6 +35,7 @@ from infiniteprep.services.usb.manifest import (
 )
 from infiniteprep.services.usb.recovery import (
     DEFAULT_RECOVERY_EXPIRY_DAYS,
+    MAX_CLEANUP_HISTORY_RECORDS,
     ReconnectChoice,
     UsbJournalEntry,
     UsbRecoveryJournalStore,
@@ -321,6 +322,26 @@ class UsbExportManifestTests(unittest.TestCase):
             meta_dir.mkdir(parents=True)
             manifest_path = meta_dir / COMPLETED_MANIFEST_FILE_NAME
             manifest_path.write_bytes(b"{" + b" " * MAX_USB_JSON_BYTES + b"}")
+            with self.assertRaises(ValueError):
+                read_completed_manifest(mount_root)
+
+    def test_manifest_normalizes_non_utc_and_dst_timestamps_to_utc(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            mount_root = Path(tmp_dir) / "usb"
+            mount_root.mkdir()
+            manifest_path = write_completed_manifest(mount_root, _build_manifest())
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            payload["started_at_utc"] = "2026-07-15T12:00:00-04:00"
+            payload["completed_at_utc"] = "2026-11-15T14:00:00+02:00"
+            manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+
+            parsed = read_completed_manifest(mount_root)
+            assert parsed is not None
+            self.assertEqual(parsed.started_at_utc, "2026-07-15T16:00:00Z")
+            self.assertEqual(parsed.completed_at_utc, "2026-11-15T12:00:00Z")
+
+            payload["started_at_utc"] = "2026-11-15T12:00:00"
+            manifest_path.write_text(json.dumps(payload), encoding="utf-8")
             with self.assertRaises(ValueError):
                 read_completed_manifest(mount_root)
 
@@ -761,6 +782,91 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
             removed_rest = store.cleanup_unresolved()
             self.assertEqual([item.export_id for item in removed_rest], ["exp-2"])
             self.assertEqual(store.load_entries(), [])
+
+    def test_expiry_and_manual_cleanup_preserve_resolved_and_record_history(self) -> None:
+        start = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
+            resolved = replace(
+                _build_journal_entry("/media/dj/STICK1", export_id="exp-resolved"),
+                started_at_utc="2026-08-01T12:00:00Z",
+                last_recovery_action=ReconnectChoice.RESUME.value,
+            )
+            expired = replace(
+                _build_journal_entry("/media/dj/STICK2", export_id="exp-expired"),
+                started_at_utc="2026-09-01T12:00:00Z",
+            )
+            active = replace(
+                _build_journal_entry("/media/dj/STICK3", export_id="exp-active"),
+                started_at_utc="2026-10-30T12:00:00Z",
+            )
+            store.save_entries([resolved, expired, active])
+
+            scan = store.evaluate_expiry(start + timedelta(days=31), at_launch=True)
+            self.assertEqual(
+                [item.export_id for item in scan.overdue_notice_entries], ["exp-expired"]
+            )
+            self.assertEqual(
+                [item.export_id for item in store.load_entries()],
+                ["exp-resolved", "exp-active"],
+            )
+
+            removed = store.cleanup_unresolved(now_utc=start + timedelta(days=32))
+            self.assertEqual([item.export_id for item in removed], ["exp-active"])
+            self.assertEqual([item.export_id for item in store.load_entries()], ["exp-resolved"])
+
+            history = store.load_cleanup_history()
+            self.assertEqual(
+                [(item.export_id, item.reason) for item in history],
+                [
+                    ("exp-expired", "overdue"),
+                    ("exp-active", "manual"),
+                ],
+            )
+
+            bulk = [
+                replace(
+                    _build_journal_entry("/media/dj/STICK", export_id=f"exp-{idx}"),
+                    started_at_utc="2026-10-01T12:00:00Z",
+                )
+                for idx in range(MAX_CLEANUP_HISTORY_RECORDS + 10)
+            ]
+            store.save_entries([resolved, *bulk])
+            store.cleanup_unresolved(now_utc=start + timedelta(days=33))
+            self.assertEqual(len(store.load_cleanup_history()), MAX_CLEANUP_HISTORY_RECORDS)
+            self.assertEqual([item.export_id for item in store.load_entries()], ["exp-resolved"])
+
+    def test_journal_store_rejects_symlink_parent_and_normalizes_offsets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            outside = root / "outside"
+            outside.mkdir()
+            linked_dir = root / "linked_parent"
+            try:
+                linked_dir.symlink_to(outside, target_is_directory=True)
+            except OSError:
+                linked_dir = None
+            if linked_dir is not None:
+                confined = UsbRecoveryJournalStore(
+                    linked_dir / "nested" / "usb_recovery_journal.json",
+                    allowed_root=root,
+                )
+                entry = _build_journal_entry("/media/dj/STICK1")
+                with self.assertRaises(ValueError):
+                    confined.save_entries([entry])
+                outside_file = outside / "usb_recovery_journal.json"
+                outside_file.write_text('{"version": 1, "entries": []}\n', encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    confined.load_entries()
+
+            journal_path = root / "usb_recovery_journal.json"
+            direct_store = UsbRecoveryJournalStore(journal_path, allowed_root=root)
+            direct_store.save_entries([_build_journal_entry("/media/dj/STICK2")])
+            raw = json.loads(journal_path.read_text(encoding="utf-8"))
+            raw["entries"][0]["started_at_utc"] = "2026-07-15T12:00:00-04:00"
+            journal_path.write_text(json.dumps(raw), encoding="utf-8")
+            reloaded = direct_store.load_entries()
+            self.assertEqual(reloaded[0].started_at_utc, "2026-07-15T16:00:00Z")
 
 
 class WorktreeCodeQualityInvariantsTests(unittest.TestCase):
