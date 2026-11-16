@@ -92,8 +92,8 @@ class CoverageMeasurementTest(unittest.TestCase):
         self.assertNotIn("--fail-under", self.text)
 
     def test_the_reporting_steps_never_fail_the_job(self) -> None:
-        """A failure in the reporting leaves the pull request green."""
-        self.assertIn("continue-on-error: true", self.matrix)
+        """The reporting runs as ordinary steps. No check is silenced."""
+        self.assertNotIn("continue-on-error", self.matrix)
 
     def test_the_test_job_holds_no_write_permission(self) -> None:
         """The job that runs the suite holds no write permission."""
@@ -168,8 +168,8 @@ class CoverageCommentJobTest(unittest.TestCase):
         self.assertNotIn("actions/checkout@", self.job)
 
     def test_the_job_never_fails_the_pull_request(self) -> None:
-        """A failure in the comment job leaves the pull request green."""
-        self.assertIn("continue-on-error: true", self.job)
+        """The comment job runs as an ordinary job. No check is silenced."""
+        self.assertNotIn("continue-on-error", self.job)
 
 
 class CoverageDependencyTest(unittest.TestCase):
