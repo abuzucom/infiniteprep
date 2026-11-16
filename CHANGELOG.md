@@ -5,11 +5,29 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.66.0] (2026-11-16)
+
+### Added
+
+- USB exports persist `.infiniteprep/manifest.in-progress.json` and `.infiniteprep/manifest.json` with a canonical SHA-256 `My Tags` digest (D116 to D121, D139 to D148, D179, D200, issue 157). The computer-side recovery journal at `usb_recovery_journal.json` matches reconnecting USB drives and gates changed paths behind confirmation (D166, D191, D192, issue 157). `UsbRecoveryDialog` offers Resume, Restore, and Leave unchanged actions with plain-text drive labels. `StorageTab` adds 30-day expiry settings, 1-day advance warning notices, launch overdue cleanup notices, and manual journal cleanup (D193 to D198, issue 157). The version advances from 0.65.1 to 0.66.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- Written key tags use Camelot, Open Key, or Standard notation (issue 128).
+  Camelot is the default. Camelot and Open Key can use a leading zero.
+  Written BPM supports integers or one or two decimal places with half-up rounding.
+  Import parses Beatport and Essentia key styles and warns about unreadable key text.
+  Settings > General exposes these write preferences to the desktop app.
+
 ## [0.64.0] (2026-11-15)
 
 ### Added
 
-- USB exports persist `.infiniteprep/manifest.in-progress.json` and `.infiniteprep/manifest.json` with a canonical SHA-256 `My Tags` digest (D116 to D121, D139 to D148, D179, D200, issue 157). The computer-side recovery journal at `usb_recovery_journal.json` matches reconnecting USB drives and gates changed paths behind confirmation (D166, D191, D192, issue 157). `UsbRecoveryDialog` offers Resume, Restore, and Leave unchanged actions with plain-text drive labels. `StorageTab` adds 30-day expiry settings, 1-day advance warning notices, launch overdue cleanup notices, and manual journal cleanup (D193 to D198, issue 157).
+- Every library table column sorts in both directions (issue 248).
+  - A header click sorts that column ascending. A second click on the same header reverses the direction. The header shows the sort indicator for the active column and direction.
+  - The table opens sorted ascending by filename with a natural order. `Track 2` comes before `Track 10`.
+  - Duration sorts by seconds. BPM sorts by number and keeps the decimals. The key column sorts by the active notation. The Camelot notation sorts by the wheel position. The Open Key notation sorts by the number. The standard notation sorts by the pitch class upward from C like the piano keys. The review status column sorts by the workflow order. The remaining columns sort by a natural case-insensitive text order.
+  - Rows that tie order by title and then by file path. Two keys at one wheel position keep the minor key first in both directions.
+  - The file ID rides on the first cell of each row. A row click opens the file in that row. The sort column, the sort direction, and the selected file survive a search, a status filter, an import, an analysis, and a write.
+  - The new `unsorted_rows_placement` setting places the rows without a value for the sorted column. The setting holds `first` or `last`. The General tab of the Settings dialog holds the choice. The rows form one group that moves with the sort direction. A BPM that is not a finite number, such as `NaN`, counts as no value.
+  - `src/infiniteprep/ui/table_sort.py` holds the typed sort keys and the row order. `tests/unit/test_ui_library_table_sort.py` and `tests/unit/test_ui_unsorted_rows_placement.py` cover the sort of every column, the selection, the refresh, and the setting.
 - Library storage supports named playlists, crates, and nested folders (issue 139).
   - Playlists keep track order and support optional repeats. Crates contain unique tracks.
   - Playlists can sort by key or BPM and restore the previous order after a restart.

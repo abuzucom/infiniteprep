@@ -12,12 +12,13 @@ from pathlib import Path
 from typing import Any, Final
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QWidget
 
 from infiniteprep import storage_paths
 from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
 from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapter
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
+from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.adapters.transcoder.safe_transcoder import SafeTranscoderAdapter
 from infiniteprep.config.credentials import CredentialStore, forget_all_credentials
 from infiniteprep.config.settings import SettingsManager
@@ -117,6 +118,8 @@ def open_settings_dialog(window: MainWindow, repo: Repository) -> None:
         cleanup_enabled=not window.batch_queue.is_busy(),
     )
     dialog.exec()
+    if dialog.result() == QDialog.DialogCode.Accepted:
+        window.reload_settings()
     if dialog.cleanup_choice is not None:
         delete_data_and_quit(window, repo, dialog.cleanup_choice)
 
@@ -248,13 +251,15 @@ def launch_desktop_app() -> int:
     if isinstance(opened, int):
         return opened
     repo = opened.repository
-    write_svc = WriteService(repo, backup_dir=opened.locations.backup_dir)
+    tag_adapter = MetadataTagAdapter(SettingsManager().load_tag_output)
+    write_svc = WriteService(repo, tag_adapter=tag_adapter, backup_dir=opened.locations.backup_dir)
     orchestrator = JobOrchestrator(repository=repo, audio_analyzer=LocalDspAnalyzer())
     reconciler = ReconciliationService(repo)
-    transcoder = SafeTranscoderAdapter(repo, backup_dir=opened.locations.backup_dir)
+    transcoder = SafeTranscoderAdapter(
+        repo, tag_adapter=tag_adapter, backup_dir=opened.locations.backup_dir
+    )
     exporter = PlaylistExporter(repo)
-    saved_theme = SettingsManager().load().theme
-    apply_application_theme(qt_app, saved_theme)
+    apply_application_theme(qt_app, SettingsManager().load().theme)
 
     window = MainWindow(
         repository=repo,
