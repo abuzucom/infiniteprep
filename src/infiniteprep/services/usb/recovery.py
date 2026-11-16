@@ -12,7 +12,11 @@ from pathlib import Path
 from typing import Final
 
 from infiniteprep import storage_paths
-from infiniteprep.services.usb._shared import write_json_atomic
+from infiniteprep.services.usb._shared import (
+    is_symlink_or_reparse_point,
+    read_bounded_json_file,
+    write_json_atomic,
+)
 from infiniteprep.services.usb.manifest import (
     ExportScope,
     UsbExportManifest,
@@ -30,6 +34,7 @@ DEFAULT_RECOVERY_EXPIRY_DAYS: Final[int] = 30
 MIN_RECOVERY_EXPIRY_DAYS: Final[int] = 1
 MAX_RECOVERY_EXPIRY_DAYS: Final[int] = 365
 EXPIRY_WARNING_LEAD_DAYS: Final[int] = 1
+JOURNAL_SCHEMA_VERSION: Final[int] = 1
 JOURNAL_FILE_NAME: Final[str] = "usb_recovery_journal.json"
 
 
@@ -43,6 +48,14 @@ class ReconnectChoice(StrEnum):
 
 _RESOLVED_RECOVERY_ACTIONS: Final[frozenset[str]] = frozenset(
     {ReconnectChoice.RESUME.value, ReconnectChoice.RESTORE.value}
+)
+_ALLOWED_RECOVERY_ACTIONS: Final[frozenset[str]] = frozenset(
+    {
+        "",
+        ReconnectChoice.RESUME.value,
+        ReconnectChoice.RESTORE.value,
+        ReconnectChoice.LEAVE_UNCHANGED.value,
+    }
 )
 
 
@@ -101,17 +114,41 @@ def _optional_bool(raw: object) -> bool | None:
     raise ValueError("Expected boolean or null field in USB recovery journal.")
 
 
+def _require_journal_bool(raw: Mapping[str, object], field_name: str, default: bool) -> bool:
+    """Return a boolean field from raw when absent as default, rejecting non-booleans."""
+    if field_name not in raw:
+        return default
+    value = raw[field_name]
+    if not isinstance(value, bool):
+        raise ValueError(f"USB recovery journal field '{field_name}' must be a boolean.")
+    return value
+
+
+def _require_journal_str(raw: object, field_name: str, *, allow_empty: bool = False) -> str:
+    """Validate that raw is a string and optionally non-empty."""
+    if not isinstance(raw, str):
+        raise ValueError(f"USB recovery journal field '{field_name}' must be a string.")
+    if not allow_empty and not raw.strip():
+        raise ValueError(f"USB recovery journal field '{field_name}' cannot be empty.")
+    return raw
+
+
+def _require_journal_str_default(raw: Mapping[str, object], field_name: str, default: str) -> str:
+    """Return an optional string field from raw when absent as default, rejecting non-strings."""
+    if field_name not in raw:
+        return default
+    return _require_journal_str(raw[field_name], field_name, allow_empty=True)
+
+
 def _drive_from_dict(raw: object) -> DriveIdentity:
     """Deserialize DriveIdentity from journal JSON."""
     if not isinstance(raw, Mapping):
         raise ValueError("Journal entry 'drive_identity' must be an object.")
     size_raw = raw.get("size_bytes")
-    if isinstance(size_raw, bool) or not isinstance(size_raw, int):
-        raise ValueError("Drive identity 'size_bytes' must be an integer.")
-    name = raw.get("name")
-    path = raw.get("path")
-    if not isinstance(name, str) or not isinstance(path, str):
-        raise ValueError("Drive identity 'name' and 'path' must be strings.")
+    if isinstance(size_raw, bool) or not isinstance(size_raw, int) or size_raw < 0:
+        raise ValueError("Drive identity 'size_bytes' must be a non-negative integer.")
+    name = _require_journal_str(raw.get("name"), "drive_identity.name", allow_empty=True)
+    path = _require_journal_str(raw.get("path"), "drive_identity.path", allow_empty=True)
     return DriveIdentity(
         name=name,
         path=path,
@@ -119,8 +156,8 @@ def _drive_from_dict(raw: object) -> DriveIdentity:
         model=_optional_str(raw.get("model")),
         vendor=_optional_str(raw.get("vendor")),
         serial=_optional_str(raw.get("serial")),
-        is_removable=bool(raw.get("is_removable", False)),
-        is_read_only=bool(raw.get("is_read_only", False)),
+        is_removable=_require_journal_bool(raw, "is_removable", False),
+        is_read_only=_require_journal_bool(raw, "is_read_only", False),
         bus_type=_optional_str(raw.get("bus_type")),
         subsystem=_optional_str(raw.get("subsystem")),
         hardware_id=_optional_str(raw.get("hardware_id")),
@@ -141,26 +178,27 @@ def _entry_from_dict(raw: object) -> UsbJournalEntry:
     """Deserialize one UsbJournalEntry from journal JSON."""
     if not isinstance(raw, Mapping):
         raise ValueError("Each USB recovery journal entry must be an object.")
-    export_id = raw.get("export_id")
-    started_at = raw.get("started_at_utc")
-    volume_uuid = raw.get("volume_uuid")
-    mount_point = raw.get("mount_point")
-    scope = raw.get("scope")
-    required_fields = (export_id, started_at, volume_uuid, mount_point, scope)
-    if not all(isinstance(item, str) for item in required_fields):
-        raise ValueError("Required USB recovery journal string fields are missing.")
+    export_id = _require_journal_str(raw.get("export_id"), "export_id")
+    started_at = _require_journal_str(raw.get("started_at_utc"), "started_at_utc")
+    _parse_utc_timestamp(started_at)
+    volume_uuid = _require_journal_str(raw.get("volume_uuid"), "volume_uuid", allow_empty=True)
+    mount_point = _require_journal_str(raw.get("mount_point"), "mount_point")
+    scope = ExportScope(_require_journal_str(raw.get("scope"), "scope"))
+    action = _require_journal_str_default(raw, "last_recovery_action", "")
+    if action not in _ALLOWED_RECOVERY_ACTIONS:
+        raise ValueError(f"Invalid USB recovery journal action: {action!r}")
     return UsbJournalEntry(
-        export_id=str(export_id),
-        started_at_utc=str(started_at),
-        volume_uuid=str(volume_uuid),
+        export_id=export_id,
+        started_at_utc=started_at,
+        volume_uuid=volume_uuid,
         drive_identity=_drive_from_dict(raw.get("drive_identity")),
-        mount_point=str(mount_point),
-        scope=ExportScope(str(scope)),
+        mount_point=mount_point,
+        scope=scope,
         playlist_names=_str_tuple(raw.get("playlist_names"), "playlist_names"),
         track_paths=_str_tuple(raw.get("track_paths"), "track_paths"),
-        backup_path=str(raw.get("backup_path", "")),
-        warned_expiry=bool(raw.get("warned_expiry", False)),
-        last_recovery_action=str(raw.get("last_recovery_action", "")),
+        backup_path=_require_journal_str_default(raw, "backup_path", ""),
+        warned_expiry=_require_journal_bool(raw, "warned_expiry", False),
+        last_recovery_action=action,
     )
 
 
@@ -261,6 +299,45 @@ def _run_required_recovery_callback(
     callback(entry, mount_root)
 
 
+def _partition_resolved_mounts(partition: PartitionInfo) -> list[Path]:
+    """Resolve existing mount points for one partition into canonical directory paths."""
+    resolved: list[Path] = []
+    for mount_text in partition.mount_points:
+        try:
+            candidate = Path(mount_text).resolve(strict=True)
+        except OSError:
+            continue
+        if candidate.is_dir():
+            resolved.append(candidate)
+    return resolved
+
+
+def _matched_mount_points(match: UsbReconnectMatch) -> set[Path]:
+    """Collect canonical mount points belonging to matched partitions on candidate."""
+    inspection = match.candidate.inspection
+    if inspection is None:
+        raise ValueError("Matched reconnect candidate lacks drive inspection data.")
+    permitted: set[Path] = set()
+    for partition in inspection.partitions:
+        if _match_entry_partition(match.entry, inspection.drive, partition) is not None:
+            permitted.update(_partition_resolved_mounts(partition))
+    return permitted
+
+
+def _validate_reconnect_mount_root(match: UsbReconnectMatch, mount_root: Path) -> None:
+    """Verify mount_root is a real directory mounted on the matched candidate partition."""
+    if is_symlink_or_reparse_point(mount_root):
+        raise ValueError("Target mount root cannot be a symbolic link.")
+    try:
+        resolved_target = mount_root.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError(f"Target mount root is missing or inaccessible: {mount_root}") from exc
+    if not resolved_target.is_dir():
+        raise ValueError(f"Target mount root is not a directory: {mount_root}")
+    if resolved_target not in _matched_mount_points(match):
+        raise ValueError("Target mount path does not match the reconnected candidate drive.")
+
+
 class UsbRecoveryJournalStore:
     """Reads, updates, matches, and expires computer-side USB export journal entries."""
 
@@ -270,11 +347,20 @@ class UsbRecoveryJournalStore:
 
     def load_entries(self) -> list[UsbJournalEntry]:
         """Load persisted journal entries from disk, returning empty when absent."""
+        if is_symlink_or_reparse_point(self.journal_path):
+            raise ValueError(f"Refusing symlink JSON file: {self.journal_path}")
         if not self.journal_path.exists():
             return []
-        raw = json.loads(self.journal_path.read_text(encoding="utf-8"))
+        raw = json.loads(read_bounded_json_file(self.journal_path))
         if not isinstance(raw, Mapping):
             raise ValueError("USB recovery journal root must be a JSON object.")
+        version = raw.get("version", JOURNAL_SCHEMA_VERSION)
+        if (
+            isinstance(version, bool)
+            or not isinstance(version, int)
+            or version != JOURNAL_SCHEMA_VERSION
+        ):
+            raise ValueError("Unsupported USB recovery journal schema version.")
         items = raw.get("entries", [])
         if not isinstance(items, list):
             raise ValueError("USB recovery journal 'entries' must be a list.")
@@ -283,10 +369,15 @@ class UsbRecoveryJournalStore:
     def save_entries(self, entries: Sequence[UsbJournalEntry]) -> None:
         """Persist journal entries atomically to disk."""
         payload: dict[str, object] = {
-            "version": 1,
+            "version": JOURNAL_SCHEMA_VERSION,
             "entries": [_entry_to_dict(entry) for entry in entries],
         }
-        write_json_atomic(self.journal_path.parent, self.journal_path.name, payload)
+        write_json_atomic(
+            self.journal_path.parent,
+            self.journal_path.name,
+            payload,
+            reject_target_symlink=True,
+        )
 
     def start_export(
         self, entry: UsbJournalEntry, mount_root: Path, manifest: UsbExportManifest
@@ -342,6 +433,13 @@ class UsbRecoveryJournalStore:
             and not confirmed
         ):
             raise ValueError("Confirm the matched drive before modifying it.")
+        _validate_reconnect_mount_root(match, mount_root)
+        if choice in (ReconnectChoice.RESTORE, ReconnectChoice.RESUME):
+            marker = read_in_progress_manifest(mount_root)
+            if marker is None or marker.export_id != match.entry.export_id:
+                raise ValueError(
+                    "Target drive does not contain a matching in-progress export manifest."
+                )
         if choice == ReconnectChoice.RESTORE:
             _run_required_recovery_callback("restore", restore_callback, match.entry, mount_root)
             remove_in_progress_manifest(mount_root)

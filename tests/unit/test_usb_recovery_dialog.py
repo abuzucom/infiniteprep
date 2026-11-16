@@ -182,7 +182,10 @@ class UsbRecoveryDialogTests(unittest.TestCase):
                 show_notice=lambda title, body: notices.append((title, body)),
             )
 
-            self.assertEqual([item.export_id for item in scan.overdue_notice_entries], ["exp-overdue"])
+            self.assertEqual(
+                [item.export_id for item in scan.overdue_notice_entries],
+                ["exp-overdue"],
+            )
             self.assertEqual([item.export_id for item in scan.warning_entries], ["exp-warn"])
             self.assertEqual(len(notices), 2)
             self.assertIn("exp-overdue", notices[0][1])

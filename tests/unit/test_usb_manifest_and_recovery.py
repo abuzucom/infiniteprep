@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import os
 import tempfile
 import unittest
@@ -10,6 +11,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from infiniteprep.services.usb._shared import MAX_USB_JSON_BYTES
 from infiniteprep.services.usb.manifest import (
     COMPLETED_MANIFEST_FILE_NAME,
     IN_PROGRESS_MANIFEST_FILE_NAME,
@@ -290,6 +292,38 @@ class UsbExportManifestTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 read_completed_manifest(mount_root)
 
+    def test_malformed_manifest_counts_and_types_are_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            mount_root = Path(tmp_dir) / "usb"
+            mount_root.mkdir()
+            valid = _build_manifest()
+            manifest_path = write_completed_manifest(mount_root, valid)
+            base_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+            invalid_patches = (
+                {"track_count": -1},
+                {"completed_at_utc": False},
+                {"completed_at_utc": None, "state": MANIFEST_STATE_COMPLETED},
+                {"target_counts": {"rekordbox": {"exported": True}}},
+                {"target_counts": {"rekordbox": {"exported": "3"}}},
+                {"target_counts": {"rekordbox": {"skipped": -2}}},
+            )
+            for patch in invalid_patches:
+                corrupted = {**base_payload, **patch}
+                manifest_path.write_text(json.dumps(corrupted), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    read_completed_manifest(mount_root)
+
+    def test_oversized_manifest_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            mount_root = Path(tmp_dir) / "usb"
+            meta_dir = mount_root / USB_METADATA_DIR_NAME
+            meta_dir.mkdir(parents=True)
+            manifest_path = meta_dir / COMPLETED_MANIFEST_FILE_NAME
+            manifest_path.write_bytes(b"{" + b" " * MAX_USB_JSON_BYTES + b"}")
+            with self.assertRaises(ValueError):
+                read_completed_manifest(mount_root)
+
 
 class UsbRecoveryMatchingTests(unittest.TestCase):
     """Volume ID and confirmation matching for reconnected USB targets."""
@@ -550,6 +584,126 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             self.assertEqual(updated.last_recovery_action, ReconnectChoice.RESTORE.value)
             self.assertIsNone(read_in_progress_manifest(mount_root))
             self.assertEqual(len(store.load_entries()), 1)
+
+    def test_recovery_rejects_unrelated_mount_or_mismatched_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            store, mount_root, entry = self._setup_store(tmp_dir)
+            wrong_mount = Path(tmp_dir) / "wrong_usb"
+            wrong_mount.mkdir()
+            write_in_progress_manifest(
+                wrong_mount,
+                _build_manifest(
+                    export_id="exp-other",
+                    state=MANIFEST_STATE_IN_PROGRESS,
+                    completed_at_utc=None,
+                ),
+            )
+            partition = build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),))
+            inspection = build_inspection(drive=entry.drive_identity, partitions=(partition,))
+            match = store.match_reconnected_target(
+                TargetCandidate(name="sdb", inspection=inspection, error=None)
+            )
+            assert match is not None
+            calls: list[tuple[str, Path]] = []
+
+            with self.assertRaises(ValueError):
+                store.apply_reconnect_choice(
+                    match,
+                    ReconnectChoice.RESUME,
+                    wrong_mount,
+                    resume_callback=lambda item, path: calls.append((item.export_id, path)),
+                )
+            self.assertEqual(calls, [])
+            self.assertIsNotNone(read_in_progress_manifest(wrong_mount))
+
+            remove_in_progress_manifest(mount_root)
+            with self.assertRaises(ValueError):
+                store.apply_reconnect_choice(
+                    match,
+                    ReconnectChoice.RESTORE,
+                    mount_root,
+                    restore_callback=lambda item, path: calls.append((item.export_id, path)),
+                )
+            write_in_progress_manifest(
+                mount_root,
+                _build_manifest(
+                    export_id="exp-mismatch",
+                    state=MANIFEST_STATE_IN_PROGRESS,
+                    completed_at_utc=None,
+                ),
+            )
+            with self.assertRaises(ValueError):
+                store.apply_reconnect_choice(
+                    match,
+                    ReconnectChoice.RESTORE,
+                    mount_root,
+                    restore_callback=lambda item, path: calls.append((item.export_id, path)),
+                )
+            self.assertEqual(calls, [])
+
+    def test_journal_rejects_malformed_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            journal_path = Path(tmp_dir) / "usb_recovery_journal.json"
+            store = UsbRecoveryJournalStore(journal_path)
+            entry = _build_journal_entry(str(Path(tmp_dir) / "usb"))
+            store.save_entries([entry])
+            base_raw = json.loads(journal_path.read_text(encoding="utf-8"))
+
+            for bad_payload in (
+                {"version": 99, "entries": base_raw["entries"]},
+                {
+                    "version": 1,
+                    "entries": [{**base_raw["entries"][0], "warned_expiry": "false"}],
+                },
+                {
+                    "version": 1,
+                    "entries": [{**base_raw["entries"][0], "last_recovery_action": "bad"}],
+                },
+                {
+                    "version": 1,
+                    "entries": [{**base_raw["entries"][0], "started_at_utc": "not-utc"}],
+                },
+                {
+                    "version": 1,
+                    "entries": [
+                        {
+                            **base_raw["entries"][0],
+                            "drive_identity": {
+                                **base_raw["entries"][0]["drive_identity"],
+                                "is_removable": "false",
+                            },
+                        }
+                    ],
+                },
+                {
+                    "version": 1,
+                    "entries": [
+                        {
+                            **base_raw["entries"][0],
+                            "drive_identity": {
+                                **base_raw["entries"][0]["drive_identity"],
+                                "size_bytes": -10,
+                            },
+                        }
+                    ],
+                },
+            ):
+                journal_path.write_text(json.dumps(bad_payload), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    store.load_entries()
+
+    def test_journal_rejects_symlink_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            outside = Path(tmp_dir) / "outside.json"
+            outside.write_text('{"version": 1, "entries": []}\n', encoding="utf-8")
+            journal_path = Path(tmp_dir) / "usb_recovery_journal.json"
+            try:
+                journal_path.symlink_to(outside)
+            except OSError:
+                return
+            store = UsbRecoveryJournalStore(journal_path)
+            with self.assertRaises(ValueError):
+                store.load_entries()
 
 
 class UsbRecoveryExpiryTests(unittest.TestCase):

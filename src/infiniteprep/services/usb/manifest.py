@@ -7,16 +7,24 @@ import errno
 import hashlib
 import json
 import os
-import stat
+import sys
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
 from infiniteprep.services.usb._shared import (
+    MAX_USB_JSON_BYTES,
+    close_win32_handle,
     is_symlink_or_reparse_point,
+    open_win32_confined_read_fd,
+    open_win32_locked_dir,
+    read_bounded_fd_utf8,
     reject_symlink_target,
+    unlink_win32_confined_file,
+    verify_fd_identity_and_parent,
     write_json_atomic,
 )
 
@@ -200,6 +208,14 @@ def _prepare_path_meta_dir(
     return meta_dir, None
 
 
+def _win32_confined_meta_handle(base: Path, meta_dir: Path, *, create: bool) -> int | None:
+    """Open a delete-locked Win32 directory handle inside base without following links."""
+    prepared = _prepare_path_meta_dir(base, meta_dir, create=create)
+    if prepared is None:
+        return None
+    return open_win32_locked_dir(meta_dir, meta_dir)
+
+
 @contextlib.contextmanager
 def _open_confined_meta_dir(
     mount_root: Path, *, create: bool
@@ -223,6 +239,16 @@ def _open_confined_meta_dir(
         finally:
             os.close(meta_fd)
         return
+    if sys.platform == "win32":
+        meta_handle = _win32_confined_meta_handle(base, meta_dir, create=create)
+        if meta_handle is None:
+            yield None
+            return
+        try:
+            yield meta_dir, None
+        finally:
+            close_win32_handle(meta_handle)
+        return
     yield _prepare_path_meta_dir(base, meta_dir, create=create)
 
 
@@ -240,42 +266,52 @@ def _open_confined_read_fd(meta_dir: Path, file_name: str, *, dir_fd: int | None
                     f"USB manifest path cannot be a symbolic link: {file_name}"
                 ) from exc
             raise
+    if sys.platform == "win32":
+        return open_win32_confined_read_fd(meta_dir / file_name, meta_dir)
     reject_symlink_target(meta_dir, file_name)
     target = meta_dir / file_name
-    if not target.exists():
+    try:
+        descriptor = os.open(target, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except FileNotFoundError:
         return None
-    if target.resolve(strict=True).parent != meta_dir.resolve(strict=True):
-        raise ValueError("USB manifest path resolves outside the mount root.")
-    return os.open(target, os.O_RDONLY)
+    try:
+        verify_fd_identity_and_parent(descriptor, target, meta_dir)
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
 
 
-def _read_confined_json_text(
-    meta_dir: Path, file_name: str, *, dir_fd: int | None
-) -> str | None:
+def _read_confined_json_text(meta_dir: Path, file_name: str, *, dir_fd: int | None) -> str | None:
     """Read UTF-8 JSON text from a confined regular manifest file."""
     _validate_manifest_file_name(file_name)
     descriptor = _open_confined_read_fd(meta_dir, file_name, dir_fd=dir_fd)
     if descriptor is None:
         return None
-    try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            return None
-    except BaseException:
-        os.close(descriptor)
-        raise
-    with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
-        return handle.read()
+    return read_bounded_fd_utf8(descriptor, max_bytes=MAX_USB_JSON_BYTES)
 
 
 def _unlink_confined_file(meta_dir: Path, file_name: str, *, dir_fd: int | None) -> bool:
     """Unlink a regular manifest file inside meta_dir or dir_fd without following symlinks."""
     _validate_manifest_file_name(file_name)
     reject_symlink_target(meta_dir, file_name, dir_fd=dir_fd)
-    try:
-        if dir_fd is not None:
+    if dir_fd is not None:
+        try:
             os.unlink(file_name, dir_fd=dir_fd)
-        else:
-            os.unlink(meta_dir / file_name)
+        except FileNotFoundError:
+            return False
+        return True
+    if sys.platform == "win32":
+        return unlink_win32_confined_file(meta_dir / file_name, meta_dir)
+    target = meta_dir / file_name
+    try:
+        resolved = target.resolve(strict=True)
+    except FileNotFoundError:
+        return False
+    if resolved.parent != meta_dir.resolve(strict=True):
+        raise ValueError("USB manifest path resolves outside the mount root.")
+    try:
+        os.unlink(target)
     except FileNotFoundError:
         return False
     return True
@@ -320,6 +356,30 @@ def _require_str(raw: object, field_name: str) -> str:
     return raw
 
 
+def _require_non_empty_str(raw: object, field_name: str) -> str:
+    """Validate that raw is a non-empty string value."""
+    text = _require_str(raw, field_name)
+    if not text.strip():
+        raise ValueError(f"Manifest field '{field_name}' cannot be empty.")
+    return text
+
+
+def _require_non_negative_int(raw: object, field_name: str) -> int:
+    """Validate that raw is a non-boolean non-negative integer."""
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
+        raise ValueError(f"Manifest field '{field_name}' must be a non-negative integer.")
+    return raw
+
+
+def _parse_iso_utc(raw: object, field_name: str) -> str:
+    """Validate that raw is a timezone-aware ISO-8601 UTC timestamp string."""
+    text = _require_non_empty_str(raw, field_name)
+    parsed = datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        raise ValueError(f"Manifest timestamp '{field_name}' must include a timezone offset.")
+    return text
+
+
 def _parse_str_dict(raw: object, field_name: str) -> dict[str, str]:
     """Validate and copy a string-to-string dictionary."""
     if not isinstance(raw, Mapping):
@@ -354,16 +414,20 @@ def _parse_target_counts(raw: object) -> dict[str, ManifestTargetCounts]:
     """Parse per-target result count records from manifest JSON."""
     if not isinstance(raw, Mapping):
         raise ValueError("Manifest field 'target_counts' must be an object.")
+    count_keys = ("exported", "exported_with_omissions", "skipped", "failed")
     parsed: dict[str, ManifestTargetCounts] = {}
     for target_name, counts in raw.items():
-        if not isinstance(target_name, str) or not isinstance(counts, Mapping):
+        if not isinstance(target_name, str) or not target_name or not isinstance(counts, Mapping):
             raise ValueError("Invalid target_counts entry in manifest.")
-        parsed[target_name] = ManifestTargetCounts(
-            exported=int(counts.get("exported", 0)),
-            exported_with_omissions=int(counts.get("exported_with_omissions", 0)),
-            skipped=int(counts.get("skipped", 0)),
-            failed=int(counts.get("failed", 0)),
-        )
+        values = {
+            key: (
+                _require_non_negative_int(counts[key], f"target_counts.{key}")
+                if key in counts
+                else 0
+            )
+            for key in count_keys
+        }
+        parsed[target_name] = ManifestTargetCounts(**values)
     return parsed
 
 
@@ -396,31 +460,37 @@ def _parse_omissions(raw: object) -> tuple[ManifestTrackOmission, ...]:
 
 def _manifest_from_dict(raw: Mapping[str, object]) -> UsbExportManifest:
     """Build a UsbExportManifest from parsed JSON."""
+    state = _require_non_empty_str(raw.get("state"), "state")
+    if state not in {MANIFEST_STATE_IN_PROGRESS, MANIFEST_STATE_COMPLETED}:
+        raise ValueError(f"Unsupported manifest state: {state!r}")
     completed_raw = raw.get("completed_at_utc")
-    completed_at = _require_str(completed_raw, "completed_at_utc") if completed_raw else None
+    completed_at = (
+        _parse_iso_utc(completed_raw, "completed_at_utc") if completed_raw is not None else None
+    )
+    if state == MANIFEST_STATE_COMPLETED and completed_at is None:
+        raise ValueError("Completed manifest must include 'completed_at_utc'.")
+    started_at = _parse_iso_utc(raw.get("started_at_utc"), "started_at_utc")
     playlists_raw = raw.get("playlist_names", [])
     if not isinstance(playlists_raw, list) or not all(
         isinstance(item, str) for item in playlists_raw
     ):
         raise ValueError("Manifest field 'playlist_names' must be a list of strings.")
-    track_count_raw = raw.get("track_count")
-    if isinstance(track_count_raw, bool) or not isinstance(track_count_raw, int):
-        raise ValueError("Manifest field 'track_count' must be an integer.")
+    track_count = _require_non_negative_int(raw.get("track_count"), "track_count")
     return UsbExportManifest(
-        export_id=_require_str(raw.get("export_id"), "export_id"),
-        state=_require_str(raw.get("state"), "state"),
-        started_at_utc=_require_str(raw.get("started_at_utc"), "started_at_utc"),
+        export_id=_require_non_empty_str(raw.get("export_id"), "export_id"),
+        state=state,
+        started_at_utc=started_at,
         completed_at_utc=completed_at,
-        app_version=_require_str(raw.get("app_version"), "app_version"),
+        app_version=_require_non_empty_str(raw.get("app_version"), "app_version"),
         adapter_versions=_parse_str_dict(raw.get("adapter_versions"), "adapter_versions"),
         analysis_versions=_parse_str_dict(raw.get("analysis_versions"), "analysis_versions"),
         readers=_parse_readers(raw.get("readers")),
-        scope=ExportScope(_require_str(raw.get("scope"), "scope")),
+        scope=ExportScope(_require_non_empty_str(raw.get("scope"), "scope")),
         playlist_names=tuple(playlists_raw),
-        track_count=track_count_raw,
+        track_count=track_count,
         target_counts=_parse_target_counts(raw.get("target_counts")),
         omissions=_parse_omissions(raw.get("omissions")),
-        my_tags_sha256=_require_str(raw.get("my_tags_sha256"), "my_tags_sha256"),
+        my_tags_sha256=_require_non_empty_str(raw.get("my_tags_sha256"), "my_tags_sha256"),
     )
 
 
