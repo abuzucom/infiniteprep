@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -180,6 +181,38 @@ def test_the_cache_key_names_the_provider_and_the_endpoint() -> None:
 
     assert key.startswith("itunes:search:")
     assert "itunes.apple.com" not in key
+
+
+def test_two_threads_send_one_lookup_for_the_same_track() -> None:
+    """Two threads that miss the cache together send one request between them."""
+    repository = _repository()
+    limiter = RequestLimiter(0.0)
+    calls: list[str] = []
+    lock = threading.Lock()
+
+    def fake_get(url: str, _params: dict[str, str]) -> dict[str, Any]:
+        with lock:
+            calls.append(url)
+        time.sleep(0.05)
+        return _recorded("match_with_genre_and_date")
+
+    adapter = ItunesSearchAdapter(repository=repository, http_get_json=fake_get, limiter=limiter)
+    results: list[int] = []
+
+    def run_search() -> None:
+        matches = adapter.search(
+            MetadataSearchQuery(artist="Deep Dish", title="The Dream"), file_id=FILE_ID
+        )
+        results.append(len(matches))
+
+    threads = [threading.Thread(target=run_search) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert len(calls) == 1
+    assert results == [1, 1]
 
 
 def test_the_request_carries_the_shared_user_agent_and_the_search_terms() -> None:

@@ -16,7 +16,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any, Final
 
 from infiniteprep.db.repositories import Repository
@@ -79,10 +80,28 @@ class RequestLimiter:
         if self.min_interval_sec <= 0.0:
             return
         with self._lock:
-            elapsed = time.monotonic() - self._last_request_ts
-            if elapsed < self.min_interval_sec:
-                time.sleep(self.min_interval_sec - elapsed)
+            self._hold_interval()
             self._last_request_ts = time.monotonic()
+
+    @contextmanager
+    def request_slot(self) -> Iterator[None]:
+        """Hold the provider slot for one request.
+
+        The caller runs the cache check and the request inside the slot. A second
+        caller waits for the slot and then finds the cached response, so two
+        threads never send the same lookup twice.
+        """
+        with self._lock:
+            if self.min_interval_sec > 0.0:
+                self._hold_interval()
+                self._last_request_ts = time.monotonic()
+            yield
+
+    def _hold_interval(self) -> None:
+        """Sleep until the minimum interval has passed since the last request."""
+        elapsed = time.monotonic() - self._last_request_ts
+        if elapsed < self.min_interval_sec:
+            time.sleep(self.min_interval_sec - elapsed)
 
 
 # The one limiter for the provider. Every adapter in the process shares it.
@@ -174,14 +193,17 @@ class ItunesSearchAdapter:
         cache_key = self._cache_key(params)
         payload = self.repo.get_cached_response(cache_key)
         if payload is None:
-            self.limiter.wait()
-            payload = self.http_get_json(ITUNES_SEARCH_URL, params)
-            self.repo.set_cached_response(
-                cache_key=cache_key,
-                provider=self.provider_name,
-                response_data=payload,
-                ttl_seconds=ITUNES_CACHE_TTL_SEC,
-            )
+            with self.limiter.request_slot():
+                # Another thread may have cached the response while this one waited.
+                payload = self.repo.get_cached_response(cache_key)
+                if payload is None:
+                    payload = self.http_get_json(ITUNES_SEARCH_URL, params)
+                    self.repo.set_cached_response(
+                        cache_key=cache_key,
+                        provider=self.provider_name,
+                        response_data=payload,
+                        ttl_seconds=ITUNES_CACHE_TTL_SEC,
+                    )
         results = payload.get("results", [])
         if not isinstance(results, list):
             return []

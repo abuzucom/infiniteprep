@@ -47,6 +47,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A row supplies a value only when it matches the artist and the title. The mean of the two field similarities reaches the match score. The candidate keeps that score.
   - The request path follows no redirect, and the request timeout is a named constant.
   - The limiter lives in the process. A second adapter or a second thread waits for the same interval.
+  - The provider slot holds the cache check and the request together. A second thread that misses the cache finds the cached response and sends no second request.
   - Every proposal records iTunes Search as its source. The provider name is `itunes` and the entity id is the track id.
 - The new `domain/source_priority.py` holds the per-field order of the sources (D394, issue 243).
   - The genre order is Discogs, then iTunes. The release date order is MusicBrainz, then Discogs, then iTunes.
