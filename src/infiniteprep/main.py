@@ -55,7 +55,7 @@ from infiniteprep.ui.storage_prompt import (
     confirm_storage_fallback,
     show_storage_error,
 )
-from infiniteprep.ui.theme import apply_application_theme
+from infiniteprep.ui.theme import NATIVE_THEME, switch_application_theme
 from infiniteprep.ui.usb_recovery_dialog import (
     format_expiry_warning_text,
     format_overdue_cleanup_text,
@@ -198,8 +198,8 @@ def apply_saved_theme(app: QApplication) -> None:
     """Apply the stored theme and store the theme in effect when it cannot apply."""
     settings_mgr = SettingsManager()
     settings = settings_mgr.load()
-    result = apply_application_theme(app, settings.theme)
-    if result.applied:
+    result = switch_application_theme(app, settings.theme, NATIVE_THEME)
+    if result.theme == settings.theme:
         return
     settings.theme = result.theme
     settings_mgr.save(settings)

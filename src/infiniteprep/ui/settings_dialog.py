@@ -36,7 +36,7 @@ from infiniteprep.ui.settings.storage import (
 )
 from infiniteprep.ui.settings.transcode import TranscodeTab
 from infiniteprep.ui.settings.updates import UpdatesTab
-from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme
+from infiniteprep.ui.theme import DEFAULT_DARK_THEME, switch_application_theme
 
 __all__ = [
     "CLEANUP_BUTTON_LABEL",
@@ -165,9 +165,8 @@ class SettingsDialog(QDialog):
             tab.apply_to(self.current_settings)
         app = QApplication.instance()
         chosen_theme = getattr(self.current_settings, "theme", DEFAULT_DARK_THEME)
-        result = apply_application_theme(app, chosen_theme)
-        if not result.applied:
-            self.current_settings.theme = previous_theme
-            self.general_tab.set_theme(previous_theme)
+        result = switch_application_theme(app, chosen_theme, previous_theme)
+        self.current_settings.theme = result.theme
+        self.general_tab.set_theme(result.theme)
         self.settings_mgr.save(self.current_settings)
         self.accept()

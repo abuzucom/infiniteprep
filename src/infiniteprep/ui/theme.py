@@ -112,12 +112,12 @@ def _has_qt_material() -> bool:
 def _load_qt_material() -> ModuleType | None:
     """Return the qt_material module, or None when the import fails.
 
-    The theme package stays optional at run time, so any import failure leaves
+    The theme package stays optional at run time, so a missing package leaves
     the app on the native theme instead of stopping it.
     """
     try:
         return importlib.import_module("qt_material")
-    except Exception as exc:
+    except ImportError as exc:
         logger.warning("The qt-material package could not be imported: %s", exc)
         return None
 
@@ -146,7 +146,7 @@ def apply_application_theme(app: QApplication, theme_name: str) -> ThemeApplicat
     """Apply the chosen theme and report whether the application took effect.
 
     A theme that cannot apply leaves the native theme in effect. The result names
-    the reason, so the caller can keep the picker on the theme in effect.
+    the theme value in effect and the reason a theme did not apply.
     """
     resolved = resolve_theme(theme_name)
     if resolved == NATIVE_THEME:
@@ -157,20 +157,49 @@ def apply_application_theme(app: QApplication, theme_name: str) -> ThemeApplicat
         _report_failure(theme_name, failure)
         _clear_stylesheet(app)
         return ThemeApplication(applied=False, theme=NATIVE_THEME, reason=failure)
-    module = _load_qt_material()
-    if module is None:
-        failure = "the qt-material package cannot be imported"
-        _report_failure(theme_name, failure)
-        _clear_stylesheet(app)
-        return ThemeApplication(applied=False, theme=NATIVE_THEME, reason=failure)
     try:
+        module = _load_qt_material()
+        if module is None:
+            failure = "the qt-material package cannot be imported"
+            _report_failure(theme_name, failure)
+            _clear_stylesheet(app)
+            return ThemeApplication(applied=False, theme=NATIVE_THEME, reason=failure)
         module.apply_stylesheet(app, theme=resolved)
-    except (RuntimeError, AttributeError, TypeError, ValueError, OSError, NameError) as exc:
+    except (
+        AttributeError,
+        ImportError,
+        IndexError,
+        KeyError,
+        NameError,
+        OSError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as exc:
         failure = f"qt-material could not apply the theme: {exc}"
         _report_failure(theme_name, failure)
         _clear_stylesheet(app)
         return ThemeApplication(applied=False, theme=NATIVE_THEME, reason=failure)
-    return ThemeApplication(applied=True, theme=resolved)
+    return ThemeApplication(applied=True, theme=theme_name or resolved)
+
+
+def switch_application_theme(
+    app: QApplication, theme_name: str, current_theme: str
+) -> ThemeApplication:
+    """Apply a new theme and keep the current theme when the new one fails.
+
+    The current theme stays in effect when it applies again. The native theme is
+    in effect when the current theme fails too. The result names the theme value
+    in effect, so the caller can show it and store it.
+    """
+    result = apply_application_theme(app, theme_name)
+    if result.applied:
+        return result
+    fallback = current_theme or NATIVE_THEME
+    restored = apply_application_theme(app, fallback)
+    if restored.applied:
+        return ThemeApplication(applied=False, theme=fallback, reason=result.reason)
+    return ThemeApplication(applied=False, theme=NATIVE_THEME, reason=result.reason)
 
 
 def _theme_failure_reason(resolved: str) -> str:

@@ -28,6 +28,7 @@ from infiniteprep.ui.theme import (
     ThemeApplication,
     apply_application_theme,
     get_theme_choices,
+    switch_application_theme,
 )
 
 
@@ -88,6 +89,40 @@ def test_apply_application_theme_reports_a_failure_when_the_engine_raises() -> N
     app.setStyleSheet.assert_called_once_with("")
 
 
+def test_switch_application_theme_keeps_the_current_theme_when_the_new_one_fails() -> None:
+    """A failed switch reapplies the current theme, so the app keeps its look."""
+    app = MagicMock(spec=QApplication)
+    engine = MagicMock()
+    engine.apply_stylesheet.side_effect = [OSError("the icon sources are missing"), None]
+    with (
+        patch("infiniteprep.ui.theme._has_qt_material", return_value=True),
+        patch("infiniteprep.ui.theme.is_theme_applicable", return_value=True),
+        patch("infiniteprep.ui.theme._load_qt_material", return_value=engine),
+    ):
+        result = switch_application_theme(app, DEFAULT_LIGHT_THEME, DEFAULT_DARK_THEME)
+
+    assert result.applied is False
+    assert result.theme == DEFAULT_DARK_THEME
+    assert "the icon sources are missing" in result.reason
+    assert engine.apply_stylesheet.call_count == 2
+
+
+def test_switch_application_theme_reports_the_native_theme_when_both_fail() -> None:
+    """A failed switch and a failed restore leave the native theme in effect."""
+    app = MagicMock(spec=QApplication)
+    engine = MagicMock()
+    engine.apply_stylesheet.side_effect = OSError("the icon sources are missing")
+    with (
+        patch("infiniteprep.ui.theme._has_qt_material", return_value=True),
+        patch("infiniteprep.ui.theme.is_theme_applicable", return_value=True),
+        patch("infiniteprep.ui.theme._load_qt_material", return_value=engine),
+    ):
+        result = switch_application_theme(app, DEFAULT_LIGHT_THEME, DEFAULT_DARK_THEME)
+
+    assert result.applied is False
+    assert result.theme == NATIVE_THEME
+
+
 def test_theme_choices_list_only_the_themes_the_build_can_apply(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -132,17 +167,23 @@ def make_settings_manager(theme: str) -> MagicMock:
 def test_main_window_keeps_the_picker_on_the_theme_in_effect(
     qtbot: Any, monkeypatch: pytest.MonkeyPatch, theme_package: Path
 ) -> None:
-    """A theme that cannot apply leaves the picker on the theme in effect."""
+    """A theme that cannot apply leaves the previous theme in effect and selected."""
     manager = make_settings_manager(DEFAULT_LIGHT_THEME)
     window = build_main_window(manager, monkeypatch)
     qtbot.addWidget(window)
 
-    failed = ThemeApplication(applied=False, theme=NATIVE_THEME, reason="the theme file is missing")
-    with patch("infiniteprep.ui.main_window.apply_application_theme", return_value=failed):
+    engine = MagicMock()
+    engine.apply_stylesheet.side_effect = [OSError("the icon sources are missing"), None]
+    with (
+        patch("infiniteprep.ui.theme._has_qt_material", return_value=True),
+        patch("infiniteprep.ui.theme.is_theme_applicable", return_value=True),
+        patch("infiniteprep.ui.theme._load_qt_material", return_value=engine),
+    ):
         window.theme_combo.setCurrentText(DEFAULT_DARK_THEME)
 
     assert window.theme_combo.currentText() == DEFAULT_LIGHT_THEME
-    manager.save.assert_not_called()
+    manager.save.assert_called_once()
+    assert manager.save.call_args.args[0].theme == DEFAULT_LIGHT_THEME
 
 
 def test_main_window_stores_a_theme_that_applied(
@@ -154,7 +195,7 @@ def test_main_window_stores_a_theme_that_applied(
     qtbot.addWidget(window)
 
     applied = ThemeApplication(applied=True, theme=DEFAULT_DARK_THEME)
-    with patch("infiniteprep.ui.main_window.apply_application_theme", return_value=applied):
+    with patch("infiniteprep.ui.main_window.switch_application_theme", return_value=applied):
         window.theme_combo.setCurrentText(DEFAULT_DARK_THEME)
 
     assert window.theme_combo.currentText() == DEFAULT_DARK_THEME
@@ -171,8 +212,13 @@ def test_settings_dialog_keeps_the_stored_theme_when_it_cannot_apply(
     qtbot.addWidget(dialog)
     dialog.theme_combo.setCurrentText(DEFAULT_LIGHT_THEME)
 
-    failed = ThemeApplication(applied=False, theme=NATIVE_THEME, reason="the theme file is missing")
-    with patch("infiniteprep.ui.settings_dialog.apply_application_theme", return_value=failed):
+    engine = MagicMock()
+    engine.apply_stylesheet.side_effect = [OSError("the icon sources are missing"), None]
+    with (
+        patch("infiniteprep.ui.theme._has_qt_material", return_value=True),
+        patch("infiniteprep.ui.theme.is_theme_applicable", return_value=True),
+        patch("infiniteprep.ui.theme._load_qt_material", return_value=engine),
+    ):
         dialog.save_settings()
 
     assert manager.load().theme == DEFAULT_DARK_THEME

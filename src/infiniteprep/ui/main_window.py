@@ -66,8 +66,8 @@ from infiniteprep.ui.table_sort import (
 from infiniteprep.ui.theme import (
     DEFAULT_DARK_THEME,
     NATIVE_THEME,
-    apply_application_theme,
     get_theme_choices,
+    switch_application_theme,
 )
 from infiniteprep.ui.time_format import split_time_seconds
 
@@ -564,20 +564,18 @@ class MainWindow(QMainWindow):
     def _on_theme_changed(self, text: str) -> None:
         """Apply the chosen theme and keep the picker on the theme in effect."""
         app = QApplication.instance()
-        result = apply_application_theme(app, text)
-        if not result.applied:
-            self._restore_applied_theme()
-            return
-        self._applied_theme = text
+        result = switch_application_theme(app, text, self._applied_theme)
+        self._applied_theme = result.theme
+        self._set_picker_theme(result.theme)
         settings_mgr = SettingsManager()
         settings = settings_mgr.load()
-        settings.theme = text
+        settings.theme = result.theme
         settings_mgr.save(settings)
 
-    def _restore_applied_theme(self) -> None:
-        """Point the picker back at the theme that is in effect."""
+    def _set_picker_theme(self, theme: str) -> None:
+        """Point the picker at the given theme without firing the change signal."""
         self.theme_combo.blockSignals(True)
-        self.theme_combo.setCurrentText(self._applied_theme)
+        self.theme_combo.setCurrentText(theme)
         self.theme_combo.blockSignals(False)
 
     def _prompt_import_folder(self) -> None:

@@ -38,11 +38,15 @@ def required_file(path: Path) -> str:
 
 
 def collect_fonts(root: Path) -> list[tuple[str, str]]:
-    """Return the data entries for the Roboto fonts and their license text."""
+    """Return the data entries for the Roboto fonts and their license text.
+
+    A missing font folder stops the build, because a bundle without the fonts
+    renders the theme in the system font.
+    """
     font_dir = root / "fonts" / FONT_DIR
     fonts = sorted(font_dir.glob("*.ttf"))
     if not fonts:
-        return []
+        raise SystemExit(f"The {PACKAGE_NAME} package is missing its Roboto fonts.")
     entries = [(str(font), f"qt_material/fonts/{FONT_DIR}") for font in fonts]
     entries.append((required_file(FONT_LICENSE_PATH), f"qt_material/fonts/{FONT_DIR}"))
     return entries

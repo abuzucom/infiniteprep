@@ -165,3 +165,25 @@ def test_the_unused_opengl_bindings_leave_every_bundle() -> None:
         entries = read_allowlist(operating_system)
         assert not any("opengl.pyd" in entry for entry in entries)
         assert not any("opengl.abi3.so" in entry for entry in entries)
+
+
+def test_the_notice_names_the_bundled_theme_package_versions() -> None:
+    """NOTICE names the pinned versions of the packages the theme bundle ships."""
+    notice = (REPO_ROOT / "NOTICE").read_text(encoding="utf-8")
+    lock_text = (REPO_ROOT / "requirements-lock.txt").read_text(encoding="utf-8")
+
+    for package in ("qt-material", "Jinja2", "MarkupSafe"):
+        version = next(
+            line.split("==")[1]
+            for line in lock_text.splitlines()
+            if line.startswith(f"{package}==")
+        )
+        assert f"{package} {version}" in notice
+
+
+def test_the_hook_stops_the_build_when_the_fonts_are_missing(tmp_path: Path) -> None:
+    """A theme package without the Roboto fonts stops the build."""
+    hook = load_hook_module()
+
+    with pytest.raises(SystemExit):
+        hook.collect_fonts(tmp_path)
