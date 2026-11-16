@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
 """Cover the bounded coverage summary document that the pull request comment uses."""
 
+import importlib.util
 import json
 import shutil
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
+BUILDER_PATH = Path(__file__).resolve().parent.parent / "scripts" / "build_coverage_summary.py"
 
-import build_coverage_summary as builder  # noqa: E402
+
+def _load_builder():
+    spec = importlib.util.spec_from_file_location("build_coverage_summary", BUILDER_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+builder = _load_builder()
 
 REPORT = """<?xml version="1.0" ?>
 <coverage line-rate="0.5" branch-rate="0.5" lines-covered="3" lines-valid="4"
@@ -64,6 +71,34 @@ class BuildCoverageSummaryTest(unittest.TestCase):
 
         paths = [item["path"] for item in summary["files"]]
         self.assertEqual(paths, ["src/a.py", "src/b.py"])
+
+    def test_the_source_prefix_appears_once(self) -> None:
+        """A path that already holds the prefix keeps one prefix."""
+        report = (
+            '<coverage lines-covered="1" lines-valid="2" branches-covered="0" '
+            'branches-valid="0"><packages><classes>'
+            '<class name="a.py" filename="src/infiniteprep/ui/theme.py" line-rate="0.5">'
+            '<lines><line number="1" hits="1"/><line number="2" hits="0"/></lines></class>'
+            "</classes></packages></coverage>"
+        )
+
+        summary = builder.read_summary(self.write_report(report), "src/infiniteprep")
+
+        self.assertEqual(summary["files"][0]["path"], "src/infiniteprep/ui/theme.py")
+
+    def test_the_source_prefix_joins_a_relative_path(self) -> None:
+        """A path relative to the measured source gains the prefix."""
+        report = (
+            '<coverage lines-covered="1" lines-valid="2" branches-covered="0" '
+            'branches-valid="0"><packages><classes>'
+            '<class name="a.py" filename="ui/theme.py" line-rate="0.5">'
+            '<lines><line number="1" hits="1"/><line number="2" hits="0"/></lines></class>'
+            "</classes></packages></coverage>"
+        )
+
+        summary = builder.read_summary(self.write_report(report), "src/infiniteprep")
+
+        self.assertEqual(summary["files"][0]["path"], "src/infiniteprep/ui/theme.py")
 
     def test_the_file_list_stays_bounded(self) -> None:
         """The document holds no more than the capped number of files."""

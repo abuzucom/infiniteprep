@@ -20,6 +20,22 @@ def _branch_conditions(branch: ET.Element) -> tuple[int, int]:
     return int(match.group(1)), int(match.group(2))
 
 
+def _file_path(filename: str, source_prefix: str) -> str:
+    """Return the path of one file with the source prefix applied at most once.
+
+    The coverage report holds the path relative to the measured source. Some
+    runs hold the path relative to the repository root already. The prefix
+    never appears twice.
+    """
+    path = filename.replace("\\", "/")
+    prefix = source_prefix.strip("/")
+    if not prefix:
+        return path
+    if path == prefix or path.startswith(f"{prefix}/"):
+        return path
+    return f"{prefix}/{path}"
+
+
 def _file_record(element: ET.Element, source_prefix: str) -> dict[str, object]:
     """Return the path and the coverage percent of one class element."""
     lines = element.findall("./lines/line")
@@ -31,8 +47,8 @@ def _file_record(element: ET.Element, source_prefix: str) -> dict[str, object]:
         covered += branch_covered
         measured += branch_total
     percent = 100.0 if measured == 0 else 100.0 * covered / measured
-    path = element.get("filename") or ""
-    return {"path": f"{source_prefix}/{path}" if source_prefix else path, "percent": round(percent, 1)}
+    path = _file_path(element.get("filename") or "", source_prefix)
+    return {"path": path, "percent": round(percent, 1)}
 
 
 def build_summary(report: ET.Element, source_prefix: str = "") -> dict[str, object]:
