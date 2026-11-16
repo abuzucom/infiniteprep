@@ -22,6 +22,13 @@ from infiniteprep.domain.enums import KeyDisplayNotation
 logger = logging.getLogger(__name__)
 DEFAULT_FAKE_LOSSLESS_METHOD: Final[str] = "signal_analysis"
 SUPPORTED_FAKE_LOSSLESS_METHODS: Final[frozenset[str]] = frozenset({DEFAULT_FAKE_LOSSLESS_METHOD})
+# Where the rows without a value for the sorted column sit in the table.
+UNSORTED_PLACEMENT_FIRST: Final[str] = "first"
+UNSORTED_PLACEMENT_LAST: Final[str] = "last"
+SUPPORTED_UNSORTED_PLACEMENTS: Final[tuple[str, ...]] = (
+    UNSORTED_PLACEMENT_FIRST,
+    UNSORTED_PLACEMENT_LAST,
+)
 DEFAULT_WAVEFORM_ZOOM_SECONDS: Final[int] = 8
 SUPPORTED_WAVEFORM_ZOOM_SECONDS: Final[tuple[int, ...]] = (
     2,
@@ -166,6 +173,8 @@ class AppSettings:
     playlist_relative_paths: bool = True
     # Ends an Analyze or write batch at its first failed file. Imports ignore it.
     stop_batch_on_first_failure: bool = False
+    # Places the rows without a value for the sorted column first or last.
+    unsorted_rows_placement: str = UNSORTED_PLACEMENT_FIRST
     theme: str = "dark_teal.xml"
     file_table_layout: str = ""  # Base64-encoded QHeaderView state.
     file_table_column_count: int = 0  # Column count when the layout was saved.
@@ -184,6 +193,8 @@ def _find_setting_value_problem(name: str, value: object, default: object) -> st
         return "an unsupported waveform zoom duration"
     if name == "fake_lossless_method" and value not in SUPPORTED_FAKE_LOSSLESS_METHODS:
         return "an unsupported fake-lossless detection method"
+    if name == "unsorted_rows_placement" and value not in SUPPORTED_UNSORTED_PLACEMENTS:
+        return "an unsupported unsorted row placement"
     return _find_numeric_setting_problem(name, value)
 
 

@@ -5,9 +5,18 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.63.2] (2026-11-15)
+## [0.64.0] (2026-11-15)
 
 ### Added
+
+- Every library table column sorts in both directions (issue 248).
+  - A header click sorts that column ascending. A second click on the same header reverses the direction. The header shows the sort indicator for the active column and direction.
+  - The table opens sorted ascending by filename with a natural order. `Track 2` comes before `Track 10`.
+  - Duration sorts by seconds. BPM sorts by number and keeps the decimals. The key column sorts by the active notation. The Camelot notation sorts by the wheel position. The Open Key notation sorts by the number. The standard notation sorts by the pitch class upward from C like the piano keys. The review status column sorts by the workflow order. The remaining columns sort by a natural case-insensitive text order.
+  - Rows that tie order by title and then by file path. Two keys at one wheel position keep the minor key first in both directions.
+  - The file ID rides on the first cell of each row. A row click opens the file in that row. The sort column, the sort direction, and the selected file survive a search, a status filter, an import, an analysis, and a write.
+  - The new `unsorted_rows_placement` setting places the rows without a value for the sorted column. The setting holds `first` or `last`. The General tab of the Settings dialog holds the choice. The rows form one group that moves with the sort direction.
+  - `src/infiniteprep/ui/table_sort.py` holds the typed sort keys and the row order. `tests/unit/test_ui_library_table_sort.py` and `tests/unit/test_ui_unsorted_rows_placement.py` cover the sort of every column, the selection, the refresh, and the setting.
 
 - Library storage supports named playlists, crates, and nested folders (issue 139).
   - Playlists keep track order and support optional repeats. Crates contain unique tracks.
