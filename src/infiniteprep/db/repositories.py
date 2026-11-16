@@ -610,10 +610,11 @@ class Repository:
         updated_at takes the current time on every write. A caller timestamp must carry a
         UTC offset. Any offset form normalizes to the stored form.
         """
-        record.updated_at = utc_now_iso()
+        # Validation runs before any assignment. A rejected call leaves the record unchanged.
         if record.timestamp:
             record.timestamp = _normalize_instant_text(record.timestamp, "timestamp")
-        else:
+        record.updated_at = utc_now_iso()
+        if not record.timestamp:
             record.timestamp = record.updated_at
         conn = self.db.connect()
         conn.execute(
@@ -723,6 +724,12 @@ class Repository:
         return [dict(r) for r in rows]
 
     def get_cached_response(self, cache_key: str) -> dict[str, Any] | None:
+        """Return the cached response for cache_key, or None when absent or expired.
+
+        The comparison runs on text. A row from an older version may lack the microsecond
+        fraction. That form means fraction zero and sorts before every fraction of the same
+        second, since "+" sorts before ".". Text order therefore still equals time order.
+        """
         now = utc_now_iso()
         conn = self.db.connect()
         row = conn.execute(

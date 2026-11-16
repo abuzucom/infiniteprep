@@ -23,6 +23,8 @@ FIRST_WRITE_TIME = "2026-11-16T12:00:00.000000+00:00"
 LATER_WRITE_TIME = "2026-11-16T12:05:00.000000+00:00"
 LAST_WRITE_TIME = "2026-11-16T12:10:00.000000+00:00"
 MIGRATION_THREE_VERSION = 3
+LEGACY_CREATED_TIME = "2026-11-15T12:00:00+00:00"
+CLOCK_WITH_FRACTION = "2026-11-16T12:00:00.000123+00:00"
 # A clock that stepped backward stamps a newer record with an older time.
 EARLIER_CLOCK_TIME = "2026-11-16T11:00:00.000000+00:00"
 FIXED_WIDTH_UTC_LENGTH = len(FIRST_WRITE_TIME)
@@ -215,6 +217,45 @@ def test_cache_expiry_accepts_any_offset_form(repo: Repository, suffix_form: str
 
     assert repo.get_cached_response("live") == {"v": 1}
     assert repo.get_cached_response("dead") is None
+
+
+@pytest.mark.parametrize(
+    ("legacy_expiry", "expected_live"),
+    [
+        ("2026-11-16T12:00:01+00:00", True),
+        # This row expired at fraction zero, before the clock reading in the same second.
+        ("2026-11-16T12:00:00+00:00", False),
+        ("2026-11-16T11:59:59+00:00", False),
+    ],
+)
+def test_legacy_cache_rows_without_a_fraction_expire_at_the_right_instant(
+    repo: Repository, monkeypatch: pytest.MonkeyPatch, legacy_expiry: str, expected_live: bool
+) -> None:
+    """A row an older version stored without microseconds keeps its true expiry."""
+    conn = repo.db.connect()
+    conn.execute(
+        "INSERT INTO provider_cache (cache_key, provider, response_json, created_at, expires_at) "
+        "VALUES ('legacy', 'provider', '{\"v\": 1}', ?, ?)",
+        (LEGACY_CREATED_TIME, legacy_expiry),
+    )
+    conn.commit()
+    monkeypatch.setattr("infiniteprep.db.repositories.utc_now_iso", lambda: CLOCK_WITH_FRACTION)
+
+    cached = repo.get_cached_response("legacy")
+
+    assert (cached == {"v": 1}) is expected_live
+
+
+def test_rejected_journal_timestamp_leaves_the_record_unchanged(repo: Repository) -> None:
+    """Validation runs first. A refused record keeps its empty updated_at."""
+    _add_file(repo, "file-a")
+    record = _record("op-1", "file-a", "2026-11-16T12:00:00")
+
+    with pytest.raises(ValueError, match="offset"):
+        repo.upsert_change_record(record)
+
+    assert record.updated_at == ""
+    assert record.timestamp == "2026-11-16T12:00:00"
 
 
 def test_cache_expiry_rejects_a_time_without_an_offset(repo: Repository) -> None:
