@@ -256,7 +256,7 @@ jobs:
       needs.resolve-pr.outputs.already_reviewed != 'true' &&
       needs.classify.outputs.change_class != 'docs' }}
     # Foucault 3.8.1. Keep the uses: pin and audit_ref on the same commit.
-    uses: abuzucom/foucault/.github/workflows/security-review.yml@3ec8d0e332f4c778c66a6aed1b9b56a3be92e716
+    uses: abuzucom/foucault/.github/workflows/security-review.yml@d50c22c6589fa6843e1bf50d3da8b29b637a1395
     with:
       audit_ref: "3ec8d0e332f4c778c66a6aed1b9b56a3be92e716"
       model_call_command: "python3 ci/call_model.py"
@@ -281,7 +281,7 @@ jobs:
       needs.resolve-pr.outputs.already_reviewed != 'true' &&
       needs.classify.outputs.change_class != 'docs' }}
     # Foucault 3.8.1. Keep the uses: pin and audit_ref on the same commit.
-    uses: abuzucom/foucault/.github/workflows/security-review.yml@3ec8d0e332f4c778c66a6aed1b9b56a3be92e716
+    uses: abuzucom/foucault/.github/workflows/security-review.yml@d50c22c6589fa6843e1bf50d3da8b29b637a1395
     with:
       audit_ref: "3ec8d0e332f4c778c66a6aed1b9b56a3be92e716"
       model_call_command: "python3 ci/call_model.py"
