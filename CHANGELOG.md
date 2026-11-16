@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.68.0] (2026-11-16)
+## [0.68.1] (2026-11-16)
 
 ### Added
 
@@ -67,6 +67,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The Roboto fonts ship beside the theme files in every bundle. The theme package does not ship the license text for the fonts. The bundle carries a pinned copy of the Apache-2.0 text next to the font files.
   - NOTICE names the shipped qt-material and MarkupSafe versions. The notice listed the versions from before the theme package shipped.
   - The packaging hook stops the build when the theme package has no Roboto fonts.
+- File names and decoder warnings show as literal text in the detail panel and the transcode dialogs.
+  - The detail panel header and warnings labels used the default Qt text format. A file name with HTML tags rendered as markup. Both labels now use the plain text format.
+  - The transcode confirmation and the transcode summary now use the plain text message helpers. Both dialogs list file names from imported files.
+  - The version advances from 0.68.0 to 0.68.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ## [0.64.0] (2026-11-15)
 
