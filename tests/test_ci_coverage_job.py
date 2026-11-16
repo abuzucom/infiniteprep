@@ -191,7 +191,7 @@ class CoverageDependencyTest(unittest.TestCase):
 
     def test_the_lockfile_pins_the_coverage_version(self) -> None:
         """The lockfile holds the pinned coverage version."""
-        self.assertRegex(self.lockfile, rf"(?m)^coverage=={re.escape(COVERAGE_VERSION)}$")
+        self.assertRegex(self.lockfile, rf"(?m)^coverage=={re.escape(COVERAGE_VERSION)} ?\\?$")
 
     def test_the_settings_measure_the_source_package_with_branches(self) -> None:
         """The coverage settings measure the source package and the branches."""
