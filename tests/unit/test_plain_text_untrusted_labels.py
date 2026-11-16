@@ -22,7 +22,8 @@ from infiniteprep.ui.action_handlers import run_transcode_with_confirmation
 from infiniteprep.ui.detail_panel import DetailPanel
 from tests.fixtures.audio_factory import create_wav_fixture
 
-MARKUP_FILE_NAME = "<b>bold</b>.wav"
+# The name holds no slash. A closing tag would split the name into a folder and a file.
+MARKUP_FILE_NAME = "<img src=x><b>bold.wav"
 STATIC_DIALOG_KINDS = ("question", "warning", "information")
 STATIC_DIALOG_FAILURE = "A static QMessageBox call renders untrusted text with AutoText."
 
