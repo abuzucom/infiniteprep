@@ -5,9 +5,18 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.63.3] (2026-11-15)
+## [0.64.1] (2026-11-15)
 
 ### Added
+
+- Every library table column sorts in both directions (issue 248).
+  - A header click sorts that column ascending. A second click on the same header reverses the direction. The header shows the sort indicator for the active column and direction.
+  - The table opens sorted ascending by filename with a natural order. `Track 2` comes before `Track 10`.
+  - Duration sorts by seconds. BPM sorts by number and keeps the decimals. The key column sorts by the active notation. The Camelot notation sorts by the wheel position. The Open Key notation sorts by the number. The standard notation sorts by the pitch class upward from C like the piano keys. The review status column sorts by the workflow order. The remaining columns sort by a natural case-insensitive text order.
+  - Rows that tie order by title and then by file path. Two keys at one wheel position keep the minor key first in both directions.
+  - The file ID rides on the first cell of each row. A row click opens the file in that row. The sort column, the sort direction, and the selected file survive a search, a status filter, an import, an analysis, and a write.
+  - The new `unsorted_rows_placement` setting places the rows without a value for the sorted column. The setting holds `first` or `last`. The General tab of the Settings dialog holds the choice. The rows form one group that moves with the sort direction. A BPM that is not a finite number, such as `NaN`, counts as no value.
+  - `src/infiniteprep/ui/table_sort.py` holds the typed sort keys and the row order. `tests/unit/test_ui_library_table_sort.py` and `tests/unit/test_ui_unsorted_rows_placement.py` cover the sort of every column, the selection, the refresh, and the setting.
 
 - Library storage supports named playlists, crates, and nested folders (issue 139).
   - Playlists keep track order and support optional repeats. Crates contain unique tracks.
@@ -55,7 +64,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The agent policy security section goes away. The file ends with the disclosure policy.
   - `docs/agent-policy/security.md` points at `SECURITY.md` instead of `SECURITY.md.example`.
   - `docs/template-drift.md` records both divergences from the source template.
-  - The version advances to 0.63.3. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+  - The version advances to 0.64.1. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 - `tests/test_release_workflow.py` reads the release job permissions and the package count from `packaging/release.py` (D355). `test_release_gathers_every_package_and_writes_checksums` replaces the six-package test name.
 - `tests/test_release_review_fixes.py` reads the package and bundle names from `expected_packages` and `expected_bundles` (D355). `PACKAGES`, `BUNDLES`, and `PACKAGES_AND_BUNDLES` replace the literal six-name lists. Two test names drop the counts six and twelve.
 
@@ -63,7 +72,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The theme picker changes the app in a packaged build (issue 247).
   - The packaged app shipped without the `qt-material` package. Every theme choice fell back to the native look. The picker showed a theme that the app never applied.
-  - `infiniteprep.spec` now names `qt_material` as a hidden import and points PyInstaller at `packaging/pyinstaller_hooks/`. The new `hook_qt_material.py` keeps the two theme files, the style sheet template, and the icon sources next to the package in every bundle.
+  - `infiniteprep.spec` now names `qt_material` as a hidden import and points PyInstaller at `packaging/pyinstaller_hooks/`. The new `hook-qt_material.py` keeps the two theme files, the style sheet template, and the icon sources next to the package in every bundle.
   - The Windows, macOS, and Linux bundle allowlists name the theme data, the Qt interface loader binding that the theme package imports, and the MarkupSafe extension that its template engine uses.
   - The Roboto fonts ship beside the theme files in every bundle. The theme package does not ship the license text for the fonts. The bundle carries a pinned copy of the Apache-2.0 text next to the font files.
 - MP3, FLAC, WAV, and AIFF tag writes verify the audio payload with SHA-256 (issue 131).

@@ -16,7 +16,11 @@ from PySide6.QtWidgets import (
 
 from infiniteprep import storage_paths
 from infiniteprep.config.credentials import CredentialStore
-from infiniteprep.config.settings import AppSettings, SettingsManager
+from infiniteprep.config.settings import (
+    UNSORTED_PLACEMENT_FIRST,
+    AppSettings,
+    SettingsManager,
+)
 from infiniteprep.data_cleanup import CleanupChoice, data_folders
 from infiniteprep.storage_paths import StorageLocations
 from infiniteprep.ui.cleanup_dialog import CleanupDialog
@@ -95,7 +99,8 @@ class SettingsDialog(QDialog):
         # Settings from an older file can lack a theme. This module resolves the
         # fallback theme and passes the result to the General tab.
         theme = getattr(settings, "theme", DEFAULT_DARK_THEME)
-        self.general_tab = GeneralTab(theme)
+        placement = getattr(settings, "unsorted_rows_placement", UNSORTED_PLACEMENT_FIRST)
+        self.general_tab = GeneralTab(theme, unsorted_placement=placement)
         self.playback_tab = PlaybackTab()
         self.analysis_tab = AnalysisTab(settings)
         self.transcode_tab = TranscodeTab(settings)
@@ -115,6 +120,7 @@ class SettingsDialog(QDialog):
     def _expose_tab_widgets(self) -> None:
         """Keep the single-form widget attributes as references to the tab widgets."""
         self.theme_combo = self.general_tab.theme_combo
+        self.unsorted_rows_placement_combo = self.general_tab.unsorted_rows_placement_combo
         self.stop_on_failure_checkbox = self.analysis_tab.stop_on_failure_checkbox
         self.fake_lossless_method_combo = self.analysis_tab.fake_lossless_method_combo
         self.transcode_mode_combo = self.transcode_tab.transcode_mode_combo

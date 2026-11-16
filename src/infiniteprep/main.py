@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any, Final
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QDialog
 
 from infiniteprep import storage_paths
 from infiniteprep.adapters.analyzers.local_dsp import LocalDspAnalyzer
@@ -109,6 +109,8 @@ def open_settings_dialog(window: MainWindow, repo: Repository) -> None:
         cleanup_enabled=not window.batch_queue.is_busy(),
     )
     dialog.exec()
+    if dialog.result() == QDialog.DialogCode.Accepted:
+        window.reload_settings()
     if dialog.cleanup_choice is not None:
         delete_data_and_quit(window, repo, dialog.cleanup_choice)
 
