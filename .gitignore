@@ -48,6 +48,7 @@ htmlcov/
 nosetests.xml
 coverage.xml
 coverage-files.txt
+coverage-summary.json
 coverage-summary.md
 *.cover
 *.py.cover

@@ -82,6 +82,11 @@ class CoverageMeasurementTest(unittest.TestCase):
         self.assertIn(UPLOAD_ARTIFACT, self.matrix)
         self.assertIn(f"name: {SUMMARY_ARTIFACT}", self.matrix)
 
+    def test_the_summary_document_comes_from_the_tested_script(self) -> None:
+        """The bounded summary document comes from the tested builder script."""
+        self.assertIn("scripts/build_coverage_summary.py", self.matrix)
+        self.assertIn("coverage-summary.json", self.matrix)
+
     def test_the_report_never_fails_the_pull_request(self) -> None:
         """The coverage number reports and never blocks."""
         self.assertNotIn("--fail-under", self.text)

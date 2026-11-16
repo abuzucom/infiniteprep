@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Cover the bounded coverage summary document that the pull request comment uses."""
+
+import json
+import shutil
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import build_coverage_summary as builder  # noqa: E402
+
+REPORT = """<?xml version="1.0" ?>
+<coverage line-rate="0.5" branch-rate="0.5" lines-covered="3" lines-valid="4"
+  branches-covered="1" branches-valid="2" version="7.17.3">
+  <packages>
+    <package name="src" line-rate="0.5" branch-rate="0.5">
+      <classes>
+        <class name="a.py" filename="src/a.py" line-rate="0.5" branch-rate="0.5">
+          <lines>
+            <line number="1" hits="1"/>
+            <line number="2" hits="0"/>
+          </lines>
+          <branches>
+            <branch number="1" type="if" condition-coverage="50% (1/2)"/>
+          </branches>
+        </class>
+        <class name="b.py" filename="src/b.py" line-rate="1.0" branch-rate="1.0">
+          <lines>
+            <line number="1" hits="3"/>
+          </lines>
+          <branches/>
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>
+"""
+
+
+class BuildCoverageSummaryTest(unittest.TestCase):
+    """Cover the summary document built from one coverage report."""
+
+    def test_the_total_uses_the_lines_and_the_branches(self) -> None:
+        """The total holds the covered lines and branches over the measured ones."""
+        summary = builder.read_summary(self.write_report(REPORT))
+
+        self.assertEqual(summary["total"], 66.7)
+
+    def test_the_files_carry_the_path_and_the_percent(self) -> None:
+        """Every file record holds its path and its percent."""
+        summary = builder.read_summary(self.write_report(REPORT))
+
+        files = summary["files"]
+        self.assertEqual(files[0], {"path": "src/a.py", "percent": 50.0})
+        self.assertEqual(files[1], {"path": "src/b.py", "percent": 100.0})
+
+    def test_the_least_covered_file_comes_first(self) -> None:
+        """The files sort by the percent and then by the path."""
+        summary = builder.read_summary(self.write_report(REPORT))
+
+        paths = [item["path"] for item in summary["files"]]
+        self.assertEqual(paths, ["src/a.py", "src/b.py"])
+
+    def test_the_file_list_stays_bounded(self) -> None:
+        """The document holds no more than the capped number of files."""
+        classes = "".join(
+            f'<class name="f{index}.py" filename="src/f{index}.py" line-rate="0.5">'
+            f'<lines><line number="1" hits="1"/></lines></class>'
+            for index in range(30)
+        )
+        report = (
+            '<coverage lines-covered="30" lines-valid="60" branches-covered="0" '
+            f'branches-valid="0"><packages><classes>{classes}</classes></packages></coverage>'
+        )
+
+        summary = builder.read_summary(self.write_report(report))
+
+        self.assertEqual(len(summary["files"]), builder.MAX_FILES)
+
+    def test_the_summary_writes_json(self) -> None:
+        """The command writes the summary document as JSON."""
+        with tempfile.TemporaryDirectory() as folder:
+            report_path = Path(folder) / "coverage.xml"
+            report_path.write_text(REPORT, encoding="utf-8")
+            output_path = Path(folder) / "coverage-summary.json"
+
+            code = builder.write_summary(report_path, output_path)
+
+            self.assertEqual(code, 0)
+            document = json.loads(output_path.read_text(encoding="utf-8"))
+            self.assertEqual(document["total"], 66.7)
+
+    def write_report(self, text: str) -> Path:
+        """Write one coverage report file and return its path."""
+        folder = Path(tempfile.mkdtemp())
+        self.addCleanup(_remove_tree, folder)
+        path = folder / "coverage.xml"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+
+def _remove_tree(folder: Path) -> None:
+    """Remove one temporary folder."""
+    shutil.rmtree(folder, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    unittest.main()
