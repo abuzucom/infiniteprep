@@ -5,9 +5,18 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.70.0] (2026-11-16)
+## [0.71.0] (2026-11-16)
 
 ### Added
+
+- The Microsoft Security DevOps scan reports its result as a pull request comment.
+  - The new `scan-comment` job in `.github/workflows/security-devops.yml` posts the comment after a passed scan and after a failed scan. A passed scan with no finding still gets a comment.
+  - The comment holds the result, the finding total, the findings by tool, and a link to the workflow run. The job updates the comment on every push and removes a second comment from the bot.
+  - The new `scripts/build_security_scan_summary.py` builds a bounded JSON document from the SARIF report. The comment job validates the document before it posts and builds the Markdown itself.
+  - The scan job holds no pull request permission. The comment job holds `pull-requests: write` and checks out nothing.
+  - A light change runs no scan and gets no new comment. The job skips a pull request from a fork.
+  - `tests/test_build_security_scan_summary.py` covers the builder. `tests/test_security_scan_comment.py` covers the wiring and runs the comment script under Node against a stubbed API.
+  - The version advances from 0.70.0 to 0.71.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - The pull request checks report the code coverage of the application.
   - The Ubuntu leg of the test matrix runs the suite under `coverage run -m pytest`. The report costs no second suite run. The other legs run the plain suite.
