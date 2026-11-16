@@ -122,6 +122,20 @@ class CoverageCommentJobTest(unittest.TestCase):
         self.assertIn(GITHUB_SCRIPT, self.job)
         self.assertIn(COMMENT_MARKER, self.job)
 
+    def test_the_comment_search_pages_through_every_comment(self) -> None:
+        """The search reads every comment, not only the first page."""
+        self.assertIn("github.paginate(github.rest.issues.listComments", self.job)
+
+    def test_the_comment_search_only_takes_the_bot_comment(self) -> None:
+        """A comment from another author never becomes the bot comment."""
+        self.assertIn("github-actions[bot]", self.job)
+        self.assertIn("comment.user?.login === botLogin", self.job)
+
+    def test_the_comment_search_requires_the_marker_at_the_start(self) -> None:
+        """A comment that only mentions the marker never becomes the bot comment."""
+        self.assertIn("comment.body.startsWith(marker)", self.job)
+        self.assertNotIn("comment.body.includes(marker)", self.job)
+
     def test_the_job_runs_only_on_a_pull_request(self) -> None:
         """The job stays out of the way on a push to main."""
         self.assertIn("github.event_name == 'pull_request'", self.job)
