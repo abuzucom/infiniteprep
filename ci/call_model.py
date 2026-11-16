@@ -85,6 +85,9 @@ REPORT_FORMAT_SUFFIX = (
     "no code fence, and no other character between the two lines, and no "
     "line after the JSON object.\n"
 )
+MAX_MODEL_NAME_CHARS = 200
+# Output budget for a profile without max_output_tokens.
+DEFAULT_MAX_OUTPUT_TOKENS = 8192
 
 
 class ProviderError(RuntimeError):
@@ -149,7 +152,7 @@ def _load_profile(provider_name: str | None = None) -> dict[str, Any]:
         raise ProviderError("provider protocol is not allowlisted")
     if not isinstance(endpoint, str) or not isinstance(model, str) or not model:
         raise ProviderError("provider profile is incomplete")
-    if len(model) > 200 or any(ord(character) < 32 for character in model):
+    if len(model) > MAX_MODEL_NAME_CHARS or any(ord(character) < 32 for character in model):
         raise ProviderError("provider model is invalid")
     profile = dict(profile)
     normalized_endpoint = _validate_endpoint(endpoint)
@@ -167,6 +170,14 @@ def _input_budget(profile: dict[str, Any]) -> int | None:
         return None
     if not isinstance(budget, int) or isinstance(budget, bool) or budget < 1:
         raise ProviderError("provider max_input_tokens is invalid")
+    return budget
+
+
+def _output_budget(profile: dict[str, Any]) -> int:
+    """Return the profile's output token budget, or the default when unset."""
+    budget = profile.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
+    if not isinstance(budget, int) or isinstance(budget, bool) or budget < 1:
+        raise ProviderError("provider max_output_tokens is invalid")
     return budget
 
 
@@ -232,7 +243,7 @@ def _build_request(profile: dict[str, Any], system_prompt: str,
                    case_text: str, api_key: str) -> Request:
     protocol = profile["protocol"]
     model = profile["model"]
-    max_tokens = profile.get("max_output_tokens", 8192)
+    max_tokens = _output_budget(profile)
     messages = _message_payload(system_prompt, case_text)
     if protocol == "ollama":
         url = f"{profile['endpoint']}/chat"
