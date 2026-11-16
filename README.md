@@ -52,6 +52,7 @@ These modules exist under `src/infiniteprep/` with tests. The desktop launcher a
   Playlist sorting uses key and BPM. One undo restores the prior order across restarts.
 - Chromaprint (`fpcalc`) and AcoustID fingerprinting, with the consent-gated, SHA-256 verified `FpcalcBootstrapService` for Windows and macOS.
 - MusicBrainz (`ws/2`) and Discogs adapters with rate limits of 1 request per second and 60 requests per minute, plus a SQLite TTL response cache.
+- The iTunes Search adapter supplies a coarse genre and a release-date fallback. It waits 3 seconds between calls, caches each response for 24 hours, keeps no artwork from the response, and refuses a row that does not match the artist and the title.
 - Closed-world LLM arbitration through Ollama or an OpenAI-compatible endpoint. `ClosedWorldValidator` limits the model to the supplied candidates. `OllamaBootstrapService` requires explicit consent.
 - `ArtworkService` normalizes cover art to a baseline JPEG of at most 800 by 800 pixels.
 
@@ -224,7 +225,8 @@ Click **Settings & Providers**. The dialog holds one tab per area:
   relative to the playlist**, on by default, for playlist export.
 - **Identification:** the AcoustID API key, the Discogs personal token, the
   closed-world LLM toggle, the Ollama or OpenAI-compatible base URL, and the
-  model.
+  model. The tab also names the host and the query data of every external
+  lookup.
 - **Storage:** the USB export reserve as a percentage and in MiB, and the
   application data cleanup action.
 - **Playback** and **Updates** hold no settings yet.
@@ -242,6 +244,18 @@ keyring fails. Environment variables override the keyring:
 | LLM API key | `INFINITEPREP_LLM_API_KEY` |
 
 Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
+
+### Data sent to iTunes Search
+
+The iTunes Search adapter sends the artist name and the track title as the
+search term, the storefront country, the client IP address, and the shared
+User-Agent to `itunes.apple.com`. The endpoint is a published constant, and the
+adapter follows no redirect. The adapter keeps no artwork from the response, and
+the shared cache holds no artwork either. Apple limits promotional content,
+album art included, to promoting store content.
+
+Live identification runs the adapter once INFRA-5 lands. The adapter has no
+caller before that.
 
 ## Usage Walkthrough
 
