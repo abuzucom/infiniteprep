@@ -16,7 +16,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The HTML report and the XML report go into artifacts with a three-day retention.
   - The `coverage==7.17.3` development dependency carries the Apache-2.0 license. It stays out of the runtime dependencies and out of the app bundle.
   - The report never fails a pull request. No coverage threshold applies.
-  - The version advances from 0.67.0 to 0.68.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.67.1 to 0.68.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - USB exports persist `.infiniteprep/manifest.in-progress.json` and `.infiniteprep/manifest.json` with a canonical SHA-256 `My Tags` digest (D116 to D121, D139 to D148, D179, D200, issue 157). The computer-side recovery journal at `usb_recovery_journal.json` matches reconnecting USB drives and gates changed paths behind confirmation (D166, D191, D192, issue 157). `UsbRecoveryDialog` offers Resume, Restore, and Leave unchanged actions with plain-text drive labels. `StorageTab` adds 30-day expiry settings, 1-day advance warning notices, launch overdue cleanup notices, and manual journal cleanup (D193 to D198, issue 157). The version advances from 0.65.1 to 0.66.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Written key tags use Camelot, Open Key, or Standard notation (issue 128).
@@ -55,6 +55,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Hardened USB recovery journal launch and Storage settings cleanup against corrupt or unreadable journal files while preserving data on disk. Preserved resolved recovery records across expiry and manual cleanup, added bounded durable cleanup history records, confined journal parent directories under the storage root, and normalized manifest and journal timestamps to UTC. The version advances from 0.67.0 to 0.67.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The theme picker changes the app in a packaged build (issue 247).
   - The packaged app shipped without the `qt-material` package. Every theme choice fell back to the native look. The picker showed a theme that the app never applied.
   - `infiniteprep.spec` now names `qt_material` as a hidden import and points PyInstaller at `packaging/pyinstaller_hooks/`. The new `hook-qt_material.py` keeps the two theme files, the style sheet template, and the icon sources next to the package in every bundle.

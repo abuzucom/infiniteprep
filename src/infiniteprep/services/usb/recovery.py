@@ -13,8 +13,12 @@ from typing import Final
 
 from infiniteprep import storage_paths
 from infiniteprep.services.usb._shared import (
+    MAX_USB_JSON_BYTES,
     is_symlink_or_reparse_point,
-    read_bounded_json_file,
+    normalize_iso_utc,
+    open_confined_directory_context,
+    parse_utc_datetime,
+    read_confined_dir_json_text,
     write_json_atomic,
 )
 from infiniteprep.services.usb.manifest import (
@@ -35,6 +39,7 @@ MIN_RECOVERY_EXPIRY_DAYS: Final[int] = 1
 MAX_RECOVERY_EXPIRY_DAYS: Final[int] = 365
 EXPIRY_WARNING_LEAD_DAYS: Final[int] = 1
 JOURNAL_SCHEMA_VERSION: Final[int] = 1
+MAX_CLEANUP_HISTORY_RECORDS: Final[int] = 100
 JOURNAL_FILE_NAME: Final[str] = "usb_recovery_journal.json"
 
 
@@ -93,6 +98,17 @@ class UsbExpiryScanResult:
     warning_entries: tuple[UsbJournalEntry, ...]
     expired_deleted_entries: tuple[UsbJournalEntry, ...]
     overdue_notice_entries: tuple[UsbJournalEntry, ...]
+
+
+@dataclass(frozen=True)
+class UsbCleanupRecord:
+    """Durable audit entry recorded when expiry or manual cleanup deletes journal data."""
+
+    export_id: str
+    started_at_utc: str
+    mount_point: str
+    deleted_at_utc: str
+    reason: str
 
 
 def _default_journal_path() -> Path:
@@ -179,8 +195,8 @@ def _entry_from_dict(raw: object) -> UsbJournalEntry:
     if not isinstance(raw, Mapping):
         raise ValueError("Each USB recovery journal entry must be an object.")
     export_id = _require_journal_str(raw.get("export_id"), "export_id")
-    started_at = _require_journal_str(raw.get("started_at_utc"), "started_at_utc")
-    _parse_utc_timestamp(started_at)
+    raw_started = _require_journal_str(raw.get("started_at_utc"), "started_at_utc")
+    started_at = normalize_iso_utc(raw_started, "started_at_utc")
     volume_uuid = _require_journal_str(raw.get("volume_uuid"), "volume_uuid", allow_empty=True)
     mount_point = _require_journal_str(raw.get("mount_point"), "mount_point")
     scope = ExportScope(_require_journal_str(raw.get("scope"), "scope"))
@@ -207,6 +223,38 @@ def _entry_to_dict(entry: UsbJournalEntry) -> dict[str, object]:
     data = asdict(entry)
     data["scope"] = entry.scope.value
     return data
+
+
+def _cleanup_record_from_dict(raw: object) -> UsbCleanupRecord:
+    """Deserialize one durable cleanup audit record from journal JSON."""
+    if not isinstance(raw, Mapping):
+        raise ValueError("Each USB recovery cleanup record must be an object.")
+    return UsbCleanupRecord(
+        export_id=_require_journal_str(raw.get("export_id"), "cleanup.export_id"),
+        started_at_utc=normalize_iso_utc(
+            _require_journal_str(raw.get("started_at_utc"), "cleanup.started_at_utc"),
+            "cleanup.started_at_utc",
+        ),
+        mount_point=_require_journal_str(raw.get("mount_point"), "cleanup.mount_point"),
+        deleted_at_utc=normalize_iso_utc(
+            _require_journal_str(raw.get("deleted_at_utc"), "cleanup.deleted_at_utc"),
+            "cleanup.deleted_at_utc",
+        ),
+        reason=_require_journal_str(raw.get("reason"), "cleanup.reason"),
+    )
+
+
+def _build_cleanup_record(
+    entry: UsbJournalEntry, deleted_at_utc: datetime, reason: str
+) -> UsbCleanupRecord:
+    """Build a bounded audit record describing an expired or removed journal entry."""
+    return UsbCleanupRecord(
+        export_id=entry.export_id,
+        started_at_utc=normalize_iso_utc(entry.started_at_utc, "started_at_utc"),
+        mount_point=entry.mount_point,
+        deleted_at_utc=deleted_at_utc.astimezone(UTC).isoformat().replace("+00:00", "Z"),
+        reason=reason,
+    )
 
 
 def _has_matching_in_progress_marker(mount_points: tuple[str, ...], export_id: str) -> bool:
@@ -256,10 +304,7 @@ def _match_entry_against_inspection(
 
 def _parse_utc_timestamp(value: str) -> datetime:
     """Parse an ISO-8601 UTC timestamp string into a UTC-aware datetime."""
-    parsed = datetime.fromisoformat(value)
-    if parsed.tzinfo is None:
-        raise ValueError("Journal timestamp must carry a timezone offset.")
-    return parsed.astimezone(UTC)
+    return parse_utc_datetime(value, "started_at_utc")
 
 
 def _classify_expiry(
@@ -338,20 +383,66 @@ def _validate_reconnect_mount_root(match: UsbReconnectMatch, mount_root: Path) -
         raise ValueError("Target mount path does not match the reconnected candidate drive.")
 
 
+def _partition_cleanup_targets(
+    entries: Sequence[UsbJournalEntry],
+    export_ids: Sequence[str] | None,
+) -> tuple[list[UsbJournalEntry], list[UsbJournalEntry]]:
+    """Select unresolved journal entries for manual cleanup while keeping resolved history."""
+    target_ids = None if export_ids is None else set(export_ids)
+    removed: list[UsbJournalEntry] = []
+    remaining: list[UsbJournalEntry] = []
+    for entry in entries:
+        is_resolved = entry.last_recovery_action in _RESOLVED_RECOVERY_ACTIONS
+        matches_target = target_ids is None or entry.export_id in target_ids
+        if not is_resolved and matches_target:
+            removed.append(entry)
+        else:
+            remaining.append(entry)
+    return removed, remaining
+
+
 class UsbRecoveryJournalStore:
     """Reads, updates, matches, and expires computer-side USB export journal entries."""
 
-    def __init__(self, journal_path: Path | None = None) -> None:
-        """Initialize the store with an explicit path or default data folder file."""
-        self.journal_path = journal_path if journal_path is not None else _default_journal_path()
+    def __init__(
+        self,
+        journal_path: Path | None = None,
+        *,
+        allowed_root: Path | None = None,
+    ) -> None:
+        """Initialize the store with a path confined under allowed_root or data_dir."""
+        default_root = storage_paths.current().data_dir
+        if journal_path is None:
+            self.journal_path = default_root / JOURNAL_FILE_NAME
+            self._allowed_root = allowed_root if allowed_root is not None else default_root
+            return
+        self.journal_path = journal_path
+        self._allowed_root = allowed_root if allowed_root is not None else journal_path.parent
 
-    def load_entries(self) -> list[UsbJournalEntry]:
-        """Load persisted journal entries from disk, returning empty when absent."""
-        if is_symlink_or_reparse_point(self.journal_path):
-            raise ValueError(f"Refusing symlink JSON file: {self.journal_path}")
-        if not self.journal_path.exists():
-            return []
-        raw = json.loads(read_bounded_json_file(self.journal_path))
+    def _load_journal_state(self) -> tuple[list[UsbJournalEntry], list[UsbCleanupRecord]]:
+        """Load persisted entries and bounded cleanup history through confined handles."""
+        with open_confined_directory_context(
+            self.journal_path.parent, self._allowed_root, create=False
+        ) as opened:
+            if opened is None:
+                return [], []
+            resolved_dir, dir_fd = opened
+            if is_symlink_or_reparse_point(resolved_dir / self.journal_path.name):
+                raise ValueError(f"Refusing symlink JSON file: {self.journal_path}")
+            content = read_confined_dir_json_text(
+                resolved_dir,
+                self.journal_path.name,
+                dir_fd=dir_fd,
+                max_bytes=MAX_USB_JSON_BYTES,
+            )
+        if content is None:
+            return [], []
+        return self._parse_journal_payload(json.loads(content))
+
+    def _parse_journal_payload(
+        self, raw: object
+    ) -> tuple[list[UsbJournalEntry], list[UsbCleanupRecord]]:
+        """Validate parsed journal JSON root, schema version, entries, and cleanup history."""
         if not isinstance(raw, Mapping):
             raise ValueError("USB recovery journal root must be a JSON object.")
         version = raw.get("version", JOURNAL_SCHEMA_VERSION)
@@ -364,20 +455,51 @@ class UsbRecoveryJournalStore:
         items = raw.get("entries", [])
         if not isinstance(items, list):
             raise ValueError("USB recovery journal 'entries' must be a list.")
-        return [_entry_from_dict(item) for item in items]
+        history_raw = raw.get("cleanup_history", [])
+        if not isinstance(history_raw, list):
+            raise ValueError("USB recovery journal 'cleanup_history' must be a list.")
+        entries = [_entry_from_dict(item) for item in items]
+        history = [_cleanup_record_from_dict(item) for item in history_raw]
+        return entries, history
 
-    def save_entries(self, entries: Sequence[UsbJournalEntry]) -> None:
-        """Persist journal entries atomically to disk."""
+    def _save_journal_state(
+        self,
+        entries: Sequence[UsbJournalEntry],
+        cleanup_history: Sequence[UsbCleanupRecord],
+    ) -> None:
+        """Persist journal entries and bounded cleanup history atomically under allowed_root."""
+        bounded_history = list(cleanup_history)[-MAX_CLEANUP_HISTORY_RECORDS:]
         payload: dict[str, object] = {
             "version": JOURNAL_SCHEMA_VERSION,
             "entries": [_entry_to_dict(entry) for entry in entries],
+            "cleanup_history": [asdict(record) for record in bounded_history],
         }
-        write_json_atomic(
-            self.journal_path.parent,
-            self.journal_path.name,
-            payload,
-            reject_target_symlink=True,
-        )
+        with open_confined_directory_context(
+            self.journal_path.parent, self._allowed_root, create=True
+        ) as opened:
+            assert opened is not None
+            resolved_dir, dir_fd = opened
+            write_json_atomic(
+                resolved_dir,
+                self.journal_path.name,
+                payload,
+                dir_fd=dir_fd,
+                create_parent=False,
+                reject_target_symlink=True,
+            )
+
+    def load_entries(self) -> list[UsbJournalEntry]:
+        """Load persisted journal entries from disk, returning empty when absent."""
+        return self._load_journal_state()[0]
+
+    def load_cleanup_history(self) -> list[UsbCleanupRecord]:
+        """Load durable cleanup audit records retained inside the journal."""
+        return self._load_journal_state()[1]
+
+    def save_entries(self, entries: Sequence[UsbJournalEntry]) -> None:
+        """Persist journal entries atomically to disk while preserving cleanup history."""
+        _, existing_history = self._load_journal_state()
+        self._save_journal_state(entries, existing_history)
 
     def start_export(
         self, entry: UsbJournalEntry, mount_root: Path, manifest: UsbExportManifest
@@ -495,39 +617,46 @@ class UsbRecoveryJournalStore:
         expiry_delta: timedelta,
         at_launch: bool,
     ) -> UsbExpiryScanResult:
-        """Partition journal entries by warning, expiry, or launch overdue cleanup."""
+        """Partition unresolved entries by warning, expiry, or launch overdue cleanup."""
+        entries, history = self._load_journal_state()
         warnings: list[UsbJournalEntry] = []
         expired: list[UsbJournalEntry] = []
         overdue: list[UsbJournalEntry] = []
         remaining: list[UsbJournalEntry] = []
-        for entry in self.load_entries():
+        for entry in entries:
+            if entry.last_recovery_action in _RESOLVED_RECOVERY_ACTIONS:
+                remaining.append(entry)
+                continue
             outcome = _classify_expiry(entry, now_utc, warning_delta, expiry_delta, at_launch)
             if outcome == "overdue":
                 overdue.append(entry)
+                history.append(_build_cleanup_record(entry, now_utc, "overdue"))
                 continue
             if outcome == "expired":
                 expired.append(entry)
+                history.append(_build_cleanup_record(entry, now_utc, "expired"))
                 continue
             if outcome == "warn":
                 entry.warned_expiry = True
                 warnings.append(entry)
             remaining.append(entry)
         if warnings or expired or overdue:
-            self.save_entries(remaining)
+            self._save_journal_state(remaining, history)
         return UsbExpiryScanResult(tuple(warnings), tuple(expired), tuple(overdue))
 
     def cleanup_unresolved(
         self,
         export_ids: Sequence[str] | None = None,
+        *,
+        now_utc: datetime | None = None,
     ) -> tuple[UsbJournalEntry, ...]:
-        """Remove targeted or all unresolved recovery journal entries manually (D193)."""
-        entries = self.load_entries()
-        if export_ids is None:
-            self.save_entries([])
-            return tuple(entries)
-        target_ids = set(export_ids)
-        removed = [entry for entry in entries if entry.export_id in target_ids]
-        remaining = [entry for entry in entries if entry.export_id not in target_ids]
-        if removed:
-            self.save_entries(remaining)
+        """Remove targeted or all unresolved entries while preserving resolved history."""
+        entries, history = self._load_journal_state()
+        removed, remaining = _partition_cleanup_targets(entries, export_ids)
+        if not removed:
+            return ()
+        deleted_at = (now_utc or datetime.now(UTC)).astimezone(UTC)
+        for entry in removed:
+            history.append(_build_cleanup_record(entry, deleted_at, "manual"))
+        self._save_journal_state(remaining, history)
         return tuple(removed)
