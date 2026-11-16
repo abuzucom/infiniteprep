@@ -23,7 +23,7 @@ pluggy==1.7.0
 pycparser==3.12
 Pygments==2.21.0
 pyinstaller==6.22.3
-pyinstaller-hooks-contrib==2026.9
+pyinstaller-hooks-contrib==2026.10
 PySide6==6.12.0
 PySide6_Addons==6.12.0
 PySide6_Essentials==6.12.0
