@@ -135,6 +135,8 @@ _internal/PySide6/translations/*.qm
 
 # qt-material theme data and the MarkupSafe extension its template engine uses
 _internal/markupsafe/_speedups.cp312-win_amd64.pyd
+_internal/qt_material/fonts/roboto/Apache-2.0.txt
+_internal/qt_material/fonts/roboto/*.ttf
 _internal/qt_material/material.qss.template
 _internal/qt_material/resources/source/*.svg
 _internal/qt_material/themes/dark_teal.xml

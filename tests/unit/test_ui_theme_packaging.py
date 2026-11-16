@@ -65,6 +65,21 @@ def test_the_hook_collects_the_theme_files_the_template_and_the_icons() -> None:
     assert any(name.endswith(".template") for name in sources)
 
 
+def test_the_hook_collects_the_roboto_fonts_and_their_license_text() -> None:
+    """The hook keeps the Roboto fonts and the Apache license text beside them."""
+    hook = load_hook_module()
+    fonts = [
+        (source, destination)
+        for source, destination in hook.datas
+        if destination == "qt_material/fonts/roboto"
+    ]
+
+    font_files = [Path(source).name for source, _destination in fonts]
+    assert "Roboto-Regular.ttf" in font_files
+    assert "Apache-2.0.txt" in font_files
+    assert all(name.endswith(".ttf") or name == "Apache-2.0.txt" for name in font_files)
+
+
 @pytest.mark.parametrize(
     ("operating_system", "expected"),
     [
@@ -116,6 +131,8 @@ def test_each_bundle_allowlist_names_the_theme_payload(
         assert f"_internal/qt_material/themes/{theme_file}" in entries
     assert "_internal/qt_material/material.qss.template" in entries
     assert "_internal/qt_material/resources/source/*.svg" in entries
+    assert "_internal/qt_material/fonts/roboto/*.ttf" in entries
+    assert "_internal/qt_material/fonts/roboto/Apache-2.0.txt" in entries
 
 
 def test_the_theme_packages_stay_pinned_to_the_approved_versions() -> None:

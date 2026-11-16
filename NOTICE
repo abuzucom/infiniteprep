@@ -35,6 +35,7 @@ Audio decoding and analysis
 Other runtime dependencies
 - keyring 25.7.0 and platformdirs 4.14.2: MIT.
 - qt-material 2.14: BSD-2-Clause.
+- Roboto fonts, inside qt-material: Apache-2.0. The license text ships beside the fonts.
 - Jinja2 3.1.6 and MarkupSafe 3.0.2: BSD-3-Clause.
 
 Optional separate download
