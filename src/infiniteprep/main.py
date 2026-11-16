@@ -58,6 +58,7 @@ from infiniteprep.ui.storage_prompt import (
 )
 from infiniteprep.ui.theme import NATIVE_THEME, switch_application_theme
 from infiniteprep.ui.usb_recovery_dialog import (
+    format_clock_suspect_text,
     format_expiry_warning_text,
     format_overdue_cleanup_text,
 )
@@ -251,6 +252,8 @@ def process_usb_recovery_at_launch(
             expiry_days=active_settings.usb_recovery_expiry_days,
         )
         notify("USB Recovery Expiring Soon", warning_text)
+    if scan.clock_suspect_entries:
+        notify("USB Recovery Clock Check", format_clock_suspect_text(scan.clock_suspect_entries))
     return scan
 
 
