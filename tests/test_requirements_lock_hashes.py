@@ -4,6 +4,10 @@ The application lockfile pins every package to an exact version and to the
 SHA-256 digest of each artifact PyPI publishes for that release. The CI jobs
 install the file in pip's hash-checking mode, so a substituted artifact fails
 the install instead of reaching the build.
+
+The file uses the unittest style of the other top-level tests. The policy
+suite discovers the top-level test tree with unittest, and the OS probe jobs
+install the checker requirements alone.
 """
 
 from __future__ import annotations
@@ -13,10 +17,11 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import unittest
 import zipfile
 from pathlib import Path
 
-import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -34,11 +39,11 @@ UPGRADED_VERSION = "2026.10"
 class LockEntry:
     """One requirement entry of a lockfile with its digests."""
 
-    def __init__(self, name: str, version: str, digests: list[str]) -> None:
-        """Record the requirement and the digests that follow it."""
+    def __init__(self, name: str, version: str) -> None:
+        """Record the requirement. The digests follow it."""
         self.name = name
         self.version = version
-        self.digests = digests
+        self.digests: list[str] = []
 
 
 def read_lock_entries(path: Path) -> list[LockEntry]:
@@ -61,69 +66,11 @@ def read_lock_entries(path: Path) -> list[LockEntry]:
             continue
         pin_match = PIN_PATTERN.match(line)
         assert pin_match is not None, f"unparsed lockfile line: {raw_line!r}"
-        entries.append(LockEntry(pin_match.group(1), pin_match.group(2), []))
+        entries.append(LockEntry(pin_match.group(1), pin_match.group(2)))
     return entries
 
 
-def test_every_application_pin_carries_artifact_digests() -> None:
-    """Each pinned package names the digests of the artifacts it may install."""
-    entries = read_lock_entries(LOCKFILE)
-    assert entries
-    for entry in entries:
-        assert entry.digests, f"{entry.name} pins no artifact digest"
-
-
-def test_every_artifact_digest_is_a_sha256_hex_value() -> None:
-    """Each digest names a SHA-256 value in lowercase hexadecimal."""
-    for entry in read_lock_entries(LOCKFILE):
-        for digest in entry.digests:
-            assert len(digest) == 64
-            assert digest == digest.lower()
-            assert all(character in "0123456789abcdef" for character in digest)
-
-
-def test_the_upgraded_package_pins_its_release_with_digests() -> None:
-    """The upgraded application dependency names its release and its digests."""
-    entries = {entry.name: entry for entry in read_lock_entries(LOCKFILE)}
-    upgraded = entries[UPGRADED_PACKAGE]
-    assert upgraded.version == UPGRADED_VERSION
-    assert upgraded.digests
-
-
-def test_the_two_lockfiles_lock_separate_environments() -> None:
-    """A package that both lockfiles name carries the same version in both."""
-    application = {entry.name: entry.version for entry in read_lock_entries(LOCKFILE)}
-    sbom = {entry.name: entry.version for entry in read_lock_entries(SBOM_LOCKFILE)}
-    assert application
-    assert sbom
-    assert not set(application) <= set(sbom)
-    for name in set(application) & set(sbom):
-        assert application[name] == sbom[name], f"{name} differs between the lockfiles"
-
-
-def test_ci_installs_the_application_lock_in_hash_checking_mode() -> None:
-    """The CI jobs verify the artifact digests of the application lockfile."""
-    ci_text = CI_WORKFLOW.read_text(encoding="utf-8")
-    assert "pip install --require-hashes -r requirements-lock.txt" in ci_text
-    assert "pip install --require-hashes --constraint requirements-lock.txt" in ci_text
-
-
-def test_the_bundle_job_installs_the_application_lock_in_hash_checking_mode() -> None:
-    """The bundle job verifies the artifact digests of the application lockfile."""
-    bundle_text = BUNDLE_WORKFLOW.read_text(encoding="utf-8")
-    assert "pip install --require-hashes -r requirements-lock.txt" in bundle_text
-
-
-def test_the_bundle_job_installs_the_sbom_lock_in_hash_checking_mode() -> None:
-    """The bundle job verifies the artifact digests of the SBOM lockfile."""
-    bundle = yaml.safe_load(BUNDLE_WORKFLOW.read_text(encoding="utf-8"))
-    steps = bundle["jobs"]["bundle"]["steps"]
-    sbom_step = next(step for step in steps if step.get("name") == "Generate Python SBOM")
-    assert "--require-hashes" in sbom_step["run"]
-    assert "requirements-sbom.txt" in sbom_step["run"]
-
-
-def _wheel_for_release(directory: Path, name: str, version: str) -> Path:
+def write_wheel(directory: Path, name: str, version: str) -> Path:
     """Write a wheel of the given release into a directory and return its path."""
     wheel_name = f"{name}-{version}-py3-none-any.whl"
     wheel_path = directory / wheel_name
@@ -142,20 +89,11 @@ def _wheel_for_release(directory: Path, name: str, version: str) -> Path:
     return wheel_path
 
 
-@pytest.mark.skipif(shutil.which(sys.executable) is None, reason="needs a Python interpreter")
-def test_pip_rejects_an_artifact_whose_digest_is_not_committed(tmp_path: Path) -> None:
-    """A substituted artifact fails the install under hash-checking mode.
-
-    The check runs pip against a local wheel, so it needs no network access.
-    pip selects the local artifact and refuses the download because no
-    committed digest matches its bytes.
-    """
-    wheels = tmp_path / "wheels"
-    wheels.mkdir()
-    _wheel_for_release(wheels, "sample", "1.0")
-    requirement = tmp_path / "requirement.txt"
-    requirement.write_text(f"sample==1.0 \\\n    --hash=sha256:{'0' * 64}\n", encoding="utf-8")
-    result = subprocess.run(
+def run_pip_install(
+    requirement: Path, wheels: Path, target: Path
+) -> subprocess.CompletedProcess[str]:
+    """Install a requirement from a local wheel directory and return the result."""
+    return subprocess.run(
         [
             sys.executable,
             "-m",
@@ -165,7 +103,7 @@ def test_pip_rejects_an_artifact_whose_digest_is_not_committed(tmp_path: Path) -
             "--find-links",
             str(wheels),
             "--target",
-            str(tmp_path / "target"),
+            str(target),
             "--require-hashes",
             "-r",
             str(requirement),
@@ -176,37 +114,99 @@ def test_pip_rejects_an_artifact_whose_digest_is_not_committed(tmp_path: Path) -
         errors="replace",
         check=False,
     )
-    assert result.returncode != 0
-    assert "hash" in (result.stdout + result.stderr).lower()
 
 
-def test_pip_accepts_an_artifact_whose_digest_is_committed(tmp_path: Path) -> None:
-    """The committed digest lets the matching artifact install."""
-    wheels = tmp_path / "wheels"
-    wheels.mkdir()
-    wheel = _wheel_for_release(wheels, "sample", "1.0")
-    digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
-    requirement = tmp_path / "requirement.txt"
-    requirement.write_text(f"sample==1.0 \\\n    --hash=sha256:{digest}\n", encoding="utf-8")
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "--no-index",
-            "--find-links",
-            str(wheels),
-            "--target",
-            str(tmp_path / "target"),
-            "--require-hashes",
-            "-r",
-            str(requirement),
-        ],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
+class ApplicationLockHashesTest(unittest.TestCase):
+    """Keep the application lockfile pinned to artifact digests."""
+
+    def test_every_application_pin_carries_artifact_digests(self) -> None:
+        """Each pinned package names the digests of the artifacts it may install."""
+        entries = read_lock_entries(LOCKFILE)
+        self.assertTrue(entries)
+        for entry in entries:
+            self.assertTrue(entry.digests, f"{entry.name} pins no artifact digest")
+
+    def test_every_artifact_digest_is_a_sha256_hex_value(self) -> None:
+        """Each digest names a SHA-256 value in lowercase hexadecimal."""
+        for entry in read_lock_entries(LOCKFILE):
+            for digest in entry.digests:
+                self.assertEqual(len(digest), 64)
+                self.assertEqual(digest, digest.lower())
+                self.assertTrue(all(character in "0123456789abcdef" for character in digest))
+
+    def test_the_upgraded_package_pins_its_release_with_digests(self) -> None:
+        """The upgraded application dependency names its release and its digests."""
+        entries = {entry.name: entry for entry in read_lock_entries(LOCKFILE)}
+        upgraded = entries[UPGRADED_PACKAGE]
+        self.assertEqual(upgraded.version, UPGRADED_VERSION)
+        self.assertTrue(upgraded.digests)
+
+    def test_the_two_lockfiles_lock_separate_environments(self) -> None:
+        """A package that both lockfiles name carries the same version in both."""
+        application = {entry.name: entry.version for entry in read_lock_entries(LOCKFILE)}
+        sbom = {entry.name: entry.version for entry in read_lock_entries(SBOM_LOCKFILE)}
+        self.assertTrue(application)
+        self.assertTrue(sbom)
+        self.assertFalse(set(application) <= set(sbom))
+        for name in set(application) & set(sbom):
+            self.assertEqual(application[name], sbom[name], f"{name} differs between the lockfiles")
+
+    def test_ci_installs_the_application_lock_in_hash_checking_mode(self) -> None:
+        """The CI jobs verify the artifact digests of the application lockfile."""
+        ci_text = CI_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("pip install --require-hashes -r requirements-lock.txt", ci_text)
+        self.assertIn("pip install --require-hashes --constraint requirements-lock.txt", ci_text)
+
+    def test_the_bundle_job_installs_the_application_lock_in_hash_checking_mode(self) -> None:
+        """The bundle job verifies the artifact digests of the application lockfile."""
+        bundle_text = BUNDLE_WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("pip install --require-hashes -r requirements-lock.txt", bundle_text)
+
+    def test_the_bundle_job_installs_the_sbom_lock_in_hash_checking_mode(self) -> None:
+        """The bundle job verifies the artifact digests of the SBOM lockfile."""
+        bundle = yaml.safe_load(BUNDLE_WORKFLOW.read_text(encoding="utf-8"))
+        steps = bundle["jobs"]["bundle"]["steps"]
+        sbom_step = next(step for step in steps if step.get("name") == "Generate Python SBOM")
+        self.assertIn("--require-hashes", sbom_step["run"])
+        self.assertIn("requirements-sbom.txt", sbom_step["run"])
+
+
+class PipHashEnforcementTest(unittest.TestCase):
+    """Prove that pip refuses an artifact whose digest the file does not name."""
+
+    def setUp(self) -> None:
+        """Create a local wheel directory for the install checks."""
+        self.directory = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.directory, True)
+        self.wheels = self.directory / "wheels"
+        self.wheels.mkdir()
+        self.wheel = write_wheel(self.wheels, "sample", "1.0")
+        self.digest = hashlib.sha256(self.wheel.read_bytes()).hexdigest()
+
+    def _requirement(self, digest: str) -> Path:
+        """Write a requirements file that names one digest and return its path."""
+        path = self.directory / "requirement.txt"
+        path.write_text(f"sample==1.0 \\\n    --hash=sha256:{digest}\n", encoding="utf-8")
+        return path
+
+    def test_pip_rejects_an_artifact_whose_digest_is_not_committed(self) -> None:
+        """A substituted artifact fails the install under hash-checking mode.
+
+        The check runs pip against a local wheel, so it needs no network
+        access. pip selects the local artifact and refuses the download
+        because no committed digest matches its bytes.
+        """
+        requirement = self._requirement("0" * 64)
+        result = run_pip_install(requirement, self.wheels, self.directory / "target")
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("hash", (result.stdout + result.stderr).lower())
+
+    def test_pip_accepts_an_artifact_whose_digest_is_committed(self) -> None:
+        """The committed digest lets the matching artifact install."""
+        requirement = self._requirement(self.digest)
+        result = run_pip_install(requirement, self.wheels, self.directory / "target")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()
