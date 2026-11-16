@@ -5,6 +5,16 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.65.1] (2026-11-16)
+
+### Added
+
+- Written key tags use Camelot, Open Key, or Standard notation (issue 128).
+  Camelot is the default. Camelot and Open Key can use a leading zero.
+  Written BPM supports integers or one or two decimal places with half-up rounding.
+  Import parses Beatport and Essentia key styles and warns about unreadable key text.
+  Settings > General exposes these write preferences to the desktop app.
+
 ## [0.64.0] (2026-11-15)
 
 ### Added

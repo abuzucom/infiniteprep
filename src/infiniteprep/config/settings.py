@@ -18,10 +18,12 @@ from urllib.parse import urlparse
 
 from infiniteprep import storage_paths
 from infiniteprep.domain.enums import KeyDisplayNotation
+from infiniteprep.domain.tag_output import BPM_DECIMAL_PLACES, TagOutputFormat
 
 logger = logging.getLogger(__name__)
 DEFAULT_FAKE_LOSSLESS_METHOD: Final[str] = "signal_analysis"
 SUPPORTED_FAKE_LOSSLESS_METHODS: Final[frozenset[str]] = frozenset({DEFAULT_FAKE_LOSSLESS_METHOD})
+SUPPORTED_TAG_KEY_NOTATIONS: Final[frozenset[str]] = frozenset(KeyDisplayNotation)
 # Where the rows without a value for the sorted column sit in the table.
 UNSORTED_PLACEMENT_FIRST: Final[str] = "first"
 UNSORTED_PLACEMENT_LAST: Final[str] = "last"
@@ -183,6 +185,9 @@ class AppSettings:
     waveform_zoom_seconds: int = DEFAULT_WAVEFORM_ZOOM_SECONDS
     usb_reserve_percent: float = 0.0  # Percent of the estimated export size.
     usb_reserve_bytes: int = 0
+    tag_key_notation: str = KeyDisplayNotation.CAMELOT.value
+    tag_key_leading_zero: bool = False
+    tag_bpm_decimals: int = 0
 
 
 def _find_setting_value_problem(name: str, value: object, default: object) -> str | None:
@@ -193,6 +198,8 @@ def _find_setting_value_problem(name: str, value: object, default: object) -> st
         return "an unsupported waveform zoom duration"
     if name == "fake_lossless_method" and value not in SUPPORTED_FAKE_LOSSLESS_METHODS:
         return "an unsupported fake-lossless detection method"
+    if name == "tag_key_notation" and value not in SUPPORTED_TAG_KEY_NOTATIONS:
+        return "an unsupported written key notation"
     if name == "unsorted_rows_placement" and value not in SUPPORTED_UNSORTED_PLACEMENTS:
         return "an unsupported unsorted row placement"
     return _find_numeric_setting_problem(name, value)
@@ -200,6 +207,8 @@ def _find_setting_value_problem(name: str, value: object, default: object) -> st
 
 def _find_numeric_setting_problem(name: str, value: object) -> str | None:
     """Return why a numeric setting value is out of range, or None when valid."""
+    if name == "tag_bpm_decimals" and value not in BPM_DECIMAL_PLACES:
+        return "an unsupported BPM precision"
     if name in NONNEGATIVE_COUNT_SETTINGS and value < 0:
         return "a negative count"
     if name == "usb_reserve_percent" and not _is_supported_reserve_percent(value):
@@ -237,6 +246,15 @@ class SettingsManager:
         """Load AppSettings from disk or return defaults if not present."""
         with self._lock:
             return self._load_unlocked()
+
+    def load_tag_output(self) -> TagOutputFormat:
+        """Read the saved key and BPM tag output preferences."""
+        settings = self.load()
+        return TagOutputFormat(
+            KeyDisplayNotation(settings.tag_key_notation),
+            settings.tag_key_leading_zero,
+            settings.tag_bpm_decimals,
+        )
 
     def _load_unlocked(self) -> AppSettings:
         """Load settings while the manager lock is held."""
