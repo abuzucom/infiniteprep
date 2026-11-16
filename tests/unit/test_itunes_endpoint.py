@@ -1,31 +1,36 @@
-"""Behavioral tests for the configurable iTunes Search endpoint (M18)."""
+"""Behavioral tests for the iTunes Search request policy (D404).
+
+The endpoint is a published constant. The adapter follows no redirect, shares
+one limiter across every instance, and keeps a response for one endpoint out
+of another provider cache.
+"""
 
 from __future__ import annotations
 
 import json
+import threading
+import urllib.error
+import urllib.parse
+import urllib.request
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from infiniteprep.adapters.catalog.itunes import (
+    ITUNES_SEARCH_HOST,
     ITUNES_SEARCH_URL,
     ItunesSearchAdapter,
-    validate_search_endpoint,
-)
-from infiniteprep.config.credentials import CredentialStore
-from infiniteprep.config.settings import (
-    DEFAULT_ITUNES_SEARCH_ENDPOINT,
-    AppSettings,
-    SettingsManager,
+    RequestLimiter,
+    build_search_opener,
 )
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.ports import MetadataSearchQuery
-from infiniteprep.ui.settings.identification import IdentificationTab
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "itunes_search"
-CUSTOM_ENDPOINT = "https://search.example.test/v1/search"
+FILE_ID = "file-1"
 
 
 def _recorded(name: str) -> dict[str, Any]:
@@ -33,119 +38,114 @@ def _recorded(name: str) -> dict[str, Any]:
     return json.loads((FIXTURE_DIR / f"{name}.json").read_text(encoding="utf-8"))
 
 
-def _adapter(endpoint: str = ITUNES_SEARCH_URL) -> tuple[ItunesSearchAdapter, list[str]]:
-    """Return an adapter that records the endpoint of every request."""
-    urls: list[str] = []
+def _repository() -> Repository:
+    """Return a Repository on a fresh in-memory database."""
+    return Repository(DatabaseManager(":memory:"))
 
-    def fake_get(url: str, _params: dict[str, str]) -> dict[str, Any]:
-        urls.append(url)
-        return _recorded("match_with_genre_and_date")
 
-    adapter = ItunesSearchAdapter(
-        repository=Repository(DatabaseManager(":memory:")),
+def _adapter(
+    repository: Repository,
+    payload: dict[str, Any],
+    calls: list[tuple[str, dict[str, str]]] | None = None,
+    limiter: RequestLimiter | None = None,
+) -> ItunesSearchAdapter:
+    """Return an adapter that replays a recorded response instead of calling the network."""
+
+    def fake_get(url: str, params: dict[str, str]) -> dict[str, Any]:
+        if calls is not None:
+            calls.append((url, params))
+        return payload
+
+    return ItunesSearchAdapter(
+        repository=repository,
         http_get_json=fake_get,
-        min_interval_sec=0.0,
-        endpoint=endpoint,
-        endpoint_validator=lambda _url: (True, None),
-    )
-    return adapter, urls
-
-
-def test_the_default_endpoint_is_the_published_search_endpoint() -> None:
-    """The default endpoint names the published iTunes Search host."""
-    assert DEFAULT_ITUNES_SEARCH_ENDPOINT == "https://itunes.apple.com/search"
-    assert ITUNES_SEARCH_URL == DEFAULT_ITUNES_SEARCH_ENDPOINT
-    assert AppSettings().itunes_search_endpoint == DEFAULT_ITUNES_SEARCH_ENDPOINT
-
-
-def test_the_adapter_queries_the_configured_endpoint() -> None:
-    """A configured endpoint reaches the request and the proposal evidence."""
-    adapter, urls = _adapter(CUSTOM_ENDPOINT)
-
-    matches = adapter.search(
-        MetadataSearchQuery(artist="Deep Dish", title="The Dream"), file_id="file-1"
+        limiter=limiter or RequestLimiter(0.0),
     )
 
-    assert urls == [CUSTOM_ENDPOINT]
-    assert matches[0].match_evidence["source_url"] == CUSTOM_ENDPOINT
+
+def test_the_endpoint_is_the_published_https_search_url() -> None:
+    """The adapter uses the published iTunes Search endpoint over HTTPS."""
+    parsed = urllib.parse.urlsplit(ITUNES_SEARCH_URL)
+
+    assert parsed.scheme == "https"
+    assert parsed.hostname == ITUNES_SEARCH_HOST
+    assert parsed.path == "/search"
 
 
-@pytest.mark.parametrize(
-    "endpoint",
-    [
-        "http://itunes.apple.com/search",
-        "https://10.0.0.1/search",
-        "https://service.internal/search",
-    ],
-)
-def test_the_adapter_refuses_an_endpoint_that_breaks_the_endpoint_rules(endpoint: str) -> None:
-    """An endpoint that fails the shared rules never reaches the adapter."""
-    with pytest.raises(ValueError, match="Invalid iTunes Search endpoint"):
-        _adapter(endpoint)
+def test_the_request_path_refuses_a_redirect() -> None:
+    """The opener follows no redirect, so a lookup never leaves the endpoint."""
+    opener = build_search_opener()
+
+    assert not any(isinstance(item, urllib.request.HTTPRedirectHandler) for item in opener.handlers)
 
 
-def test_an_endpoint_that_resolves_into_a_private_network_is_refused() -> None:
-    """An endpoint whose host resolves into a private network never reaches a request."""
-    calls: list[str] = []
+def test_a_redirect_response_becomes_an_error_and_never_reaches_the_target() -> None:
+    """A redirect response raises and the target path never receives a request."""
+    requested_paths: list[str] = []
 
-    def fake_get(url: str, _params: dict[str, str]) -> dict[str, Any]:
-        calls.append(url)
-        return _recorded("match_with_genre_and_date")
+    class RedirectHandler(BaseHTTPRequestHandler):
+        """Answers the first path with a redirect and the second with a body."""
 
-    adapter = ItunesSearchAdapter(
-        repository=Repository(DatabaseManager(":memory:")),
-        http_get_json=fake_get,
-        min_interval_sec=0.0,
-        endpoint=CUSTOM_ENDPOINT,
-        endpoint_validator=lambda _url: (False, "Host resolved to a disallowed IP address."),
-    )
+        def do_GET(self) -> None:
+            """Answer one request."""
+            requested_paths.append(self.path)
+            if self.path == "/search":
+                self.send_response(302)
+                self.send_header("Location", "/target")
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b"{}")
 
-    ready, reason = adapter.is_available()
-    matches = adapter.search(
-        MetadataSearchQuery(artist="Deep Dish", title="The Dream"), file_id="file-1"
-    )
+        def log_message(self, format: str, *args: Any) -> None:
+            """Keep the test output free of the server log."""
 
-    assert ready is False
-    assert reason is not None
-    assert matches == []
-    assert calls == []
+    server = HTTPServer(("127.0.0.1", 0), RedirectHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        opener = build_search_opener()
+        url = f"http://127.0.0.1:{server.server_port}/search"
+        with pytest.raises(urllib.error.HTTPError) as error:
+            opener.open(url, timeout=5)
+        assert error.value.code == 302
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
-
-def test_the_shared_validator_refuses_a_private_host() -> None:
-    """The shared validator refuses a private address and an internal hostname."""
-    assert validate_search_endpoint("https://10.0.0.1/search")[0] is False
-    assert validate_search_endpoint("https://service.internal/search")[0] is False
-
-
-def test_an_invalid_stored_endpoint_falls_back_to_the_default(tmp_path: Path) -> None:
-    """A stored endpoint that breaks the rules loads as the default."""
-    settings_path = tmp_path / "settings.json"
-    settings_path.write_text(
-        json.dumps({"itunes_search_endpoint": "http://itunes.apple.com/search"}),
-        encoding="utf-8",
-    )
-
-    loaded = SettingsManager(settings_path).load()
-
-    assert loaded.itunes_search_endpoint == DEFAULT_ITUNES_SEARCH_ENDPOINT
+    assert "/target" not in requested_paths
 
 
-def test_an_update_with_an_invalid_endpoint_raises(tmp_path: Path) -> None:
-    """An update that breaks the endpoint rules raises and writes nothing."""
-    manager = SettingsManager(tmp_path / "settings.json")
+def test_the_request_path_refuses_a_url_outside_the_published_endpoint() -> None:
+    """The default request path rejects any URL that is not the published endpoint."""
+    adapter = ItunesSearchAdapter(repository=_repository(), limiter=RequestLimiter(0.0))
 
-    with pytest.raises(ValueError, match="itunes_search_endpoint"):
-        manager.update(itunes_search_endpoint="http://itunes.apple.com/search")
+    with pytest.raises(ValueError, match="published endpoint"):
+        adapter._default_http_get_json("https://127.0.0.1/search", {})
 
 
-def test_the_identification_tab_saves_the_endpoint(qtbot: Any) -> None:
-    """The tab shows the endpoint and writes the stored value back."""
-    settings = AppSettings()
-    tab = IdentificationTab(settings, CredentialStore(use_memory_backend=True))
-    qtbot.addWidget(tab)
+def test_every_adapter_shares_the_provider_limiter() -> None:
+    """Two adapters in the process wait for the same interval."""
+    first = ItunesSearchAdapter(repository=_repository())
+    second = ItunesSearchAdapter(repository=_repository())
 
-    tab.itunes_endpoint_input.setText(CUSTOM_ENDPOINT)
-    updated = AppSettings()
-    tab.apply_to(updated)
+    assert first.limiter is second.limiter
 
-    assert updated.itunes_search_endpoint == CUSTOM_ENDPOINT
+
+def test_two_adapters_that_share_a_limiter_wait_for_each_other() -> None:
+    """A second adapter waits for the interval the first adapter used."""
+    limiter = RequestLimiter(0.05)
+    repository = _repository()
+    calls: list[tuple[str, dict[str, str]]] = []
+    first = _adapter(repository, _recorded("match_with_genre_and_date"), calls, limiter)
+    second = _adapter(repository, _recorded("match_with_genre_and_date"), calls, limiter)
+
+    first.search(MetadataSearchQuery(artist="Deep Dish", title="The Dream"), file_id=FILE_ID)
+    second.search(MetadataSearchQuery(artist="Deep Dish", title="Flashdance"), file_id=FILE_ID)
+
+    assert len(calls) == 2
+    assert calls[0][0] == ITUNES_SEARCH_URL
+    assert calls[1][0] == ITUNES_SEARCH_URL

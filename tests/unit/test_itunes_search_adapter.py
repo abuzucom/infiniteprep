@@ -9,7 +9,11 @@ from typing import Any
 
 import pytest
 
-from infiniteprep.adapters.catalog.itunes import ITUNES_SEARCH_URL, ItunesSearchAdapter
+from infiniteprep.adapters.catalog.itunes import (
+    ITUNES_SEARCH_URL,
+    ItunesSearchAdapter,
+    RequestLimiter,
+)
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, EntityType
@@ -59,7 +63,7 @@ def _adapter(
     repository: Repository,
     payload: dict[str, Any],
     calls: list[tuple[str, dict[str, str]]] | None = None,
-    min_interval_sec: float = 0.0,
+    limiter: RequestLimiter | None = None,
 ) -> ItunesSearchAdapter:
     """Return an adapter that replays a recorded response instead of calling the network."""
 
@@ -71,8 +75,7 @@ def _adapter(
     return ItunesSearchAdapter(
         repository=repository,
         http_get_json=fake_get,
-        min_interval_sec=min_interval_sec,
-        endpoint_validator=lambda _url: (True, None),
+        limiter=limiter or RequestLimiter(0.0),
     )
 
 
@@ -140,7 +143,7 @@ def test_the_rate_limit_holds_the_next_request_back() -> None:
     adapter = _adapter(
         _repository(),
         _recorded("match_with_genre_and_date"),
-        min_interval_sec=RATE_LIMIT_INTERVAL_SEC,
+        limiter=RequestLimiter(RATE_LIMIT_INTERVAL_SEC),
     )
 
     started = time.monotonic()
@@ -149,6 +152,34 @@ def test_the_rate_limit_holds_the_next_request_back() -> None:
     elapsed = time.monotonic() - started
 
     assert elapsed >= RATE_LIMIT_INTERVAL_SEC - RATE_LIMIT_TOLERANCE_SEC
+
+
+def test_an_unrelated_row_supplies_no_candidate() -> None:
+    """A row that matches neither the artist nor the title supplies no value."""
+    adapter = _adapter(_repository(), _recorded("unrelated_row"))
+
+    assert adapter.search(_query(), file_id=FILE_ID) == []
+
+
+def test_a_malformed_duration_leaves_the_candidate_without_a_duration() -> None:
+    """A row with a malformed duration still supplies the genre and the year."""
+    adapter = _adapter(_repository(), _recorded("malformed_duration"))
+
+    matches = adapter.search(_query(), file_id=FILE_ID)
+
+    assert len(matches) == 1
+    assert matches[0].duration is None
+    assert matches[0].release_details.genre == "Dance"
+
+
+def test_the_cache_key_names_the_provider_and_the_endpoint() -> None:
+    """The cache key holds the provider and the endpoint, so no other source shares it."""
+    adapter = _adapter(_repository(), _recorded("match_with_genre_and_date"))
+
+    key = adapter._cache_key({"term": "Deep Dish The Dream"})
+
+    assert key.startswith("itunes:search:")
+    assert "itunes.apple.com" not in key
 
 
 def test_the_request_carries_the_shared_user_agent_and_the_search_terms() -> None:

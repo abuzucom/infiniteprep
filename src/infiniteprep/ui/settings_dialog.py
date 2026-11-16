@@ -125,7 +125,6 @@ class SettingsDialog(QDialog):
         self.enable_llm_checkbox = self.identification_tab.enable_llm_checkbox
         self.ollama_url_input = self.identification_tab.ollama_url_input
         self.ollama_model_combo = self.identification_tab.ollama_model_combo
-        self.itunes_endpoint_input = self.identification_tab.itunes_endpoint_input
         self.usb_reserve_percent_spin = self.storage_tab.usb_reserve_percent_spin
         self.usb_reserve_mib_spin = self.storage_tab.usb_reserve_mib_spin
         self.cleanup_btn = self.storage_tab.cleanup_btn

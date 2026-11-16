@@ -21,9 +21,6 @@ from infiniteprep.domain.enums import KeyDisplayNotation
 
 logger = logging.getLogger(__name__)
 DEFAULT_FAKE_LOSSLESS_METHOD: Final[str] = "signal_analysis"
-# The published iTunes Search endpoint. A setting may point the adapter at a
-# compatible endpoint, so the value lives with the other application defaults.
-DEFAULT_ITUNES_SEARCH_ENDPOINT: Final[str] = "https://itunes.apple.com/search"
 SUPPORTED_FAKE_LOSSLESS_METHODS: Final[frozenset[str]] = frozenset({DEFAULT_FAKE_LOSSLESS_METHOD})
 DEFAULT_WAVEFORM_ZOOM_SECONDS: Final[int] = 8
 SUPPORTED_WAVEFORM_ZOOM_SECONDS: Final[tuple[int, ...]] = (
@@ -162,7 +159,6 @@ class AppSettings:
     enable_llm_arbitration: bool = False
     ollama_base_url: str = "http://127.0.0.1:11434/v1"
     ollama_model: str = "qwen2.5:3b"
-    itunes_search_endpoint: str = DEFAULT_ITUNES_SEARCH_ENDPOINT
     fpcalc_custom_path: str = ""
     transcode_mode: str = "sibling_export"
     transcode_preset: str = "XDJ_LOSSLESS_AUTO"
@@ -188,10 +184,6 @@ def _find_setting_value_problem(name: str, value: object, default: object) -> st
         return "an unsupported waveform zoom duration"
     if name == "fake_lossless_method" and value not in SUPPORTED_FAKE_LOSSLESS_METHODS:
         return "an unsupported fake-lossless detection method"
-    if name == "itunes_search_endpoint":
-        valid, reason = validate_endpoint_url(str(value))
-        if not valid:
-            return f"an invalid endpoint ({reason})"
     return _find_numeric_setting_problem(name, value)
 
 

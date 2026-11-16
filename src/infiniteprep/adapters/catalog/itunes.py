@@ -9,15 +9,16 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
+import math
 import re
+import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from typing import Any, Final
 
-from infiniteprep.config.settings import DEFAULT_ITUNES_SEARCH_ENDPOINT, validate_endpoint_url
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
 from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
@@ -25,39 +26,114 @@ from infiniteprep.domain.ports import MetadataSearchQuery
 from infiniteprep.domain.similarity import string_similarity
 from infiniteprep.user_agent import USER_AGENT
 
-ITUNES_SEARCH_URL: Final[str] = DEFAULT_ITUNES_SEARCH_ENDPOINT
+ITUNES_SEARCH_URL: Final[str] = "https://itunes.apple.com/search"
+ITUNES_SEARCH_HOST: Final[str] = "itunes.apple.com"
 ITUNES_USER_AGENT: Final[str] = USER_AGENT
 ITUNES_CACHE_TTL_SEC: Final[int] = 86400
-# The published limit is about 20 calls per minute. The adapter waits 3 seconds
-# between calls so the limit holds for a single client.
+# The published limit is about 20 calls per minute. The limiter waits 3 seconds
+# between calls so the limit holds for every caller in the process.
 ITUNES_MIN_INTERVAL_SEC: Final[float] = 3.0
+# A lookup answers in well under a second. The timeout keeps a stalled
+# connection from holding a lookup slot for longer.
+ITUNES_REQUEST_TIMEOUT_SEC: Final[int] = 15
 DEFAULT_COUNTRY: Final[str] = "US"
 RESULT_LIMIT: Final[int] = 10
 MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
-# iTunes genres stay coarse, so the provider confidence sits below the value the
-# other catalog sources reach.
-ITUNES_MATCH_SCORE: Final[float] = 0.60
-DISCLOSURE_HOST: Final[str] = "itunes.apple.com"
+# A row supplies a value only when it matches the artist and the title closely
+# enough. The mean of the two field scores reaches the match score, and each
+# field reaches the field score on its own.
+MIN_MATCH_SCORE: Final[float] = 0.60
+MIN_FIELD_SCORE: Final[float] = 0.50
+# The response fields reach the candidate. The length cap keeps a long value
+# out of a proposal.
+MAX_FIELD_LENGTH: Final[int] = 500
 DISCLOSURE_QUERY_DATA: Final[str] = (
     "the artist name and track title as the search term, the storefront country, "
     "the client IP address, and the shared User-Agent"
 )
 DISCLOSURE_TEXT: Final[str] = (
-    f"Live identification sends {DISCLOSURE_QUERY_DATA} to {DISCLOSURE_HOST}. "
+    f"Live identification sends {DISCLOSURE_QUERY_DATA} to {ITUNES_SEARCH_HOST}. "
     "The adapter keeps no artwork from the response."
 )
 RELEASE_YEAR_RE: Final[re.Pattern[str]] = re.compile(r"^(\d{4})")
 # A row without a release date sorts after every dated row.
 MISSING_RELEASE_DATE: Final[str] = "9999-99-99"
 
-logger = logging.getLogger(__name__)
 
-EndpointValidator = Callable[[str], "tuple[bool, str | None]"]
+class RequestLimiter:
+    """Holds the request timing for one provider across every adapter instance.
+
+    The limiter lives in the process, so a second adapter or a second thread
+    waits for the same interval. The lock keeps two callers from passing the
+    check at the same time.
+    """
+
+    def __init__(self, min_interval_sec: float = ITUNES_MIN_INTERVAL_SEC) -> None:
+        """Initialize the limiter with the minimum interval between requests."""
+        self.min_interval_sec = min_interval_sec
+        self._lock = threading.Lock()
+        self._last_request_ts: float = 0.0
+
+    def wait(self) -> None:
+        """Hold the next request until the minimum interval has passed."""
+        if self.min_interval_sec <= 0.0:
+            return
+        with self._lock:
+            elapsed = time.monotonic() - self._last_request_ts
+            if elapsed < self.min_interval_sec:
+                time.sleep(self.min_interval_sec - elapsed)
+            self._last_request_ts = time.monotonic()
 
 
-def validate_search_endpoint(url: str) -> tuple[bool, str | None]:
-    """Validate an endpoint against the shared rules and the DNS rebinding rules."""
-    return validate_endpoint_url(url, resolve_dns=True)
+# The one limiter for the provider. Every adapter in the process shares it.
+REQUEST_LIMITER: Final[RequestLimiter] = RequestLimiter(ITUNES_MIN_INTERVAL_SEC)
+
+
+def build_search_opener() -> urllib.request.OpenerDirector:
+    """Return an opener that follows no redirect.
+
+    The opener holds the standard handlers without the redirect handler, so a
+    redirect response becomes an error and no request ever leaves the published
+    endpoint.
+    """
+    opener = urllib.request.OpenerDirector()
+    for handler_class in (
+        urllib.request.ProxyHandler,
+        urllib.request.HTTPHandler,
+        urllib.request.HTTPSHandler,
+        urllib.request.HTTPDefaultErrorHandler,
+        urllib.request.HTTPErrorProcessor,
+        urllib.request.UnknownHandler,
+    ):
+        opener.add_handler(handler_class())
+    return opener
+
+
+def _text(value: Any, limit: int = MAX_FIELD_LENGTH) -> str:
+    """Return a trimmed text value with a length cap."""
+    if not isinstance(value, str):
+        return ""
+    return value.strip()[:limit]
+
+
+def _identifier(value: Any) -> str:
+    """Return a trimmed identifier from a string or a number."""
+    if isinstance(value, bool):
+        return ""
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        return str(int(value))
+    return _text(value)
+
+
+def _duration_seconds(value: Any) -> float | None:
+    """Return the duration in seconds, or None when the value is not a number."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if not math.isfinite(float(value)) or value <= 0:
+        return None
+    return float(value) / 1000.0
 
 
 class ItunesSearchAdapter:
@@ -70,42 +146,21 @@ class ItunesSearchAdapter:
         repository: Repository,
         http_get_json: Callable[[str, dict[str, str]], dict[str, Any]] | None = None,
         *,
-        min_interval_sec: float = ITUNES_MIN_INTERVAL_SEC,
         country: str = DEFAULT_COUNTRY,
-        endpoint: str = ITUNES_SEARCH_URL,
-        endpoint_validator: EndpointValidator | None = None,
+        limiter: RequestLimiter | None = None,
     ) -> None:
-        """Initialize ItunesSearchAdapter with Repository cache, rate limiter, and country.
-
-        The endpoint comes from the application settings. It must pass the shared
-        endpoint rules, so only a public HTTPS host is reachable. The validator
-        also resolves the host, so a name that points into a private network
-        never reaches a request.
-        """
-        valid, reason = validate_endpoint_url(endpoint)
-        if not valid:
-            raise ValueError(f"Invalid iTunes Search endpoint {endpoint!r}: {reason}")
+        """Initialize ItunesSearchAdapter with the Repository cache and the country."""
         self.repo = repository
         self.http_get_json = http_get_json or self._default_http_get_json
-        self.min_interval_sec = min_interval_sec
         self.country = country
-        self.endpoint = endpoint
-        self.endpoint_validator = endpoint_validator or validate_search_endpoint
-        self._last_request_ts: float = 0.0
+        self.limiter = limiter or REQUEST_LIMITER
 
     def is_available(self) -> tuple[bool, str | None]:
-        """Return the endpoint status. iTunes Search needs no key."""
-        valid, reason = self.endpoint_validator(self.endpoint)
-        if not valid:
-            return False, f"iTunes Search endpoint is not reachable: {reason}"
+        """Return the availability status. iTunes Search needs no key."""
         return True, None
 
     def search(self, query: MetadataSearchQuery, file_id: str = "") -> list[CandidateMatch]:
         """Search iTunes Search for the track named by the query."""
-        ready, reason = self.is_available()
-        if not ready:
-            logger.warning("iTunes Search skipped: %s", reason)
-            return []
         term = self._search_term(query)
         if not term:
             return []
@@ -119,8 +174,8 @@ class ItunesSearchAdapter:
         cache_key = self._cache_key(params)
         payload = self.repo.get_cached_response(cache_key)
         if payload is None:
-            self._respect_rate_limit()
-            payload = self.http_get_json(self.endpoint, params)
+            self.limiter.wait()
+            payload = self.http_get_json(ITUNES_SEARCH_URL, params)
             self.repo.set_cached_response(
                 cache_key=cache_key,
                 provider=self.provider_name,
@@ -133,7 +188,8 @@ class ItunesSearchAdapter:
         row = self._select_row(results, query)
         if row is None:
             return []
-        return [self._candidate_from_row(row, query, file_id)]
+        score = self._row_score(row, query)
+        return [self._candidate_from_row(row, query, file_id, score)]
 
     def fetch(
         self, entity_id: str, entity_type: EntityType = EntityType.RELEASE, file_id: str = ""
@@ -148,89 +204,106 @@ class ItunesSearchAdapter:
         return " ".join(parts)
 
     def _cache_key(self, params: dict[str, str]) -> str:
-        """Return the cache key for one request."""
-        raw = json.dumps(params, sort_keys=True)
+        """Return the cache key for one request.
+
+        The key holds the endpoint and the provider, so a response never
+        reaches another endpoint or another provider.
+        """
+        raw = json.dumps(
+            {"provider": self.provider_name, "endpoint": ITUNES_SEARCH_URL, "params": params},
+            sort_keys=True,
+        )
         digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
         return f"itunes:search:{digest}"
 
-    def _respect_rate_limit(self) -> None:
-        """Sleep if necessary to hold the published iTunes Search call rate."""
-        if self.min_interval_sec <= 0.0:
-            return
-        elapsed = time.monotonic() - self._last_request_ts
-        if elapsed < self.min_interval_sec:
-            time.sleep(self.min_interval_sec - elapsed)
-        self._last_request_ts = time.monotonic()
-
     def _select_row(self, results: list[Any], query: MetadataSearchQuery) -> dict[str, Any] | None:
-        """Return the best matching row, keeping the earliest date among tied rows."""
-        scored = [(self._row_score(row, query), row) for row in results if isinstance(row, dict)]
-        if not scored:
+        """Return the best matching row that reaches the minimum similarity."""
+        eligible: list[tuple[float, dict[str, Any]]] = []
+        for row in results:
+            if not isinstance(row, dict):
+                continue
+            artist_score, title_score = self._row_field_scores(row, query)
+            if artist_score < MIN_FIELD_SCORE or title_score < MIN_FIELD_SCORE:
+                continue
+            eligible.append(((artist_score + title_score) / 2.0, row))
+        if not eligible:
             return None
-        best_score = max(score for score, _row in scored)
-        tied = [row for score, row in scored if score == best_score]
+        best_score = max(score for score, _row in eligible)
+        if best_score < MIN_MATCH_SCORE:
+            return None
+        tied = [row for score, row in eligible if score == best_score]
         return min(tied, key=self._row_date_key)
 
+    def _row_field_scores(
+        self, row: dict[str, Any], query: MetadataSearchQuery
+    ) -> tuple[float, float]:
+        """Return the artist similarity and the title similarity of one row."""
+        artist_score = string_similarity(query.artist, _text(row.get("artistName")))
+        title_score = string_similarity(query.title, _text(row.get("trackName")))
+        return (artist_score, title_score)
+
     def _row_score(self, row: dict[str, Any], query: MetadataSearchQuery) -> float:
-        """Return the similarity of one row against the artist and the title."""
-        artist_score = string_similarity(query.artist, str(row.get("artistName", "")))
-        title_score = string_similarity(query.title, str(row.get("trackName", "")))
-        return artist_score + title_score
+        """Return the mean similarity of one row against the artist and the title."""
+        artist_score, title_score = self._row_field_scores(row, query)
+        return (artist_score + title_score) / 2.0
 
     def _row_date_key(self, row: dict[str, Any]) -> tuple[str, str]:
         """Return the sort key that puts the earliest release date first."""
-        release_date = str(row.get("releaseDate", "")).strip()
+        release_date = _text(row.get("releaseDate"))
         if not release_date:
-            return (MISSING_RELEASE_DATE, str(row.get("trackId", "")))
-        return (release_date, str(row.get("trackId", "")))
+            return (MISSING_RELEASE_DATE, _identifier(row.get("trackId")))
+        return (release_date, _identifier(row.get("trackId")))
 
     def _candidate_from_row(
-        self, row: dict[str, Any], query: MetadataSearchQuery, file_id: str
+        self,
+        row: dict[str, Any],
+        query: MetadataSearchQuery,
+        file_id: str,
+        score: float,
     ) -> CandidateMatch:
         """Build a release candidate from one iTunes row. No artwork field is copied."""
-        track_id = str(row.get("trackId", ""))
-        collection_id = str(row.get("collectionId", ""))
-        release_date = str(row.get("releaseDate", "")).strip()
+        track_id = _identifier(row.get("trackId"))
+        collection_id = _identifier(row.get("collectionId"))
+        release_date = _text(row.get("releaseDate"))
         year_match = RELEASE_YEAR_RE.match(release_date)
-        duration_ms = row.get("trackTimeMillis")
-        duration = float(duration_ms) / 1000.0 if duration_ms else None
         return CandidateMatch(
             id=f"itunes-track-{track_id}",
             file_id=file_id,
             provider=self.provider_name,
             provider_entity_id=track_id,
             entity_type=EntityType.RELEASE,
-            artist=str(row.get("artistName", "")) or query.artist,
-            title=str(row.get("trackName", "")) or query.title,
-            duration=duration,
+            artist=_text(row.get("artistName")) or (query.artist or ""),
+            title=_text(row.get("trackName")) or (query.title or ""),
+            duration=_duration_seconds(row.get("trackTimeMillis")),
             release_details=ReleaseDetails(
-                release_title=str(row.get("collectionName", "")) or None,
+                release_title=_text(row.get("collectionName")) or None,
                 year=year_match.group(1) if year_match else None,
-                genre=str(row.get("primaryGenreName", "")).strip() or None,
+                genre=_text(row.get("primaryGenreName")) or None,
             ),
             match_evidence={
                 "itunes_track_id": track_id,
                 "itunes_collection_id": collection_id,
                 "itunes_release_date": release_date,
-                "source_url": self.endpoint,
+                "source_url": ITUNES_SEARCH_URL,
             },
-            match_score=ITUNES_MATCH_SCORE,
+            match_score=score,
         )
 
     def _default_http_get_json(self, url: str, params: dict[str, str]) -> dict[str, Any]:
-        """Perform HTTPS GET request to the iTunes Search endpoint."""
-        if not url.startswith("https://"):
-            raise ValueError(f"iTunes Search URL must use https:// scheme: {url}")
-        valid, reason = validate_search_endpoint(url)
-        if not valid:
-            raise ValueError(reason or "Blocked iTunes Search endpoint URL.")
+        """Perform HTTPS GET request to the published iTunes Search endpoint."""
+        if not url.startswith(f"https://{ITUNES_SEARCH_HOST}/"):
+            raise ValueError(f"iTunes Search URL must use the published endpoint: {url}")
         encoded = urllib.parse.urlencode(params)
         request = urllib.request.Request(
             f"{url}?{encoded}",
             headers={"User-Agent": ITUNES_USER_AGENT, "Accept": "application/json"},
         )
-        with urllib.request.urlopen(request, timeout=15) as response:
-            raw_bytes = response.read(MAX_API_RESPONSE_BYTES + 1)
+        opener = build_search_opener()
+        try:
+            with opener.open(request, timeout=ITUNES_REQUEST_TIMEOUT_SEC) as response:
+                raw_bytes = response.read(MAX_API_RESPONSE_BYTES + 1)
+        except urllib.error.HTTPError as error:
+            raise ValueError(f"iTunes Search request failed: {error.code}") from error
         if len(raw_bytes) > MAX_API_RESPONSE_BYTES:
             raise ValueError("iTunes Search HTTP response exceeded maximum byte size limit.")
         return dict(json.loads(raw_bytes.decode("utf-8")))

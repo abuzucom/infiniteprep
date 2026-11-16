@@ -44,6 +44,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The adapter waits 3 seconds between calls for the published limit of about 20 calls per minute. It caches every response in the shared SQLite cache for 24 hours.
   - The matching engine ranks the rows over the artist and the title. The earliest release date wins among the rows that tie for the best match.
   - The adapter reads `primaryGenreName` and `releaseDate`. It keeps no artwork from the response because Apple limits promotional content, album art included, to promoting store content.
+  - A row supplies a value only when it matches the artist and the title. The mean of the two field similarities reaches the match score. The candidate keeps that score.
+  - The request path follows no redirect, and the request timeout is a named constant.
+  - The limiter lives in the process. A second adapter or a second thread waits for the same interval.
   - Every proposal records iTunes Search as its source. The provider name is `itunes` and the entity id is the track id.
 - The new `domain/source_priority.py` holds the per-field order of the sources (D394, issue 243).
   - The genre order is Discogs, then iTunes. The release date order is MusicBrainz, then Discogs, then iTunes.
@@ -51,9 +54,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The table also limits the fields a provider may supply. The iTunes adapter proposes the genre and the release year only.
   - A dropped proposal turns superseded in the proposal table.
 - The text similarity helper moves to `domain/similarity.py`. `services/matching_engine.py` keeps its name and its behavior.
-- The iTunes Search endpoint is a setting. The default is `https://itunes.apple.com/search`. The endpoint passes the shared endpoint rules before the adapter accepts it. The host is resolved before every lookup, and a host that points into a private network is refused.
 - The Identification settings tab names the host and the query data of the iTunes Search lookup. The README holds the same disclosure in a new section.
-- `tests/unit/test_itunes_search_adapter.py`, `tests/unit/test_source_priority_filter.py`, and `tests/unit/test_itunes_disclosure.py` cover a match with a genre and a date, the empty response, a field another source already supplied, a response with artwork, the rate limit, the cache, and the provenance on each proposal. The recorded responses live under `tests/fixtures/itunes_search/`.
+- `tests/unit/test_itunes_search_adapter.py`, `tests/unit/test_itunes_endpoint.py`, `tests/unit/test_source_priority_filter.py`, and `tests/unit/test_itunes_disclosure.py` cover a match with a genre and a date, the empty response, an unrelated row, a malformed duration, a field another source already supplied, a response with artwork, the rate limit, the cache, the redirect refusal, and the provenance on each proposal. The recorded responses live under `tests/fixtures/itunes_search/`.
 - The version advances to 0.60.0 for the Settings tabs, to 0.60.1 for the synthetic audio fixtures, to 0.60.2 for the bundle trim, to 0.60.3 for the source research decisions, to 0.60.4 for the release test constants, to 0.61.0 for fake-lossless audio detection, to 0.62.0 for the schema migrations, and to 0.64.0 for the iTunes Search fallback. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
 
 ### Changed
