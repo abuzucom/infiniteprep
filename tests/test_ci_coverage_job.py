@@ -136,6 +136,20 @@ class CoverageCommentJobTest(unittest.TestCase):
         self.assertIn("comment.body.startsWith(marker)", self.job)
         self.assertNotIn("comment.body.includes(marker)", self.job)
 
+    def test_the_job_serializes_its_runs(self) -> None:
+        """One comment job runs at a time for a pull request."""
+        self.assertIn("group: coverage-comment-", self.job)
+        self.assertIn("cancel-in-progress: true", self.job)
+
+    def test_the_comment_search_removes_duplicate_comments(self) -> None:
+        """A second coverage comment from the bot never survives."""
+        self.assertIn("deleteComment", self.job)
+
+    def test_the_comment_search_keeps_the_newest_result(self) -> None:
+        """An older run never overwrites the result of a newer run."""
+        self.assertIn("infiniteprep-coverage-run", self.job)
+        self.assertIn("newestPosted > runId", self.job)
+
     def test_the_job_runs_only_on_a_pull_request(self) -> None:
         """The job stays out of the way on a push to main."""
         self.assertIn("github.event_name == 'pull_request'", self.job)

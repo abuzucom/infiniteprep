@@ -253,6 +253,11 @@ jobs:
       needs.test-matrix.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # One comment job runs at a time for a pull request. A newer push cancels
+    # the older job, so two runs never write the comment at the same time.
+    concurrency:
+      group: coverage-comment-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
     permissions:
       contents: read
       pull-requests: write
@@ -269,9 +274,11 @@ jobs:
           script: |
             const fs = require('fs');
             const marker = '<!-- infiniteprep-coverage -->';
+            const runPattern = /infiniteprep-coverage-run (\d+)/;
             const botLogin = 'github-actions[bot]';
             const summary = fs.readFileSync('coverage-summary.md', 'utf8');
-            const body = `${marker}\n${summary}`;
+            const runId = context.runId;
+            const body = `${marker}\n<!-- infiniteprep-coverage-run ${runId} -->\n${summary}`;
             const { owner, repo } = context.repo;
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner,
@@ -279,17 +286,27 @@ jobs:
               issue_number: context.issue.number,
               per_page: 100,
             });
-            const previous = comments.find(
+            const matches = comments.filter(
               (comment) =>
                 comment.user?.login === botLogin &&
                 typeof comment.body === 'string' &&
                 comment.body.startsWith(marker),
             );
-            if (previous) {
+            const postedRunIds = matches.map((comment) => {
+              const found = comment.body.match(runPattern);
+              return found ? Number(found[1]) : 0;
+            });
+            const newestPosted = postedRunIds.length ? Math.max(...postedRunIds) : 0;
+            if (newestPosted > runId) {
+              core.info('A newer run already posted the coverage table.');
+              return;
+            }
+            const [target, ...extra] = matches;
+            if (target) {
               await github.rest.issues.updateComment({
                 owner,
                 repo,
-                comment_id: previous.id,
+                comment_id: target.id,
                 body,
               });
             } else {
@@ -298,5 +315,12 @@ jobs:
                 repo,
                 issue_number: context.issue.number,
                 body,
+              });
+            }
+            for (const comment of extra) {
+              await github.rest.issues.deleteComment({
+                owner,
+                repo,
+                comment_id: comment.id,
               });
             }
