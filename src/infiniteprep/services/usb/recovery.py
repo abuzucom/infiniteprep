@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
-import os
-import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
@@ -15,6 +12,7 @@ from pathlib import Path
 from typing import Final
 
 from infiniteprep import storage_paths
+from infiniteprep.services.usb._shared import write_json_atomic
 from infiniteprep.services.usb.manifest import (
     ExportScope,
     UsbExportManifest,
@@ -87,24 +85,6 @@ class UsbExpiryScanResult:
 def _default_journal_path() -> Path:
     """Resolve the default computer journal path."""
     return storage_paths.current().data_dir / JOURNAL_FILE_NAME
-
-
-def _write_json_atomic(path: Path, payload: Mapping[str, object]) -> None:
-    """Atomically persist JSON payload to path using a sibling temporary file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-    descriptor, temp_name = tempfile.mkstemp(
-        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", text=True
-    )
-    temp_path = Path(temp_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(text)
-        os.replace(temp_path, path)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            temp_path.unlink(missing_ok=True)
-        raise
 
 
 def _optional_str(raw: object) -> str | None:
@@ -306,7 +286,7 @@ class UsbRecoveryJournalStore:
             "version": 1,
             "entries": [_entry_to_dict(entry) for entry in entries],
         }
-        _write_json_atomic(self.journal_path, payload)
+        write_json_atomic(self.journal_path.parent, self.journal_path.name, payload)
 
     def start_export(
         self, entry: UsbJournalEntry, mount_root: Path, manifest: UsbExportManifest

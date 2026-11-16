@@ -3,20 +3,14 @@
 from __future__ import annotations
 
 import ast
-import sys
+import os
 import tempfile
 import unittest
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-WORKTREE_ROOT = Path(__file__).resolve().parents[2]
-WORKTREE_SRC = WORKTREE_ROOT / "src"
-for _candidate in (str(WORKTREE_ROOT), str(WORKTREE_SRC)):
-    if _candidate not in sys.path:
-        sys.path.insert(0, _candidate)
-
-from infiniteprep.services.usb.manifest import (  # noqa: E402
+from infiniteprep.services.usb.manifest import (
     COMPLETED_MANIFEST_FILE_NAME,
     IN_PROGRESS_MANIFEST_FILE_NAME,
     MANIFEST_STATE_COMPLETED,
@@ -33,17 +27,18 @@ from infiniteprep.services.usb.manifest import (  # noqa: E402
     compute_my_tags_digest,
     read_completed_manifest,
     read_in_progress_manifest,
+    remove_in_progress_manifest,
     write_completed_manifest,
     write_in_progress_manifest,
 )
-from infiniteprep.services.usb.recovery import (  # noqa: E402
+from infiniteprep.services.usb.recovery import (
     DEFAULT_RECOVERY_EXPIRY_DAYS,
     ReconnectChoice,
     UsbJournalEntry,
     UsbRecoveryJournalStore,
 )
-from infiniteprep.services.usb.targets import TargetCandidate  # noqa: E402
-from tests.unit.test_code_quality_invariants import (  # noqa: E402
+from infiniteprep.services.usb.targets import TargetCandidate
+from tests.unit.test_code_quality_invariants import (
     FORBIDDEN_CALL_NAMES,
     FORBIDDEN_COMMENT_MARKERS,
     FORBIDDEN_HASH_ATTRS,
@@ -54,11 +49,13 @@ from tests.unit.test_code_quality_invariants import (  # noqa: E402
     count_local_assignments,
     find_inner_loop_breaks,
 )
-from tests.unit.usb_preflight_support import (  # noqa: E402
+from tests.unit.usb_preflight_support import (
     build_drive,
     build_inspection,
     build_partition,
 )
+
+REPO_SRC = Path(__file__).resolve().parents[2] / "src"
 
 
 def _sample_vocabulary() -> list[ManifestTagEntry]:
@@ -238,6 +235,60 @@ class UsbExportManifestTests(unittest.TestCase):
             self.assertTrue(loaded.completed_at_utc.endswith("Z"))
             self.assertEqual(loaded.omissions[0].track.relative_path, "crate/b.flac")
             self.assertEqual(loaded.omissions[0].source_value, "Composed By Name")
+
+    def test_symlinked_metadata_dir_or_manifest_file_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            mount_root = root / "usb"
+            outside_dir = root / "outside"
+            mount_root.mkdir()
+            outside_dir.mkdir()
+            outside_file = outside_dir / "secret.json"
+            outside_file.write_text('{"secret": true}\n', encoding="utf-8")
+
+            in_prog = _build_manifest(
+                export_id="exp-sym",
+                state=MANIFEST_STATE_IN_PROGRESS,
+                completed_at_utc=None,
+            )
+
+            meta_link = mount_root / USB_METADATA_DIR_NAME
+            try:
+                meta_link.symlink_to(outside_dir, target_is_directory=True)
+            except OSError:
+                return
+            with self.assertRaises(ValueError):
+                write_in_progress_manifest(mount_root, in_prog)
+            with self.assertRaises(ValueError):
+                read_in_progress_manifest(mount_root)
+            meta_link.unlink()
+
+            meta_dir = mount_root / USB_METADATA_DIR_NAME
+            meta_dir.mkdir()
+            file_link = meta_dir / IN_PROGRESS_MANIFEST_FILE_NAME
+            file_link.symlink_to(outside_file)
+            with self.assertRaises(ValueError):
+                read_in_progress_manifest(mount_root)
+            with self.assertRaises(ValueError):
+                write_in_progress_manifest(mount_root, in_prog)
+            with self.assertRaises(ValueError):
+                remove_in_progress_manifest(mount_root)
+            self.assertTrue(outside_file.exists())
+
+    def test_posix_read_uses_nofollow_and_blocks_swapped_symlink(self) -> None:
+        if not hasattr(os, "O_NOFOLLOW"):
+            return
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            mount_root = root / "usb"
+            mount_root.mkdir()
+            outside_file = root / "outside.json"
+            outside_file.write_text("{}", encoding="utf-8")
+            meta_dir = mount_root / USB_METADATA_DIR_NAME
+            meta_dir.mkdir()
+            (meta_dir / COMPLETED_MANIFEST_FILE_NAME).symlink_to(outside_file)
+            with self.assertRaises(ValueError):
+                read_completed_manifest(mount_root)
 
 
 class UsbRecoveryMatchingTests(unittest.TestCase):
@@ -562,12 +613,13 @@ class WorktreeCodeQualityInvariantsTests(unittest.TestCase):
     """AST, line length, and ASCII checks on worktree USB-5 source files."""
 
     TARGET_PATHS = (
-        WORKTREE_SRC / "infiniteprep" / "services" / "usb" / "manifest.py",
-        WORKTREE_SRC / "infiniteprep" / "services" / "usb" / "recovery.py",
-        WORKTREE_SRC / "infiniteprep" / "services" / "usb" / "__init__.py",
-        WORKTREE_SRC / "infiniteprep" / "config" / "settings.py",
-        WORKTREE_SRC / "infiniteprep" / "ui" / "settings" / "storage.py",
-        WORKTREE_SRC / "infiniteprep" / "ui" / "usb_recovery_dialog.py",
+        REPO_SRC / "infiniteprep" / "services" / "usb" / "_shared.py",
+        REPO_SRC / "infiniteprep" / "services" / "usb" / "manifest.py",
+        REPO_SRC / "infiniteprep" / "services" / "usb" / "recovery.py",
+        REPO_SRC / "infiniteprep" / "services" / "usb" / "__init__.py",
+        REPO_SRC / "infiniteprep" / "config" / "settings.py",
+        REPO_SRC / "infiniteprep" / "ui" / "settings" / "storage.py",
+        REPO_SRC / "infiniteprep" / "ui" / "usb_recovery_dialog.py",
     )
 
     def test_target_files_meet_quality_invariants(self) -> None:

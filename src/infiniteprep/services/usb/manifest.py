@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import hashlib
 import json
 import os
-import tempfile
-from collections.abc import Mapping, Sequence
+import stat
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from pathlib import Path
 from typing import Final
+
+from infiniteprep.services.usb._shared import (
+    is_symlink_or_reparse_point,
+    reject_symlink_target,
+    write_json_atomic,
+)
 
 USB_METADATA_DIR_NAME: Final[str] = ".infiniteprep"
 COMPLETED_MANIFEST_FILE_NAME: Final[str] = "manifest.json"
@@ -124,48 +131,179 @@ def compute_my_tags_digest(
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
+def _validate_manifest_file_name(file_name: str) -> None:
+    """Reject directory separators, traversal segments, and empty manifest names."""
+    if (
+        not file_name
+        or file_name in {".", ".."}
+        or "/" in file_name
+        or "\\" in file_name
+        or "\x00" in file_name
+    ):
+        raise ValueError(f"Invalid USB manifest file name: {file_name!r}")
+
+
+def _resolve_mount_root(mount_root: Path) -> Path:
+    """Validate and resolve the mounted USB root directory."""
+    if is_symlink_or_reparse_point(mount_root):
+        raise ValueError(f"Mount root cannot be a symbolic link: {mount_root}")
+    try:
+        base = mount_root.resolve(strict=True)
+    except OSError as exc:
+        raise ValueError(f"Mount root is missing or not a directory: {mount_root}") from exc
+    if not base.is_dir():
+        raise ValueError(f"Mount root is missing or not a directory: {mount_root}")
+    return base
+
+
+def _supports_dir_fd_nofollow() -> bool:
+    """Return True when the platform supports dir_fd atomic operations with O_NOFOLLOW."""
+    return (
+        hasattr(os, "O_NOFOLLOW")
+        and hasattr(os, "O_DIRECTORY")
+        and os.open in os.supports_dir_fd
+        and os.replace in os.supports_dir_fd
+        and os.unlink in os.supports_dir_fd
+        and os.lstat in os.supports_dir_fd
+    )
+
+
+def _open_meta_child_fd(base_fd: int, *, create: bool) -> int | None:
+    """Open the USB metadata directory inside base_fd without following symbolic links."""
+    if create:
+        with contextlib.suppress(FileExistsError):
+            os.mkdir(USB_METADATA_DIR_NAME, 0o755, dir_fd=base_fd)
+    meta_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        return os.open(USB_METADATA_DIR_NAME, meta_flags, dir_fd=base_fd)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise ValueError("USB metadata folder cannot be a symbolic link.") from exc
+        raise
+
+
+def _prepare_path_meta_dir(
+    base: Path, meta_dir: Path, *, create: bool
+) -> tuple[Path, int | None] | None:
+    """Prepare and verify canonical meta_dir when dir_fd operations are unavailable."""
+    if create:
+        meta_dir.mkdir(exist_ok=True)
+    elif not meta_dir.exists():
+        return None
+    if is_symlink_or_reparse_point(meta_dir):
+        raise ValueError("USB metadata folder cannot be a symbolic link.")
+    resolved = meta_dir.resolve(strict=True)
+    if resolved != meta_dir or not resolved.is_relative_to(base):
+        raise ValueError("USB metadata folder resolves outside the mount root.")
+    return meta_dir, None
+
+
+@contextlib.contextmanager
+def _open_confined_meta_dir(
+    mount_root: Path, *, create: bool
+) -> Iterator[tuple[Path, int | None] | None]:
+    """Yield (canonical_meta_dir, optional_dir_fd) confined strictly inside mount_root."""
+    base = _resolve_mount_root(mount_root)
+    meta_dir = base / USB_METADATA_DIR_NAME
+    if is_symlink_or_reparse_point(meta_dir):
+        raise ValueError("USB metadata folder cannot be a symbolic link.")
+    if _supports_dir_fd_nofollow():
+        base_fd = os.open(base, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            meta_fd = _open_meta_child_fd(base_fd, create=create)
+        finally:
+            os.close(base_fd)
+        if meta_fd is None:
+            yield None
+            return
+        try:
+            yield meta_dir, meta_fd
+        finally:
+            os.close(meta_fd)
+        return
+    yield _prepare_path_meta_dir(base, meta_dir, create=create)
+
+
+def _open_confined_read_fd(meta_dir: Path, file_name: str, *, dir_fd: int | None) -> int | None:
+    """Open file_name for reading inside meta_dir or dir_fd without following symlinks."""
+    if dir_fd is not None:
+        flags = os.O_RDONLY | os.O_NOFOLLOW
+        try:
+            return os.open(file_name, flags, dir_fd=dir_fd)
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            if exc.errno == errno.ELOOP:
+                raise ValueError(
+                    f"USB manifest path cannot be a symbolic link: {file_name}"
+                ) from exc
+            raise
+    reject_symlink_target(meta_dir, file_name)
+    target = meta_dir / file_name
+    if not target.exists():
+        return None
+    if target.resolve(strict=True).parent != meta_dir.resolve(strict=True):
+        raise ValueError("USB manifest path resolves outside the mount root.")
+    return os.open(target, os.O_RDONLY)
+
+
+def _read_confined_json_text(
+    meta_dir: Path, file_name: str, *, dir_fd: int | None
+) -> str | None:
+    """Read UTF-8 JSON text from a confined regular manifest file."""
+    _validate_manifest_file_name(file_name)
+    descriptor = _open_confined_read_fd(meta_dir, file_name, dir_fd=dir_fd)
+    if descriptor is None:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            return None
+    except BaseException:
+        os.close(descriptor)
+        raise
+    with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
+        return handle.read()
+
+
+def _unlink_confined_file(meta_dir: Path, file_name: str, *, dir_fd: int | None) -> bool:
+    """Unlink a regular manifest file inside meta_dir or dir_fd without following symlinks."""
+    _validate_manifest_file_name(file_name)
+    reject_symlink_target(meta_dir, file_name, dir_fd=dir_fd)
+    try:
+        if dir_fd is not None:
+            os.unlink(file_name, dir_fd=dir_fd)
+        else:
+            os.unlink(meta_dir / file_name)
+    except FileNotFoundError:
+        return False
+    return True
+
+
 def metadata_dir_path(mount_root: Path) -> Path:
     """Return the confined InfinitePrep metadata directory below mount_root (D142)."""
-    base = mount_root.resolve()
-    if not base.exists() or not base.is_dir():
-        raise ValueError(f"Mount root is missing or not a directory: {mount_root}")
-    candidate = mount_root / USB_METADATA_DIR_NAME
-    if candidate.is_symlink():
+    base = _resolve_mount_root(mount_root)
+    candidate = base / USB_METADATA_DIR_NAME
+    if is_symlink_or_reparse_point(candidate):
         raise ValueError("USB metadata folder cannot be a symbolic link.")
     resolved = candidate.resolve()
     if not resolved.is_relative_to(base):
         raise ValueError("USB metadata folder resolves outside the mount root.")
-    return candidate
+    return mount_root / USB_METADATA_DIR_NAME
 
 
 def _confined_manifest_file(mount_root: Path, file_name: str) -> Path:
     """Return a confined manifest file path inside the mount root's metadata folder."""
+    _validate_manifest_file_name(file_name)
     meta_dir = metadata_dir_path(mount_root)
     target = meta_dir / file_name
-    if target.is_symlink():
+    if is_symlink_or_reparse_point(target):
         raise ValueError(f"USB manifest path cannot be a symbolic link: {file_name}")
     resolved = target.resolve()
     if not resolved.is_relative_to(mount_root.resolve()):
         raise ValueError("USB manifest path resolves outside the mount root.")
     return target
-
-
-def _write_json_atomic(target: Path, payload: Mapping[str, object]) -> None:
-    """Atomically write JSON UTF-8 content to target inside an existing parent."""
-    target.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-    descriptor, temp_name = tempfile.mkstemp(
-        dir=target.parent, prefix=f".{target.name}.", suffix=".tmp", text=True
-    )
-    temp_path = Path(temp_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(text)
-        os.replace(temp_path, target)
-    except BaseException:
-        with contextlib.suppress(OSError):
-            temp_path.unlink(missing_ok=True)
-        raise
 
 
 def _manifest_to_dict(manifest: UsbExportManifest) -> dict[str, object]:
@@ -290,9 +428,18 @@ def write_in_progress_manifest(mount_root: Path, manifest: UsbExportManifest) ->
     """Write the temporary USB in-progress manifest while preserving completed data (D200)."""
     if manifest.state != MANIFEST_STATE_IN_PROGRESS:
         raise ValueError("In-progress manifest must have state 'in_progress'.")
-    target = _confined_manifest_file(mount_root, IN_PROGRESS_MANIFEST_FILE_NAME)
-    _write_json_atomic(target, _manifest_to_dict(manifest))
-    return target
+    with _open_confined_meta_dir(mount_root, create=True) as opened:
+        assert opened is not None
+        meta_dir, meta_fd = opened
+        write_json_atomic(
+            meta_dir,
+            IN_PROGRESS_MANIFEST_FILE_NAME,
+            _manifest_to_dict(manifest),
+            dir_fd=meta_fd,
+            create_parent=False,
+            reject_target_symlink=True,
+        )
+    return mount_root / USB_METADATA_DIR_NAME / IN_PROGRESS_MANIFEST_FILE_NAME
 
 
 def write_completed_manifest(mount_root: Path, manifest: UsbExportManifest) -> Path:
@@ -301,21 +448,31 @@ def write_completed_manifest(mount_root: Path, manifest: UsbExportManifest) -> P
         raise ValueError("Completed manifest must have state 'completed'.")
     if not manifest.completed_at_utc:
         raise ValueError("Completed manifest must include a UTC completion timestamp.")
-    target = _confined_manifest_file(mount_root, COMPLETED_MANIFEST_FILE_NAME)
-    _write_json_atomic(target, _manifest_to_dict(manifest))
-    in_progress = _confined_manifest_file(mount_root, IN_PROGRESS_MANIFEST_FILE_NAME)
-    in_progress.unlink(missing_ok=True)
-    return target
+    with _open_confined_meta_dir(mount_root, create=True) as opened:
+        assert opened is not None
+        meta_dir, meta_fd = opened
+        write_json_atomic(
+            meta_dir,
+            COMPLETED_MANIFEST_FILE_NAME,
+            _manifest_to_dict(manifest),
+            dir_fd=meta_fd,
+            create_parent=False,
+            reject_target_symlink=True,
+        )
+        _unlink_confined_file(meta_dir, IN_PROGRESS_MANIFEST_FILE_NAME, dir_fd=meta_fd)
+    return mount_root / USB_METADATA_DIR_NAME / COMPLETED_MANIFEST_FILE_NAME
 
 
 def _read_manifest_file(mount_root: Path, file_name: str) -> UsbExportManifest | None:
     """Read one JSON manifest file below mount_root, returning None when absent."""
-    target = _confined_manifest_file(mount_root, file_name)
-    if not target.exists():
+    with _open_confined_meta_dir(mount_root, create=False) as opened:
+        if opened is None:
+            return None
+        meta_dir, meta_fd = opened
+        content = _read_confined_json_text(meta_dir, file_name, dir_fd=meta_fd)
+    if content is None:
         return None
-    if not target.is_file():
-        return None
-    raw = json.loads(target.read_text(encoding="utf-8"))
+    raw = json.loads(content)
     if not isinstance(raw, Mapping):
         raise ValueError(f"Manifest file {file_name} must hold a JSON object.")
     return _manifest_from_dict(raw)
@@ -333,8 +490,8 @@ def read_in_progress_manifest(mount_root: Path) -> UsbExportManifest | None:
 
 def remove_in_progress_manifest(mount_root: Path) -> bool:
     """Remove the USB in-progress manifest during recovery while keeping history (D139)."""
-    target = _confined_manifest_file(mount_root, IN_PROGRESS_MANIFEST_FILE_NAME)
-    if not target.exists():
-        return False
-    target.unlink()
-    return True
+    with _open_confined_meta_dir(mount_root, create=False) as opened:
+        if opened is None:
+            return False
+        meta_dir, meta_fd = opened
+        return _unlink_confined_file(meta_dir, IN_PROGRESS_MANIFEST_FILE_NAME, dir_fd=meta_fd)

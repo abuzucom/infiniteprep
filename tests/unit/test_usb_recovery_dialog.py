@@ -2,38 +2,34 @@
 
 from __future__ import annotations
 
-import sys
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialog, QLabel
 
-WORKTREE_ROOT = Path(__file__).resolve().parents[2]
-WORKTREE_SRC = WORKTREE_ROOT / "src"
-for _candidate in (str(WORKTREE_ROOT), str(WORKTREE_SRC)):
-    if _candidate not in sys.path:
-        sys.path.insert(0, _candidate)
-
-from infiniteprep.config.credentials import CredentialStore  # noqa: E402
-from infiniteprep.config.settings import AppSettings, SettingsManager  # noqa: E402
-from infiniteprep.services.usb.manifest import ExportScope  # noqa: E402
-from infiniteprep.services.usb.recovery import (  # noqa: E402
+from infiniteprep.config.credentials import CredentialStore
+from infiniteprep.config.settings import AppSettings, SettingsManager
+from infiniteprep.main import process_usb_recovery_at_launch
+from infiniteprep.services.usb.manifest import ExportScope
+from infiniteprep.services.usb.recovery import (
     DEFAULT_RECOVERY_EXPIRY_DAYS,
     ReconnectChoice,
     UsbJournalEntry,
     UsbReconnectMatch,
+    UsbRecoveryJournalStore,
 )
-from infiniteprep.services.usb.targets import TargetCandidate  # noqa: E402
-from infiniteprep.ui.settings.storage import StorageTab  # noqa: E402
-from infiniteprep.ui.settings_dialog import SettingsDialog  # noqa: E402
-from infiniteprep.ui.usb_recovery_dialog import (  # noqa: E402
+from infiniteprep.services.usb.targets import TargetCandidate
+from infiniteprep.ui.settings.storage import StorageTab
+from infiniteprep.ui.settings_dialog import SettingsDialog
+from infiniteprep.ui.usb_recovery_dialog import (
     UsbRecoveryDialog,
     format_expiry_warning_text,
     format_overdue_cleanup_text,
 )
-from tests.unit.usb_preflight_support import (  # noqa: E402
+from tests.unit.usb_preflight_support import (
     build_drive,
     build_inspection,
     build_partition,
@@ -137,12 +133,67 @@ class UsbRecoveryDialogTests(unittest.TestCase):
     def test_notice_formatters_render_entry_details(self) -> None:
         entry = _build_match(requires_confirmation=False).entry
         warning = format_expiry_warning_text([entry])
+        custom_warning = format_expiry_warning_text([entry], expiry_days=14)
         overdue = format_overdue_cleanup_text([entry])
 
         self.assertIn("1 day", warning.casefold())
+        self.assertIn("30 days", warning.casefold())
+        self.assertIn("14 days", custom_warning.casefold())
         self.assertIn(entry.export_id, warning)
         self.assertIn("expired", overdue.casefold())
         self.assertIn(entry.export_id, overdue)
+
+    def test_launch_processes_usb_expiry_and_displays_notices(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            settings_mgr = SettingsManager(root / "settings.json")
+            settings_mgr.update(usb_recovery_expiry_enabled=True, usb_recovery_expiry_days=30)
+            store = UsbRecoveryJournalStore(root / "usb_recovery_journal.json")
+
+            base_entry = _build_match(requires_confirmation=False).entry
+            warn_entry = UsbJournalEntry(
+                export_id="exp-warn",
+                started_at_utc="2026-10-02T12:00:00Z",
+                volume_uuid=base_entry.volume_uuid,
+                drive_identity=base_entry.drive_identity,
+                mount_point=base_entry.mount_point,
+                scope=base_entry.scope,
+                playlist_names=base_entry.playlist_names,
+                track_paths=base_entry.track_paths,
+            )
+            overdue_entry = UsbJournalEntry(
+                export_id="exp-overdue",
+                started_at_utc="2026-09-29T12:00:00Z",
+                volume_uuid=base_entry.volume_uuid,
+                drive_identity=base_entry.drive_identity,
+                mount_point=base_entry.mount_point,
+                scope=base_entry.scope,
+                playlist_names=base_entry.playlist_names,
+                track_paths=base_entry.track_paths,
+            )
+            store.save_entries([warn_entry, overdue_entry])
+
+            notices: list[tuple[str, str]] = []
+            now_utc = datetime(2026, 10, 31, 13, 0, tzinfo=UTC)
+            scan = process_usb_recovery_at_launch(
+                settings_manager=settings_mgr,
+                journal_store=store,
+                now_utc=now_utc,
+                show_notice=lambda title, body: notices.append((title, body)),
+            )
+
+            self.assertEqual([item.export_id for item in scan.overdue_notice_entries], ["exp-overdue"])
+            self.assertEqual([item.export_id for item in scan.warning_entries], ["exp-warn"])
+            self.assertEqual(len(notices), 2)
+            self.assertIn("exp-overdue", notices[0][1])
+            self.assertIn("30 days", notices[1][1])
+            self.assertIn("exp-warn", notices[1][1])
+            remaining = store.load_entries()
+            self.assertEqual([item.export_id for item in remaining], ["exp-warn"])
+            self.assertTrue(remaining[0].warned_expiry)
+            self.assertEqual(
+                now_utc - datetime(2026, 10, 2, 12, 0, tzinfo=UTC), timedelta(days=29, hours=1)
+            )
 
 
 class StorageTabUsbRecoverySettingsTests(unittest.TestCase):

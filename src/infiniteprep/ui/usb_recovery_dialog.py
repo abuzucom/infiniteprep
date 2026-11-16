@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from infiniteprep.services.usb.models import DriveIdentity, PartitionInfo
 from infiniteprep.services.usb.recovery import (
+    DEFAULT_RECOVERY_EXPIRY_DAYS,
     ReconnectChoice,
     UsbJournalEntry,
     UsbReconnectMatch,
@@ -28,9 +29,16 @@ def _format_entry_bullet(entry: UsbJournalEntry) -> str:
     return f"* {entry.export_id} ({entry.mount_point}, started {entry.started_at_utc})"
 
 
-def format_expiry_warning_text(entries: Sequence[UsbJournalEntry]) -> str:
+def format_expiry_warning_text(
+    entries: Sequence[UsbJournalEntry],
+    *,
+    expiry_days: int = DEFAULT_RECOVERY_EXPIRY_DAYS,
+) -> str:
     """Build the 1-day advance expiry warning message for unresolved USB entries (D194)."""
-    header = "Automatic cleanup removes these unresolved USB recovery entries after 1 day:"
+    header = (
+        "Automatic cleanup removes unresolved USB recovery entries older than "
+        f"{expiry_days} days; these entries expire within 1 day:"
+    )
     lines = [header, *(_format_entry_bullet(entry) for entry in entries)]
     return "\n".join(lines)
 
