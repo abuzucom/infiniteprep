@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.66.0] (2026-11-16)
+## [0.66.1] (2026-11-16)
 
 ### Added
 
@@ -15,6 +15,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Written BPM supports integers or one or two decimal places with half-up rounding.
   Import parses Beatport and Essentia key styles and warns about unreadable key text.
   Settings > General exposes these write preferences to the desktop app.
+
+### Fixed
+
+- Hardened USB recovery journal launch and Storage settings cleanup against corrupt or unreadable journal files while preserving data on disk. Preserved resolved recovery records across expiry and manual cleanup, added bounded durable cleanup history records, confined journal parent directories under the storage root, and normalized manifest and journal timestamps to UTC. The version advances from 0.66.0 to 0.66.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ## [0.64.0] (2026-11-15)
 
