@@ -13,6 +13,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The Ubuntu leg of the test matrix runs the suite under `coverage run -m pytest`. The report costs no second suite run. The other legs run the plain suite.
   - The coverage step writes a bounded JSON document with the total and the files with the least coverage. The new `scripts/build_coverage_summary.py` builds the document from the coverage report.
   - A separate `coverage-comment` job posts the table as a pull request comment. The job updates the comment on every push and removes a second comment from the bot.
+  - A pull request from a fork receives a read-only token. The comment job skips those pull requests. The report stays in the artifacts.
   - The job validates the document before it posts. The document holds only the expected fields. Every number sits in the allowed range. Every path holds only safe characters. The file list and the comment length stay inside the caps. The job builds the Markdown itself. A file name never ends the code fence.
   - The job runs one at a time for a pull request. A newer push cancels the older job. The comment carries the run that wrote it. An older run never replaces a newer result.
   - The job that runs the suite holds read-only permissions. The comment job holds `pull-requests: write` and checks out nothing. No test code can post on the pull request.

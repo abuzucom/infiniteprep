@@ -246,11 +246,14 @@ jobs:
 
   # The comment job holds the pull request write permission. The job that runs
   # the suite keeps read-only permissions, so no test code can post a comment.
+  # A pull request from a fork receives a read-only token, so the job skips
+  # those pull requests. The report stays in the artifacts.
   coverage-comment:
     needs: [changes, test-matrix]
     if: >-
       ${{ !cancelled() && github.event_name == 'pull_request' &&
-      needs.test-matrix.result == 'success' }}
+      needs.test-matrix.result == 'success' &&
+      github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # One comment job runs at a time for a pull request. A newer push cancels

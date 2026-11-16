@@ -163,6 +163,12 @@ class CoverageCommentJobTest(unittest.TestCase):
         """The job stays out of the way on a push to main."""
         self.assertIn("github.event_name == 'pull_request'", self.job)
 
+    def test_the_job_skips_a_pull_request_from_a_fork(self) -> None:
+        """A pull request from a fork receives a read-only token."""
+        self.assertIn(
+            "github.event.pull_request.head.repo.full_name == github.repository", self.job
+        )
+
     def test_the_job_checks_out_nothing(self) -> None:
         """The job holds no checkout, so it keeps no credentials."""
         self.assertNotIn("actions/checkout@", self.job)
