@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.70.0] (2026-11-16)
+## [0.71.0] (2026-11-16)
 
 ### Added
 
@@ -72,6 +72,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The change journal and the recovery prompt show local time.
+  - Both tables showed the stored UTC text with microseconds and an offset. They now show the local date and time of this computer. Stored values stay unchanged.
+  - A MusicBrainz release date yields a year only when it starts with four digits followed by the end or a hyphen. Any other shape yields no year.
+  - `WriteService`, `MetadataTagAdapter`, and `SafeTranscoderAdapter` accept an optional `now_iso` clock. Each default is `utc_now_iso`, so every journal timestamp carries the fixed-width UTC form.
+  - The version advances from 0.70.0 to 0.71.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - A wrong computer clock no longer removes USB recovery entries.
   - The expiry scan keeps an entry whose start time lies after the current time. It also keeps an entry older than its expiry limit plus 365 days.
   - The launch scan shows a "USB Recovery Clock Check" notice that lists the kept entries. Settings > Storage still removes them by hand.
