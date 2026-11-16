@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.66.0] (2026-11-16)
+## [0.66.1] (2026-11-16)
 
 ### Added
 
@@ -15,6 +15,25 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Written BPM supports integers or one or two decimal places with half-up rounding.
   Import parses Beatport and Essentia key styles and warns about unreadable key text.
   Settings > General exposes these write preferences to the desktop app.
+
+### Changed
+
+- The theme picker lists the themes the build can apply, and a theme that cannot apply stays out of the picker (issue 247).
+  - `apply_application_theme` returns a result that names the theme in effect and the reason a theme did not apply.
+  - The main window and the Settings dialog keep the picker on the theme in effect. A failed choice reapplies the theme that was in effect. The app keeps its look. The stored theme names the theme in effect. A failed application logs a warning that names the theme and the reason.
+  - A failed theme choice never leaves a picker or a settings file naming a theme that the app does not use.
+  - The theme picker reads one shared list of choices. The main window and the Settings dialog offer the same themes.
+  - The version advances to 0.66.1. `pyproject.toml` and `src/infiniteprep/__init__.py` hold the new value.
+
+### Fixed
+
+- The theme picker changes the app in a packaged build (issue 247).
+  - The packaged app shipped without the `qt-material` package. Every theme choice fell back to the native look. The picker showed a theme that the app never applied.
+  - `infiniteprep.spec` now names `qt_material` as a hidden import and points PyInstaller at `packaging/pyinstaller_hooks/`. The new `hook-qt_material.py` keeps the two theme files, the style sheet template, and the icon sources next to the package in every bundle.
+  - The Windows, macOS, and Linux bundle allowlists name the theme data, the Qt interface loader binding that the theme package imports, and the MarkupSafe extension that its template engine uses.
+  - The Roboto fonts ship beside the theme files in every bundle. The theme package does not ship the license text for the fonts. The bundle carries a pinned copy of the Apache-2.0 text next to the font files.
+  - NOTICE names the shipped qt-material and MarkupSafe versions. The notice listed the versions from before the theme package shipped.
+  - The packaging hook stops the build when the theme package has no Roboto fonts.
 
 ## [0.64.0] (2026-11-15)
 
