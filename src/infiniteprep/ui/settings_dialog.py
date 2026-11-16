@@ -36,7 +36,7 @@ from infiniteprep.ui.settings.storage import (
 )
 from infiniteprep.ui.settings.transcode import TranscodeTab
 from infiniteprep.ui.settings.updates import UpdatesTab
-from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme
+from infiniteprep.ui.theme import DEFAULT_DARK_THEME, switch_application_theme
 
 __all__ = [
     "CLEANUP_BUTTON_LABEL",
@@ -160,10 +160,13 @@ class SettingsDialog(QDialog):
     def save_settings(self) -> None:
         """Persist updated settings to JSON and secrets to CredentialStore."""
         self.identification_tab.store_secrets()
+        previous_theme = getattr(self.current_settings, "theme", DEFAULT_DARK_THEME)
         for tab in self.setting_tabs:
             tab.apply_to(self.current_settings)
-        self.settings_mgr.save(self.current_settings)
         app = QApplication.instance()
-        if app is not None:
-            apply_application_theme(app, self.current_settings.theme)
+        chosen_theme = getattr(self.current_settings, "theme", DEFAULT_DARK_THEME)
+        result = switch_application_theme(app, chosen_theme, previous_theme)
+        self.current_settings.theme = result.theme
+        self.general_tab.set_theme(result.theme)
+        self.settings_mgr.save(self.current_settings)
         self.accept()
