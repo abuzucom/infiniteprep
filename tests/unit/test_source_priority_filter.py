@@ -7,7 +7,13 @@ import pytest
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import ApprovalOrigin, AudioFormat, EntityType, ProposalReviewStatus
-from infiniteprep.domain.models import ApprovedField, CandidateMatch, FileAsset, ReleaseDetails
+from infiniteprep.domain.models import (
+    ApprovedField,
+    CandidateMatch,
+    FieldProposal,
+    FileAsset,
+    ReleaseDetails,
+)
 from infiniteprep.domain.source_priority import FIELD_PRIORITY, outranks, priority_rank
 from infiniteprep.services.reconciliation import ReconciliationService
 
@@ -152,6 +158,30 @@ def test_the_superseded_proposal_is_marked_in_the_database() -> None:
     itunes_proposals = [item for item in stored if item.provider == "itunes"]
     assert itunes_proposals
     assert all(item.review_status == ProposalReviewStatus.SUPERSEDED for item in itunes_proposals)
+
+
+def test_a_stored_proposal_from_a_source_that_disappeared_turns_superseded() -> None:
+    """A stored iTunes proposal turns superseded when a Discogs candidate holds the field."""
+    repository = _repository()
+    repository.upsert_file_asset(_asset())
+    repository.upsert_field_proposal(
+        FieldProposal(
+            id="stored-itunes-genre",
+            file_id=FILE_ID,
+            field_name="genre",
+            proposed_value="Dance",
+            provider="itunes",
+            provider_entity_id="2",
+            provider_confidence=0.9,
+        )
+    )
+    repository.upsert_candidate_match(_candidate("discogs", "1", genre="Electronic"))
+
+    _reconcile(repository)
+
+    stored = repository.get_field_proposal_by_id("stored-itunes-genre")
+    assert stored is not None
+    assert stored.review_status == ProposalReviewStatus.SUPERSEDED
 
 
 def test_a_field_without_an_order_keeps_every_provider_proposal() -> None:

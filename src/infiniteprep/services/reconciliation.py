@@ -111,7 +111,7 @@ class ReconciliationService:
         kept = self._apply_source_priority(asset.id, generated)
         for prop in kept:
             self.repo.upsert_field_proposal(prop)
-        self._supersede_dropped_proposals(asset.id, generated, kept)
+        self._supersede_lower_priority_proposals(asset.id, kept)
 
         self._update_review_status_after_reconcile(asset.id, kept)
         return self.repo.list_field_proposals(asset.id)
@@ -159,25 +159,30 @@ class ReconciliationService:
                 return True
         return False
 
-    def _supersede_dropped_proposals(
-        self,
-        file_id: str,
-        proposals: list[FieldProposal],
-        kept: list[FieldProposal],
-    ) -> None:
-        """Mark the stored proposals of a dropped source as superseded."""
-        kept_ids = {proposal.id for proposal in kept}
-        dropped = [
-            (proposal.field_name, proposal.provider)
-            for proposal in proposals
-            if proposal.id not in kept_ids
-        ]
-        if not dropped:
+    def _supersede_lower_priority_proposals(self, file_id: str, kept: list[FieldProposal]) -> None:
+        """Mark the stored proposals of a lower ranked source as superseded.
+
+        The comparison covers every stored proposal for the file. A stored
+        proposal from a lower ranked source goes superseded when a higher
+        ranked source holds the field, even when that source produced no
+        proposal in this run.
+        """
+        winners: dict[str, str] = {}
+        for proposal in kept:
+            if priority_rank(proposal.field_name, proposal.provider) is None:
+                continue
+            current = winners.get(proposal.field_name)
+            if current is None or outranks(proposal.field_name, proposal.provider, current):
+                winners[proposal.field_name] = proposal.provider
+        if not winners:
             return
         for stored in self.repo.list_field_proposals(file_id):
             if stored.review_status != ProposalReviewStatus.PENDING:
                 continue
-            if (stored.field_name, stored.provider) in dropped:
+            winner = winners.get(stored.field_name)
+            if winner is None:
+                continue
+            if outranks(stored.field_name, winner, stored.provider):
                 self.repo.update_proposal_status(stored.id, ProposalReviewStatus.SUPERSEDED)
 
     def _proposals_from_candidate(
