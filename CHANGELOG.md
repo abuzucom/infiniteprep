@@ -49,6 +49,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Two pinned Python packages advance.
+  - `requirements-lock.txt` pins `pyinstaller-hooks-contrib` 2026.10 for the application environment. The previous pin was 2026.9.
+  - `requirements-sbom.txt` pins `jsonpointer` 3.12 with the SHA-256 of its wheel for the SBOM tool environment. The previous pin was 3.10.
+  - Both file headers state that the two files lock separate environments. A package that both environments need appears in both files at the same version.
+- The application lockfile pins the SHA-256 digest of every artifact PyPI publishes for each pinned release.
+  - `requirements-lock.txt` lists the digest of each wheel and source distribution under its pin. pip verifies the bytes it installs against that list.
+  - The `ci` and bundle jobs install the file with `--require-hashes`. A substituted artifact fails the install instead of reaching the build.
+  - `tests/test_requirements_lock_hashes.py` checks that every pin carries a digest and that pip rejects an artifact whose digest the file does not name.
 - The foucault security review pin advances from 3.8.1 to 3.8.8.
   - `.github/workflows/security-review-pr.yml` pins both `uses:` references and both `audit_ref` values to commit `d50c22c6589fa6843e1bf50d3da8b29b637a1395`.
   - `ci/build_pr_case.py`, `ci/call_model.py`, and `scripts/check_pr_review_response.py` match that commit byte for byte. The other three adapter files carry no upstream change.
@@ -76,7 +84,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `utc_now_iso` always emits microseconds. The fixed width keeps text comparison equal to time comparison.
   - `Repository.upsert_change_record` converts a caller timestamp with any UTC offset to that stored form. A value without an offset raises `ValueError`.
   - `Repository.set_cached_response` converts `expires_at_iso` the same way. A value without an offset raises `ValueError`.
-  - The version advances from 0.69.0 to 0.70.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.69.1 to 0.70.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- The version advances from 0.69.0 to 0.69.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Hardened USB recovery journal launch and Storage settings cleanup against corrupt or unreadable journal files while preserving data on disk. Preserved resolved recovery records across expiry and manual cleanup, added bounded durable cleanup history records, confined journal parent directories under the storage root, and normalized manifest and journal timestamps to UTC. The version advances from 0.67.0 to 0.67.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The theme picker changes the app in a packaged build (issue 247).
   - The packaged app shipped without the `qt-material` package. Every theme choice fell back to the native look. The picker showed a theme that the app never applied.
