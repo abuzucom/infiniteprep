@@ -18,6 +18,7 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui import main_window as main_window_module
 from infiniteprep.ui.main_window import MainWindow
+from infiniteprep.ui.table_sort import parse_bpm_value
 from tests.fixtures.audio_factory import create_wav_fixture
 from tests.fixtures.memory_settings import MemorySettingsManager
 
@@ -295,6 +296,50 @@ def test_unsorted_rows_move_with_the_direction(qtbot: Any, tmp_path: Path) -> No
     click_header(window, BPM_COLUMN)
 
     assert visible_names(window) == ["a.wav", "b.wav"]
+
+
+def test_a_non_finite_bpm_sorts_with_the_unsorted_rows(qtbot: Any, tmp_path: Path) -> None:
+    """A BPM that is not a finite number counts as no value at all."""
+    window, _repo, _ids = build_window(
+        qtbot,
+        tmp_path,
+        [
+            TrackSpec("a.wav", tags={"bpm": "128"}),
+            TrackSpec("b.wav", tags={"bpm": "NaN"}),
+        ],
+    )
+
+    click_header(window, BPM_COLUMN)
+
+    assert visible_names(window) == ["b.wav", "a.wav"]
+
+
+def test_a_non_finite_bpm_follows_the_placement_setting(
+    qtbot: Any, tmp_path: Path, settings
+) -> None:
+    """A BPM that is not a finite number moves with the unsorted group."""
+    settings.settings = replace(settings.settings, unsorted_rows_placement="last")
+    window, _repo, _ids = build_window(
+        qtbot,
+        tmp_path,
+        [
+            TrackSpec("a.wav", tags={"bpm": "128"}),
+            TrackSpec("b.wav", tags={"bpm": "inf"}),
+        ],
+    )
+
+    click_header(window, BPM_COLUMN)
+
+    assert visible_names(window) == ["a.wav", "b.wav"]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("128.5", 128.5), ("128", 128.0), ("", None), ("fast", None), ("NaN", None), ("inf", None)],
+)
+def test_parse_bpm_value_keeps_only_finite_numbers(text: str, expected: float | None) -> None:
+    """Only a finite number becomes a BPM value."""
+    assert parse_bpm_value(text) == expected
 
 
 def test_clicking_a_row_after_a_sort_loads_that_file(qtbot: Any, tmp_path: Path) -> None:

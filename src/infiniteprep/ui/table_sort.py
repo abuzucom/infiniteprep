@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 from functools import cmp_to_key
@@ -108,10 +109,16 @@ class _SortEntry:
 
 
 def parse_bpm_value(text: str) -> float | None:
-    """Return the BPM as a number, or None when the text holds no usable number."""
+    """Return the BPM as a number, or None when the text holds no usable number.
+
+    A value that is not a finite number, such as "NaN" or "inf", has no place
+    in a numeric order. Such a value counts as no value at all.
+    """
     try:
         value = float(text.strip())
     except (AttributeError, TypeError, ValueError):
+        return None
+    if not math.isfinite(value):
         return None
     return value
 
