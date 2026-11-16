@@ -244,13 +244,15 @@ Endpoint URLs must use HTTPS to a public host or HTTP to a loopback host.
 
 ### Data sent to iTunes Search
 
-The iTunes Search lookup sends the artist name and the track title as the
+The iTunes Search adapter sends the artist name and the track title as the
 search term, the storefront country, the client IP address, and the shared
 User-Agent to `itunes.apple.com`. The endpoint is a published constant, and the
-adapter follows no redirect.
+adapter follows no redirect. The adapter keeps no artwork from the response, and
+the shared cache holds no artwork either. Apple limits promotional content,
+album art included, to promoting store content.
 
-The iTunes Search adapter keeps no artwork from the response. Apple limits
-promotional content, album art included, to promoting store content.
+Live identification runs the adapter once INFRA-5 lands. The adapter has no
+caller before that.
 
 ## Usage Walkthrough
 

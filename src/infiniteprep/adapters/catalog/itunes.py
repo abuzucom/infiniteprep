@@ -53,8 +53,20 @@ DISCLOSURE_QUERY_DATA: Final[str] = (
     "the client IP address, and the shared User-Agent"
 )
 DISCLOSURE_TEXT: Final[str] = (
-    f"Live identification sends {DISCLOSURE_QUERY_DATA} to {ITUNES_SEARCH_HOST}. "
+    f"The iTunes Search adapter sends {DISCLOSURE_QUERY_DATA} to {ITUNES_SEARCH_HOST}. "
     "The adapter keeps no artwork from the response."
+)
+# The cached response holds the fields the adapter reads. The artwork fields and
+# every other promotional field stay out of the shared cache.
+CACHED_RESULT_FIELDS: Final[tuple[str, ...]] = (
+    "trackId",
+    "collectionId",
+    "artistName",
+    "collectionName",
+    "trackName",
+    "primaryGenreName",
+    "releaseDate",
+    "trackTimeMillis",
 )
 RELEASE_YEAR_RE: Final[re.Pattern[str]] = re.compile(r"^(\d{4})")
 # A row without a release date sorts after every dated row.
@@ -155,6 +167,22 @@ def _duration_seconds(value: Any) -> float | None:
     return float(value) / 1000.0
 
 
+def _cacheable_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Return the response fields that the shared cache keeps.
+
+    The cached payload holds no artwork and no other promotional field.
+    """
+    results = payload.get("results")
+    if not isinstance(results, list):
+        return {"resultCount": 0, "results": []}
+    kept_rows = [
+        {name: row[name] for name in CACHED_RESULT_FIELDS if name in row}
+        for row in results
+        if isinstance(row, dict)
+    ]
+    return {"resultCount": len(kept_rows), "results": kept_rows}
+
+
 class ItunesSearchAdapter:
     """Queries iTunes Search for a coarse genre and a release date."""
 
@@ -201,7 +229,7 @@ class ItunesSearchAdapter:
                     self.repo.set_cached_response(
                         cache_key=cache_key,
                         provider=self.provider_name,
-                        response_data=payload,
+                        response_data=_cacheable_payload(payload),
                         ttl_seconds=ITUNES_CACHE_TTL_SEC,
                     )
         results = payload.get("results", [])

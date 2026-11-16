@@ -184,6 +184,74 @@ def test_a_stored_proposal_from_a_source_that_disappeared_turns_superseded() -> 
     assert stored.review_status == ProposalReviewStatus.SUPERSEDED
 
 
+def test_an_approved_provider_supersedes_a_stored_lower_ranked_proposal() -> None:
+    """An approved Discogs genre turns a stored iTunes proposal superseded."""
+    repository = _repository()
+    repository.upsert_file_asset(_asset())
+    repository.upsert_field_proposal(
+        FieldProposal(
+            id="stored-itunes-genre",
+            file_id=FILE_ID,
+            field_name="genre",
+            proposed_value="Dance",
+            provider="itunes",
+            provider_entity_id="2",
+            provider_confidence=0.9,
+        )
+    )
+    repository.upsert_approved_field(
+        ApprovedField(
+            file_id=FILE_ID,
+            field_name="genre",
+            approved_value="Electronic",
+            approval_origin=ApprovalOrigin.PROPOSAL_ACCEPTED,
+            approved_at="2026-11-15T00:00:00+00:00",
+            locked=False,
+            provider_attribution={"provider": "discogs", "entity_id": "1"},
+        )
+    )
+
+    _reconcile(repository)
+
+    stored = repository.get_field_proposal_by_id("stored-itunes-genre")
+    assert stored is not None
+    assert stored.review_status == ProposalReviewStatus.SUPERSEDED
+
+
+def test_an_owner_value_supersedes_every_stored_proposal_for_the_field() -> None:
+    """A value the owner set turns every stored proposal for the field superseded."""
+    repository = _repository()
+    repository.upsert_file_asset(_asset())
+    repository.upsert_field_proposal(
+        FieldProposal(
+            id="stored-itunes-genre",
+            file_id=FILE_ID,
+            field_name="genre",
+            proposed_value="Dance",
+            provider="itunes",
+            provider_entity_id="2",
+            provider_confidence=0.9,
+        )
+    )
+    repository.upsert_approved_field(
+        ApprovedField(
+            file_id=FILE_ID,
+            field_name="genre",
+            approved_value="Progressive House",
+            approval_origin=ApprovalOrigin.MANUAL_EDIT,
+            approved_at="2026-11-15T00:00:00+00:00",
+            locked=True,
+            provider_attribution={"provider": "user_manual"},
+        )
+    )
+
+    _reconcile(repository)
+
+    stored = repository.get_field_proposal_by_id("stored-itunes-genre")
+    assert stored is not None
+    assert stored.review_status == ProposalReviewStatus.SUPERSEDED
+
+
 def test_a_field_without_an_order_keeps_every_provider_proposal() -> None:
     """A field outside the priority table keeps the current behavior."""
     repository = _repository()

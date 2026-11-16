@@ -43,7 +43,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `adapters/catalog/itunes.py` queries `https://itunes.apple.com/search` with the shared D221 User-Agent. The lookup sends the artist name and the track title as the search term, plus the storefront country.
   - The adapter waits 3 seconds between calls for the published limit of about 20 calls per minute. It caches every response in the shared SQLite cache for 24 hours.
   - The matching engine ranks the rows over the artist and the title. The earliest release date wins among the rows that tie for the best match.
-  - The adapter reads `primaryGenreName` and `releaseDate`. It keeps no artwork from the response because Apple limits promotional content, album art included, to promoting store content.
+  - The adapter reads `primaryGenreName` and `releaseDate`. It keeps no artwork from the response because Apple limits promotional content, album art included, to promoting store content. The shared cache holds the read fields only. No artwork URL stays in it.
   - A row supplies a value only when it matches the artist and the title. The mean of the two field similarities reaches the match score. The candidate keeps that score.
   - The request path follows no redirect, and the request timeout is a named constant.
   - The limiter lives in the process. A second adapter or a second thread waits for the same interval.
@@ -53,7 +53,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The genre order is Discogs, then iTunes. The release date order is MusicBrainz, then Discogs, then iTunes.
   - A higher ranked source keeps the field. A lower ranked proposal for that field never reaches the proposal table. A value the owner set outranks every provider.
   - The table also limits the fields a provider may supply. The iTunes adapter proposes the genre and the release year only.
-  - A stored proposal from a lower ranked source turns superseded when a higher ranked source holds the field. The rule also covers a source that no longer produces a proposal.
+  - A stored proposal from a lower ranked source turns superseded when a higher ranked source holds the field. The rule also covers a source that no longer produces a proposal. An approved value from a higher ranked source holds the field too, and a value the owner set holds it on its own.
 - The text similarity helper moves to `domain/similarity.py`. `services/matching_engine.py` keeps its name and its behavior.
 - The Identification settings tab names the host and the query data of the iTunes Search lookup. The README holds the same disclosure in a new section.
 - `tests/unit/test_itunes_search_adapter.py`, `tests/unit/test_itunes_endpoint.py`, `tests/unit/test_source_priority_filter.py`, and `tests/unit/test_itunes_disclosure.py` cover a match with a genre and a date, the empty response, an unrelated row, a malformed duration, a field another source already supplied, a response with artwork, the rate limit, the cache, the redirect refusal, and the provenance on each proposal. The recorded responses live under `tests/fixtures/itunes_search/`.

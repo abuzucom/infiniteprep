@@ -164,26 +164,48 @@ class ReconciliationService:
 
         The comparison covers every stored proposal for the file. A stored
         proposal from a lower ranked source goes superseded when a higher
-        ranked source holds the field, even when that source produced no
-        proposal in this run.
+        ranked source holds the field. The source may hold the field through an
+        approved value or through a proposal from this run. A value the owner
+        set holds the field on its own.
         """
-        winners: dict[str, str] = {}
-        for proposal in kept:
-            if priority_rank(proposal.field_name, proposal.provider) is None:
-                continue
-            current = winners.get(proposal.field_name)
-            if current is None or outranks(proposal.field_name, proposal.provider, current):
-                winners[proposal.field_name] = proposal.provider
-        if not winners:
+        winners, owner_fields = self._field_owners(file_id, kept)
+        if not winners and not owner_fields:
             return
         for stored in self.repo.list_field_proposals(file_id):
             if stored.review_status != ProposalReviewStatus.PENDING:
+                continue
+            if stored.field_name in owner_fields:
+                self.repo.update_proposal_status(stored.id, ProposalReviewStatus.SUPERSEDED)
                 continue
             winner = winners.get(stored.field_name)
             if winner is None:
                 continue
             if outranks(stored.field_name, winner, stored.provider):
                 self.repo.update_proposal_status(stored.id, ProposalReviewStatus.SUPERSEDED)
+
+    def _field_owners(
+        self, file_id: str, kept: list[FieldProposal]
+    ) -> tuple[dict[str, str], set[str]]:
+        """Return the source that holds each ordered field and the fields the owner set."""
+        winners: dict[str, str] = {}
+        owner_fields: set[str] = set()
+        for field_name, approved_field in self.repo.get_approved_fields_map(file_id).items():
+            if approved_field.approval_origin in USER_VALUE_ORIGINS:
+                owner_fields.add(field_name)
+                continue
+            provider = str(approved_field.provider_attribution.get("provider", ""))
+            if priority_rank(field_name, provider) is None:
+                continue
+            current = winners.get(field_name)
+            if current is None or outranks(field_name, provider, current):
+                winners[field_name] = provider
+        for proposal in kept:
+            if priority_rank(proposal.field_name, proposal.provider) is None:
+                continue
+            current = winners.get(proposal.field_name)
+            if current is None or outranks(proposal.field_name, proposal.provider, current):
+                winners[proposal.field_name] = proposal.provider
+        return (winners, owner_fields)
 
     def _proposals_from_candidate(
         self, asset: FileAsset, cand: CandidateMatch, app_score: float

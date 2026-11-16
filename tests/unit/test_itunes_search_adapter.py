@@ -114,6 +114,28 @@ def test_the_earliest_release_date_wins_among_tied_rows() -> None:
     assert matches[0].release_details.year == "1994"
 
 
+def test_the_cached_response_keeps_no_artwork() -> None:
+    """The shared cache holds the read fields only, so no artwork URL stays in it."""
+    repository = _repository()
+    adapter = _adapter(repository, _recorded("artwork_only"))
+
+    adapter.search(_query(), file_id=FILE_ID)
+
+    cache_key = adapter._cache_key(
+        {
+            "term": "Deep Dish The Dream",
+            "media": "music",
+            "entity": "song",
+            "country": "US",
+            "limit": "10",
+        }
+    )
+    cached = repository.get_cached_response(cache_key)
+    assert cached is not None
+    assert "artwork" not in json.dumps(cached).lower()
+    assert cached["results"][0]["primaryGenreName"] == "Dance"
+
+
 def test_the_response_artwork_is_ignored() -> None:
     """No artwork field from the response reaches the candidate."""
     adapter = _adapter(_repository(), _recorded("artwork_only"))
