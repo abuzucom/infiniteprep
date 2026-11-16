@@ -41,6 +41,8 @@ EXPIRY_WARNING_LEAD_DAYS: Final[int] = 1
 JOURNAL_SCHEMA_VERSION: Final[int] = 1
 MAX_CLEANUP_HISTORY_RECORDS: Final[int] = 100
 JOURNAL_FILE_NAME: Final[str] = "usb_recovery_journal.json"
+# An entry may outlive its expiry limit by this much before the scan doubts the host clock.
+_PLAUSIBLE_AGE_MARGIN: Final[timedelta] = timedelta(days=MAX_RECOVERY_EXPIRY_DAYS)
 
 
 class ReconnectChoice(StrEnum):
@@ -98,6 +100,8 @@ class UsbExpiryScanResult:
     warning_entries: tuple[UsbJournalEntry, ...]
     expired_deleted_entries: tuple[UsbJournalEntry, ...]
     overdue_notice_entries: tuple[UsbJournalEntry, ...]
+    # Entries the scan kept because the host clock gave them an implausible age.
+    clock_suspect_entries: tuple[UsbJournalEntry, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -314,8 +318,14 @@ def _classify_expiry(
     expiry_delta: timedelta,
     at_launch: bool,
 ) -> str:
-    """Classify an entry as keep, warn, expired, or overdue."""
+    """Classify an entry as keep, warn, expired, overdue, or clock_suspect.
+
+    A wrong host clock must never remove recovery data. An entry that starts after now_utc,
+    or one older than the expiry limit plus the longest allowed limit, counts as clock_suspect.
+    """
     elapsed = now_utc - _parse_utc_timestamp(entry.started_at_utc)
+    if elapsed < timedelta(0) or elapsed > expiry_delta + _PLAUSIBLE_AGE_MARGIN:
+        return "clock_suspect"
     if elapsed >= expiry_delta:
         return "overdue" if at_launch else "expired"
     if elapsed >= warning_delta and not entry.warned_expiry:
@@ -617,11 +627,15 @@ class UsbRecoveryJournalStore:
         expiry_delta: timedelta,
         at_launch: bool,
     ) -> UsbExpiryScanResult:
-        """Partition unresolved entries by warning, expiry, or launch overdue cleanup."""
+        """Partition unresolved entries by warning, expiry, or launch overdue cleanup.
+
+        A clock_suspect entry stays in the journal unchanged.
+        """
         entries, history = self._load_journal_state()
         warnings: list[UsbJournalEntry] = []
         expired: list[UsbJournalEntry] = []
         overdue: list[UsbJournalEntry] = []
+        suspect: list[UsbJournalEntry] = []
         remaining: list[UsbJournalEntry] = []
         for entry in entries:
             if entry.last_recovery_action in _RESOLVED_RECOVERY_ACTIONS:
@@ -639,10 +653,12 @@ class UsbRecoveryJournalStore:
             if outcome == "warn":
                 entry.warned_expiry = True
                 warnings.append(entry)
+            if outcome == "clock_suspect":
+                suspect.append(entry)
             remaining.append(entry)
         if warnings or expired or overdue:
             self._save_journal_state(remaining, history)
-        return UsbExpiryScanResult(tuple(warnings), tuple(expired), tuple(overdue))
+        return UsbExpiryScanResult(tuple(warnings), tuple(expired), tuple(overdue), tuple(suspect))
 
     def cleanup_unresolved(
         self,
