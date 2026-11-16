@@ -29,7 +29,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from infiniteprep.config.settings import SettingsManager
+from infiniteprep.config.settings import (
+    SUPPORTED_UNSORTED_PLACEMENTS,
+    UNSORTED_PLACEMENT_FIRST,
+    SettingsManager,
+)
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
     FieldName,
@@ -52,6 +56,13 @@ from infiniteprep.ui.batch_queue import (
 from infiniteprep.ui.batch_queue_dock import BatchQueueDock
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.folder_import import FolderImportController, ImportReportDialog
+from infiniteprep.ui.table_sort import (
+    FILENAME_COLUMN,
+    SORT_COLUMN_COUNT,
+    LibraryRow,
+    parse_bpm_value,
+    sort_rows,
+)
 from infiniteprep.ui.theme import DEFAULT_DARK_THEME, apply_application_theme, get_available_themes
 from infiniteprep.ui.time_format import split_time_seconds
 
@@ -70,6 +81,8 @@ TABLE_COLUMNS: Final[tuple[str, ...]] = (
 )
 MAIN_WINDOW_WIDTH: Final[int] = 1360
 MAIN_WINDOW_HEIGHT: Final[int] = 820
+if len(TABLE_COLUMNS) != SORT_COLUMN_COUNT:
+    raise RuntimeError("The library table columns and the sort kinds must stay aligned.")
 SEARCH_INPUT_STRETCH: Final[int] = 3
 STATUS_FILTER_STRETCH: Final[int] = 1
 SPLITTER_TOP_HEIGHT: Final[int] = 380
@@ -138,6 +151,7 @@ class MainWindow(QMainWindow):
 
         self.current_key_notation: KeyDisplayNotation = KeyDisplayNotation.CAMELOT
         self.visible_file_ids: list[str] = []
+        self._init_sort_state()
 
         self.setWindowTitle("InfinitePrep - DJ Music Metadata & Audio Preparation")
         self.resize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
@@ -265,6 +279,11 @@ class MainWindow(QMainWindow):
         file_header = self.file_table.horizontalHeader()
         file_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         file_header.setStretchLastSection(True)
+        file_header.setSectionsClickable(True)
+        self.file_table.setSortingEnabled(False)
+        file_header.setSortIndicatorShown(True)
+        file_header.setSortIndicator(self._sort_column, Qt.SortOrder.AscendingOrder)
+        file_header.sectionClicked.connect(self._on_table_header_clicked)
         self.file_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.file_table.itemSelectionChanged.connect(self._on_table_selection_changed)
 
@@ -326,13 +345,64 @@ class MainWindow(QMainWindow):
         """Reload all FileAssets from Repository and populate the filtered table."""
         all_files = self.repo.list_files()
         filtered = [f for f in all_files if self._matches_active_filters(f)]
-        self.visible_file_ids = [f.id for f in filtered]
+        rows = [self._build_library_row(asset) for asset in filtered]
+        ordered = sort_rows(
+            rows,
+            column=self._sort_column,
+            descending=self._sort_descending,
+            placement=self._unsorted_placement,
+            notation=self.current_key_notation,
+        )
+        self.visible_file_ids = [row.file_id for row in ordered]
 
         self.file_table.blockSignals(True)
-        self.file_table.setRowCount(len(filtered))
-        for row_idx, asset in enumerate(filtered):
-            self._populate_table_row(row_idx, asset)
+        self.file_table.setRowCount(len(ordered))
+        for row_idx, row in enumerate(ordered):
+            self._populate_table_row(row_idx, row)
         self.file_table.blockSignals(False)
+        self._restore_selected_file()
+
+    def _init_sort_state(self) -> None:
+        """Set the starting sort column, direction, selection, and placement."""
+        self._sort_column: int = FILENAME_COLUMN
+        self._sort_descending: bool = False
+        self._selected_file_id: str | None = None
+        self._unsorted_placement: str = self._read_unsorted_placement()
+
+    def _read_unsorted_placement(self) -> str:
+        """Return the stored placement of the rows without a value for the sorted column."""
+        settings = SettingsManager().load()
+        placement = getattr(settings, "unsorted_rows_placement", UNSORTED_PLACEMENT_FIRST)
+        if placement in SUPPORTED_UNSORTED_PLACEMENTS:
+            return placement
+        return UNSORTED_PLACEMENT_FIRST
+
+    def reload_settings(self) -> None:
+        """Read the stored preferences again and repaint the table."""
+        self._unsorted_placement = self._read_unsorted_placement()
+        self.refresh_file_table()
+
+    def _on_table_header_clicked(self, column: int) -> None:
+        """Sort by the clicked column and reverse the direction on a second click."""
+        if column == self._sort_column:
+            self._sort_descending = not self._sort_descending
+        else:
+            self._sort_column = column
+            self._sort_descending = False
+        order = (
+            Qt.SortOrder.DescendingOrder if self._sort_descending else Qt.SortOrder.AscendingOrder
+        )
+        self.file_table.horizontalHeader().setSortIndicator(self._sort_column, order)
+        self.refresh_file_table()
+
+    def _restore_selected_file(self) -> None:
+        """Keep the selected file selected after the table repaints."""
+        if not self._selected_file_id:
+            return
+        if self._selected_file_id not in self.visible_file_ids:
+            return
+        row_idx = self.visible_file_ids.index(self._selected_file_id)
+        self.file_table.selectRow(row_idx)
 
     def _asset_warnings(self, asset: FileAsset) -> list[str]:
         """Collect technical and analysis warnings for one library asset."""
@@ -364,20 +434,42 @@ class MainWindow(QMainWindow):
         haystack = f"{asset.current_path} {asset.original_tags}".lower()
         return query in haystack
 
-    def _populate_table_row(self, row_idx: int, asset: FileAsset) -> None:
-        """Render a single FileAsset row in the batch review table."""
-        cells = self._build_table_row_cells(asset)
-        for col_idx, text in enumerate(cells):
-            self.file_table.setItem(row_idx, col_idx, QTableWidgetItem(text))
+    def _populate_table_row(self, row_idx: int, row: LibraryRow) -> None:
+        """Render one library row and store its file ID on the first cell."""
+        for col_idx, text in enumerate(row.cells):
+            item = QTableWidgetItem(text)
+            if col_idx == 0:
+                item.setData(Qt.ItemDataRole.UserRole, row.file_id)
+            self.file_table.setItem(row_idx, col_idx, item)
 
-    def _build_table_row_cells(self, asset: FileAsset) -> list[str]:
-        """Compute string cells for a single FileAsset row in the batch review table."""
+    def _build_library_row(self, asset: FileAsset) -> LibraryRow:
+        """Build the table row for one asset with the values the sort needs."""
         std = asset.original_tags.get("standard_tags", {})
         approved = self.repo.get_approved_fields_map(asset.id)
         top_by_field: dict[str, str] = {}
-        for p in self.repo.list_field_proposals(asset.id):
-            top_by_field.setdefault(p.field_name, p.proposed_value)
+        for proposal in self.repo.list_field_proposals(asset.id):
+            top_by_field.setdefault(proposal.field_name, proposal.proposed_value)
+        raw_key = self._effective_val(std, approved, top_by_field, FieldName.KEY.value)
+        raw_bpm = self._effective_val(std, approved, top_by_field, FieldName.BPM.value)
+        cells = self._build_table_row_cells(asset, std, approved, top_by_field)
+        return LibraryRow(
+            file_id=asset.id,
+            cells=tuple(cells),
+            path=asset.current_path,
+            duration_seconds=asset.duration,
+            bpm=parse_bpm_value(raw_bpm),
+            key=parse_key_string(raw_key),
+            review_status=str(asset.review_status),
+        )
 
+    def _build_table_row_cells(
+        self,
+        asset: FileAsset,
+        std: dict[str, str],
+        approved: dict,
+        top_by_field: dict[str, str],
+    ) -> list[str]:
+        """Compute string cells for a single FileAsset row in the batch review table."""
         lbl_str = self._effective_val(std, approved, top_by_field, FieldName.LABEL.value)
         cat_str = self._effective_val(std, approved, top_by_field, FieldName.CATALOG_NUMBER.value)
         raw_key = self._effective_val(std, approved, top_by_field, FieldName.KEY.value)
@@ -438,8 +530,14 @@ class MainWindow(QMainWindow):
         if not selected_rows:
             return
         row_idx = selected_rows[0].row()
-        if 0 <= row_idx < len(self.visible_file_ids):
-            self.detail_panel.load_file_asset(self.visible_file_ids[row_idx])
+        item = self.file_table.item(row_idx, 0)
+        if item is None:
+            return
+        file_id = item.data(Qt.ItemDataRole.UserRole)
+        if not file_id:
+            return
+        self._selected_file_id = str(file_id)
+        self.detail_panel.load_file_asset(self._selected_file_id)
 
     def _on_key_notation_changed(self, text: str) -> None:
         """Update key notation across table and DetailPanel."""

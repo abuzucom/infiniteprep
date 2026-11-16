@@ -24,6 +24,13 @@ logger = logging.getLogger(__name__)
 DEFAULT_FAKE_LOSSLESS_METHOD: Final[str] = "signal_analysis"
 SUPPORTED_FAKE_LOSSLESS_METHODS: Final[frozenset[str]] = frozenset({DEFAULT_FAKE_LOSSLESS_METHOD})
 SUPPORTED_TAG_KEY_NOTATIONS: Final[frozenset[str]] = frozenset(KeyDisplayNotation)
+# Where the rows without a value for the sorted column sit in the table.
+UNSORTED_PLACEMENT_FIRST: Final[str] = "first"
+UNSORTED_PLACEMENT_LAST: Final[str] = "last"
+SUPPORTED_UNSORTED_PLACEMENTS: Final[tuple[str, ...]] = (
+    UNSORTED_PLACEMENT_FIRST,
+    UNSORTED_PLACEMENT_LAST,
+)
 DEFAULT_WAVEFORM_ZOOM_SECONDS: Final[int] = 8
 SUPPORTED_WAVEFORM_ZOOM_SECONDS: Final[tuple[int, ...]] = (
     2,
@@ -168,6 +175,8 @@ class AppSettings:
     playlist_relative_paths: bool = True
     # Ends an Analyze or write batch at its first failed file. Imports ignore it.
     stop_batch_on_first_failure: bool = False
+    # Places the rows without a value for the sorted column first or last.
+    unsorted_rows_placement: str = UNSORTED_PLACEMENT_FIRST
     theme: str = "dark_teal.xml"
     file_table_layout: str = ""  # Base64-encoded QHeaderView state.
     file_table_column_count: int = 0  # Column count when the layout was saved.
@@ -191,13 +200,15 @@ def _find_setting_value_problem(name: str, value: object, default: object) -> st
         return "an unsupported fake-lossless detection method"
     if name == "tag_key_notation" and value not in SUPPORTED_TAG_KEY_NOTATIONS:
         return "an unsupported written key notation"
-    if name == "tag_bpm_decimals" and value not in BPM_DECIMAL_PLACES:
-        return "an unsupported BPM precision"
+    if name == "unsorted_rows_placement" and value not in SUPPORTED_UNSORTED_PLACEMENTS:
+        return "an unsupported unsorted row placement"
     return _find_numeric_setting_problem(name, value)
 
 
 def _find_numeric_setting_problem(name: str, value: object) -> str | None:
     """Return why a numeric setting value is out of range, or None when valid."""
+    if name == "tag_bpm_decimals" and value not in BPM_DECIMAL_PLACES:
+        return "an unsupported BPM precision"
     if name in NONNEGATIVE_COUNT_SETTINGS and value < 0:
         return "a negative count"
     if name == "usb_reserve_percent" and not _is_supported_reserve_percent(value):
