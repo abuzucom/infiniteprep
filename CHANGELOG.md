@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.68.1] (2026-11-16)
+## [0.69.1] (2026-11-16)
 
 ### Added
 
@@ -49,6 +49,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The foucault security review pin advances from 3.8.1 to 3.8.8.
+  - `.github/workflows/security-review-pr.yml` pins both `uses:` references and both `audit_ref` values to commit `d50c22c6589fa6843e1bf50d3da8b29b637a1395`.
+  - `ci/build_pr_case.py`, `ci/call_model.py`, and `scripts/check_pr_review_response.py` match that commit byte for byte. The other three adapter files carry no upstream change.
+  - `tests/test_review_wiring.py` holds the new commit and the new SHA-256 digests. `docs/pr-review.md` lists the new pin.
+  - The version advances from 0.68.0 to 0.68.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The theme picker lists the themes the build can apply, and a theme that cannot apply stays out of the picker (issue 247).
   - `apply_application_theme` returns a result that names the theme in effect and the reason a theme did not apply.
   - The main window and the Settings dialog keep the picker on the theme in effect. A failed choice reapplies the theme that was in effect. The app keeps its look. The stored theme names the theme in effect. A failed application logs a warning that names the theme and the reason.
@@ -59,6 +64,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A wrong computer clock no longer removes USB recovery entries.
+  - The expiry scan keeps an entry whose start time lies after the current time. It also keeps an entry older than its expiry limit plus 365 days.
+  - The launch scan shows a "USB Recovery Clock Check" notice that lists the kept entries. Settings > Storage still removes them by hand.
+  - `UsbExpiryScanResult` gains the optional `clock_suspect_entries` field. Three-argument construction keeps working.
+  - The version advances from 0.68.1 to 0.69.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Hardened USB recovery journal launch and Storage settings cleanup against corrupt or unreadable journal files while preserving data on disk. Preserved resolved recovery records across expiry and manual cleanup, added bounded durable cleanup history records, confined journal parent directories under the storage root, and normalized manifest and journal timestamps to UTC. The version advances from 0.67.0 to 0.67.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The theme picker changes the app in a packaged build (issue 247).
   - The packaged app shipped without the `qt-material` package. Every theme choice fell back to the native look. The picker showed a theme that the app never applied.
@@ -70,7 +80,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - File names and decoder warnings show as literal text in the detail panel and the transcode dialogs.
   - The detail panel header and warnings labels used the default Qt text format. A file name with HTML tags rendered as markup. Both labels now use the plain text format.
   - The transcode confirmation and the transcode summary now use the plain text message helpers. Both dialogs list file names from imported files.
-  - The version advances from 0.68.0 to 0.68.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.69.0 to 0.69.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ## [0.64.0] (2026-11-15)
 

@@ -50,6 +50,17 @@ def format_overdue_cleanup_text(entries: Sequence[UsbJournalEntry]) -> str:
     return "\n".join(lines)
 
 
+def format_clock_suspect_text(entries: Sequence[UsbJournalEntry]) -> str:
+    """Build the notice listing entries kept because the computer clock looks wrong."""
+    header = (
+        "The computer clock gives these USB recovery entries an impossible age. "
+        "Automatic cleanup kept them. Check the date and time of this computer. "
+        "Settings > Storage removes the entries by hand:"
+    )
+    lines = [header, *(_format_entry_bullet(entry) for entry in entries)]
+    return "\n".join(lines)
+
+
 def _describe_drive_identity(drive: DriveIdentity) -> str:
     """Render untrusted drive vendor, model, and serial attributes as plain text."""
     vendor = drive.vendor or "Unknown vendor"
