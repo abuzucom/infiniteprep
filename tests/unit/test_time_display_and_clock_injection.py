@@ -22,6 +22,7 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
 from infiniteprep.ui.journal_dialog import JournalDialog
+from infiniteprep.ui.recovery_dialog import RecoveryDialog
 from infiniteprep.ui.time_format import format_local_timestamp
 from tests.fixtures.audio_factory import create_wav_fixture
 
@@ -122,6 +123,35 @@ def test_transcoder_journal_takes_its_time_from_the_injected_clock(tmp_path: Pat
     stored = repo.get_change_record(record.operation_id)
     assert stored is not None
     assert stored.timestamp == TRANSCODER_CLOCK_TIME
+
+
+def test_recovery_dialog_shows_local_time_not_stored_text(
+    qtbot: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The recovery table cell holds the local form of the interrupted write time."""
+    repo = Repository(DatabaseManager(":memory:"))
+    tag_adapter = MetadataTagAdapter()
+    asset = _import_one_track(repo, tag_adapter, tmp_path)
+    ReviewService(repo).set_manual_field_value(asset.id, FieldName.ARTIST.value, "Sasha")
+    write_service = WriteService(
+        repo, tag_adapter, backup_dir=tmp_path / "backups", now_iso=lambda: STORED_TIME
+    )
+
+    def stop_mid_write(_path: Path, _tags: dict[str, str]) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(tag_adapter, "_write_tags_by_format", stop_mid_write)
+    with pytest.raises(KeyboardInterrupt):
+        write_service.apply_single_plan(write_service.build_batch_preview([asset.id])[0])
+    monkeypatch.undo()
+    dialog = RecoveryDialog(write_service)
+    qtbot.addWidget(dialog)
+
+    dialog.refresh()
+
+    shown = dialog.table.item(0, TIMESTAMP_COLUMN).text()
+    assert shown == format_local_timestamp(STORED_TIME)
+    assert shown != STORED_TIME
 
 
 def test_journal_dialog_shows_local_time_not_stored_text(qapp: Any, tmp_path: Path) -> None:
