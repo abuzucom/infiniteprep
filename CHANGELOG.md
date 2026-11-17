@@ -27,7 +27,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A library row dragged onto the waveform loads that track paused at the start. A drop while a track plays asks first. `Cancel` keeps the playing track and its position.
   - The player shows a `Loaded:` line with the file name it holds. A mismatch with the detail panel stays visible.
   - The new `tests/unit/test_selection_keeps_playback.py` covers the selection, the four play paths, and the drop paths.
-  - The version advances from 0.75.0 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.75.1 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - The new `tests/unit/test_destructive_action_guards.py` checks the guards in front of destructive UI actions (accessibility audit).
   - The version advances from 0.72.4 to 0.72.5 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
@@ -67,6 +67,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The field rows of the detail panel keep keyboard and screen reader users in place (accessibility audit).
+  - Each row's edit box and its Accept, Save, and Lock buttons name their field, such as "Save artist". Every row announced the same "Save" before.
+  - Accept, Save, and Lock keep focus on the same control of the same row. The rows rebuild after each action, and focus fell out of the table before.
+  - Text typed in one row stays when another row's action runs. The rebuild wiped every unsaved row before. The acted row shows its new stored value.
+  - The new `tests/unit/test_detail_panel_row_actions.py` covers the names, the focus, and the unsaved text.
+  - The open list of each named picker carries the picker's name. A screen reader announced an unnamed list once a picker opened. The new `ui/accessible_names.py` names a picker and its list together.
+  - The version advances from 0.75.0 to 0.75.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Catalog, fingerprint, and LLM responses pass type and length checks before they reach a proposal.
   - The new `adapters/provider_fields.py` checks every field the Discogs, MusicBrainz, and AcoustID adapters read. Text stays printable and stops at 500 characters. A field of the wrong type reads as absent. A list keeps at most 100 items.
   - A response that is not a JSON object raises before the cache write, so a malformed body never reaches the shared cache.
