@@ -40,20 +40,19 @@ class DatabaseManager:
         if getattr(self._local, "conn", None) is None:
             if self._is_memory:
                 uri = f"file:{self._memory_name}?mode=memory&cache=shared"
-                conn = sqlite3.connect(uri, timeout=BUSY_TIMEOUT_SECONDS, uri=True)
+                self._local.conn = sqlite3.connect(uri, timeout=BUSY_TIMEOUT_SECONDS, uri=True)
             else:
-                conn = sqlite3.connect(str(self.db_path), timeout=BUSY_TIMEOUT_SECONDS)
+                self._local.conn = sqlite3.connect(str(self.db_path), timeout=BUSY_TIMEOUT_SECONDS)
             try:
-                conn.row_factory = sqlite3.Row
+                self._local.conn.row_factory = sqlite3.Row
                 if not self._is_memory:
-                    conn.execute("PRAGMA journal_mode = WAL;")
-                conn.execute("PRAGMA foreign_keys = ON;")
+                    self._local.conn.execute("PRAGMA journal_mode = WAL;")
+                self._local.conn.execute("PRAGMA foreign_keys = ON;")
             except sqlite3.Error:
                 # A file that is not a database fails here. The handle closes now, so a
                 # restore can replace the file while the error dialog shows.
-                conn.close()
+                self.close()
                 raise
-            self._local.conn = conn
         return self._local.conn
 
     def initialize(self) -> None:

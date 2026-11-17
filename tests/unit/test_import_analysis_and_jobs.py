@@ -34,6 +34,9 @@ SILENT_SAMPLES = 8192
 SAMPLE_RATE = 44100
 # A tag write limit below any real output size, so the size check runs on a short file.
 TINY_TAG_WRITE_LIMIT = 1000
+# A 0.5 second 44.1 kHz stereo fixture resamples to 24000 frames at 48 kHz. As 24-bit stereo
+# those frames take 24000 * 2 * 3 bytes before the WAV header.
+EXACT_SAMPLE_BYTES = 24000 * 2 * 3
 CORRUPT_DATABASE_BYTES = b"this file is not an SQLite database" * 64
 
 
@@ -149,6 +152,28 @@ def test_transcode_refuses_an_untaggable_output_before_decoding(
         )
 
     assert sorted(path.name for path in source.parent.iterdir()) == ["tagged.wav"]
+
+
+def test_transcode_limit_counts_the_container_header(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Samples that fit the limit exactly still fail, since the header adds bytes."""
+    monkeypatch.setattr(safe_transcoder, "MAX_WAV_REWRITE_BYTES", EXACT_SAMPLE_BYTES)
+    repo = make_repo()
+    file_id = import_one(
+        repo,
+        create_wav_fixture(
+            tmp_path / "crate" / "tagged.wav", duration_sec=0.5, tags={"artist": "Deep Dish"}
+        ),
+    )
+    transcoder = SafeTranscoderAdapter(repo, backup_dir=tmp_path / "backups")
+
+    with pytest.raises(ValueError, match="tag write limit"):
+        transcoder.transcode_file(
+            file_id,
+            preset=TranscodePreset.FORCE_WAV_48K_24B,
+            mode=TranscodeMode.SIBLING_EXPORT,
+        )
 
 
 def test_transcode_of_an_untagged_file_ignores_the_tag_limit(

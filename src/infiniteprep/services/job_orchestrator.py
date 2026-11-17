@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -345,10 +346,27 @@ class JobOrchestrator:
         try:
             step()
         except BaseException as exc:
-            error_text = f"{type(exc).__name__}: {exc}"
-            self.repo.update_job_state(asset.id, job_type, JOB_STATE_FAILED, error_text)
+            self._record_job_failure(asset.id, job_type, exc)
             raise
         self.repo.update_job_state(asset.id, job_type, JOB_STATE_COMPLETED)
+
+    def _record_job_failure(self, file_id: str, job_type: str, error: BaseException) -> None:
+        """Mark the job failed. A database error here is logged, so the step error still rises.
+
+        The row then stays processing, which list_pending_jobs reports, so the job is
+        not lost from view.
+        """
+        try:
+            self.repo.update_job_state(
+                file_id, job_type, JOB_STATE_FAILED, f"{type(error).__name__}: {error}"
+            )
+        except sqlite3.Error as record_error:
+            logger.error(
+                "Could not record the failed %s job of file %s after %s.",
+                job_type,
+                file_id,
+                type(record_error).__name__,
+            )
 
     def _run_analysis_step(self, asset: FileAsset, audio_path: Path) -> None:
         """Analyze the audio locally and store the result on the file."""

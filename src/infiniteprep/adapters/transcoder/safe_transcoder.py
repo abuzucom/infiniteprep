@@ -38,6 +38,9 @@ MAX_TRANSCODE_SAMPLE_RATE_HZ: Final[int] = 384_000
 MAX_TRANSCODE_DECODED_SAMPLES: Final[int] = 7200 * 48_000 * 2
 # Bytes each sample takes in the uncompressed output subtypes.
 PCM_SAMPLE_BYTES: Final[dict[str, int]] = {"PCM_16": 2, "PCM_24": 3}
+# Room for the WAV or AIFF header and chunks next to the samples. A WAV header takes 44
+# bytes and an AIFF header 54. The margin also covers a larger fmt or COMM chunk.
+OUTPUT_CONTAINER_OVERHEAD_BYTES: Final[int] = 64 * 1024
 SAMPLE_RATE_44K1: Final[int] = 44100
 SAMPLE_RATE_48K: Final[int] = 48000
 # Headroom guard against inter-sample peaks during polyphase resampling
@@ -359,7 +362,8 @@ class SafeTranscoderAdapter:
         if sf_fmt == "FLAC" or bytes_per_sample is None or int(info.samplerate) <= 0:
             return
         output_frames = math.ceil(int(info.frames) * target_sr / int(info.samplerate))
-        estimated_bytes = output_frames * int(info.channels) * bytes_per_sample
+        sample_bytes = output_frames * int(info.channels) * bytes_per_sample
+        estimated_bytes = sample_bytes + OUTPUT_CONTAINER_OVERHEAD_BYTES
         if estimated_bytes <= MAX_WAV_REWRITE_BYTES or not self._effective_tags(asset):
             return
         raise ValueError(
