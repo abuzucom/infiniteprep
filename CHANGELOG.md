@@ -56,6 +56,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The popup list of each main window and audio player picker carries an accessible name. A screen reader announced the six popup lists with no name.
+  - The new `infiniteprep.ui.accessibility.set_combo_box_name` names a picker and its popup list together.
+  - `test_dialog_tables_are_read_only_and_leave_on_tab` in `tests/unit/test_accessible_names_and_keyboard_sort.py` keeps each dialog referenced until its assertions run. The dialogs were deleted before the check. The repository owner approved this edit.
 - Latent defects in the online adapters and key removal (issue 288).
   - A network failure, a timeout, or a malformed response from MusicBrainz, Discogs, iTunes Search, or AcoustID fails that lookup only. The identification job continues with the other providers. AcoustID returns the failure as a warning. A failed lookup stays out of the cache. A response that is not a JSON object counts as malformed and returns no candidate. It raised out of the adapter before.
   - Candidate ids from MusicBrainz, Discogs, and iTunes Search hold the file id. The same release found for two files collided on one candidate id before.

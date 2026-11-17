@@ -27,6 +27,7 @@ from infiniteprep.config.settings import (
     SUPPORTED_WAVEFORM_ZOOM_SECONDS,
     SettingsManager,
 )
+from infiniteprep.ui.accessibility import set_combo_box_name
 from infiniteprep.ui.time_format import split_time_seconds
 
 logger = logging.getLogger(__name__)
@@ -518,8 +519,8 @@ class AudioPreviewWidget(QWidget):
             LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX
         )
         root.addWidget(self.waveform_bar)
-        self.view_combo.setAccessibleName("Waveform view")
-        self.zoom_combo.setAccessibleName("Waveform zoom")
+        set_combo_box_name(self.view_combo, "Waveform view")
+        set_combo_box_name(self.zoom_combo, "Waveform zoom")
         view_controls = QHBoxLayout()
         view_controls.addWidget(QLabel("Waveform view", self))
         view_controls.addWidget(self.view_combo)

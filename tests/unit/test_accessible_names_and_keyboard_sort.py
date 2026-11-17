@@ -120,14 +120,16 @@ def test_dialog_tables_are_read_only_and_leave_on_tab(qtbot: Any) -> None:
     """The write, journal, and recovery tables open no editor and pass Tab to the next control."""
     repository = Repository(DatabaseManager(":memory:"))
     write_service = WriteService(repository)
-    tables: list[QTableWidget] = []
-    for dialog in (
+    # qtbot holds a weak reference only. The list keeps each parentless dialog, and the
+    # table it owns, alive until the assertions run.
+    dialogs = [
         WritePlanDialog(write_service, []),
         JournalDialog(repository, write_service),
         RecoveryDialog(write_service),
-    ):
+    ]
+    for dialog in dialogs:
         qtbot.addWidget(dialog)
-        tables.append(dialog.table)
+    tables: list[QTableWidget] = [dialog.table for dialog in dialogs]
 
     no_edit = QAbstractItemView.EditTrigger.NoEditTriggers
     assert [table.editTriggers() == no_edit for table in tables] == [True, True, True]
