@@ -22,10 +22,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- A push to `main` after a merge skips checks that already passed on the pull request.
+  - `ci.yml` and `os-tests.yml` trigger on pull requests only. A push to `main` runs neither the lint jobs nor the test matrix nor the Windows and macOS jobs.
+  - The `check-sync` job of `sync-check.yml` runs on pull requests only.
+  - `security-devops.yml` still runs on a push to `main`. Its scan keeps the code scanning baseline of `main` current.
+  - `agents-md-compliance.yml` triggers on pull requests to `main` instead of pushes to `main`. The `static-checks` job now runs before merge.
+  - The version advances from 0.72.5 to 0.72.6 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - `JobOrchestrator.process_files` takes `raise_on_failure` in place of `raise_on_unexpected` (issue 288). The flag raises for the expected job errors, so the old name misstated it. No caller in `src/` passed the old keyword.
 - The library status filter lists every review status (issue 288). The filter lacked `ready_for_review`, `conflicting_candidates`, `no_match`, and four more statuses that the pipeline sets.
 - The library search reads the cells the table shows (issue 288). It read the stored tag structure before, so `tags` matched every file and an approved artist matched none.
-- The version advances from 0.72.5 to 0.73.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`. The keyword rename is an incompatible change of a public method.
+- The version advances from 0.72.6 to 0.73.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`. The keyword rename is an incompatible change of a public method.
 
 ### Fixed
 

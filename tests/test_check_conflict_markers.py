@@ -738,7 +738,7 @@ class WiringTest(unittest.TestCase):
             encoding="utf-8")
         self.assertEqual(
             _workflow_events(sync_content), {"push", "pull_request"})
-        self.assertEqual(_workflow_events(compliance_content), {"push"})
+        self.assertEqual(_workflow_events(compliance_content), {"pull_request"})
         self.assertNotIn("pull_request_target", sync_content)
         self.assertNotIn("pull-requests: write", sync_content)
         self.assertNotIn("actions/github-script", sync_content)
