@@ -54,6 +54,7 @@ OTHER_TAGS_COLUMN_COUNT: Final[int] = 2
 COL_OTHER_KEY: Final[int] = 0
 COL_OTHER_VALUE: Final[int] = 1
 PLAY_SELECTED_LABEL: Final[str] = "Play Selected"
+NO_SELECTION_TEXT: Final[str] = "Select a track to inspect metadata and proposals."
 REPLACE_TRACK_TITLE: Final[str] = "Replace the playing track?"
 REPLACE_TRACK_CANCEL_LABEL: Final[str] = "Cancel"
 REPLACE_TRACK_CONFIRM_LABEL: Final[str] = "Load Paused"
@@ -232,7 +233,7 @@ class DetailPanel(QWidget):
         self._latest_generation_by_file: dict[str, int] = {}
         self.key_notation: KeyDisplayNotation = KeyDisplayNotation.CAMELOT
 
-        self.header_label = QLabel("Select a track to inspect metadata and proposals.", self)
+        self.header_label = QLabel(NO_SELECTION_TEXT, self)
         self.warnings_label = QLabel("", self)
         # File names and decoder messages come from imported files. The default
         # AutoText format renders markup in them as HTML.
@@ -338,6 +339,20 @@ class DetailPanel(QWidget):
         self.key_notation = notation
         if self.current_file_id is not None:
             self.select_file_asset(self.current_file_id)
+
+    def clear_selection(self) -> None:
+        """Show that no file is selected and leave the player untouched.
+
+        A cleared table selection leaves no file behind in the panel. The loaded
+        track stays in the player, and the `Play Selected` button turns off.
+        """
+        self.current_file_id = None
+        self.header_label.setText(NO_SELECTION_TEXT)
+        self.warnings_label.clear()
+        self.fields_table.setRowCount(0)
+        self.other_tags_table.setRowCount(0)
+        self.candidates_list.clear()
+        self.play_selected_btn.setEnabled(False)
 
     def select_file_asset(self, file_id: str) -> FileAsset | None:
         """Populate the detail panel for the specified file_id without touching the player.

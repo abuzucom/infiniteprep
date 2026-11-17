@@ -182,6 +182,32 @@ def test_the_play_selected_button_loads_and_plays_the_selection(library: Library
     assert panel.audio_player.play_btn.text() == "Pause"
 
 
+def test_a_cleared_selection_empties_the_detail_panel(library: Library) -> None:
+    """Clearing the table selection leaves no file in the panel and no play button."""
+    panel = library.window.detail_panel
+    select_row(library, FIRST_NAME)
+    assert panel.current_file_id == library.first_id
+
+    library.window.file_table.clearSelection()
+
+    assert panel.current_file_id is None
+    assert panel.play_selected_btn.isEnabled() is False
+    assert FIRST_NAME not in panel.header_label.text()
+
+
+def test_ctrl_enter_after_a_cleared_selection_loads_nothing(library: Library, qtbot: Any) -> None:
+    """Ctrl+Enter loads no file when the table has no selected row."""
+    panel = library.window.detail_panel
+    select_row(library, FIRST_NAME)
+    library.window.file_table.clearSelection()
+
+    qtbot.keyClick(
+        library.window.file_table, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier
+    )
+
+    assert panel.audio_player.current_file_path is None
+
+
 def test_the_play_selected_button_resumes_the_loaded_track(library: Library) -> None:
     """The button plays the selected track again when the player already holds it."""
     panel = library.window.detail_panel

@@ -547,18 +547,27 @@ class MainWindow(QMainWindow):
         )
         self.visible_file_ids = [row.file_id for row in ordered]
 
-        self.file_table.blockSignals(True)
-        self.file_table.setRowCount(len(ordered))
-        for row_idx, row in enumerate(ordered):
-            self._populate_table_row(row_idx, row)
-        self.file_table.blockSignals(False)
-        self._restore_selected_file()
+        # The repopulation empties the table selection for a moment. The panel
+        # keeps the file while the refresh runs, and the selection is restored
+        # before the refresh ends.
+        self._refreshing_table = True
+        try:
+            self.file_table.blockSignals(True)
+            self.file_table.setRowCount(len(ordered))
+            for row_idx, row in enumerate(ordered):
+                self._populate_table_row(row_idx, row)
+            self.file_table.blockSignals(False)
+            self._restore_selected_file()
+        finally:
+            self._refreshing_table = False
+        self._sync_detail_panel_with_selection()
 
     def _init_sort_state(self) -> None:
         """Set the starting sort column, direction, selection, and placement."""
         self._sort_column: int = FILENAME_COLUMN
         self._sort_descending: bool = False
         self._selected_file_id: str | None = None
+        self._refreshing_table = False
         self._unsorted_placement: str = self._read_unsorted_placement()
 
     def _read_unsorted_placement(self) -> str:
@@ -754,10 +763,13 @@ class MainWindow(QMainWindow):
         """Show the selected file in DetailPanel when table selection changes.
 
         The selection never touches the player. The player keeps its track, its
-        position, and its play state until an explicit load (D407).
+        position, and its play state until an explicit load (D407). A cleared
+        selection leaves no file behind in the panel.
         """
         selected_rows = self.file_table.selectionModel().selectedRows()
         if not selected_rows:
+            if not self._refreshing_table:
+                self._clear_selection()
             return
         row_idx = selected_rows[0].row()
         item = self.file_table.item(row_idx, FILE_ID_COLUMN)
@@ -769,6 +781,19 @@ class MainWindow(QMainWindow):
         self._selected_file_id = str(file_id)
         self.detail_panel.select_file_asset(self._selected_file_id)
 
+    def _clear_selection(self) -> None:
+        """Drop the selection from the window and from the detail panel."""
+        self._selected_file_id = None
+        self.detail_panel.clear_selection()
+
+    def _sync_detail_panel_with_selection(self) -> None:
+        """Show the selected file in the detail panel after a refresh."""
+        file_id = self._selected_row_file_id()
+        if file_id is None:
+            return
+        self._selected_file_id = file_id
+        self.detail_panel.select_file_asset(file_id)
+
     def _file_id_for_row(self, row: int) -> str | None:
         """Return the file ID of the table row, or None when the row holds none."""
         item = self.file_table.item(row, FILE_ID_COLUMN)
@@ -777,11 +802,19 @@ class MainWindow(QMainWindow):
         file_id = item.data(Qt.ItemDataRole.UserRole)
         return str(file_id) if file_id else None
 
+    def _selected_row_file_id(self) -> str | None:
+        """Return the file ID of the selected row, or None when no row is selected."""
+        selected_rows = self.file_table.selectionModel().selectedRows()
+        if not selected_rows:
+            return None
+        return self._file_id_for_row(selected_rows[0].row())
+
     def _play_selected_file(self) -> None:
         """Load and play the file the library table has selected."""
-        if self._selected_file_id is None:
+        file_id = self._selected_row_file_id()
+        if file_id is None:
             return
-        self.detail_panel.load_and_play_file_asset(self._selected_file_id)
+        self.detail_panel.load_and_play_file_asset(file_id)
 
     def _on_table_cell_double_clicked(self, row: int, column: int) -> None:
         """Load and play the double-clicked row."""
