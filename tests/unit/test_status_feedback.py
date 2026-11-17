@@ -112,22 +112,31 @@ def test_write_preview_count_is_announced(qtbot: Any, announcements: list[str]) 
 def test_toolbar_actions_explain_an_empty_library(
     qtbot: Any, tmp_path: Path, messages: list[tuple[QMessageBox.Icon, str, str]]
 ) -> None:
-    """Bulk Approve, Transcode, and Export each say why they did nothing on an empty table."""
+    """Every toolbar action on the visible files says why it did nothing on an empty table."""
     calls: list[object] = []
     window = build_window(
         qtbot,
         tmp_path,
         with_track=False,
+        on_analyze_batch=calls.append,
+        on_open_write_dialog=calls.append,
         on_transcode_batch=calls.append,
         on_export_playlist=lambda ids, destination: calls.append((ids, destination)),
     )
-
-    buttons = (window.bulk_btn, window.transcode_btn, window.export_playlist_btn)
-    for button in buttons:
-        button.click()
+    # Identify & Analyze and Preview & Apply Writes keep no button attribute, so their
+    # handlers run directly. The other three run through their buttons.
+    actions = (
+        window._trigger_analyze_all,
+        window._trigger_open_write_dialog,
+        window.bulk_btn.click,
+        window.transcode_btn.click,
+        window.export_playlist_btn.click,
+    )
+    for action in actions:
+        action()
 
     assert calls == []
-    assert [text for _icon, _title, text in messages] == [NO_VISIBLE_FILES_TEXT] * len(buttons)
+    assert [text for _icon, _title, text in messages] == [NO_VISIBLE_FILES_TEXT] * len(actions)
 
 
 def test_finished_batch_is_announced(
