@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.74.1] (2026-11-17)
+## [0.74.2] (2026-11-17)
 
 ### Added
 
@@ -47,6 +47,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Requests that carry a credential no longer follow a redirect.
+  - The Discogs, MusicBrainz, and AcoustID adapters and the LLM reasoning adapter send through the new `adapters/http_openers.py` opener. That opener holds no redirect handler, so a redirect response raises an error.
+  - urllib copied every header, the Discogs token and the LLM Bearer key included, to the redirect target. A redirect could also move a request from https to plain http. The AcoustID key rides in the query string and followed every redirect too.
+  - The LLM endpoint check covered the first URL only. A redirect now ends the request before it reaches a host the check never saw.
+  - The version advances from 0.74.1 to 0.74.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Catalog, fingerprint, and LLM responses pass type and length checks before they reach a proposal.
   - The new `adapters/provider_fields.py` checks every field the Discogs, MusicBrainz, and AcoustID adapters read. Text stays printable and stops at 500 characters. A field of the wrong type reads as absent. A list keeps at most 100 items.
   - A response that is not a JSON object raises before the cache write, so a malformed body never reaches the shared cache.

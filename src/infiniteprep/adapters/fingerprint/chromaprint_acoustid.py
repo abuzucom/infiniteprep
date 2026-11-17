@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
 
+from infiniteprep.adapters import http_openers
 from infiniteprep.adapters.fingerprint.fpcalc_bootstrap import FpcalcBootstrapService
 from infiniteprep.adapters.provider_fields import (
     provider_dict,
@@ -182,7 +183,8 @@ class ChromaprintAcoustIDAdapter:
             f"{url}?{encoded}",
             headers={"User-Agent": USER_AGENT},
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        # The query string carries the API key. A redirect raises instead of forwarding it.
+        with http_openers.open_without_redirects(req, timeout=15) as resp:
             raw_bytes = resp.read(MAX_API_RESPONSE_BYTES + 1)
         if len(raw_bytes) > MAX_API_RESPONSE_BYTES:
             raise ValueError("AcoustID HTTP response exceeded maximum byte size limit.")

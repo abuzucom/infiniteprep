@@ -11,6 +11,7 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any, Final
 
+from infiniteprep.adapters import http_openers
 from infiniteprep.adapters.provider_fields import (
     provider_dict,
     provider_dicts,
@@ -239,7 +240,8 @@ class MusicBrainzAdapter:
             f"{url}?{encoded}",
             headers={"User-Agent": MB_USER_AGENT, "Accept": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        # A redirect raises instead of carrying the request to a host this URL does not name.
+        with http_openers.open_without_redirects(req, timeout=15) as resp:
             raw_bytes = resp.read(MAX_API_RESPONSE_BYTES + 1)
         if len(raw_bytes) > MAX_API_RESPONSE_BYTES:
             raise ValueError("MusicBrainz HTTP response exceeded maximum byte size limit.")

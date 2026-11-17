@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, Final
 
+from infiniteprep.adapters import http_openers
 from infiniteprep.adapters.provider_fields import (
     first_provider_text,
     provider_dict,
@@ -234,7 +235,8 @@ class DiscogsAdapter:
             "Authorization": f"Discogs token={self.user_token}",
         }
         req = urllib.request.Request(full_url, headers=headers)
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        # The Authorization header carries the token. A redirect raises instead of forwarding it.
+        with http_openers.open_without_redirects(req, timeout=15) as resp:
             raw_bytes = resp.read(MAX_API_RESPONSE_BYTES + 1)
         if len(raw_bytes) > MAX_API_RESPONSE_BYTES:
             raise ValueError("Discogs HTTP response exceeded maximum byte size limit.")
