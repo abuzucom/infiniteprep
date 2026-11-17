@@ -53,9 +53,10 @@ def _make_bundle(root: Path, files: dict[str, int]) -> Path:
 
 
 def _write_limits(path: Path, measured: dict[str, int | None]) -> Path:
-    """Write a limits file holding the given measured sizes."""
+    """Write a limits file holding the given measured sizes and a null for the rest."""
     document = {
-        name: None if size is None else {"measured_bytes": size} for name, size in measured.items()
+        name: None if measured.get(name) is None else {"measured_bytes": measured[name]}
+        for name in OPERATING_SYSTEMS
     }
     path.write_text(json.dumps(document), encoding="utf-8")
     return path
@@ -120,7 +121,17 @@ class LimitTest(unittest.TestCase):
         """A record for an unknown operating system is an error."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "limits.json"
-            path.write_text(json.dumps({"solaris": None}), encoding="utf-8")
+            document = {"linux": None, "macos": None, "windows": None, "solaris": None}
+            path.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                SCRIPT.load_limits(path)
+
+    def test_a_missing_operating_system_is_rejected(self) -> None:
+        """A limits file without a record for every operating system is an error."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "limits.json"
+            document = {"linux": None, "macos": None}
+            path.write_text(json.dumps(document), encoding="utf-8")
             with self.assertRaises(ValueError):
                 SCRIPT.load_limits(path)
 
@@ -128,7 +139,25 @@ class LimitTest(unittest.TestCase):
         """A record with an unknown field is an error."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "limits.json"
-            path.write_text(json.dumps({"windows": {"megabytes": 12}}), encoding="utf-8")
+            document = {
+                "linux": None,
+                "macos": None,
+                "windows": {"megabytes": 12},
+            }
+            path.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                SCRIPT.load_limits(path)
+
+    def test_a_record_without_a_byte_count_is_rejected(self) -> None:
+        """A record without a byte count is an error, so no limit is skipped."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "limits.json"
+            document = {
+                "linux": None,
+                "macos": None,
+                "windows": {"measured_at": "2026-11-17"},
+            }
+            path.write_text(json.dumps(document), encoding="utf-8")
             with self.assertRaises(ValueError):
                 SCRIPT.load_limits(path)
 
@@ -142,7 +171,11 @@ class LimitTest(unittest.TestCase):
         """A record may name the day of the measurement."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "limits.json"
-            document = {"windows": {"measured_bytes": 100, "measured_at": "2026-11-17"}}
+            document = {
+                "linux": None,
+                "macos": None,
+                "windows": {"measured_bytes": 100, "measured_at": "2026-11-17"},
+            }
             path.write_text(json.dumps(document), encoding="utf-8")
             self.assertEqual(SCRIPT.load_limits(path)["windows"], 100)
 
@@ -150,7 +183,11 @@ class LimitTest(unittest.TestCase):
         """A measurement date that is not a calendar date is an error."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "limits.json"
-            document = {"windows": {"measured_bytes": 100, "measured_at": "2026-13-01"}}
+            document = {
+                "linux": None,
+                "macos": None,
+                "windows": {"measured_bytes": 100, "measured_at": "2026-13-01"},
+            }
             path.write_text(json.dumps(document), encoding="utf-8")
             with self.assertRaises(ValueError):
                 SCRIPT.load_limits(path)

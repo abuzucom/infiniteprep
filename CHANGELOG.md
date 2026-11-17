@@ -34,6 +34,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `packaging/bundle_size_limits.json` holds the measured size of each operating system on `main`. The limit is that size plus 50 percent.
   - The measured sizes are 248709436 bytes on Windows, 168151858 bytes on macOS, and 363129630 bytes on Linux. The limits are 373064154 bytes, 252227787 bytes, and 544694445 bytes.
   - A bundle past the limit fails the job. A record of null means the size was not measured yet. The check then reports the sizes and passes.
+  - Every operating system needs a record in the limits file, and every record needs a byte count. A missing record or a record without a byte count is an error, so a lost record cannot disable a limit.
   - The new `tests/test_bundle_size.py` checks the measurement, the limit, the command, and the workflow wiring.
   - The README documents the size report and the limits file.
   - The version advances from 0.75.0 to 0.75.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.

@@ -13,7 +13,9 @@ fails when the bundle grows past that limit.
 The limit comes from packaging/bundle_size_limits.json. Each record holds the
 measured unpacked size of the bundle on main in bytes. The limit is that size
 plus 50 percent. A record of null means the size was not measured yet, so the
-check reports the sizes and passes without a limit comparison.
+check reports the sizes and passes without a limit comparison. Every operating
+system needs a record, and every record needs a byte count. A limits file that
+breaks either rule is an error, so that a lost record cannot disable a limit.
 
 The unpacked size is the sum of the byte sizes of the regular files below the
 bundle root. A symbolic link is skipped and never followed.
@@ -120,9 +122,10 @@ def derive_limit(measured_bytes: int) -> int:
 def load_limits(path: Path) -> dict[str, int | None]:
     """Return the measured size of each operating system from the limits file.
 
-    An operating system without a record, and a record of null, both mean that
-    the size was not measured yet. An unknown operating system and an unknown
-    field raise ValueError, so that a typo cannot disable the limit.
+    Every operating system needs a record. A record of null means that the
+    size was not measured yet. An unknown operating system, a missing record,
+    and an unknown field raise ValueError, so that a typo cannot disable the
+    limit.
     """
     document = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(document, dict):
@@ -134,6 +137,11 @@ def load_limits(path: Path) -> dict[str, int | None]:
         if key not in OPERATING_SYSTEMS:
             raise ValueError(f"{path} names the unknown operating system {key!r}.")
         measured[key] = _read_measurement(path, key, value)
+    missing = [name for name in OPERATING_SYSTEMS if name not in measured]
+    if missing:
+        raise ValueError(
+            f"{path} has no record for {missing[0]}. Every operating system needs a record."
+        )
     return measured
 
 
@@ -149,7 +157,9 @@ def _read_measurement(path: Path, key: str, value: object) -> int | None:
     _check_measurement_date(path, key, value.get("measured_at"))
     size = value.get("measured_bytes")
     if size is None:
-        return None
+        raise ValueError(
+            f"{path} must hold a byte count for {key!r}. Use null for a size that was not measured."
+        )
     if isinstance(size, bool) or not isinstance(size, int) or size < 0:
         raise ValueError(f"{path} must hold a byte count of zero or more for {key!r}.")
     return size
@@ -316,7 +326,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as error:
         parser.error(str(error))
     try:
-        measured_bytes = load_limits(args.limits).get(args.operating_system)
+        measured_bytes = load_limits(args.limits)[args.operating_system]
     except (OSError, ValueError) as error:
         print(f"bundle_size: {error}", file=sys.stderr)
         return INPUT_FAILED
