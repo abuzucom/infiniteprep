@@ -11,7 +11,7 @@ from infiniteprep.domain.enums import (
     format_canonical_key,
     parse_key_string,
 )
-from infiniteprep.domain.metadata_values import resolve_effective_value
+from infiniteprep.domain.metadata_values import resolve_effective_value, top_proposal_values
 
 if TYPE_CHECKING:
     from infiniteprep.db.repositories import Repository
@@ -38,9 +38,7 @@ def _track_values(repository: Repository, file_id: str) -> tuple[int, float] | N
         return None
     tags = asset.original_tags.get("standard_tags", {})
     approved = repository.get_approved_fields_map(file_id)
-    proposals: dict[str, str] = {}
-    for proposal in repository.list_field_proposals(file_id):
-        proposals.setdefault(proposal.field_name, proposal.proposed_value)
+    proposals = top_proposal_values(repository.list_field_proposals(file_id))
 
     key = parse_key_string(resolve_effective_value(tags, approved, proposals, FieldName.KEY.value))
     bpm_text = resolve_effective_value(tags, approved, proposals, FieldName.BPM.value)

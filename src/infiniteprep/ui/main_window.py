@@ -41,7 +41,7 @@ from infiniteprep.domain.enums import (
     format_canonical_key,
     parse_key_string,
 )
-from infiniteprep.domain.metadata_values import resolve_effective_value
+from infiniteprep.domain.metadata_values import resolve_effective_value, top_proposal_values
 from infiniteprep.domain.models import FileAsset
 from infiniteprep.services.import_service import ImportBatchReport, ImportService
 from infiniteprep.services.job_orchestrator import BatchKind, BatchState, QueuedBatch
@@ -461,9 +461,7 @@ class MainWindow(QMainWindow):
         """Build the table row for one asset with the values the sort needs."""
         std = asset.original_tags.get("standard_tags", {})
         approved = self.repo.get_approved_fields_map(asset.id)
-        top_by_field: dict[str, str] = {}
-        for proposal in self.repo.list_field_proposals(asset.id):
-            top_by_field.setdefault(proposal.field_name, proposal.proposed_value)
+        top_by_field = top_proposal_values(self.repo.list_field_proposals(asset.id))
         raw_key = self._effective_val(std, approved, top_by_field, FieldName.KEY.value)
         raw_bpm = self._effective_val(std, approved, top_by_field, FieldName.BPM.value)
         cells = self._build_table_row_cells(asset, std, approved, top_by_field)

@@ -105,16 +105,59 @@ class ReconciliationService:
             generated.extend(self._proposals_from_candidate(asset, cand, app_score))
             self._check_and_attach_pitch_drift(asset, cand, analyses)
 
-        for ana in analyses:
-            generated.extend(self._proposals_from_analysis(asset.id, ana))
+        analysis_proposals: list[FieldProposal] = []
+        for ana in self._latest_analysis_per_analyzer(analyses):
+            analysis_proposals.extend(self._proposals_from_analysis(asset.id, ana))
+        generated.extend(analysis_proposals)
 
         kept = self._apply_source_priority(asset.id, generated)
         for prop in kept:
             self.repo.upsert_field_proposal(prop)
+        self._supersede_stale_analysis_proposals(asset.id, analysis_proposals)
         self._supersede_lower_priority_proposals(asset.id, kept)
 
         self._update_review_status_after_reconcile(asset.id, kept)
         return self.repo.list_field_proposals(asset.id)
+
+    def _latest_analysis_per_analyzer(self, analyses: list[AnalysisResult]) -> list[AnalysisResult]:
+        """Return the newest result of each analyzer.
+
+        The repository lists the results newest first. An analyzer version change leaves the
+        older result in the table. Only the newest result states the current BPM and key.
+        """
+        latest: dict[str, AnalysisResult] = {}
+        for ana in analyses:
+            latest.setdefault(ana.analyzer_name, ana)
+        return list(latest.values())
+
+    def _supersede_stale_analysis_proposals(
+        self, file_id: str, current: list[FieldProposal]
+    ) -> None:
+        """Mark the pending proposals an analyzer no longer states as superseded.
+
+        A re-analysis can change the BPM or the key. The earlier value stays in the table
+        under its own row. It must not compete with the current value of the same analyzer.
+        """
+        # A row stored before this run keeps its own ID, so the unique key identifies it.
+        current_keys = {self._proposal_key(proposal) for proposal in current}
+        fields_by_provider = {(proposal.provider, proposal.field_name) for proposal in current}
+        for stored in self.repo.list_field_proposals(file_id):
+            if stored.review_status != ProposalReviewStatus.PENDING:
+                continue
+            if self._proposal_key(stored) in current_keys:
+                continue
+            if (stored.provider, stored.field_name) in fields_by_provider:
+                self.repo.update_proposal_status(stored.id, ProposalReviewStatus.SUPERSEDED)
+
+    @staticmethod
+    def _proposal_key(proposal: FieldProposal) -> tuple[str, str, str, str]:
+        """Return the columns that identify one stored proposal of a file."""
+        return (
+            proposal.field_name,
+            proposal.proposed_value,
+            proposal.provider,
+            proposal.provider_entity_id,
+        )
 
     def _apply_source_priority(
         self, file_id: str, proposals: list[FieldProposal]
@@ -277,6 +320,17 @@ class ReconciliationService:
             review_status=ProposalReviewStatus.PENDING,
         )
 
+    def _analysis_proposal_id(
+        self, file_id: str, field_name: str, ana: AnalysisResult, value: str
+    ) -> str:
+        """Return the proposal ID for one analysis value.
+
+        The ID covers every column of the proposal table's unique key. A changed value or a
+        new analysis row then gets its own ID and never collides with the stored row.
+        """
+        digest = f"{file_id}:{field_name}:{ana.analyzer_name}:{ana.id}:{value}"
+        return str(uuid.uuid5(uuid.NAMESPACE_OID, digest))
+
     def _proposals_from_analysis(self, file_id: str, ana: AnalysisResult) -> list[FieldProposal]:
         """Create authoritative BPM and Key FieldProposals from local audio analysis (Rule 5)."""
         props: list[FieldProposal] = []
@@ -289,7 +343,7 @@ class ReconciliationService:
             bpm_str = f"{ana.bpm:.1f}"
             props.append(
                 FieldProposal(
-                    id=str(uuid.uuid5(uuid.NAMESPACE_OID, f"{file_id}:bpm:{ana.analyzer_name}")),
+                    id=self._analysis_proposal_id(file_id, FieldName.BPM.value, ana, bpm_str),
                     file_id=file_id,
                     field_name=FieldName.BPM.value,
                     proposed_value=bpm_str,
@@ -304,7 +358,7 @@ class ReconciliationService:
             key_std = format_canonical_key(ana.key_tonic, ana.key_mode, KeyDisplayNotation.STANDARD)
             props.append(
                 FieldProposal(
-                    id=str(uuid.uuid5(uuid.NAMESPACE_OID, f"{file_id}:key:{ana.analyzer_name}")),
+                    id=self._analysis_proposal_id(file_id, FieldName.KEY.value, ana, key_std),
                     file_id=file_id,
                     field_name=FieldName.KEY.value,
                     proposed_value=key_std,

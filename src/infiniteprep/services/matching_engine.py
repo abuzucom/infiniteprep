@@ -27,6 +27,31 @@ POSSESSIVE_REMIXER_PATTERN: Final[re.Pattern[str]] = re.compile(r"^([A-Za-z0-9 &
 BY_REMIXER_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^([A-Za-z0-9 &\.]+?)\s+(?:remix|mix|dub|rework|edit)$", re.IGNORECASE
 )
+# A keyword counts only as a whole word. "Dublin" holds "dub" and names no mix.
+MIX_KEYWORD_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:" + "|".join(MIX_KEYWORDS) + r")\b", re.IGNORECASE
+)
+# Words that describe a mix. A phrase built only from these words names no remixer.
+MIX_DESCRIPTOR_WORDS: Final[frozenset[str]] = frozenset(
+    {
+        *MIX_KEYWORDS,
+        "original",
+        "radio",
+        "full",
+        "long",
+        "short",
+        "main",
+        "album",
+        "single",
+        "inch",
+        "the",
+        "a",
+    }
+)
+# Stems of common contractions. "It's Alright Mix" holds no possessive remixer.
+CONTRACTION_STEMS: Final[frozenset[str]] = frozenset(
+    {"it", "let", "that", "what", "he", "she", "there", "here", "who", "where"}
+)
 PAREN_BASE_GROUP: Final[int] = 1
 PAREN_MIX_GROUP: Final[int] = 2
 DEFAULT_MISSING_DURATION_SCORE: Final[float] = 0.75
@@ -51,8 +76,7 @@ def parse_dj_title_and_mix(raw_title: str) -> tuple[str, str | None, str | None]
         return cleaned, None, None
     base_title = match.group(PAREN_BASE_GROUP).strip()
     inside = match.group(PAREN_MIX_GROUP).strip()
-    lower_inside = inside.lower()
-    if not any(kw in lower_inside for kw in MIX_KEYWORDS):
+    if MIX_KEYWORD_PATTERN.search(inside) is None:
         return cleaned, None, None
 
     remixer = _infer_remixer_from_mix_name(inside)
@@ -63,14 +87,20 @@ def _infer_remixer_from_mix_name(mix_name: str) -> str | None:
     """Extract remixer name from 'Sharam's ... Mix' or 'Danny Tenaglia Dub'."""
     poss = POSSESSIVE_REMIXER_PATTERN.match(mix_name)
     if poss:
-        return poss.group(PAREN_BASE_GROUP).strip()
-    generic_prefixes = {"original", "extended", "club", "radio", "vocal", "instrumental", "dub"}
+        owner = poss.group(PAREN_BASE_GROUP).strip()
+        return None if owner.lower() in CONTRACTION_STEMS else owner
     by_match = BY_REMIXER_PATTERN.match(mix_name)
     if by_match:
         candidate_remixer = by_match.group(PAREN_BASE_GROUP).strip()
-        if candidate_remixer.lower() not in generic_prefixes:
+        if not _is_mix_descriptor_phrase(candidate_remixer):
             return candidate_remixer
     return None
+
+
+def _is_mix_descriptor_phrase(phrase: str) -> bool:
+    """Return whether every word of the phrase is a mix descriptor or a number."""
+    words = phrase.lower().split()
+    return all(word in MIX_DESCRIPTOR_WORDS or word.isdigit() for word in words)
 
 
 def duration_similarity(file_dur: float | None, cand_dur: float | None) -> float:
