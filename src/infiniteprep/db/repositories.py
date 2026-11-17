@@ -6,7 +6,7 @@ import json
 import logging
 import sqlite3
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -683,6 +683,95 @@ class Repository:
         else:
             rows = conn.execute("SELECT * FROM change_records ORDER BY rowid DESC").fetchall()
         return [self._row_to_change_record(r) for r in rows]
+
+    def list_change_records_with_status(self, status: OperationStatus) -> list[ChangeRecord]:
+        """Return the journal records in one status, newest first.
+
+        The journal only grows. A status filter in SQL reads the few matching rows and
+        never deserializes the rest.
+        """
+        conn = self.db.connect()
+        rows = conn.execute(
+            "SELECT * FROM change_records WHERE operation_status = ? ORDER BY rowid DESC",
+            (str(status),),
+        ).fetchall()
+        return [self._row_to_change_record(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Bulk readers for many files in one query
+    # ------------------------------------------------------------------
+    def _rows_for_files(
+        self, sql_all: str, sql_for_files: str, file_ids: Sequence[str] | None
+    ) -> list[sqlite3.Row]:
+        """Run sql_all, or sql_for_files with the file IDs bound as one JSON array.
+
+        One bound JSON array keeps the query a fixed string at any number of files.
+        """
+        conn = self.db.connect()
+        if file_ids is None:
+            return conn.execute(sql_all).fetchall()
+        return conn.execute(sql_for_files, (json.dumps(list(file_ids)),)).fetchall()
+
+    def approved_fields_by_file(
+        self, file_ids: Sequence[str] | None = None
+    ) -> dict[str, dict[str, ApprovedField]]:
+        """Return the approved fields of every file, or of file_ids, keyed by file ID."""
+        rows = self._rows_for_files(
+            "SELECT * FROM approved_fields ORDER BY file_id, field_name",
+            "SELECT * FROM approved_fields WHERE file_id IN (SELECT value FROM json_each(?)) "
+            "ORDER BY file_id, field_name",
+            file_ids,
+        )
+        grouped: dict[str, dict[str, ApprovedField]] = {}
+        for row in rows:
+            grouped.setdefault(row["file_id"], {})[row["field_name"]] = self._row_to_approved_field(
+                row
+            )
+        return grouped
+
+    def field_proposals_by_file(
+        self, file_ids: Sequence[str] | None = None
+    ) -> dict[str, list[FieldProposal]]:
+        """Return the field proposals of every file, or of file_ids, keyed by file ID.
+
+        Each list keeps the order of list_field_proposals: field name, then best score first.
+        """
+        rows = self._rows_for_files(
+            "SELECT * FROM field_proposals ORDER BY file_id, field_name, "
+            "COALESCE(application_match_score, provider_confidence, 0) DESC",
+            "SELECT * FROM field_proposals WHERE file_id IN (SELECT value FROM json_each(?)) "
+            "ORDER BY file_id, field_name, "
+            "COALESCE(application_match_score, provider_confidence, 0) DESC",
+            file_ids,
+        )
+        grouped: dict[str, list[FieldProposal]] = {}
+        for row in rows:
+            grouped.setdefault(row["file_id"], []).append(self._row_to_field_proposal(row))
+        return grouped
+
+    def analysis_results_by_file(
+        self, file_ids: Sequence[str] | None = None
+    ) -> dict[str, list[AnalysisResult]]:
+        """Return the analysis results of every file, or of file_ids, newest first per file."""
+        rows = self._rows_for_files(
+            "SELECT * FROM analysis_results ORDER BY file_id, analyzed_at DESC",
+            "SELECT * FROM analysis_results WHERE file_id IN (SELECT value FROM json_each(?)) "
+            "ORDER BY file_id, analyzed_at DESC",
+            file_ids,
+        )
+        grouped: dict[str, list[AnalysisResult]] = {}
+        for row in rows:
+            grouped.setdefault(row["file_id"], []).append(self._row_to_analysis_result(row))
+        return grouped
+
+    def files_by_id(self, file_ids: Sequence[str]) -> dict[str, FileAsset]:
+        """Return the stored assets among file_ids, keyed by file ID."""
+        rows = self._rows_for_files(
+            "SELECT * FROM file_assets",
+            "SELECT * FROM file_assets WHERE id IN (SELECT value FROM json_each(?))",
+            file_ids,
+        )
+        return {row["id"]: self._row_to_file_asset(row) for row in rows}
 
     # ------------------------------------------------------------------
     # Persistent Jobs & Provider Cache

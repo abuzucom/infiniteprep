@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Final
 
@@ -28,12 +29,18 @@ EXPECTED_TRANSCODE_ERRORS: Final[tuple[type[Exception], ...]] = (
 )
 
 
+CancelCheck = Callable[[], bool]
+ProgressCallback = Callable[[int, int, str], None]
+
+
 @dataclass
 class TranscodeBatchSummary:
     """Completed transcode results and per-file failure messages keyed by file_id."""
 
     results: list[TranscodeResult] = field(default_factory=list)
     failures: dict[str, str] = field(default_factory=dict)
+    # True when a cancel request ended the batch before its last file.
+    stopped_early: bool = False
 
 
 def resolve_transcode_options(
@@ -59,10 +66,23 @@ def transcode_files(
     *,
     preset: TranscodePreset,
     mode: TranscodeMode,
+    should_cancel: CancelCheck | None = None,
+    progress: ProgressCallback | None = None,
 ) -> TranscodeBatchSummary:
-    """Transcode each file in order and record a failure without stopping the batch."""
+    """Transcode each file in order and record a failure without stopping the batch.
+
+    A true should_cancel stops before the next file and keeps the finished files.
+    progress receives (file number, total, path) before each file.
+    """
     summary = TranscodeBatchSummary()
-    for file_id in file_ids:
+    total = len(file_ids)
+    for index, file_id in enumerate(file_ids):
+        if should_cancel is not None and should_cancel():
+            summary.stopped_early = True
+            return summary
+        if progress is not None:
+            asset = transcoder.repo.get_file_by_id(file_id)
+            progress(index + 1, total, asset.current_path if asset is not None else file_id)
         try:
             summary.results.append(transcoder.transcode_file(file_id, preset=preset, mode=mode))
         except EXPECTED_TRANSCODE_ERRORS as exc:

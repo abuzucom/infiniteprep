@@ -297,8 +297,10 @@ def launch_desktop_app() -> int:
         ).exec(),
         on_open_journal_dialog=lambda: JournalDialog(repo, write_svc, parent=window).exec(),
         on_open_settings_dialog=lambda: open_settings_dialog(window, repo),
+        # The transcode runs as a queued batch, so the window stays responsive with
+        # progress, cancel, and the stuck-file prompt.
         on_transcode_batch=lambda fids: run_transcode_with_confirmation(
-            window, repo, transcoder, fids, SettingsManager()
+            window, repo, transcoder, fids, SettingsManager(), queue_batch=window.queue_batch
         ),
         on_export_playlist=lambda fids, dest: export_playlist_with_feedback(
             window,

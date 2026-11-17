@@ -101,11 +101,7 @@ class WriteService:
 
     def list_interrupted_operations(self) -> list[ChangeRecord]:
         """Return journal records left IN_PROGRESS by a crash or power loss mid-write."""
-        return [
-            record
-            for record in self.repo.list_change_records()
-            if record.operation_status == OperationStatus.IN_PROGRESS
-        ]
+        return self.repo.list_change_records_with_status(OperationStatus.IN_PROGRESS)
 
     def _ensure_no_pending_recovery(self) -> None:
         """Refuse a new write while an interrupted write may have left a half-written file."""

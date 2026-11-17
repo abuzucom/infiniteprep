@@ -62,6 +62,7 @@ class BatchKind(StrEnum):
     ANALYZE = "analyze"
     IMPORT = "import"
     WRITE = "write"
+    TRANSCODE = "transcode"
 
 
 class BatchState(StrEnum):
