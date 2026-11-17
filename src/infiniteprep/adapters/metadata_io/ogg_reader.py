@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import mmap
+import os
 import struct
 from dataclasses import dataclass
 from pathlib import Path
@@ -244,10 +246,30 @@ def _parse_codec_info(packet: bytes) -> tuple[str, int, int, int, int]:
 
 
 def read_ogg(source: bytes | Path | str) -> OggMetadata:
-    """Read metadata, codec parameters, and comments from Ogg Vorbis or Opus data."""
-    raw = Path(source).read_bytes() if isinstance(source, str | Path) else source
-    if not isinstance(raw, bytes):
+    """Read metadata, codec parameters, and comments from Ogg Vorbis or Opus data.
+
+    A path is memory-mapped, not read whole. The reader touches only the header pages at
+    the start and the pages it scans back from the end, so a large file costs little memory.
+    """
+    if isinstance(source, str | Path):
+        return _read_ogg_file(Path(source))
+    if not isinstance(source, bytes):
         raise TypeError("Ogg source must be bytes, Path, or str.")
+    return _read_ogg_data(source)
+
+
+def _read_ogg_file(path: Path) -> OggMetadata:
+    """Map the file read-only and parse it without loading the whole file."""
+    with path.open("rb") as handle:
+        if os.fstat(handle.fileno()).st_size == 0:
+            # mmap refuses an empty file. An empty file holds no Ogg page.
+            raise OggFormatError("Ogg file is empty.")
+        with mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
+            return _read_ogg_data(mapped)
+
+
+def _read_ogg_data(raw: bytes | mmap.mmap) -> OggMetadata:
+    """Parse Ogg data held in memory or mapped from a file."""
     serial, packets = _assemble_stream_headers(raw)
     info = _parse_codec_info(packets[0])
     comment = _parse_comment_packet(info[0], packets[1])

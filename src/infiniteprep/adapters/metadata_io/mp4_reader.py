@@ -21,6 +21,11 @@ LARGE_ATOM_HEADER_SIZE: Final[int] = 16
 LARGE_SIZE_MARKER: Final[int] = 1
 FULL_ATOM_PREFIX: Final[int] = 4
 MAX_CHILD_ATOMS: Final[int] = 65_536
+# The ID3, FLAC, and Ogg readers cap a tag field at 16 MiB while they parse. A larger MP4
+# data payload shows as a size summary and is never copied or decoded.
+MAX_DATA_PAYLOAD_BYTES: Final[int] = 16 * 1024 * 1024
+# iTunes writes integer data atoms of 1, 2, 4, or 8 bytes. A longer payload is binary.
+MAX_INTEGER_PAYLOAD_BYTES: Final[int] = 8
 # mvhd version 1 widens its times to 64 bits. Each layout is the offset of the timescale
 # field and the struct format of the timescale and duration.
 MVHD_VERSION_64_BIT: Final[int] = 1
@@ -330,11 +335,28 @@ def _read_item(data: bytes, entry: _Atom) -> Mp4Tag:
         name = _find(parts, "name")
         key = f"----:{_full_atom_text(data, mean)}:{_full_atom_text(data, name)}"
     values = tuple(
-        _decode_data(entry.atom_type, data[part.body_start : part.end])
-        for part in parts
-        if part.atom_type == "data"
+        _decode_data_atom(entry.atom_type, data, part) for part in parts if part.atom_type == "data"
     )
     return Mp4Tag(key, values)
+
+
+def _decode_data_atom(key: str, data: bytes, part: _Atom) -> str:
+    """Decode one data atom, summarizing a picture or an oversized payload without a copy.
+
+    Only the 4-byte type indicator is read before the size check. A crafted text payload
+    near the import size cap therefore never becomes a bytes copy or a decoded string.
+    """
+    size = part.end - part.body_start
+    if size < DATA_HEADER_SIZE:
+        raise Mp4FormatError(f"A data atom in {key!r} is truncated; the file is damaged.")
+    indicator = data[part.body_start : part.body_start + UINT32_SIZE]
+    type_code = struct.unpack(">I", indicator)[0] & DATA_TYPE_MASK
+    payload_size = size - DATA_HEADER_SIZE
+    if type_code in IMAGE_TYPES:
+        return f"<cover {IMAGE_TYPES[type_code]} {payload_size} bytes>"
+    if payload_size > MAX_DATA_PAYLOAD_BYTES:
+        return f"<oversized data {payload_size} bytes>"
+    return _decode_data(key, data[part.body_start : part.end])
 
 
 def _full_atom_text(data: bytes, atom: _Atom | None) -> str:
@@ -356,7 +378,7 @@ def _decode_data(key: str, body: bytes) -> str:
         return payload.decode("utf-16-be", errors="replace")
     if type_code in IMAGE_TYPES:
         return f"<cover {IMAGE_TYPES[type_code]} {len(payload)} bytes>"
-    if type_code in (SIGNED_INT, UNSIGNED_INT) and payload:
+    if type_code in (SIGNED_INT, UNSIGNED_INT) and 0 < len(payload) <= MAX_INTEGER_PAYLOAD_BYTES:
         return str(int.from_bytes(payload, "big", signed=type_code == SIGNED_INT))
     if key in PAIR_KEYS and len(payload) >= PAIR_FIELDS_END:
         number, total = struct.unpack(">HH", payload[PAIR_NUMBER_OFFSET:PAIR_FIELDS_END])

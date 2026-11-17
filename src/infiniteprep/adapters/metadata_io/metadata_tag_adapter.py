@@ -76,6 +76,11 @@ from infiniteprep.hashing import compute_sha256
 XDJ_RX3_MAX_SAMPLE_RATE_HZ: Final[int] = 48000
 XDJ_RX3_MAX_BIT_DEPTH: Final[int] = 24
 # A RIFF form opens with "RIFF", a 4-byte size, and the 4-byte form type.
+# A raw custom tag value above this length shows as a summary in the database row and the
+# Other Tags table. A base64 Vorbis picture or a crafted text frame can reach megabytes.
+MAX_RAW_TAG_TEXT_CHARS: Final[int] = 4096
+RAW_TAG_SUMMARY_PREFIX_CHARS: Final[int] = 200
+TRUNCATED_RAW_TAG_MARK: Final[str] = "... "
 RIFF_FORM_HEADER_SIZE: Final[int] = 12
 # A RIFF chunk opens with a 4-byte ID and a 4-byte payload size.
 RIFF_CHUNK_HEADER_SIZE: Final[int] = 8
@@ -517,8 +522,7 @@ def _parse_m4a(data: bytes) -> _ParsedAudio:
 def _parse_ogg(file_path: Path) -> _ParsedAudio:
     """Read Ogg key and tempo while preserving the original comment fields.
 
-    read_ogg accepts bytes or a path only, so the file is read whole. Ogg files are lossy and
-    small next to WAV or AIFF.
+    read_ogg maps the file from the path and touches only the pages it parses.
     """
     info = read_ogg(file_path)
     properties = AudioProperties(
@@ -647,6 +651,30 @@ def _binary_frame_entry(frame: Id3Frame) -> tuple[str, str]:
     return key, f"<{label}, {len(frame.body)} bytes, sha256 {digest}>"
 
 
+def bound_raw_tag_value(value: object) -> object:
+    """Return value with every string above MAX_RAW_TAG_TEXT_CHARS replaced by a summary.
+
+    The summary keeps the leading characters, the full length, and a SHA-256 digest, so a
+    later read still tells whether the value changed. Lists keep their order.
+    """
+    if isinstance(value, list):
+        return [bound_raw_tag_value(item) for item in value]
+    if not isinstance(value, str) or len(value) <= MAX_RAW_TAG_TEXT_CHARS:
+        return value
+    digest = hashlib.sha256(value.encode("utf-8", errors="surrogatepass")).hexdigest()
+    head = value[:RAW_TAG_SUMMARY_PREFIX_CHARS]
+    return f"{head}{TRUNCATED_RAW_TAG_MARK}<{len(value)} chars, sha256 {digest}>"
+
+
+def bound_raw_tag_values(raw_tags: dict[str, Any]) -> dict[str, Any]:
+    """Return raw_tags with every oversized string value summarized.
+
+    Raw custom tags feed the database row and the Other Tags table only. A tag write reads
+    the file itself, so a summary here never reaches a written file.
+    """
+    return {key: bound_raw_tag_value(value) for key, value in raw_tags.items()}
+
+
 def _picture_fields(body: bytes) -> tuple[str, str]:
     """Return the MIME type and description of an APIC body, or empty strings when damaged.
 
@@ -750,7 +778,7 @@ class MetadataTagAdapter:
             )
 
         props = parsed.properties
-        raw_custom_tags = parsed.raw_custom_tags
+        raw_custom_tags = bound_raw_tag_values(parsed.raw_custom_tags)
         if props.bits_per_sample is not None:
             raw_custom_tags["_bits_per_sample"] = props.bits_per_sample
         warnings = evaluate_xdj_rx3_warnings(fmt, props.sample_rate, props.bits_per_sample)

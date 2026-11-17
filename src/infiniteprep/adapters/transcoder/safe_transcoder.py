@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -12,7 +11,6 @@ from typing import Final
 
 import numpy as np
 import soundfile as sf
-from scipy.signal import resample_poly
 
 from infiniteprep import storage_paths
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
@@ -21,6 +19,7 @@ from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     copy_to_new_verified_file,
     operation_backup_path,
 )
+from infiniteprep.adapters.transcoder.block_resampler import iter_resampled_blocks
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, OperationStatus
 from infiniteprep.domain.models import ChangeRecord, FileAsset, utc_now_iso
@@ -41,6 +40,29 @@ RESAMPLE_HEADROOM: Final[float] = 0.999
 SIBLING_OUTPUT_TAG: Final[str] = "_XDJ"
 # Settings files written before 0.3.0 store the lossless auto preset under this value.
 LEGACY_LOSSLESS_AUTO_VALUE: Final[str] = "XDJ_RX3_LOSSLESS_AUTO"
+
+
+def write_resampled_audio(
+    source_path: Path, output_path: Path, target_rate: int, subtype: str, file_format: str
+) -> None:
+    """Resample source_path to target_rate block by block and write output_path.
+
+    One block of input and output stays in memory at a time. Each block is clipped to the
+    headroom guard before the write, as the whole-file path did.
+    """
+    with (
+        sf.SoundFile(str(source_path)) as source,
+        sf.SoundFile(
+            str(output_path),
+            "w",
+            samplerate=target_rate,
+            channels=source.channels,
+            subtype=subtype,
+            format=file_format,
+        ) as sink,
+    ):
+        for block in iter_resampled_blocks(source, target_rate):
+            sink.write(np.clip(block, -RESAMPLE_HEADROOM, RESAMPLE_HEADROOM))
 
 
 class TranscodeMode(StrEnum):
@@ -120,11 +142,10 @@ class SafeTranscoderAdapter:
             raise FileNotFoundError(f"Source audio file missing at {src_path}.")
         self._verify_audio_bounds(src_path)
 
-        pcm, src_sr = sf.read(str(src_path), dtype="float64", always_2d=True)
+        src_sr = int(sf.info(str(src_path)).samplerate)
         target_sr, target_subtype, target_ext, sf_fmt = self._resolve_target_params(
-            asset, int(src_sr), preset
+            asset, src_sr, preset
         )
-        resampled = self._resample_audio(pcm, int(src_sr), target_sr)
 
         out_path = self._determine_output_path(
             src_path, target_ext, mode, export_dir, allowed_export_root
@@ -135,7 +156,6 @@ class SafeTranscoderAdapter:
             asset=asset,
             src_path=src_path,
             out_path=out_path,
-            resampled=resampled,
             target_sr=target_sr,
             target_subtype=target_subtype,
             sf_fmt=sf_fmt,
@@ -157,7 +177,6 @@ class SafeTranscoderAdapter:
         asset: FileAsset,
         src_path: Path,
         out_path: Path,
-        resampled: np.ndarray,
         target_sr: int,
         target_subtype: str,
         sf_fmt: str,
@@ -169,7 +188,7 @@ class SafeTranscoderAdapter:
         if mode == TranscodeMode.IN_PLACE_BACKED_UP:
             rec = self._backup_and_journal_in_place(asset, src_path, out_path)
         try:
-            sf.write(str(temp_out), resampled, target_sr, subtype=target_subtype, format=sf_fmt)
+            write_resampled_audio(src_path, temp_out, target_sr, target_subtype, sf_fmt)
             self._apply_effective_tags_to_output(asset, temp_out)
             post_hash = compute_sha256(temp_out)
             temp_out.replace(out_path)
@@ -259,16 +278,6 @@ class SafeTranscoderAdapter:
         if asset.format == AudioFormat.AIFF:
             return target_sr, "PCM_24", ".aiff", "AIFF"
         return target_sr, "PCM_24", ".wav", "WAV"
-
-    def _resample_audio(self, pcm: np.ndarray, src_sr: int, target_sr: int) -> np.ndarray:
-        """Resample multi-channel PCM using polyphase filtering when sample rates differ."""
-        if src_sr == target_sr or src_sr <= 0 or target_sr <= 0:
-            return np.clip(pcm, -RESAMPLE_HEADROOM, RESAMPLE_HEADROOM)
-        divisor = math.gcd(src_sr, target_sr)
-        up = target_sr // divisor
-        down = src_sr // divisor
-        resampled = resample_poly(pcm, up, down, axis=0)
-        return np.clip(resampled, -RESAMPLE_HEADROOM, RESAMPLE_HEADROOM)
 
     def _determine_output_path(
         self,
