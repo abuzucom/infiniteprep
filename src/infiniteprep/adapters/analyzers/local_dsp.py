@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Final
 
@@ -21,8 +22,9 @@ MAX_ANALYSIS_DURATION_SEC: Final[float] = 1800.0  # 30 minutes
 # values that expand a small file to many gigabytes. The values match the preview decoder caps.
 MAX_DSP_CHANNELS: Final[int] = 8
 MAX_DSP_SAMPLE_RATE_HZ: Final[int] = 384_000
-# 200 million mono frames cover 30 minutes at 96 kHz.
-MAX_DSP_MONO_FRAMES: Final[int] = 200_000_000
+# The mono frame cap covers 30 minutes at 48 kHz, about 691 MB as float64. A file above
+# 48 kHz analyzes a shorter span. The analysis steps make a few temporary copies of this size.
+MAX_DSP_MONO_FRAMES: Final[int] = 30 * 60 * 48_000
 DSP_BLOCK_FRAMES: Final[int] = 65_536
 ENVELOPE_BINS: Final[int] = 64
 
@@ -227,8 +229,10 @@ def read_bounded_mono_pcm(
     info = sf.info(str(audio_reference))
     sample_rate = int(info.samplerate)
     frame_limit = _bounded_dsp_frames(sample_rate, int(info.channels), max_duration_sec)
-    frames_to_read = min(int(info.frames), frame_limit) if info.frames > 0 else frame_limit
-    return _decode_mono_blocks(audio_reference, frames_to_read), sample_rate
+    if info.frames > 0:
+        frames_to_read = min(int(info.frames), frame_limit)
+        return _decode_mono_into_buffer(audio_reference, frames_to_read), sample_rate
+    return _decode_mono_chunks(audio_reference, frame_limit), sample_rate
 
 
 def _bounded_dsp_frames(sample_rate: int, channels: int, max_duration_sec: float) -> int:
@@ -246,18 +250,35 @@ def _bounded_dsp_frames(sample_rate: int, channels: int, max_duration_sec: float
     return min(max(1, round(sample_rate * max_duration_sec)), MAX_DSP_MONO_FRAMES)
 
 
-def _decode_mono_blocks(audio_reference: Path, frame_limit: int) -> np.ndarray:
-    """Decode at most frame_limit frames in blocks and return the mono mix as float64."""
-    chunks: list[np.ndarray] = []
-    filled = 0
+def _mono_blocks(audio_reference: Path, frame_limit: int) -> Iterator[np.ndarray]:
+    """Yield the mono mix of each decoded block until frame_limit frames have passed."""
+    remaining = frame_limit
     for block in sf.blocks(
         str(audio_reference), blocksize=DSP_BLOCK_FRAMES, dtype="float64", always_2d=True
     ):
-        take = min(int(block.shape[0]), frame_limit - filled)
+        take = min(int(block.shape[0]), remaining)
         if take <= 0:
-            break
-        chunks.append(np.mean(block[:take], axis=1))
-        filled += take
+            return
+        yield np.mean(block[:take], axis=1)
+        remaining -= take
+
+
+def _decode_mono_into_buffer(audio_reference: Path, frame_count: int) -> np.ndarray:
+    """Decode a stream of known length into one buffer, so the mono mix exists only once."""
+    mono = np.empty(frame_count, dtype=np.float64)
+    filled = 0
+    for chunk in _mono_blocks(audio_reference, frame_count):
+        mono[filled : filled + chunk.size] = chunk
+        filled += chunk.size
+    if filled == frame_count:
+        return mono
+    # The header declared more frames than the stream holds. The copy releases the rest.
+    return mono[:filled].copy()
+
+
+def _decode_mono_chunks(audio_reference: Path, frame_limit: int) -> np.ndarray:
+    """Decode a stream of unknown length. The join holds the mono mix twice for a moment."""
+    chunks = list(_mono_blocks(audio_reference, frame_limit))
     return np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float64)
 
 

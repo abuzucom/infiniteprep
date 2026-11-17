@@ -10,8 +10,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - A crafted audio header no longer claims unbounded decode memory or analysis time.
-  - The local analyzer decodes in blocks and keeps only the mono mix. The memory in use follows the frame count, not the frame count times the channel count.
-  - The local analyzer refuses a file that declares more than 8 channels or a sample rate above 384 kHz. It decodes at most 200 million frames.
+  - The local analyzer decodes in blocks and keeps only the mono mix. The memory in use follows the frame count, not the frame count times the channel count. A stream of known length decodes into one buffer, so the mono mix never exists twice.
+  - The local analyzer refuses a file that declares more than 8 channels or a sample rate above 384 kHz. It decodes at most 30 minutes at 48 kHz, about 691 MB of mono samples. A file above 48 kHz analyzes a shorter span.
   - The tempo estimate computes only the lags of the tempo range. A full autocorrelation of a 30 minute file needed over 100 billion steps.
   - The transcoder refuses a file that declares more than 8 channels, a sample rate above 384 kHz, or more decoded samples than a 2 hour stereo file at 48 kHz holds.
   - A decode that runs out of memory fails that one file. The analysis reports a decode failure, and a transcode batch continues with the next file.
