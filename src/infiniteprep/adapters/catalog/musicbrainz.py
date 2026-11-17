@@ -39,6 +39,10 @@ SAFE_ENTITY_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 # digits, because \d also matches other Unicode decimal digits.
 RELEASE_YEAR_RE: Final[re.Pattern[str]] = re.compile(r"([0-9]{4})(?:-|\Z)")
 MB_REQUEST_TIMEOUT_SEC: Final[float] = 15.0
+# A release candidate names the pressing as well as the recording, so it scores above a
+# recording found without any release.
+MB_RECORDING_MATCH_SCORE: Final[float] = 0.85
+MB_RELEASE_MATCH_SCORE: Final[float] = 0.88
 FETCH_ENDPOINTS: Final[dict[EntityType, str]] = {
     EntityType.RECORDING: "recording",
     EntityType.RELEASE: "release",
@@ -191,7 +195,7 @@ class MusicBrainzAdapter:
                     title=title,
                     duration=duration,
                     match_evidence={"recording_id": rec_id},
-                    match_score=0.85,
+                    match_score=MB_RECORDING_MATCH_SCORE,
                 )
             ]
         return [
@@ -232,7 +236,7 @@ class MusicBrainzAdapter:
             duration=duration,
             release_details=self._release_details(rel, track_num),
             match_evidence={"recording_id": rec_id, "release_id": rel_id},
-            match_score=0.88,
+            match_score=MB_RELEASE_MATCH_SCORE,
         )
 
     def _candidate_from_release_lookup(
@@ -256,7 +260,7 @@ class MusicBrainzAdapter:
             duration=None,
             release_details=self._release_details(release, None),
             match_evidence={"release_id": rel_id},
-            match_score=0.88,
+            match_score=MB_RELEASE_MATCH_SCORE,
         )
 
     def _release_details(self, rel: dict[str, Any], track_num: str | None) -> ReleaseDetails:
