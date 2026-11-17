@@ -11,15 +11,18 @@ import hashlib
 import json
 import math
 import re
-import threading
-import time
 import urllib.error
-import urllib.parse
 import urllib.request
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from typing import Any, Final
 
+from infiniteprep.adapters import http_json
+from infiniteprep.adapters.http_json import (
+    LOOKUP_ERRORS,
+    build_candidate_id,
+    fetch_json,
+    log_lookup_failure,
+)
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
 from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
@@ -73,47 +76,17 @@ RELEASE_YEAR_RE: Final[re.Pattern[str]] = re.compile(r"^(\d{4})")
 MISSING_RELEASE_DATE: Final[str] = "9999-99-99"
 
 
-class RequestLimiter:
+class RequestLimiter(http_json.RequestLimiter):
     """Holds the request timing for one provider across every adapter instance.
 
     The limiter lives in the process, so a second adapter or a second thread
-    waits for the same interval. The lock keeps two callers from passing the
-    check at the same time.
+    waits for the same interval. The class keeps the iTunes interval as the
+    default.
     """
 
     def __init__(self, min_interval_sec: float = ITUNES_MIN_INTERVAL_SEC) -> None:
         """Initialize the limiter with the minimum interval between requests."""
-        self.min_interval_sec = min_interval_sec
-        self._lock = threading.Lock()
-        self._last_request_ts: float = 0.0
-
-    def wait(self) -> None:
-        """Hold the next request until the minimum interval has passed."""
-        if self.min_interval_sec <= 0.0:
-            return
-        with self._lock:
-            self._hold_interval()
-            self._last_request_ts = time.monotonic()
-
-    @contextmanager
-    def request_slot(self) -> Iterator[None]:
-        """Hold the provider slot for one request.
-
-        The caller runs the cache check and the request inside the slot. A second
-        caller waits for the slot and then finds the cached response, so two
-        threads never send the same lookup twice.
-        """
-        with self._lock:
-            if self.min_interval_sec > 0.0:
-                self._hold_interval()
-                self._last_request_ts = time.monotonic()
-            yield
-
-    def _hold_interval(self) -> None:
-        """Sleep until the minimum interval has passed since the last request."""
-        elapsed = time.monotonic() - self._last_request_ts
-        if elapsed < self.min_interval_sec:
-            time.sleep(self.min_interval_sec - elapsed)
+        super().__init__(min_interval_sec)
 
 
 # The one limiter for the provider. Every adapter in the process shares it.
@@ -225,7 +198,12 @@ class ItunesSearchAdapter:
                 # Another thread may have cached the response while this one waited.
                 payload = self.repo.get_cached_response(cache_key)
                 if payload is None:
-                    payload = self.http_get_json(ITUNES_SEARCH_URL, params)
+                    try:
+                        payload = self.http_get_json(ITUNES_SEARCH_URL, params)
+                    except LOOKUP_ERRORS as error:
+                        # A failed lookup fails this file only. The job continues.
+                        log_lookup_failure("iTunes Search", error)
+                        return []
                     self.repo.set_cached_response(
                         cache_key=cache_key,
                         provider=self.provider_name,
@@ -317,7 +295,7 @@ class ItunesSearchAdapter:
         release_date = _text(row.get("releaseDate"))
         year_match = RELEASE_YEAR_RE.match(release_date)
         return CandidateMatch(
-            id=f"itunes-track-{track_id}",
+            id=build_candidate_id("itunes-track", file_id, track_id),
             file_id=file_id,
             provider=self.provider_name,
             provider_entity_id=track_id,
@@ -343,17 +321,15 @@ class ItunesSearchAdapter:
         """Perform HTTPS GET request to the published iTunes Search endpoint."""
         if not url.startswith(f"https://{ITUNES_SEARCH_HOST}/"):
             raise ValueError(f"iTunes Search URL must use the published endpoint: {url}")
-        encoded = urllib.parse.urlencode(params)
-        request = urllib.request.Request(
-            f"{url}?{encoded}",
-            headers={"User-Agent": ITUNES_USER_AGENT, "Accept": "application/json"},
-        )
-        opener = build_search_opener()
         try:
-            with opener.open(request, timeout=ITUNES_REQUEST_TIMEOUT_SEC) as response:
-                raw_bytes = response.read(MAX_API_RESPONSE_BYTES + 1)
+            return fetch_json(
+                url,
+                params,
+                {"User-Agent": ITUNES_USER_AGENT, "Accept": "application/json"},
+                provider="iTunes Search",
+                timeout=ITUNES_REQUEST_TIMEOUT_SEC,
+                max_bytes=MAX_API_RESPONSE_BYTES,
+                open_url=build_search_opener().open,
+            )
         except urllib.error.HTTPError as error:
             raise ValueError(f"iTunes Search request failed: {error.code}") from error
-        if len(raw_bytes) > MAX_API_RESPONSE_BYTES:
-            raise ValueError("iTunes Search HTTP response exceeded maximum byte size limit.")
-        return dict(json.loads(raw_bytes.decode("utf-8")))

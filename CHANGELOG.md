@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.74.0] (2026-11-17)
+## [0.75.0] (2026-11-17)
 
 ### Added
 
@@ -47,6 +47,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Latent defects in the online adapters, the LLM validator, and key removal (issue 288).
+  - A network failure, a timeout, or a malformed response from MusicBrainz, Discogs, iTunes Search, or AcoustID fails that lookup only. The identification job continues with the other providers. AcoustID returns the failure as a warning. A failed lookup stays out of the cache.
+  - Candidate ids from MusicBrainz, Discogs, and iTunes Search hold the file id. The same release found for two files collided on one candidate id before.
+  - Each Discogs track keeps its own candidate row. A Discogs year of 0 reads as no year. A track without a position takes its list position.
+  - A MusicBrainz release lookup returns a release candidate. It returned nothing after the request before. An unsupported entity type fails before any request. A missing track number reads as no track number.
+  - The fpcalc step catches process, file, and parse errors only. A defect in the runner now surfaces.
+  - The Beatport and ACRCloud stubs report unavailable with the reason. They reported available while every lookup returned nothing.
+  - The LLM validator accepts a proposed value only from the selected candidate. It accepted the id of one candidate with the value of another before.
+  - `OllamaBootstrapService` gains an optional `base_url` keyword. The model list follows the configured server and treats a malformed response as no models.
+  - `forget_all_credentials` attempts every key after a failed delete. It stopped at the first failure before.
+  - The new module `infiniteprep.adapters.http_json` holds the bounded HTTPS JSON fetch and the request limiter. `RequestLimiter` stays importable from the iTunes adapter.
+  - The new `tests/unit/test_adapter_latent_defects.py` covers each change.
+  - The version advances from 0.74.0 to 0.75.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Wrong results and failed operations from the wholesale quality review (issue 288).
   - An unreadable subfolder no longer stops an import. A folder and a file inside it import the file once.
   - Silent or flat audio yields no key. The analyzer proposed A minor before.

@@ -10,9 +10,40 @@ import subprocess
 import urllib.request
 from collections.abc import Callable
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
-OLLAMA_TAGS_URL: Final[str] = "http://127.0.0.1:11434/api/tags"
+from infiniteprep.config.settings import validate_endpoint_url
+
+OLLAMA_DEFAULT_BASE_URL: Final[str] = "http://127.0.0.1:11434"
+OLLAMA_TAGS_URL: Final[str] = f"{OLLAMA_DEFAULT_BASE_URL}/api/tags"
+# The Settings field holds the OpenAI-compatible endpoint, which ends in /v1.
+# The tags endpoint lives at the server root.
+OPENAI_PATH_SUFFIX: Final[str] = "/v1"
+OLLAMA_TAGS_TIMEOUT_SEC: Final[float] = 3.0
+MAX_TAGS_RESPONSE_BYTES: Final[int] = 1_048_576  # 1 MiB holds any local model list
+
+
+def build_tags_url(base_url: str) -> str:
+    """Return the /api/tags URL of the Ollama server at base_url.
+
+    base_url may be the server root or the OpenAI-compatible endpoint ending in /v1.
+    """
+    root = base_url.strip().rstrip("/")
+    if root.endswith(OPENAI_PATH_SUFFIX):
+        root = root[: -len(OPENAI_PATH_SUFFIX)]
+    return f"{root}/api/tags"
+
+
+def parse_model_names(data: Any) -> list[str]:
+    """Return the model names in an /api/tags response, ignoring malformed entries."""
+    if not isinstance(data, dict):
+        return []
+    models = data.get("models")
+    if not isinstance(models, list):
+        return []
+    return [str(m["name"]) for m in models if isinstance(m, dict) and m.get("name")]
+
+
 # A model reference is [host/][namespace/]model:tag, e.g. hf.co/user/model:q4.
 # Each slash-separated segment and the tag must start with a letter or digit.
 # The CLI parses an argument as an option only when it starts with a hyphen.
@@ -44,23 +75,41 @@ class OllamaBootstrapService:
     def __init__(
         self,
         runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
+        base_url: str = OLLAMA_DEFAULT_BASE_URL,
     ) -> None:
-        """Initialize OllamaBootstrapService with optional subprocess test runner."""
+        """Initialize OllamaBootstrapService with optional subprocess test runner.
+
+        base_url names the Ollama server, as the Settings Ollama URL field holds it.
+        """
         self.runner = runner
+        self.tags_url = build_tags_url(base_url)
 
     def is_ollama_installed(self) -> bool:
         """Return True if the ollama CLI binary is present on PATH."""
         return shutil.which("ollama") is not None
 
     def list_installed_models(self) -> list[str]:
-        """Query local Ollama daemon /api/tags and return installed model names."""
-        req = urllib.request.Request(OLLAMA_TAGS_URL)
-        try:
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                return [str(m.get("name", "")) for m in data.get("models", []) if m.get("name")]
-        except (OSError, ValueError):
+        """Query the Ollama server /api/tags and return installed model names.
+
+        A URL that fails the endpoint rules, an unreachable server, or a malformed
+        response returns an empty list.
+        """
+        valid, _reason = validate_endpoint_url(self.tags_url)
+        if not valid:
             return []
+        req = urllib.request.Request(self.tags_url)
+        try:
+            with urllib.request.urlopen(req, timeout=OLLAMA_TAGS_TIMEOUT_SEC) as resp:
+                raw_bytes = resp.read(MAX_TAGS_RESPONSE_BYTES + 1)
+        except OSError:
+            return []
+        if len(raw_bytes) > MAX_TAGS_RESPONSE_BYTES:
+            return []
+        try:
+            data = json.loads(raw_bytes.decode("utf-8"))
+        except ValueError:
+            return []
+        return parse_model_names(data)
 
     def install_ollama(self, *, user_consented: bool) -> str:
         """Install Ollama using official OS package manager only when user_consented is True."""

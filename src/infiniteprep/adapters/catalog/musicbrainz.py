@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
-import time
-import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from typing import Any, Final
 
+from infiniteprep.adapters.http_json import (
+    LOOKUP_ERRORS,
+    RequestLimiter,
+    build_candidate_id,
+    fetch_json,
+    log_lookup_failure,
+)
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
 from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
@@ -26,6 +30,11 @@ SAFE_ENTITY_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 # A MusicBrainz release date reads YYYY, YYYY-MM, or YYYY-MM-DD. The class names ASCII
 # digits, because \d also matches other Unicode decimal digits.
 RELEASE_YEAR_RE: Final[re.Pattern[str]] = re.compile(r"([0-9]{4})(?:-|\Z)")
+MB_REQUEST_TIMEOUT_SEC: Final[float] = 15.0
+FETCH_ENDPOINTS: Final[dict[EntityType, str]] = {
+    EntityType.RECORDING: "recording",
+    EntityType.RELEASE: "release",
+}
 
 
 def extract_release_year(raw_date: object) -> str | None:
@@ -59,7 +68,7 @@ class MusicBrainzAdapter:
         self.repo = repository
         self.http_get_json = http_get_json or self._default_http_get_json
         self.min_interval_sec = min_interval_sec
-        self._last_request_ts: float = 0.0
+        self._limiter = RequestLimiter(min_interval_sec)
 
     def is_available(self) -> tuple[bool, str | None]:
         """Return availability status for MusicBrainz public API."""
@@ -80,54 +89,66 @@ class MusicBrainzAdapter:
 
         cache_hash = hashlib.sha256(lucene_query.encode("utf-8")).hexdigest()[:24]
         cache_key = f"mb:search:{cache_hash}"
-        payload = self.repo.get_cached_response(cache_key)
+        payload = self._cached_get(
+            cache_key,
+            f"{MB_BASE_URL}/recording",
+            {"query": lucene_query, "fmt": "json", "limit": "10"},
+        )
         if payload is None:
-            self._respect_rate_limit()
-            payload = self.http_get_json(
-                f"{MB_BASE_URL}/recording",
-                {"query": lucene_query, "fmt": "json", "limit": "10"},
-            )
-            self.repo.set_cached_response(
-                cache_key=cache_key,
-                provider=self.provider_name,
-                response_data=payload,
-                ttl_seconds=MB_CACHE_TTL_SEC,
-            )
+            return []
         return self._parse_recording_list(payload.get("recordings", []), file_id=file_id)
 
     def fetch(
         self, entity_id: str, entity_type: EntityType = EntityType.RELEASE, file_id: str = ""
     ) -> list[CandidateMatch]:
-        """Fetch a specific MusicBrainz recording or release by MBID."""
+        """Fetch a specific MusicBrainz recording or release by MBID.
+
+        An entity type without a lookup endpoint raises ValueError before any request.
+        """
         if not SAFE_ENTITY_ID_RE.match(entity_id):
             raise ValueError(f"Invalid MusicBrainz entity_id '{entity_id}'.")
-        endpoint = "recording" if entity_type == EntityType.RECORDING else "release"
-        cache_key = f"mb:fetch:{endpoint}:{entity_id}"
-        payload = self.repo.get_cached_response(cache_key)
+        endpoint = FETCH_ENDPOINTS.get(entity_type)
+        if endpoint is None:
+            raise ValueError(f"MusicBrainz fetch does not support entity type '{entity_type}'.")
+        payload = self._cached_get(
+            f"mb:fetch:{endpoint}:{entity_id}",
+            f"{MB_BASE_URL}/{endpoint}/{entity_id}",
+            {"inc": "artists+releases+labels+media", "fmt": "json"},
+        )
         if payload is None:
-            self._respect_rate_limit()
-            payload = self.http_get_json(
-                f"{MB_BASE_URL}/{endpoint}/{entity_id}",
-                {"inc": "artists+releases+labels+media", "fmt": "json"},
-            )
-            self.repo.set_cached_response(
-                cache_key=cache_key,
-                provider=self.provider_name,
-                response_data=payload,
-                ttl_seconds=MB_CACHE_TTL_SEC,
-            )
+            return []
         if entity_type == EntityType.RECORDING:
             return self._parse_recording_list([payload], file_id=file_id)
-        return []
+        return [self._candidate_from_release_lookup(payload, file_id)]
+
+    def _cached_get(
+        self, cache_key: str, url: str, params: dict[str, str]
+    ) -> dict[str, Any] | None:
+        """Return the cached or fetched payload, or None after a failed lookup.
+
+        A network failure or a malformed response fails this lookup only. The
+        identification job continues with the other providers.
+        """
+        payload = self.repo.get_cached_response(cache_key)
+        if payload is not None:
+            return payload
+        self._respect_rate_limit()
+        try:
+            payload = self.http_get_json(url, params)
+        except LOOKUP_ERRORS as error:
+            log_lookup_failure("MusicBrainz", error)
+            return None
+        self.repo.set_cached_response(
+            cache_key=cache_key,
+            provider=self.provider_name,
+            response_data=payload,
+            ttl_seconds=MB_CACHE_TTL_SEC,
+        )
+        return payload
 
     def _respect_rate_limit(self) -> None:
         """Sleep if necessary to maintain the 1 request/second MusicBrainz limit."""
-        if self.min_interval_sec <= 0.0:
-            return
-        elapsed = time.monotonic() - self._last_request_ts
-        if elapsed < self.min_interval_sec:
-            time.sleep(self.min_interval_sec - elapsed)
-        self._last_request_ts = time.monotonic()
+        self._limiter.wait()
 
     def _parse_recording_list(
         self, recordings: list[dict[str, Any]], file_id: str
@@ -150,7 +171,7 @@ class MusicBrainzAdapter:
         if not releases:
             return [
                 CandidateMatch(
-                    id=f"mb-rec-{rec_id}",
+                    id=build_candidate_id("mb-rec", file_id, rec_id),
                     file_id=file_id,
                     provider=self.provider_name,
                     provider_entity_id=rec_id,
@@ -186,14 +207,11 @@ class MusicBrainzAdapter:
     ) -> CandidateMatch:
         """Build a Release CandidateMatch from a MusicBrainz release sub-object."""
         rel_id = str(rel.get("id", rec_id))
-        lbl_info = (rel.get("label-info") or [{}])[0]
-        label_name = (lbl_info.get("label") or {}).get("name")
-        cat_no = lbl_info.get("catalog-number")
         media = (rel.get("media") or [{}])[0]
         tracks = media.get("track") or [{}]
-        track_num = str(tracks[0].get("number", "")) if tracks else None
+        track_num = str(tracks[0].get("number") or "") or None
         return CandidateMatch(
-            id=f"mb-rel-{rel_id}",
+            id=build_candidate_id("mb-rel", file_id, rec_id, rel_id),
             file_id=file_id,
             provider=self.provider_name,
             provider_entity_id=rel_id,
@@ -201,31 +219,58 @@ class MusicBrainzAdapter:
             artist=artist_str,
             title=title,
             duration=duration,
-            release_details=ReleaseDetails(
-                release_title=rel.get("title"),
-                label=label_name,
-                catalog_number=cat_no,
-                country=rel.get("country"),
-                year=extract_release_year(rel.get("date")),
-                track_number=track_num,
-                vinyl_position=track_num,
-                format_description=media.get("format"),
-            ),
+            release_details=self._release_details(rel, track_num),
             match_evidence={"recording_id": rec_id, "release_id": rel_id},
             match_score=0.88,
         )
 
+    def _candidate_from_release_lookup(
+        self, release: dict[str, Any], file_id: str
+    ) -> CandidateMatch:
+        """Build a Release CandidateMatch from a MusicBrainz release lookup payload.
+
+        A release lookup names no single track, so the candidate holds no track number.
+        """
+        rel_id = str(release.get("id", ""))
+        credits = release.get("artist-credit") or []
+        artists = [a.get("name", "") for a in credits if isinstance(a, dict)]
+        return CandidateMatch(
+            id=build_candidate_id("mb-rel", file_id, rel_id),
+            file_id=file_id,
+            provider=self.provider_name,
+            provider_entity_id=rel_id,
+            entity_type=EntityType.RELEASE,
+            artist=", ".join(a for a in artists if a) or None,
+            title=str(release.get("title", "")),
+            duration=None,
+            release_details=self._release_details(release, None),
+            match_evidence={"release_id": rel_id},
+            match_score=0.88,
+        )
+
+    def _release_details(self, rel: dict[str, Any], track_num: str | None) -> ReleaseDetails:
+        """Return the release details of one MusicBrainz release object."""
+        lbl_info = (rel.get("label-info") or [{}])[0]
+        media = (rel.get("media") or [{}])[0]
+        return ReleaseDetails(
+            release_title=rel.get("title"),
+            label=(lbl_info.get("label") or {}).get("name"),
+            catalog_number=lbl_info.get("catalog-number"),
+            country=rel.get("country"),
+            year=extract_release_year(rel.get("date")),
+            track_number=track_num,
+            vinyl_position=track_num,
+            format_description=media.get("format"),
+        )
+
     def _default_http_get_json(self, url: str, params: dict[str, str]) -> dict[str, Any]:
         """Perform HTTPS GET request to MusicBrainz API with required User-Agent."""
-        if not url.startswith("https://"):
-            raise ValueError(f"MusicBrainz URL must use https:// scheme: {url}")
-        encoded = urllib.parse.urlencode(params)
-        req = urllib.request.Request(
-            f"{url}?{encoded}",
-            headers={"User-Agent": MB_USER_AGENT, "Accept": "application/json"},
+        return fetch_json(
+            url,
+            params,
+            {"User-Agent": MB_USER_AGENT, "Accept": "application/json"},
+            provider="MusicBrainz",
+            timeout=MB_REQUEST_TIMEOUT_SEC,
+            max_bytes=MAX_API_RESPONSE_BYTES,
+            open_url=urllib.request.urlopen,
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            raw_bytes = resp.read(MAX_API_RESPONSE_BYTES + 1)
-        if len(raw_bytes) > MAX_API_RESPONSE_BYTES:
-            raise ValueError("MusicBrainz HTTP response exceeded maximum byte size limit.")
-        return dict(json.loads(raw_bytes.decode("utf-8")))

@@ -22,27 +22,30 @@ class ClosedWorldValidator:
         if selected_id is None and proposed_val is None:
             return True, None
 
-        allowed_ids = {str(c.get("id")) for c in allowed_candidates if c.get("id") is not None}
-        allowed_vals = {
-            str(c.get("value")).strip().lower()
-            for c in allowed_candidates
-            if c.get("value") is not None
-        }
-
-        if selected_id is not None and str(selected_id) not in allowed_ids:
+        by_id = {str(c.get("id")): c for c in allowed_candidates if c.get("id") is not None}
+        if selected_id is not None and str(selected_id) not in by_id:
             return (
                 False,
                 f"Hallucinated candidate ID '{selected_id}' not in allowed_candidates; "
                 "discarded LLM output.",
             )
-        if (
-            proposed_val is not None
-            and allowed_vals
-            and str(proposed_val).strip().lower() not in allowed_vals
-        ):
+        if proposed_val is None:
+            return True, None
+        # The value must belong to the selected candidate. Two separate sets accepted an
+        # ID from one candidate paired with the value of another.
+        scope = [by_id[str(selected_id)]] if selected_id is not None else allowed_candidates
+        allowed_vals = {
+            _normalize_value(c.get("value")) for c in scope if c.get("value") is not None
+        }
+        if _normalize_value(proposed_val) not in allowed_vals:
             return (
                 False,
-                f"Hallucinated value '{proposed_val}' not in allowed_candidates; "
+                f"Value '{proposed_val}' does not belong to the selected candidate; "
                 "discarded LLM output.",
             )
         return True, None
+
+
+def _normalize_value(value: Any) -> str:
+    """Return a candidate value folded for comparison."""
+    return str(value).strip().lower()
