@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.68.1] (2026-11-16)
+## [0.71.1] (2026-11-17)
 
 ### Added
 
@@ -13,7 +13,20 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Enter in the rename template field keeps the write preview open.
   - Tab leaves the library table.
   - Tab from a field edit box reaches the action buttons of the same row.
-  - The version advances from 0.68.0 to 0.68.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.71.0 to 0.71.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+
+## [0.71.0] (2026-11-16)
+
+### Added
+
+- The Microsoft Security DevOps scan reports its result as a pull request comment.
+  - The new `scan-comment` job in `.github/workflows/security-devops.yml` posts the comment after a passed scan and after a failed scan. A passed scan with no finding still gets a comment.
+  - The comment holds the result, the finding total, the findings by tool, and a link to the workflow run. The job updates the comment on every push and removes a second comment from the bot.
+  - The new `scripts/build_security_scan_summary.py` builds a bounded JSON document from the SARIF report. The comment job validates the document before it posts and builds the Markdown itself.
+  - The scan job holds no pull request permission. The comment job holds `pull-requests: write` and checks out nothing.
+  - A light change runs no scan and gets no new comment. The job skips a pull request from a fork.
+  - `tests/test_build_security_scan_summary.py` covers the builder. `tests/test_security_scan_comment.py` covers the wiring and runs the comment script under Node against a stubbed API.
+  - The version advances from 0.70.0 to 0.71.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - The pull request checks report the code coverage of the application.
   - The Ubuntu leg of the test matrix runs the suite under `coverage run -m pytest`. The report costs no second suite run. The other legs run the plain suite.
@@ -55,6 +68,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Two pinned Python packages advance.
+  - `requirements-lock.txt` pins `pyinstaller-hooks-contrib` 2026.10 for the application environment. The previous pin was 2026.9.
+  - `requirements-sbom.txt` pins `jsonpointer` 3.12 with the SHA-256 of its wheel for the SBOM tool environment. The previous pin was 3.10.
+  - Both file headers state that the two files lock separate environments. A package that both environments need appears in both files at the same version.
+- The application lockfile pins the SHA-256 digest of every artifact PyPI publishes for each pinned release.
+  - `requirements-lock.txt` lists the digest of each wheel and source distribution under its pin. pip verifies the bytes it installs against that list.
+  - The `ci` and bundle jobs install the file with `--require-hashes`. A substituted artifact fails the install instead of reaching the build.
+  - `tests/test_requirements_lock_hashes.py` checks that every pin carries a digest and that pip rejects an artifact whose digest the file does not name.
+- The foucault security review pin advances from 3.8.1 to 3.8.8.
+  - `.github/workflows/security-review-pr.yml` pins both `uses:` references and both `audit_ref` values to commit `d50c22c6589fa6843e1bf50d3da8b29b637a1395`.
+  - `ci/build_pr_case.py`, `ci/call_model.py`, and `scripts/check_pr_review_response.py` match that commit byte for byte. The other three adapter files carry no upstream change.
+  - `tests/test_review_wiring.py` holds the new commit and the new SHA-256 digests. `docs/pr-review.md` lists the new pin.
+  - The version advances from 0.68.0 to 0.68.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The theme picker lists the themes the build can apply, and a theme that cannot apply stays out of the picker (issue 247).
   - `apply_application_theme` returns a result that names the theme in effect and the reason a theme did not apply.
   - The main window and the Settings dialog keep the picker on the theme in effect. A failed choice reapplies the theme that was in effect. The app keeps its look. The stored theme names the theme in effect. A failed application logs a warning that names the theme and the reason.
@@ -65,6 +91,20 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A wrong computer clock no longer removes USB recovery entries.
+  - The expiry scan keeps an entry whose start time lies after the current time. It also keeps an entry older than its expiry limit plus 365 days.
+  - The launch scan shows a "USB Recovery Clock Check" notice that lists the kept entries. Settings > Storage still removes them by hand.
+  - `UsbExpiryScanResult` gains the optional `clock_suspect_entries` field. Three-argument construction keeps working.
+  - The version advances from 0.68.1 to 0.69.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- The library database no longer depends on the computer clock for record order.
+  - A change journal record keeps the time of its first write. A later status update no longer replaces that time.
+  - The change journal and the pending job list follow insertion order. A backward clock step no longer reorders them.
+  - Schema migration 3 adds the `updated_at` column to the change journal. The column holds the time of the latest write. Each existing row starts at its own timestamp. `ChangeRecord` gains the optional `updated_at` field.
+  - `utc_now_iso` always emits microseconds. The fixed width keeps text comparison equal to time comparison.
+  - `Repository.upsert_change_record` converts a caller timestamp with any UTC offset to that stored form. A value without an offset raises `ValueError`.
+  - `Repository.set_cached_response` converts `expires_at_iso` the same way. A value without an offset raises `ValueError`.
+  - The version advances from 0.69.1 to 0.70.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- The version advances from 0.69.0 to 0.69.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Hardened USB recovery journal launch and Storage settings cleanup against corrupt or unreadable journal files while preserving data on disk. Preserved resolved recovery records across expiry and manual cleanup, added bounded durable cleanup history records, confined journal parent directories under the storage root, and normalized manifest and journal timestamps to UTC. The version advances from 0.67.0 to 0.67.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The theme picker changes the app in a packaged build (issue 247).
   - The packaged app shipped without the `qt-material` package. Every theme choice fell back to the native look. The picker showed a theme that the app never applied.

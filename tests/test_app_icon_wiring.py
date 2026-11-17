@@ -105,8 +105,8 @@ class AppIconWiringTest(unittest.TestCase):
     def test_pillow_is_a_pinned_build_dependency(self) -> None:
         """PyInstaller needs Pillow to convert the PNG icon."""
         self.assertIn(f'"{PILLOW_PIN}"', PYPROJECT_PATH.read_text(encoding="utf-8"))
-        lock_lines = LOCKFILE_PATH.read_text(encoding="utf-8").splitlines()
-        self.assertIn(PILLOW_PIN, lock_lines)
+        lock_text = LOCKFILE_PATH.read_text(encoding="utf-8")
+        self.assertRegex(lock_text, rf"(?m)^{re.escape(PILLOW_PIN)} ?\\?$")
 
     def test_the_website_links_the_favicon(self) -> None:
         """The landing page names the 64-pixel logo as its favicon."""
