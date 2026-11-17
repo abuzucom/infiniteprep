@@ -5,9 +5,18 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.74.2] (2026-11-17)
+## [0.75.1] (2026-11-17)
 
 ### Added
+
+- The library sorts from the keyboard (accessibility audit).
+  - A Sort by picker and an Ascending or Descending button sit next to the filters. The table header took no keyboard focus, so only a mouse could sort before.
+  - A header click and the sort controls stay in step.
+- Every control that Tab reaches in the main window and the write, journal, and recovery dialogs carries an accessible name. The filter field, the status filter, the key notation and theme pickers, the waveform view and zoom pickers, the rename template field, and every table and list announced no purpose before.
+- The library, field, write preview, journal, and recovery tables open no cell editor. An edit typed in a cell changed nothing and vanished on the next refresh.
+- The other tags, write preview, journal, and recovery tables pass Tab to the next control. Tab walked every cell before.
+- The new `tests/unit/test_accessible_names_and_keyboard_sort.py` covers the names, the read-only tables, and the keyboard sort.
+  - The version advances from 0.74.1 to 0.75.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - The new `tests/unit/test_destructive_action_guards.py` checks the guards in front of destructive UI actions (accessibility audit).
   - The version advances from 0.72.4 to 0.72.5 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
@@ -51,7 +60,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The Discogs, MusicBrainz, and AcoustID adapters and the LLM reasoning adapter send through the new `adapters/http_openers.py` opener. That opener holds no redirect handler, so a redirect response raises an error.
   - urllib copied every header, the Discogs token and the LLM Bearer key included, to the redirect target. A redirect could also move a request from https to plain http. The AcoustID key rides in the query string and followed every redirect too.
   - The LLM endpoint check covered the first URL only. A redirect now ends the request before it reaches a host the check never saw.
-  - The version advances from 0.74.1 to 0.74.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.75.0 to 0.75.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Catalog, fingerprint, and LLM responses pass type and length checks before they reach a proposal.
   - The new `adapters/provider_fields.py` checks every field the Discogs, MusicBrainz, and AcoustID adapters read. Text stays printable and stops at 500 characters. A field of the wrong type reads as absent. A list keeps at most 100 items.
   - A response that is not a JSON object raises before the cache write, so a malformed body never reaches the shared cache.
