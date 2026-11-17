@@ -59,7 +59,21 @@ WAVEFORM_MIN_HALF_BAR_PX: Final[float] = 2.0
 WAVEFORM_FULL_HEIGHT_SCALE: Final[float] = 2.0
 WAVEFORM_CENTER_DIVISOR: Final[float] = 2.0
 ZOOM_PLAYHEAD_CENTER_RATIO: Final[float] = 0.5
-SPECTRUM_OVERLAY_ALPHA: Final[int] = 128
+# The bands overlap, so each stays translucent. At this alpha every band still reaches
+# 3:1 against the waveform background.
+SPECTRUM_OVERLAY_ALPHA: Final[int] = 192
+WAVEFORM_BACKGROUND_COLOR: Final[str] = "#181c24"
+PLAYED_BAR_COLOR: Final[str] = "#3b82f6"
+# Gray 500 reaches 3:1 against the background. Gray 600 reached only 2.3:1.
+UNPLAYED_BAR_COLOR: Final[str] = "#6b7280"
+PLAYHEAD_COLOR: Final[str] = "#f59e0b"
+# Okabe-Ito colors stay distinct with red-green color blindness. Red and green did not.
+SPECTRUM_BAND_COLORS: Final[dict[str, str]] = {
+    "Low": "#56b4e9",
+    "Mid": "#e69f00",
+    "High": "#f0e442",
+}
+LEGEND_SWATCH_STYLE: Final[str] = "background-color: {color}; min-width: 12px; max-width: 12px;"
 SPECTRUM_DURATION_EPSILON_SEC: Final[float] = 1e-9
 PLAYHEAD_WIDTH_PX: Final[int] = 2
 ZOOM_FALLBACK_COLOR: Final[str] = "#6b7280"
@@ -304,7 +318,7 @@ class WaveformOverviewBar(QWidget):
         """Render waveform vertical bars and the current playhead indicator."""
         painter = QPainter(self)
         rect = self.rect()
-        painter.fillRect(rect, QColor("#181c24"))
+        painter.fillRect(rect, QColor(WAVEFORM_BACKGROUND_COLOR))
         if self.view_mode == ZOOM_MODE:
             # _paint_zoom reads spectrum attributes. Zoom before analysis completes
             # draws the fallback overview segment instead.
@@ -322,9 +336,9 @@ class WaveformOverviewBar(QWidget):
                 WAVEFORM_MIN_HALF_BAR_PX, amp * (rect.height() * WAVEFORM_HALF_HEIGHT_SCALE)
             )
             color = (
-                QColor("#3b82f6")
+                QColor(PLAYED_BAR_COLOR)
                 if (idx / float(count)) <= self.playhead_ratio
-                else QColor("#4b5563")
+                else QColor(UNPLAYED_BAR_COLOR)
             )
             painter.fillRect(
                 int(idx * bar_w),
@@ -334,7 +348,7 @@ class WaveformOverviewBar(QWidget):
                 color,
             )
         play_x = int(self.playhead_ratio * rect.width())
-        painter.fillRect(play_x, 0, PLAYHEAD_WIDTH_PX, rect.height(), QColor("#f59e0b"))
+        painter.fillRect(play_x, 0, PLAYHEAD_WIDTH_PX, rect.height(), QColor(PLAYHEAD_COLOR))
         painter.end()
 
     def _paint_zoom(self, painter: QPainter, width: int, height: int) -> None:
@@ -348,10 +362,10 @@ class WaveformOverviewBar(QWidget):
                 0,
                 PLAYHEAD_WIDTH_PX,
                 height,
-                QColor("#f59e0b"),
+                QColor(PLAYHEAD_COLOR),
             )
             return
-        colors = (QColor("#22c55e"), QColor("#3b82f6"), QColor("#ef4444"))
+        colors = tuple(QColor(color) for color in SPECTRUM_BAND_COLORS.values())
         for color in colors:
             color.setAlpha(SPECTRUM_OVERLAY_ALPHA)
         dimensions = (width, height)
@@ -359,7 +373,11 @@ class WaveformOverviewBar(QWidget):
         for column in range(width):
             self._paint_zoom_column(painter, column, dimensions, analysis)
         painter.fillRect(
-            int(width * ZOOM_PLAYHEAD_CENTER_RATIO), 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b")
+            int(width * ZOOM_PLAYHEAD_CENTER_RATIO),
+            0,
+            PLAYHEAD_WIDTH_PX,
+            height,
+            QColor(PLAYHEAD_COLOR),
         )
 
     def _paint_zoom_column(
@@ -433,7 +451,7 @@ class WaveformOverviewBar(QWidget):
                 0,
                 PLAYHEAD_WIDTH_PX,
                 height,
-                QColor("#f59e0b"),
+                QColor(PLAYHEAD_COLOR),
             )
             return
         for column in range(width):
@@ -445,7 +463,11 @@ class WaveformOverviewBar(QWidget):
                 painter, column, (time_start, time_end), height, ZOOM_OVERVIEW_COLOR
             )
         painter.fillRect(
-            int(width * ZOOM_PLAYHEAD_CENTER_RATIO), 0, PLAYHEAD_WIDTH_PX, height, QColor("#f59e0b")
+            int(width * ZOOM_PLAYHEAD_CENTER_RATIO),
+            0,
+            PLAYHEAD_WIDTH_PX,
+            height,
+            QColor(PLAYHEAD_COLOR),
         )
 
 
@@ -519,6 +541,7 @@ class AudioPreviewWidget(QWidget):
             LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX
         )
         root.addWidget(self.waveform_bar)
+        self.spectrum_legend = self._build_spectrum_legend()
         name_combo_box(self.view_combo, "Waveform view")
         name_combo_box(self.zoom_combo, "Waveform zoom")
         view_controls = QHBoxLayout()
@@ -526,6 +549,7 @@ class AudioPreviewWidget(QWidget):
         view_controls.addWidget(self.view_combo)
         view_controls.addWidget(QLabel("Zoom", self))
         view_controls.addWidget(self.zoom_combo)
+        view_controls.addWidget(self.spectrum_legend)
         view_controls.addStretch()
         root.addLayout(view_controls)
         root.addWidget(self.position_slider)
@@ -543,6 +567,23 @@ class AudioPreviewWidget(QWidget):
         root.addLayout(controls)
         root.addWidget(self.status_label)
         root.addWidget(self.analysis_status_label)
+
+    def _build_spectrum_legend(self) -> QWidget:
+        """Build the band legend that the zoom view shows.
+
+        Color alone named the bands before. The legend pairs each color with its name.
+        """
+        legend = QWidget(self)
+        layout = QHBoxLayout(legend)
+        layout.setContentsMargins(0, 0, 0, 0)
+        for band, color in SPECTRUM_BAND_COLORS.items():
+            swatch = QLabel(legend)
+            swatch.setStyleSheet(LEGEND_SWATCH_STYLE.format(color=color))
+            layout.addWidget(swatch)
+            layout.addWidget(QLabel(band, legend))
+        legend.setAccessibleName("Spectrum bands: low, mid, and high")
+        legend.setVisible(self.view_combo.currentText() == ZOOM_MODE)
+        return legend
 
     def _connect_signals(self) -> None:
         """Connect QMediaPlayer, slider, and button signals."""
@@ -604,6 +645,7 @@ class AudioPreviewWidget(QWidget):
     def _on_view_changed(self, mode: str) -> None:
         """Switch between the track overview and centered zoom view."""
         self.waveform_bar.view_mode = mode
+        self.spectrum_legend.setVisible(mode == ZOOM_MODE)
         self.waveform_bar.zoom_seconds = self.waveform_zoom_seconds
         self.waveform_bar.set_playback(self.current_position_sec, self.duration_sec)
 
