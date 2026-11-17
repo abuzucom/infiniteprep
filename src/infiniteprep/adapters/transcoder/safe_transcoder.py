@@ -28,6 +28,12 @@ from infiniteprep.hashing import compute_sha256
 
 MAX_TRANSCODE_FILE_BYTES: Final[int] = 1_073_741_824  # 1 GiB
 MAX_TRANSCODE_DURATION_SEC: Final[float] = 7200.0  # 2 hours
+# A file header declares the channel count, the sample rate, and the frame count. A crafted
+# header can claim a shape that decodes a small file to many gigabytes of float64 samples.
+MAX_TRANSCODE_CHANNELS: Final[int] = 8
+MAX_TRANSCODE_SAMPLE_RATE_HZ: Final[int] = 384_000
+# The budget equals a 2 hour stereo file at 48 kHz.
+MAX_TRANSCODE_DECODED_SAMPLES: Final[int] = 7200 * 48_000 * 2
 SAMPLE_RATE_44K1: Final[int] = 44100
 SAMPLE_RATE_48K: Final[int] = 48000
 # Headroom guard against inter-sample peaks during polyphase resampling
@@ -209,6 +215,28 @@ class SafeTranscoderAdapter:
             raise ValueError(
                 f"Audio file '{src_path.name}' duration ({info.duration:.1f}s) exceeds "
                 f"maximum transcode limit ({MAX_TRANSCODE_DURATION_SEC:.0f}s)."
+            )
+        self._verify_decoded_size(
+            src_path.name, int(info.channels), int(info.samplerate), int(info.frames)
+        )
+
+    def _verify_decoded_size(self, name: str, channels: int, sample_rate: int, frames: int) -> None:
+        """Reject a declared stream shape whose decoded samples exceed the memory budget."""
+        if channels <= 0 or channels > MAX_TRANSCODE_CHANNELS:
+            raise ValueError(
+                f"Audio file '{name}' declares {channels} channels; the transcoder accepts "
+                f"1 to {MAX_TRANSCODE_CHANNELS}."
+            )
+        if sample_rate <= 0 or sample_rate > MAX_TRANSCODE_SAMPLE_RATE_HZ:
+            raise ValueError(
+                f"Audio file '{name}' declares a {sample_rate} Hz sample rate; the transcoder "
+                f"accepts 1 to {MAX_TRANSCODE_SAMPLE_RATE_HZ} Hz."
+            )
+        decoded_samples = frames * channels
+        if decoded_samples > MAX_TRANSCODE_DECODED_SAMPLES:
+            raise ValueError(
+                f"Audio file '{name}' decodes to {decoded_samples} samples, above the "
+                f"transcode limit ({MAX_TRANSCODE_DECODED_SAMPLES}); split the file first."
             )
 
     def _resolve_target_params(
