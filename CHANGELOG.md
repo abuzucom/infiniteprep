@@ -5,9 +5,18 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.74.1] (2026-11-17)
+## [0.75.0] (2026-11-17)
 
 ### Added
+
+- The library sorts from the keyboard (accessibility audit).
+  - A Sort by picker and an Ascending or Descending button sit next to the filters. The table header took no keyboard focus, so only a mouse could sort before.
+  - A header click and the sort controls stay in step.
+- Every control that Tab reaches in the main window and the write, journal, and recovery dialogs carries an accessible name. The filter field, the status filter, the key notation and theme pickers, the waveform view and zoom pickers, the rename template field, and every table and list announced no purpose before.
+- The library, field, write preview, journal, and recovery tables open no cell editor. An edit typed in a cell changed nothing and vanished on the next refresh.
+- The other tags, write preview, journal, and recovery tables pass Tab to the next control. Tab walked every cell before.
+- The new `tests/unit/test_accessible_names_and_keyboard_sort.py` covers the names, the read-only tables, and the keyboard sort.
+  - The version advances from 0.74.1 to 0.75.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - The new `tests/unit/test_destructive_action_guards.py` checks the guards in front of destructive UI actions (accessibility audit).
   - The version advances from 0.72.4 to 0.72.5 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
