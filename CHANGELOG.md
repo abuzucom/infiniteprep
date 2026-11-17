@@ -5,10 +5,16 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.72.0] (2026-11-17)
+## [0.72.1] (2026-11-17)
 
 ### Fixed
 
+- Crafted tag data costs bounded time and memory in the tag parsers and the library table sort.
+  - An ID3 text frame decodes at most 4096 values and at most 16 MiB of text. A larger frame shows as a byte summary in Other Tags. The ID3v2.3 renderer rejects a tag that holds such a frame.
+  - An ID3 picture frame reads its description without a text split of the picture bytes.
+  - The Ogg reader checks the packet size with a running total. A packet near the 16 MiB cap needed billions of steps before.
+  - The library table sorts a text with a digit run above 4300 digits. Such a tag value stopped every table refresh before.
+  - The version advances from 0.72.0 to 0.72.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The change journal and the recovery prompt show local time.
   - Both tables showed the stored UTC text with microseconds and an offset. They now show the local date and time of this computer. Stored values stay unchanged.
   - A MusicBrainz release date yields a year only when it starts with four digits followed by the end or a hyphen. Any other shape yields no year.

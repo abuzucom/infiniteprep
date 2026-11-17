@@ -27,6 +27,10 @@ MAX_PADDING_BYTES: Final[int] = 64 * 1024
 # cover art, and 64 MiB covers every compressed frame of one tag together.
 MAX_INFLATED_FRAME_BYTES: Final[int] = 16 * 1024 * 1024
 MAX_INFLATED_TAG_BYTES: Final[int] = 64 * 1024 * 1024
+# Text caps bound the work a crafted text frame can claim. 16 MiB matches the inflation cap
+# and holds any real lyrics frame. 4096 values exceeds every real multi-value frame.
+MAX_TEXT_BYTES: Final[int] = 16 * 1024 * 1024
+MAX_TEXT_VALUES: Final[int] = 4096
 
 TAG_FLAG_UNSYNC: Final[int] = 0x80
 TAG_FLAG_EXTENDED: Final[int] = 0x40
@@ -301,16 +305,41 @@ def _terminator(encoding: int) -> bytes:
     return b"\x00\x00" if encoding in (UTF16, UTF16BE) else b"\x00"
 
 
+def _find_terminator(raw: bytes, width: int, start: int = 0) -> int:
+    """Return the offset of the next terminator at or after start, or -1 when none follows.
+
+    A 2-byte terminator only counts at an even offset, so it never splits a UTF-16 code unit.
+    """
+    terminator = b"\x00" * width
+    index = raw.find(terminator, start)
+    while index >= 0 and index % width:
+        index = raw.find(terminator, index + 1)
+    return index
+
+
 def _split_strings(raw: bytes, encoding: int) -> list[bytes]:
-    """Split raw on the encoding's terminator, keeping 2-byte alignment for UTF-16."""
-    terminator = _terminator(encoding)
-    width = len(terminator)
+    """Split raw on the encoding's terminator, keeping 2-byte alignment for UTF-16.
+
+    The byte and value caps bound the memory and time a crafted text frame can claim.
+    """
+    if len(raw) > MAX_TEXT_BYTES:
+        raise Id3FormatError(
+            f"Text frame exceeds {MAX_TEXT_BYTES} bytes; remove the frame with a tag editor."
+        )
+    width = len(_terminator(encoding))
     parts: list[bytes] = []
     start = 0
-    for index in range(0, len(raw) - width + 1, width):
-        if raw[index : index + width] == terminator:
-            parts.append(raw[start:index])
-            start = index + width
+    index = _find_terminator(raw, width)
+    while index >= 0:
+        # Each terminator adds one value, and the bytes after the last one form one more.
+        if len(parts) + 1 >= MAX_TEXT_VALUES:
+            raise Id3FormatError(
+                f"Text frame holds more than {MAX_TEXT_VALUES} values; "
+                "remove the frame with a tag editor."
+            )
+        parts.append(raw[start:index])
+        start = index + width
+        index = _find_terminator(raw, width, start)
     parts.append(raw[start:])
     return parts
 
@@ -353,10 +382,18 @@ def _split_described(body: bytes) -> tuple[int, str, bytes]:
     if not body:
         raise Id3FormatError("Frame body is empty; expected an encoding byte.")
     encoding = body[0]
-    parts = _split_strings(body[1:], encoding)
-    description = _decode_string(parts[0], encoding)
-    rest = body[1 + len(parts[0]) + len(_terminator(encoding)) :] if len(parts) > 1 else b""
-    return encoding, description, rest
+    raw = body[1:]
+    width = len(_terminator(encoding))
+    # Only the first terminator matters here. The rest can hold megabytes of picture data.
+    end = _find_terminator(raw, width)
+    if end < 0:
+        return encoding, _decode_string(raw, encoding), b""
+    return encoding, _decode_string(raw[:end], encoding), raw[end + width :]
+
+
+def decode_description(body: bytes) -> str:
+    """Return the description that follows the encoding byte, without reading what follows."""
+    return _split_described(body)[1]
 
 
 def decode_text_values(frame: Id3Frame) -> list[str]:

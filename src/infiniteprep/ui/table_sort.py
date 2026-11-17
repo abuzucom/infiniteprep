@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from dataclasses import dataclass
 from functools import cmp_to_key
 from typing import Final
@@ -123,17 +124,31 @@ def parse_bpm_value(text: str) -> float | None:
     return value
 
 
+def _ascii_digits(run: str) -> str:
+    """Return a run of Unicode decimal digits as ASCII digits."""
+    if run.isascii():
+        return run
+    return "".join(str(unicodedata.decimal(character)) for character in run)
+
+
 def natural_key(text: str) -> tuple[tuple[int, object], ...]:
     """Return a comparison key that orders the numbers inside a text by value.
 
     The text is folded to lower case. Each number becomes a token that sorts
     before each text token, so "Track 2" comes before "Track 10".
+
+    A number compares by its digit count, then by its digits, with leading
+    zeros removed. That order equals the numeric order. It needs no integer
+    conversion, which Python refuses for a run above 4300 digits. Every
+    Unicode decimal digit maps to its ASCII digit first, so a number in any
+    script orders by its value.
     """
     parts = _NUMBER_PATTERN.split(text.casefold())
     tokens: list[tuple[int, object]] = []
     for index, part in enumerate(parts):
         if index % 2:
-            tokens.append((0, int(part)))
+            digits = _ascii_digits(part).lstrip("0")
+            tokens.append((0, (len(digits), digits)))
         else:
             tokens.append((1, part))
     return tuple(tokens)
