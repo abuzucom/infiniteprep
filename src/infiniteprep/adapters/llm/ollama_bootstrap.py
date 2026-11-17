@@ -71,8 +71,10 @@ class OllamaBootstrapService:
             data = provider_dict(json.loads(raw.decode("utf-8")))
         except ValueError:
             return []
+        # Any local process can answer on this port, so a name must pass the model reference
+        # grammar before it reaches a caller. dict.fromkeys drops repeats and keeps order.
         names = (provider_text(model.get("name")) for model in provider_dicts(data.get("models")))
-        return [name for name in names if name]
+        return list(dict.fromkeys(name for name in names if name and is_safe_model_reference(name)))
 
     def install_ollama(self, *, user_consented: bool) -> str:
         """Install Ollama using official OS package manager only when user_consented is True."""

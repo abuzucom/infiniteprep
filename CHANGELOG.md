@@ -51,7 +51,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `adapters/provider_fields.py` checks every field the Discogs, MusicBrainz, and AcoustID adapters read. Text stays printable and stops at 500 characters. A field of the wrong type reads as absent. A list keeps at most 100 items.
   - A response that is not a JSON object raises before the cache write, so a malformed body never reaches the shared cache.
   - An AcoustID score outside 0 to 1 reads as no confidence.
-  - The Ollama model probe reads at most 1 MiB and keeps only valid model names.
+  - The Ollama model probe reads at most 1 MiB. It keeps a name only when the name passes the model reference grammar, and it lists each name once.
+  - A provider number past the float range reads as absent.
+  - AcoustID evidence stores only the checked recording fields. It stored the whole recording object before.
   - The LLM output check requires the selected ID and the proposed value to belong to one candidate. A value with no candidate value to match counts as invented. A non-string field or a field above 1000 characters fails.
   - A validated LLM answer returns the stored ID and value of its candidate. The rationale stays printable and stops at 500 characters. A failed request names only the exception class.
   - The version advances from 0.74.0 to 0.74.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.

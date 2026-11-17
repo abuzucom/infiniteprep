@@ -190,7 +190,7 @@ def test_discogs_search_survives_malformed_fields() -> None:
             {
                 "id": 42,
                 "title": "Deep Dish - The Dream",
-                "label": [7, "Tribal America"],
+                "label": [{"x": 1}, "Tribal America"],
                 "catno": {"nested": True},
                 "year": [1994],
                 "format": "Vinyl",
@@ -301,7 +301,7 @@ class _FakeResponse:
 @pytest.mark.parametrize(
     ("body", "expected"),
     [
-        (b'{"models": [{"name": "qwen2.5:3b"}, {"name": 5}, "bad"]}', ["qwen2.5:3b", "5"]),
+        (b'{"models": [{"name": "qwen2.5:3b"}, {"name": 5}, "bad"]}', ["qwen2.5:3b"]),
         (b'["not", "an", "object"]', []),
         (b"not json", []),
     ],

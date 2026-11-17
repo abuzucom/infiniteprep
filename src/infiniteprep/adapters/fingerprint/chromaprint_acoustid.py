@@ -151,15 +151,26 @@ class ChromaprintAcoustIDAdapter:
         artists = [name for name in names if name]
         group_ids = (provider_text(rg.get("id")) for rg in provider_dicts(rec.get("releasegroups")))
         rgs = [group_id for group_id in group_ids if group_id]
+        title = provider_text(rec.get("title"))
+        duration = provider_number(rec.get("duration"))
+        # The evidence holds only the checked fields. The whole recording object can carry
+        # any nested shape and text up to the response cap, and the evidence is stored.
+        recording = {
+            "id": rec_id,
+            "title": title,
+            "duration": duration,
+            "artists": artists,
+            "releasegroup_ids": rgs,
+        }
         return FingerprintMatchItem(
             fingerprint_id=acid_id,
             confidence=score,
             recording_ids=[rec_id] if rec_id else [],
             artist=", ".join(artists) if artists else None,
-            title=provider_text(rec.get("title")),
-            duration=provider_number(rec.get("duration")),
+            title=title,
+            duration=duration,
             release_group_ids=rgs,
-            raw_evidence={"acoustid_id": acid_id, "recording": rec},
+            raw_evidence={"acoustid_id": acid_id, "recording": recording},
         )
 
     def _default_http_get_json(self, url: str, params: dict[str, str]) -> dict[str, Any]:
