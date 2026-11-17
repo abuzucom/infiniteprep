@@ -48,6 +48,7 @@ from infiniteprep.domain.models import ApprovedField, FileAsset
 from infiniteprep.services.import_service import ImportBatchReport, ImportService
 from infiniteprep.services.job_orchestrator import BatchKind, BatchState, QueuedBatch
 from infiniteprep.services.review_service import ReviewService
+from infiniteprep.ui.accessibility import name_combo_popups
 from infiniteprep.ui.batch_queue import (
     BatchQueueController,
     BatchRun,
@@ -243,6 +244,7 @@ class MainWindow(QMainWindow):
         self._setup_batch_queue()
         self._restore_table_layouts()
         self.refresh_file_table()
+        name_combo_popups(self)
 
     def _setup_batch_queue(self) -> None:
         """Create the batch queue, its dock panel, and the import controller it drives."""

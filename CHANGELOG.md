@@ -66,6 +66,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The combo box popups in the main window carry the accessible name of their combo box.
+  - A screen reader announced an unnamed list while a popup was open.
+  - The new `src/infiniteprep/ui/accessibility.py` names the popup of every combo box below the main window.
+  - The new `tests/unit/test_combo_popup_names.py` checks the naming of a popup.
+  - `tests/unit/test_accessible_names_and_keyboard_sort.py` keeps every dialog alive, so its table survives until the assertions run. The repository owner approved this edit.
+
 - Catalog, fingerprint, and LLM responses pass type and length checks before they reach a proposal.
   - The new `adapters/provider_fields.py` checks every field the Discogs, MusicBrainz, and AcoustID adapters read. Text stays printable and stops at 500 characters. A field of the wrong type reads as absent. A list keeps at most 100 items.
   - A response that is not a JSON object raises before the cache write, so a malformed body never reaches the shared cache.
