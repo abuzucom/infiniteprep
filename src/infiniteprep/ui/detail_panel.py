@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import html
 import unicodedata
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
@@ -75,6 +76,32 @@ COL_PROPOSAL_SOURCE: Final[int] = 3
 COL_APPROVED_EDIT: Final[int] = 4
 COL_ACTIONS: Final[int] = 5
 ACTION_ROW_MARGIN_PX: Final[int] = 2
+# Row widget roles. A row widget carries the object name "<field>:<role>", so focus
+# finds the same control again after the table rebuilds.
+ROLE_EDIT: Final[str] = "edit"
+ROLE_ACCEPT: Final[str] = "accept"
+ROLE_SAVE: Final[str] = "save"
+ROLE_LOCK: Final[str] = "lock"
+ROW_FIELD_PROPERTY: Final[str] = "field_name"
+LOADED_TEXT_PROPERTY: Final[str] = "loaded_text"
+
+
+@dataclass(frozen=True)
+class FieldRowState:
+    """Unsaved edit box text and the focused row control, kept across a table rebuild."""
+
+    unsaved_edits: dict[str, str]
+    focused_name: str | None
+
+
+def row_widget_name(field_name: str, role: str) -> str:
+    """Return the object name of one row control."""
+    return f"{field_name}:{role}"
+
+
+def field_label(field_name: str) -> str:
+    """Return the spoken form of a field name, such as "catalog number"."""
+    return field_name.replace("_", " ")
 
 
 def _format_scalar_tag_value(value: object) -> str:
@@ -156,6 +183,11 @@ def other_tag_rows(raw_custom_tags: Mapping[str, object]) -> list[tuple[str, str
 
 class DetailPanel(QWidget):
     """Side-by-side inspector for current tags, proposals, approved values, and audio preview."""
+
+    # The file the field rows show, and the field whose row action runs. The class
+    # defaults keep __init__ inside its length budget.
+    _fields_file_id: str | None = None
+    _acted_field: str | None = None
 
     def __init__(
         self,
@@ -440,7 +472,14 @@ class DetailPanel(QWidget):
         self.warnings_label.setText(" | ".join(warnings) if warnings else "No hardware warnings.")
 
     def _populate_fields_table(self, asset: FileAsset) -> None:
-        """Populate rows for each standard DJ field."""
+        """Populate rows for each standard DJ field.
+
+        A refresh of the same file keeps unsaved text in other rows and keeps focus on
+        the same row control. A row action rebuilds every row, and the rebuild dropped
+        both before.
+        """
+        same_file = asset.id == self._fields_file_id
+        kept = self._capture_row_state() if same_file else FieldRowState({}, None)
         existing_std = asset.original_tags.get("standard_tags", {})
         approved_map = self.repo.get_approved_fields_map(asset.id)
         proposals = self.repo.list_field_proposals(asset.id)
@@ -459,6 +498,42 @@ class DetailPanel(QWidget):
                 field_props=by_field.get(f_name, []),
                 approved=approved_map.get(f_name),
             )
+        self._fields_file_id = asset.id
+        self._acted_field = None
+        self._restore_row_state(kept)
+
+    def _row_controls(self) -> Iterator[QWidget]:
+        """Yield the edit box and the buttons of every current field row."""
+        for row_idx in range(self.fields_table.rowCount()):
+            edit_box = self.fields_table.cellWidget(row_idx, COL_APPROVED_EDIT)
+            if edit_box is not None:
+                yield edit_box
+            actions = self.fields_table.cellWidget(row_idx, COL_ACTIONS)
+            if actions is not None:
+                yield from actions.findChildren(QPushButton)
+
+    def _capture_row_state(self) -> FieldRowState:
+        """Record unsaved edit text, except in the acted row, and the focused control."""
+        unsaved: dict[str, str] = {}
+        for control in self._row_controls():
+            if not isinstance(control, QLineEdit):
+                continue
+            field_name = str(control.property(ROW_FIELD_PROPERTY))
+            changed = control.text() != control.property(LOADED_TEXT_PROPERTY)
+            if changed and field_name != self._acted_field:
+                unsaved[field_name] = control.text()
+        focused = QApplication.focusWidget()
+        in_rows = focused is not None and self.fields_table.isAncestorOf(focused)
+        return FieldRowState(unsaved, focused.objectName() if in_rows else None)
+
+    def _restore_row_state(self, state: FieldRowState) -> None:
+        """Put back unsaved edit text and move focus to the same row control."""
+        for control in self._row_controls():
+            field_name = str(control.property(ROW_FIELD_PROPERTY))
+            if isinstance(control, QLineEdit) and field_name in state.unsaved_edits:
+                control.setText(state.unsaved_edits[field_name])
+            if state.focused_name and control.objectName() == state.focused_name:
+                control.setFocus()
 
     def _populate_single_field_row(
         self,
@@ -487,6 +562,10 @@ class DetailPanel(QWidget):
 
         edit_box = QLineEdit(app_val, self.fields_table)
         edit_box.setMaxLength(MAX_MANUAL_FIELD_LENGTH)
+        edit_box.setObjectName(row_widget_name(field_name, ROLE_EDIT))
+        edit_box.setProperty(ROW_FIELD_PROPERTY, field_name)
+        edit_box.setProperty(LOADED_TEXT_PROPERTY, app_val)
+        edit_box.setAccessibleName(f"Approved value for {field_label(field_name)}")
         self.fields_table.setCellWidget(row_idx, COL_APPROVED_EDIT, edit_box)
 
         action_widget = self._create_row_action_widget(
@@ -513,27 +592,44 @@ class DetailPanel(QWidget):
         )
 
         if top_prop is not None:
-            acc_btn = QPushButton("Accept", container)
-            acc_btn.clicked.connect(lambda _c=False, pid=top_prop.id: self._on_accept_proposal(pid))
-            layout.addWidget(acc_btn)
+            acc_btn = self._add_row_button(layout, field_name, ROLE_ACCEPT, "Accept")
+            acc_btn.setAccessibleName(f"Accept proposal for {field_label(field_name)}")
+            acc_btn.clicked.connect(
+                lambda _c=False, fn=field_name, pid=top_prop.id: self._accept_row_proposal(fn, pid)
+            )
 
-        save_btn = QPushButton("Save", container)
+        save_btn = self._add_row_button(layout, field_name, ROLE_SAVE, "Save")
         save_btn.clicked.connect(
             lambda _c=False, fid=file_id, fn=field_name, eb=edit_box: self._on_save_manual(
                 fid, fn, eb.text()
             )
         )
-        layout.addWidget(save_btn)
 
         is_locked = bool(approved and approved.locked)
-        lock_btn = QPushButton("Unlock" if is_locked else "Lock", container)
+        lock_text = "Unlock" if is_locked else "Lock"
+        lock_btn = self._add_row_button(layout, field_name, ROLE_LOCK, lock_text)
         lock_btn.clicked.connect(
             lambda _c=False, fid=file_id, fn=field_name, lk=not is_locked: self._on_toggle_lock(
                 fid, fn, lk
             )
         )
-        layout.addWidget(lock_btn)
         return container
+
+    def _add_row_button(
+        self, layout: QHBoxLayout, field_name: str, role: str, text: str
+    ) -> QPushButton:
+        """Add one row button named for its field, so each row's buttons sound different."""
+        button = QPushButton(text, layout.parentWidget())
+        button.setObjectName(row_widget_name(field_name, role))
+        button.setProperty(ROW_FIELD_PROPERTY, field_name)
+        button.setAccessibleName(f"{text} {field_label(field_name)}")
+        layout.addWidget(button)
+        return button
+
+    def _accept_row_proposal(self, field_name: str, proposal_id: str) -> bool:
+        """Accept a row's proposal. The accepted value replaces unsaved text in that row."""
+        self._acted_field = field_name
+        return self._on_accept_proposal(proposal_id)
 
     def _format_display_val(self, field_name: str, raw_val: str) -> str:
         """Format canonical key according to active KeyDisplayNotation when displaying KEY."""
@@ -592,6 +688,7 @@ class DetailPanel(QWidget):
 
     def _on_save_manual(self, file_id: str, field_name: str, value: str) -> None:
         """Save a manual field edit with lock=True and refresh UI state."""
+        self._acted_field = field_name
         cleaned = value.strip()
         if len(cleaned) > MAX_MANUAL_FIELD_LENGTH:
             cleaned = cleaned[:MAX_MANUAL_FIELD_LENGTH]
