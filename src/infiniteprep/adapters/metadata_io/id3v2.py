@@ -466,9 +466,13 @@ def replace_text_frame(tag: Id3Tag, frame_id: str, value: str) -> Id3Tag:
 
 
 def replace_txxx(tag: Id3Tag, description: str, value: str) -> Id3Tag:
-    """Return tag with the TXXX frames of this exact description replaced by one value."""
-    key = f"TXXX:{description}"
-    kept = tuple(frame for frame in tag.frames if frame_key(frame) != key)
+    """Return tag with the TXXX frames of this description replaced by one value.
+
+    The description compares without case. The reader maps TXXX:CatalogNumber and
+    TXXX:CATALOGNUMBER to one field, so the writer replaces both.
+    """
+    key = f"TXXX:{description}".casefold()
+    kept = tuple(frame for frame in tag.frames if frame_key(frame).casefold() != key)
     return replace(tag, frames=(*kept, build_txxx_frame(description, value)))
 
 
@@ -565,6 +569,24 @@ def _convert_date(frame: Id3Frame) -> list[Id3Frame]:
     if time_of_day is not None:
         result.append(build_text_frame("TIME", time_of_day))
     return result
+
+
+def v23_date_text(value: str) -> str:
+    """Return the part of a timestamp that ID3v2.3 TYER, TDAT, and TIME can hold.
+
+    The reader rejoins those frames as YYYY, YYYY-MM-DD, or YYYY-MM-DDTHH:MM. A text
+    without a leading year stays in its own frame, so it returns unchanged.
+    """
+    match = TDRC_RE.fullmatch(value.strip())
+    if match is None:
+        return value
+    year, month, day, hour, minute, second = match.groups()
+    if _tdat_value(year, month, day) is None:
+        return year
+    date_text = f"{year}-{month}-{day}"
+    if _time_value(hour, minute, second) is None:
+        return date_text
+    return f"{date_text}T{hour}:{minute}"
 
 
 def _to_v23_encoding(frame: Id3Frame) -> Id3Frame:

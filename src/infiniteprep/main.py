@@ -80,35 +80,34 @@ def run_evaluation_sample(input_dir: Path) -> dict[str, Any]:
     hashes_before = {
         p: compute_sha256(p) for p in discover_files_bounded([input_dir]) if p.is_file()
     }
-    db = DatabaseManager(":memory:")
-    repo = Repository(db)
-    imp_report = ImportService(repo).import_paths([input_dir], source_type=SourceType.VINYL)
-    file_ids = [f.id for f in imp_report.imported_files]
+    # The context manager closes the database on every path, an error included.
+    with DatabaseManager(":memory:") as db:
+        repo = Repository(db)
+        imp_report = ImportService(repo).import_paths([input_dir], source_type=SourceType.VINYL)
+        file_ids = [f.id for f in imp_report.imported_files]
 
-    JobOrchestrator(
-        repository=repo,
-        fingerprint_provider=MockFingerprintAdapter(),
-        catalog_providers=[MockCatalogProviderAdapter()],
-        audio_analyzer=LocalDspAnalyzer(),
-    ).process_files(file_ids)
-    reconciler = ReconciliationService(repo)
-    for fid in file_ids:
-        reconciler.reconcile_file(fid)
+        JobOrchestrator(
+            repository=repo,
+            fingerprint_provider=MockFingerprintAdapter(),
+            catalog_providers=[MockCatalogProviderAdapter()],
+            audio_analyzer=LocalDspAnalyzer(),
+        ).process_files(file_ids)
+        reconciler = ReconciliationService(repo)
+        for fid in file_ids:
+            reconciler.reconcile_file(fid)
 
-    metrics = {
-        "input_dir": str(input_dir),
-        "total_imported_files": len(file_ids),
-        "damaged_files": len(imp_report.damaged_files),
-        "unsupported_files": len(imp_report.unsupported_files),
-        "identified_files": sum(1 for fid in file_ids if repo.list_candidate_matches(fid)),
-        "analyzed_files": sum(1 for fid in file_ids if repo.list_analysis_results(fid)),
-        "zero_unintended_file_mutations": all(
-            compute_sha256(p) == h for p, h in hashes_before.items()
-        ),
-        "FieldName_BPM": FieldName.BPM.value,
-    }
-    db.close()
-    return metrics
+        return {
+            "input_dir": str(input_dir),
+            "total_imported_files": len(file_ids),
+            "damaged_files": len(imp_report.damaged_files),
+            "unsupported_files": len(imp_report.unsupported_files),
+            "identified_files": sum(1 for fid in file_ids if repo.list_candidate_matches(fid)),
+            "analyzed_files": sum(1 for fid in file_ids if repo.list_analysis_results(fid)),
+            "zero_unintended_file_mutations": all(
+                compute_sha256(p) == h for p, h in hashes_before.items()
+            ),
+            "FieldName_BPM": FieldName.BPM.value,
+        }
 
 
 def open_settings_dialog(window: MainWindow, repo: Repository) -> None:

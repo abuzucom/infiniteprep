@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.72.5] (2026-11-17)
+## [0.73.0] (2026-11-17)
 
 ### Added
 
@@ -20,8 +20,32 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `tests/unit/test_detail_panel_row_tab_order.py` checks that Tab visits Save, then Lock, in one field row.
   - The version advances from 0.72.1 to 0.72.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
+### Changed
+
+- `JobOrchestrator.process_files` takes `raise_on_failure` in place of `raise_on_unexpected` (issue 288). The flag raises for the expected job errors, so the old name misstated it. No caller in `src/` passed the old keyword.
+- The library status filter lists every review status (issue 288). The filter lacked `ready_for_review`, `conflicting_candidates`, `no_match`, and four more statuses that the pipeline sets.
+- The library search reads the cells the table shows (issue 288). It read the stored tag structure before, so `tags` matched every file and an approved artist matched none.
+- The version advances from 0.72.5 to 0.73.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`. The keyword rename is an incompatible change of a public method.
+
 ### Fixed
 
+- Wrong results and failed operations from the wholesale quality review (issue 288).
+  - An unreadable subfolder no longer stops an import. A folder and a file inside it import the file once.
+  - Silent or flat audio yields no key. The analyzer proposed A minor before.
+  - A partial date such as `2020-05` writes to MP3, WAV, and AIFF. The read-back check compares the part ID3v2.3 holds.
+  - A TXXX write replaces a frame whose description differs only in case.
+  - A file name with a colon, as macOS stores a Finder slash, writes and transcodes with a backup.
+  - A transcode refuses a WAV or AIFF output past the tag write limit before it decodes. It failed after the full encode before.
+  - A USB Resume or Restore records the journal action before it removes the drive marker. A failed journal write can retry.
+  - An infinite number in drive inspection output falls back to the default size. A USB JSON read closes its descriptor once.
+  - Win32 errors carry their Windows meaning. A sharing violation read as "Broken pipe" before.
+  - The macOS inspector reads stdout and stderr together. A child that filled stderr first stalled until the timeout.
+  - The Windows inspector sets UTF-8 output. A non-ASCII volume label decoded as replacement characters.
+  - The toolbar theme picker follows a theme the Settings dialog applied.
+  - A failed job step reads failed with its error in the jobs table. It stayed queued before.
+  - A failed queued write logs its traceback.
+  - A library file that is not a database releases its handle. The evaluation run closes its database on an error.
+  - New test modules `test_tag_write_round_trips.py`, `test_import_analysis_and_jobs.py`, `test_usb_recovery_and_runner_fixes.py`, and `test_library_filters_and_theme_sync.py` under `tests/unit/` cover these fixes.
 - Enter in the USB export confirm dialog cancels the export. Enter confirmed the export before. Confirm Export takes an explicit click or Space.
 - Enter in the interrupted USB export prompt leaves the drive unchanged. Enter resumed the export before. Resume and Restore take an explicit click or Space.
 - Clean Up USB Recovery Journal asks before it deletes any entry. No is the default. The result shows in a message. The result showed only in a tooltip before.

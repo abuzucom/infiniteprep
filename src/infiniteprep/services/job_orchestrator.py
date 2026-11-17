@@ -33,6 +33,13 @@ EXPECTED_JOB_ERRORS: tuple[type[Exception], ...] = (
 )
 
 
+JOB_FINGERPRINT = "fingerprint"
+JOB_CATALOG_LOOKUP = "catalog_lookup"
+JOB_AUDIO_ANALYSIS = "audio_analysis"
+JOB_STATE_PROCESSING = "processing"
+JOB_STATE_COMPLETED = "completed"
+JOB_STATE_FAILED = "failed"
+
 CancelCheck = Callable[[], bool]
 ProgressCallback = Callable[[int, int, str], None]
 
@@ -214,9 +221,13 @@ class JobOrchestrator:
         self.audio_analyzer: AudioAnalyzer = audio_analyzer or MockAudioAnalyzerAdapter()
 
     def process_files(
-        self, file_ids: list[str], *, raise_on_unexpected: bool = False
+        self, file_ids: list[str], *, raise_on_failure: bool = False
     ) -> BatchJobSummary:
-        """Execute identification, catalog search, and audio analysis for each file_id."""
+        """Execute identification, catalog search, and audio analysis for each file_id.
+
+        raise_on_failure raises RuntimeError after the first file that fails with an
+        expected job error, once that failure is recorded.
+        """
         summary = BatchJobSummary()
         for file_id in file_ids:
             asset = self.repo.get_file_by_id(file_id)
@@ -239,7 +250,7 @@ class JobOrchestrator:
                 )
                 summary.failed_files += 1
                 summary.errors[file_id] = msg
-                if raise_on_unexpected:
+                if raise_on_failure:
                     raise RuntimeError(msg) from exc
         return summary
 
@@ -312,22 +323,9 @@ class JobOrchestrator:
         self.repo.update_file_status(asset.id, task_status=TaskStatus.PROCESSING)
         audio_path = Path(asset.current_path)
 
-        # 1. Fingerprint job
-        self.repo.enqueue_job(str(uuid.uuid4()), asset.id, "fingerprint")
-        self._run_fingerprint_step(asset, audio_path)
-        self.repo.update_job_state(asset.id, "fingerprint", "completed")
-
-        # 2. Catalog lookup job
-        self.repo.enqueue_job(str(uuid.uuid4()), asset.id, "catalog_lookup")
-        self._run_catalog_step(asset)
-        self.repo.update_job_state(asset.id, "catalog_lookup", "completed")
-
-        # 3. Local audio analysis job
-        self.repo.enqueue_job(str(uuid.uuid4()), asset.id, "audio_analysis")
-        ana_result = self.audio_analyzer.analyze(audio_path, asset.id)
-        ana_result.file_id = asset.id
-        self.repo.upsert_analysis_result(ana_result)
-        self.repo.update_job_state(asset.id, "audio_analysis", "completed")
+        self._run_job(asset, JOB_FINGERPRINT, lambda: self._run_fingerprint_step(asset, audio_path))
+        self._run_job(asset, JOB_CATALOG_LOOKUP, lambda: self._run_catalog_step(asset))
+        self._run_job(asset, JOB_AUDIO_ANALYSIS, lambda: self._run_analysis_step(asset, audio_path))
 
         self.repo.update_file_status(
             asset.id,
@@ -335,6 +333,28 @@ class JobOrchestrator:
             review_status=ReviewStatus.PROPOSED,
             clear_error=True,
         )
+
+    def _run_job(self, asset: FileAsset, job_type: str, step: Callable[[], object]) -> None:
+        """Run one job step and record processing, then completed or failed, in the jobs table.
+
+        A failed step keeps its error text on the job row and re-raises. The row no longer
+        stays queued after a failure.
+        """
+        self.repo.enqueue_job(str(uuid.uuid4()), asset.id, job_type)
+        self.repo.update_job_state(asset.id, job_type, JOB_STATE_PROCESSING)
+        try:
+            step()
+        except BaseException as exc:
+            error_text = f"{type(exc).__name__}: {exc}"
+            self.repo.update_job_state(asset.id, job_type, JOB_STATE_FAILED, error_text)
+            raise
+        self.repo.update_job_state(asset.id, job_type, JOB_STATE_COMPLETED)
+
+    def _run_analysis_step(self, asset: FileAsset, audio_path: Path) -> None:
+        """Analyze the audio locally and store the result on the file."""
+        ana_result = self.audio_analyzer.analyze(audio_path, asset.id)
+        ana_result.file_id = asset.id
+        self.repo.upsert_analysis_result(ana_result)
 
     def _run_fingerprint_step(self, asset: FileAsset, audio_path: Path) -> None:
         """Run fingerprint provider if available and persist recording CandidateMatches."""

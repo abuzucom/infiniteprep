@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 import numpy as np
 import soundfile as sf
@@ -16,10 +16,12 @@ from scipy.signal import resample_poly
 
 from infiniteprep import storage_paths
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
+    MAX_WAV_REWRITE_BYTES,
     MetadataTagAdapter,
     approved_values_to_write,
     copy_to_new_verified_file,
     operation_backup_path,
+    portable_backup_name,
 )
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, OperationStatus
@@ -34,6 +36,8 @@ MAX_TRANSCODE_CHANNELS: Final[int] = 8
 MAX_TRANSCODE_SAMPLE_RATE_HZ: Final[int] = 384_000
 # The budget equals a 2 hour stereo file at 48 kHz.
 MAX_TRANSCODE_DECODED_SAMPLES: Final[int] = 7200 * 48_000 * 2
+# Bytes each sample takes in the uncompressed output subtypes.
+PCM_SAMPLE_BYTES: Final[dict[str, int]] = {"PCM_16": 2, "PCM_24": 3}
 SAMPLE_RATE_44K1: Final[int] = 44100
 SAMPLE_RATE_48K: Final[int] = 48000
 # Headroom guard against inter-sample peaks during polyphase resampling
@@ -119,11 +123,12 @@ class SafeTranscoderAdapter:
         if not src_path.exists():
             raise FileNotFoundError(f"Source audio file missing at {src_path}.")
         self._verify_audio_bounds(src_path)
+        info = sf.info(str(src_path))
+        target = self._resolve_target_params(asset, int(info.samplerate), preset)
+        self._refuse_untaggable_output(asset, info, target)
+        target_sr, target_subtype, target_ext, sf_fmt = target
 
         pcm, src_sr = sf.read(str(src_path), dtype="float64", always_2d=True)
-        target_sr, target_subtype, target_ext, sf_fmt = self._resolve_target_params(
-            asset, int(src_sr), preset
-        )
         resampled = self._resample_audio(pcm, int(src_sr), target_sr)
 
         out_path = self._determine_output_path(
@@ -311,7 +316,11 @@ class SafeTranscoderAdapter:
         self.backup_dir.mkdir(parents=True, exist_ok=True)
         op_id = str(uuid.uuid4())
         backup_path = operation_backup_path(
-            self.backup_dir, asset.id, op_id, src_path.name, kind="transcode"
+            self.backup_dir,
+            asset.id,
+            op_id,
+            portable_backup_name(src_path.name),
+            kind="transcode",
         )
         pre_hash = compute_sha256(src_path)
         copy_to_new_verified_file(src_path, backup_path, pre_hash)
@@ -330,11 +339,38 @@ class SafeTranscoderAdapter:
         self.repo.upsert_change_record(rec)
         return rec
 
-    def _apply_effective_tags_to_output(self, asset: FileAsset, out_path: Path) -> None:
-        """Write original standard tags merged with user-approved fields onto output file."""
+    def _effective_tags(self, asset: FileAsset) -> dict[str, str]:
+        """Return the original standard tags merged with the user-approved fields."""
         std = dict(asset.original_tags.get("standard_tags", {}))
         approved = approved_values_to_write(self.repo.get_approved_fields_map(asset.id))
-        effective = {**std, **approved}
+        return {**std, **approved}
+
+    def _refuse_untaggable_output(
+        self, asset: FileAsset, info: Any, target: tuple[int, str, str, str]
+    ) -> None:
+        """Refuse before decoding when the tag write would refuse the uncompressed output.
+
+        The tag writer reads the whole file and refuses one above MAX_WAV_REWRITE_BYTES.
+        A long WAV or AIFF output passes that size, so the transcode would fail only after
+        the full decode, resample, and encode. FLAC output stays compressed.
+        """
+        target_sr, target_subtype, _target_ext, sf_fmt = target
+        bytes_per_sample = PCM_SAMPLE_BYTES.get(target_subtype)
+        if sf_fmt == "FLAC" or bytes_per_sample is None or int(info.samplerate) <= 0:
+            return
+        output_frames = math.ceil(int(info.frames) * target_sr / int(info.samplerate))
+        estimated_bytes = output_frames * int(info.channels) * bytes_per_sample
+        if estimated_bytes <= MAX_WAV_REWRITE_BYTES or not self._effective_tags(asset):
+            return
+        raise ValueError(
+            f"The {sf_fmt} output of '{Path(asset.current_path).name}' would hold about "
+            f"{estimated_bytes} bytes, past the {MAX_WAV_REWRITE_BYTES}-byte tag write limit. "
+            "Pick a FLAC output or split the file, then retry."
+        )
+
+    def _apply_effective_tags_to_output(self, asset: FileAsset, out_path: Path) -> None:
+        """Write original standard tags merged with user-approved fields onto output file."""
+        effective = self._effective_tags(asset)
         if effective:
             self.tag_adapter._write_tags_by_format(
                 out_path, self.tag_adapter.format_output_tags(effective)

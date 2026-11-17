@@ -11,6 +11,9 @@ from types import TracebackType
 from infiniteprep.db.migrations.m0001_initial import read_schema_sql
 from infiniteprep.db.migrations.runner import migrate_database
 
+# Seconds a connection waits for another connection's write lock before it fails.
+BUSY_TIMEOUT_SECONDS = 30.0
+
 
 def get_schema_sql() -> str:
     """Load the SQLite schema DDL from schema.sql."""
@@ -37,13 +40,20 @@ class DatabaseManager:
         if getattr(self._local, "conn", None) is None:
             if self._is_memory:
                 uri = f"file:{self._memory_name}?mode=memory&cache=shared"
-                self._local.conn = sqlite3.connect(uri, timeout=30.0, uri=True)
+                conn = sqlite3.connect(uri, timeout=BUSY_TIMEOUT_SECONDS, uri=True)
             else:
-                self._local.conn = sqlite3.connect(str(self.db_path), timeout=30.0)
-            self._local.conn.row_factory = sqlite3.Row
-            if not self._is_memory:
-                self._local.conn.execute("PRAGMA journal_mode = WAL;")
-            self._local.conn.execute("PRAGMA foreign_keys = ON;")
+                conn = sqlite3.connect(str(self.db_path), timeout=BUSY_TIMEOUT_SECONDS)
+            try:
+                conn.row_factory = sqlite3.Row
+                if not self._is_memory:
+                    conn.execute("PRAGMA journal_mode = WAL;")
+                conn.execute("PRAGMA foreign_keys = ON;")
+            except sqlite3.Error:
+                # A file that is not a database fails here. The handle closes now, so a
+                # restore can replace the file while the error dialog shows.
+                conn.close()
+                raise
+            self._local.conn = conn
         return self._local.conn
 
     def initialize(self) -> None:

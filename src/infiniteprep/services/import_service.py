@@ -89,8 +89,17 @@ def _scan_single_directory_children(
     max_depth: int,
     max_files: int,
 ) -> None:
-    """Append non-symlink child files to discovered and enqueue subdirectories within bounds."""
-    for child in sorted(current_dir.iterdir()):
+    """Append non-symlink child files to discovered and enqueue subdirectories within bounds.
+
+    A folder the user cannot read, such as "System Volume Information" on a drive root,
+    is skipped with a warning. The rest of the selection still imports.
+    """
+    try:
+        children = sorted(current_dir.iterdir())
+    except OSError as exc:
+        logger.warning("Import skipped one unreadable folder after %s.", type(exc).__name__)
+        return
+    for child in children:
         if len(discovered) >= max_files:
             return
         if child.is_symlink():
@@ -139,7 +148,8 @@ def discover_files_bounded(
             max_files=max_files,
         )
 
-    return discovered
+    # A selection can name a folder and a file inside it. Each file imports once.
+    return list(dict.fromkeys(discovered))
 
 
 class ImportService:

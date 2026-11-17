@@ -153,7 +153,8 @@ def estimate_key_from_chroma(
     chroma = _accumulate_chroma_bins(spectrum, freqs)
     chroma_std = float(np.std(chroma))
     if chroma_std <= 1e-9:
-        return PitchClass.A, KeyMode.MINOR, 0.0
+        # Silence and flat noise carry no pitch. A key here would be invented.
+        return None, None, 0.0
     chroma_norm = (chroma - float(np.mean(chroma))) / chroma_std
     return _match_key_profiles(chroma_norm)
 
