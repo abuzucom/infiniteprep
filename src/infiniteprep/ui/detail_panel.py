@@ -249,7 +249,7 @@ class DetailPanel(QWidget):
             enable_multimedia_backend=enable_audio_backend,
             settings_manager=self.settings_manager,
         )
-        self.audio_player.on_play_selection_requested = self._play_selected_file
+        self.audio_player.on_play_selection_requested = self._on_player_play_requested
         self.audio_player.on_file_dropped = self._on_file_id_dropped
         self._build_waveform_pool()
         self.fields_table = QTableWidget(0, FIELDS_TABLE_COLUMN_COUNT, self)
@@ -407,8 +407,21 @@ class DetailPanel(QWidget):
         """Return the file ID the player holds."""
         return self._loaded_audio_id
 
-    def _play_selected_file(self) -> bool:
-        """Load and play the selected file when it differs from the loaded track."""
+    def _play_selected_file(self) -> None:
+        """Load and play the selected file.
+
+        The button always plays the selection. A selection that the player
+        already holds resumes at its current position.
+        """
+        if self.current_file_id is None:
+            return
+        self.load_and_play_file_asset(self.current_file_id)
+
+    def _on_player_play_requested(self) -> bool:
+        """Load the selection for the player play button when it differs from the loaded track.
+
+        The player button toggles the loaded track when the selection matches it.
+        """
         if self.current_file_id is None:
             return False
         if self.current_file_id == self._loaded_audio_id:

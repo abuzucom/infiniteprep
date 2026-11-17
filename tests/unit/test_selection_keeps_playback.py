@@ -182,6 +182,32 @@ def test_the_play_selected_button_loads_and_plays_the_selection(library: Library
     assert panel.audio_player.play_btn.text() == "Pause"
 
 
+def test_the_play_selected_button_resumes_the_loaded_track(library: Library) -> None:
+    """The button plays the selected track again when the player already holds it."""
+    panel = library.window.detail_panel
+    select_row(library, FIRST_NAME)
+    panel.load_and_play_file_asset(library.first_id)
+    panel.audio_player.stop_playback()
+    panel.audio_player.seek_to_seconds(SEEK_SECONDS)
+
+    panel.play_selected_btn.click()
+
+    assert panel.audio_player.play_btn.text() == "Pause"
+    assert panel.audio_player.current_position_sec == pytest.approx(SEEK_SECONDS)
+
+
+def test_the_player_play_button_toggles_the_loaded_track(library: Library) -> None:
+    """The player button pauses the loaded track when the selection matches it."""
+    panel = library.window.detail_panel
+    select_row(library, FIRST_NAME)
+    panel.load_and_play_file_asset(library.first_id)
+
+    panel.audio_player.play_btn.click()
+
+    assert panel.audio_player.play_btn.text() == "Play"
+    assert panel.audio_player.current_file_path == library.first_path
+
+
 def test_the_player_play_button_loads_a_different_selection(library: Library) -> None:
     """The play button loads the selection when it differs from the loaded track."""
     panel = library.window.detail_panel
