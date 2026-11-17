@@ -152,6 +152,17 @@ def test_natural_key_accepts_a_digit_run_past_the_integer_limit() -> None:
     assert natural_key(f"Track {long_run}") > natural_key("Track 10")
 
 
+def test_natural_key_orders_non_ascii_digits_by_value() -> None:
+    """A number in Arabic-Indic digits orders by its value against ASCII numbers."""
+    arabic_zero = "\N{ARABIC-INDIC DIGIT ZERO}"
+    arabic_two = "\N{ARABIC-INDIC DIGIT TWO}"
+
+    assert natural_key(f"Track {arabic_two}") < natural_key("Track 9")
+    assert natural_key(f"Track {arabic_two}") == natural_key("Track 2")
+    assert natural_key(f"Track {arabic_zero}") == natural_key("Track 0")
+    assert natural_key(f"Track {arabic_zero}{arabic_two}") == natural_key("Track 2")
+
+
 def test_natural_key_orders_numbers_by_value() -> None:
     """Numbers inside text order by value, and leading zeros do not change the value."""
     assert natural_key("Track 2") < natural_key("Track 10")
