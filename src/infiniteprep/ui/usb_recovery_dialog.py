@@ -173,6 +173,11 @@ class UsbRecoveryDialog(QDialog):
             lambda: self._select(ReconnectChoice.LEAVE_UNCHANGED)
         )
         row.addWidget(self.leave_unchanged_btn)
+        # Enter leaves the drive unchanged. Resume and Restore modify the drive, so each
+        # takes an explicit choice.
+        self.leave_unchanged_btn.setDefault(True)
+        self.resume_btn.setAutoDefault(False)
+        self.restore_btn.setAutoDefault(False)
         layout.addLayout(row)
 
     def _apply_confirmation_state(self) -> None:
