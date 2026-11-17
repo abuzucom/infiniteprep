@@ -489,8 +489,6 @@ class AudioPreviewWidget(QWidget):
         for seconds in ZOOM_SECONDS:
             self.zoom_combo.addItem(f"{seconds} seconds", seconds)
         self.zoom_combo.setCurrentIndex(self.zoom_combo.findData(self.waveform_zoom_seconds))
-        self.view_combo.setAccessibleName("Waveform view")
-        self.zoom_combo.setAccessibleName("Waveform zoom")
         self.position_slider = QSlider(Qt.Orientation.Horizontal, self)
         self.position_slider.setRange(0, 0)
         self.position_slider.setSingleStep(SLIDER_SINGLE_STEP_MS)
@@ -520,6 +518,8 @@ class AudioPreviewWidget(QWidget):
             LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX
         )
         root.addWidget(self.waveform_bar)
+        self.view_combo.setAccessibleName("Waveform view")
+        self.zoom_combo.setAccessibleName("Waveform zoom")
         view_controls = QHBoxLayout()
         view_controls.addWidget(QLabel("Waveform view", self))
         view_controls.addWidget(self.view_combo)
