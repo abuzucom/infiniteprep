@@ -5,12 +5,13 @@ from __future__ import annotations
 import hashlib
 import html
 import unicodedata
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QCloseEvent, QPalette
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -40,6 +42,7 @@ from infiniteprep.services.fake_lossless import ANALYZER_VERSION as FAKE_LOSSLES
 from infiniteprep.services.fake_lossless import FakeLosslessResult
 from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
 from infiniteprep.ui.audio_player import AudioPreviewWidget
+from infiniteprep.ui.contrast import warning_text_color
 from infiniteprep.ui.waveform_worker import CANCEL_WAIT_MS, WaveformAnalysisPool
 
 DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = tuple(FieldName)
@@ -50,6 +53,11 @@ CANDIDATE_BOX_STRETCH: Final[int] = 1
 OTHER_TAGS_COLUMN_COUNT: Final[int] = 2
 COL_OTHER_KEY: Final[int] = 0
 COL_OTHER_VALUE: Final[int] = 1
+PLAY_SELECTED_LABEL: Final[str] = "Play Selected"
+NO_SELECTION_TEXT: Final[str] = "Select a track to inspect metadata and proposals."
+REPLACE_TRACK_TITLE: Final[str] = "Replace the playing track?"
+REPLACE_TRACK_CANCEL_LABEL: Final[str] = "Cancel"
+REPLACE_TRACK_CONFIRM_LABEL: Final[str] = "Load Paused"
 # Stored in the fake-lossless record configuration when the newest run fails.
 FAKE_LOSSLESS_FAILED_STATUS: Final[str] = "failed"
 # Longer values show cut short in the cell. The tooltip holds the full text.
@@ -75,6 +83,37 @@ COL_PROPOSAL_SOURCE: Final[int] = 3
 COL_APPROVED_EDIT: Final[int] = 4
 COL_ACTIONS: Final[int] = 5
 ACTION_ROW_MARGIN_PX: Final[int] = 2
+# Row widget roles. A row widget carries the object name "<field>:<role>", so focus
+# finds the same control again after the table rebuilds.
+ROLE_EDIT: Final[str] = "edit"
+ROLE_ACCEPT: Final[str] = "accept"
+ROLE_SAVE: Final[str] = "save"
+ROLE_LOCK: Final[str] = "lock"
+ROW_FIELD_PROPERTY: Final[str] = "field_name"
+LOADED_TEXT_PROPERTY: Final[str] = "loaded_text"
+ROW_NAME_SEPARATOR: Final[str] = ":"
+# Events after which the label background can differ, so the warning amber can too.
+THEME_CHANGE_EVENTS: Final[frozenset[QEvent.Type]] = frozenset(
+    {QEvent.Type.StyleChange, QEvent.Type.PaletteChange}
+)
+
+
+@dataclass(frozen=True)
+class FieldRowState:
+    """Unsaved edit box text and the focused row control, kept across a table rebuild."""
+
+    unsaved_edits: dict[str, str]
+    focused_name: str | None
+
+
+def row_widget_name(field_name: str, role: str) -> str:
+    """Return the object name of one row control."""
+    return f"{field_name}{ROW_NAME_SEPARATOR}{role}"
+
+
+def field_label(field_name: str) -> str:
+    """Return the spoken form of a field name, such as "catalog number"."""
+    return field_name.replace("_", " ")
 
 
 def _format_scalar_tag_value(value: object) -> str:
@@ -157,6 +196,11 @@ def other_tag_rows(raw_custom_tags: Mapping[str, object]) -> list[tuple[str, str
 class DetailPanel(QWidget):
     """Side-by-side inspector for current tags, proposals, approved values, and audio preview."""
 
+    # The file the field rows show, and the field whose row action runs. The class
+    # defaults keep __init__ inside its length budget.
+    _fields_file_id: str | None = None
+    _acted_field: str | None = None
+
     def __init__(
         self,
         repository: Repository,
@@ -189,19 +233,34 @@ class DetailPanel(QWidget):
         self._latest_generation_by_file: dict[str, int] = {}
         self.key_notation: KeyDisplayNotation = KeyDisplayNotation.CAMELOT
 
-        self.header_label = QLabel("Select a track to inspect metadata and proposals.", self)
+        self.header_label = QLabel(NO_SELECTION_TEXT, self)
         self.warnings_label = QLabel("", self)
         # File names and decoder messages come from imported files. The default
         # AutoText format renders markup in them as HTML.
         self.header_label.setTextFormat(Qt.TextFormat.PlainText)
         self.warnings_label.setTextFormat(Qt.TextFormat.PlainText)
-        self.warnings_label.setStyleSheet("color: #d97706; font-weight: bold;")
+        self._apply_warning_color()
+        self.play_selected_btn = QPushButton(PLAY_SELECTED_LABEL, self)
+        self.play_selected_btn.setEnabled(False)
+        self.play_selected_btn.setAccessibleName(PLAY_SELECTED_LABEL)
+        self.play_selected_btn.clicked.connect(self._play_selected_file)
         self.settings_manager = settings_manager or SettingsManager()
         self.audio_player = AudioPreviewWidget(
             self,
             enable_multimedia_backend=enable_audio_backend,
             settings_manager=self.settings_manager,
         )
+        self.audio_player.on_play_selection_requested = self._on_player_play_requested
+        self.audio_player.on_file_dropped = self._on_file_id_dropped
+        self._build_waveform_pool()
+        self.fields_table = QTableWidget(0, FIELDS_TABLE_COLUMN_COUNT, self)
+        self.other_tags_table = QTableWidget(0, OTHER_TAGS_COLUMN_COUNT, self)
+        self.candidates_list = QListWidget(self)
+
+        self._build_layout()
+
+    def _build_waveform_pool(self) -> None:
+        """Create the waveform analysis pool and connect its results."""
         self.waveform_pool = WaveformAnalysisPool(self)
         self.waveform_pool.overview_ready.connect(self._on_overview_ready)
         self.waveform_pool.completed.connect(self._on_waveform_completed)
@@ -211,16 +270,14 @@ class DetailPanel(QWidget):
         application = QApplication.instance()
         if application is not None:
             application.aboutToQuit.connect(self.waveform_pool.shutdown)
-        self.fields_table = QTableWidget(0, FIELDS_TABLE_COLUMN_COUNT, self)
-        self.other_tags_table = QTableWidget(0, OTHER_TAGS_COLUMN_COUNT, self)
-        self.candidates_list = QListWidget(self)
-
-        self._build_layout()
 
     def _build_layout(self) -> None:
         """Assemble the vertical layout of DetailPanel."""
         root = QVBoxLayout(self)
-        root.addWidget(self.header_label)
+        header_row = QHBoxLayout()
+        header_row.addWidget(self.header_label, stretch=1)
+        header_row.addWidget(self.play_selected_btn)
+        root.addLayout(header_row)
         root.addWidget(self.warnings_label)
         root.addWidget(self.audio_player)
 
@@ -281,28 +338,116 @@ class DetailPanel(QWidget):
         """Change key display notation and refresh the current file view."""
         self.key_notation = notation
         if self.current_file_id is not None:
-            self.load_file_asset(self.current_file_id)
+            self.select_file_asset(self.current_file_id)
 
-    def load_file_asset(self, file_id: str) -> None:
-        """Populate the detail panel for the specified file_id."""
+    def clear_selection(self) -> None:
+        """Show that no file is selected and leave the player untouched.
+
+        A cleared table selection leaves no file behind in the panel. The loaded
+        track stays in the player, and the `Play Selected` button turns off.
+        """
+        self.current_file_id = None
+        self.header_label.setText(NO_SELECTION_TEXT)
+        self.warnings_label.clear()
+        self.fields_table.setRowCount(0)
+        self.other_tags_table.setRowCount(0)
+        self.candidates_list.clear()
+        self.play_selected_btn.setEnabled(False)
+
+    def select_file_asset(self, file_id: str) -> FileAsset | None:
+        """Populate the detail panel for the specified file_id without touching the player.
+
+        A selection never stops playback. The player keeps its track, its position,
+        and its play state until an explicit load (D407).
+        """
         if file_id != self.current_file_id:
             self._analysis_file_id = None
             self._analysis_path = None
         self.current_file_id = file_id
         asset = self.repo.get_file_by_id(file_id)
         if asset is None:
-            return
+            return None
 
         self.header_label.setText(
             f"File: {Path(asset.current_path).name} | Format: {asset.format} | "
-            f"Write Supported: {asset.is_write_supported}"
+            f"Write Supported: {'Yes' if asset.is_write_supported else 'No'}"
         )
         self._populate_warnings(asset)
-        self._load_audio_if_changed(asset)
-        self._request_waveform_analysis(asset)
         self._populate_fields_table(asset)
         self._populate_other_tags(asset)
         self._populate_candidates_list(file_id)
+        self.play_selected_btn.setEnabled(True)
+        return asset
+
+    def load_file_asset(self, file_id: str) -> None:
+        """Populate the detail panel for the specified file_id and load the track."""
+        asset = self.select_file_asset(file_id)
+        if asset is None:
+            return
+        self._load_audio_if_changed(asset)
+        self._request_waveform_analysis(asset)
+
+    def load_and_play_file_asset(self, file_id: str) -> None:
+        """Load the track into the player and start it.
+
+        The selection stays where it is. The loaded track label shows the track
+        the player holds.
+        """
+        asset = self.repo.get_file_by_id(file_id)
+        if asset is None:
+            return
+        if asset.id == self._loaded_audio_id:
+            # The same track keeps its position, so the request resumes it.
+            self.audio_player.start_playback()
+            return
+        self._load_audio(asset)
+        self._request_waveform_analysis(asset)
+        self.audio_player.start_playback()
+
+    def load_track_paused(self, file_id: str) -> None:
+        """Load the track into the player paused at the start.
+
+        The selection stays where it is, so the panel can show another file than
+        the player holds.
+        """
+        asset = self.repo.get_file_by_id(file_id)
+        if asset is None:
+            return
+        self.audio_player.stop_playback()
+        self._load_audio(asset)
+        self._request_waveform_analysis(asset)
+
+    @property
+    def loaded_file_id(self) -> str | None:
+        """Return the file ID the player holds."""
+        return self._loaded_audio_id
+
+    def _play_selected_file(self) -> None:
+        """Load and play the selected file.
+
+        The button always plays the selection. A selection that the player
+        already holds resumes at its current position.
+        """
+        if self.current_file_id is None:
+            return
+        self.load_and_play_file_asset(self.current_file_id)
+
+    def _on_player_play_requested(self) -> bool:
+        """Load the selection for the player play button when it differs from the loaded track.
+
+        The player button toggles the loaded track when the selection matches it.
+        """
+        if self.current_file_id is None:
+            return False
+        if self.current_file_id == self._loaded_audio_id:
+            return False
+        self.load_and_play_file_asset(self.current_file_id)
+        return True
+
+    def _load_audio(self, asset: FileAsset) -> None:
+        """Load the asset into the player and mark it as the loaded track."""
+        self._loaded_audio_id = asset.id
+        self.audio_player.load_file(Path(asset.current_path), fallback_duration_sec=asset.duration)
 
     def _load_audio_if_changed(self, asset: FileAsset) -> None:
         """Load the asset into the player only when a different file ID is selected.
@@ -313,11 +458,10 @@ class DetailPanel(QWidget):
         """
         if asset.id == self._loaded_audio_id:
             return
-        self._loaded_audio_id = asset.id
-        self.audio_player.load_file(Path(asset.current_path), fallback_duration_sec=asset.duration)
+        self._load_audio(asset)
 
     def _request_waveform_analysis(self, asset: FileAsset) -> None:
-        """Submit one job for the selected track and retain a fallback overview."""
+        """Submit one job for the loaded track and retain a fallback overview."""
         path = Path(asset.current_path)
         if asset.id == self._analysis_file_id and path == self._analysis_path:
             return
@@ -334,22 +478,66 @@ class DetailPanel(QWidget):
             fake_lossless_method=method,
         )
 
+    def _on_file_id_dropped(self, file_id: str) -> None:
+        """Load a dropped track into the player paused at the start.
+
+        A playing track needs a confirmation first. The warning names both tracks,
+        so the user knows what the drop replaces.
+        """
+        asset = self.repo.get_file_by_id(file_id)
+        if asset is None:
+            return
+        dropped_name = Path(asset.current_path).name
+        if self.audio_player.is_playing:
+            playing_name = self._loaded_track_name()
+            if not self._confirm_replace_playing_track(playing_name, dropped_name):
+                return
+        self.load_track_paused(asset.id)
+
+    def _loaded_track_name(self) -> str:
+        """Return the name of the track the player holds."""
+        if self.audio_player.current_file_path is None:
+            return "The current track"
+        return self.audio_player.current_file_path.name
+
+    def _confirm_replace_playing_track(self, playing_name: str, dropped_name: str) -> bool:
+        """Ask before a drop replaces the playing track."""
+        box = self._build_replace_track_box(playing_name, dropped_name)
+        box.exec()
+        clicked = box.clickedButton()
+        return clicked is not None and clicked.text() == REPLACE_TRACK_CONFIRM_LABEL
+
+    def _build_replace_track_box(self, playing_name: str, dropped_name: str) -> QMessageBox:
+        """Build the warning that a drop replaces the playing track."""
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(REPLACE_TRACK_TITLE)
+        box.setText(
+            f"'{playing_name}' is playing. "
+            f"Loading '{dropped_name}' stops it and starts the new track paused."
+        )
+        cancel_button = box.addButton(REPLACE_TRACK_CANCEL_LABEL, QMessageBox.ButtonRole.RejectRole)
+        box.addButton(REPLACE_TRACK_CONFIRM_LABEL, QMessageBox.ButtonRole.AcceptRole)
+        # Cancel stays the default, so a stray Enter keeps the playing track.
+        box.setDefaultButton(cancel_button)
+        return box
+
     def _on_overview_ready(self, file_id: str, generation: int, envelope: object) -> None:
-        """Display only a fallback overview that matches the selected track generation."""
-        if file_id != self.current_file_id or generation != self._analysis_generation:
+        """Display only a fallback overview that matches the loaded track generation."""
+        if file_id != self._loaded_audio_id or generation != self._analysis_generation:
             return
         self.audio_player.set_overview_envelope(list(envelope))
 
     def _on_waveform_completed(self, file_id: str, generation: int, waveform: object) -> None:
-        """Display only results that still match the selected track generation."""
-        if file_id != self.current_file_id or generation != self._analysis_generation:
+        """Display only results that still match the loaded track generation."""
+        if file_id != self._loaded_audio_id or generation != self._analysis_generation:
             return
         self.audio_player.set_spectrum_waveform(waveform)
         self.audio_player.show_analysis_complete()
 
     def _on_waveform_failed(self, file_id: str, generation: int, message: str) -> None:
         """Display current analysis failures without clearing the overview."""
-        if file_id != self.current_file_id or generation != self._analysis_generation:
+        if file_id != self._loaded_audio_id or generation != self._analysis_generation:
             return
         self.audio_player.show_analysis_failure(message)
 
@@ -431,6 +619,24 @@ class DetailPanel(QWidget):
             self.other_tags_table.setItem(row_idx, COL_OTHER_KEY, key_item)
             self.other_tags_table.setItem(row_idx, COL_OTHER_VALUE, value_item)
 
+    def _apply_warning_color(self) -> None:
+        """Color the warnings with the amber that reaches 4.5:1 on the label background.
+
+        A fixed amber read at about 3:1 on a light theme. The label background
+        follows the theme, so the amber follows it too.
+        """
+        # Polish first. Before polish, the palette lacks the theme style sheet colors.
+        self.warnings_label.ensurePolished()
+        background = self.warnings_label.palette().color(QPalette.ColorRole.Window)
+        color = warning_text_color(background).name()
+        self.warnings_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+
+    def changeEvent(self, event: QEvent) -> None:
+        """Pick the warning amber again after a theme or palette change."""
+        super().changeEvent(event)
+        if event.type() in THEME_CHANGE_EVENTS:
+            self._apply_warning_color()
+
     def _populate_warnings(self, asset: FileAsset) -> None:
         """Render XDJ-RX3 hardware warnings, pitch drift alerts, and rip diagnostics."""
         tech = asset.original_tags.get("technical", {})
@@ -440,7 +646,14 @@ class DetailPanel(QWidget):
         self.warnings_label.setText(" | ".join(warnings) if warnings else "No hardware warnings.")
 
     def _populate_fields_table(self, asset: FileAsset) -> None:
-        """Populate rows for each standard DJ field."""
+        """Populate rows for each standard DJ field.
+
+        A refresh of the same file keeps unsaved text in other rows and keeps focus on
+        the same row control. A row action rebuilds every row, and the rebuild dropped
+        both before.
+        """
+        same_file = asset.id == self._fields_file_id
+        kept = self._capture_row_state() if same_file else FieldRowState({}, None)
         existing_std = asset.original_tags.get("standard_tags", {})
         approved_map = self.repo.get_approved_fields_map(asset.id)
         proposals = self.repo.list_field_proposals(asset.id)
@@ -459,6 +672,53 @@ class DetailPanel(QWidget):
                 field_props=by_field.get(f_name, []),
                 approved=approved_map.get(f_name),
             )
+        self._fields_file_id = asset.id
+        self._acted_field = None
+        self._restore_row_state(kept)
+
+    def _row_controls(self) -> Iterator[QWidget]:
+        """Yield the edit box and the buttons of every current field row."""
+        for row_idx in range(self.fields_table.rowCount()):
+            edit_box = self.fields_table.cellWidget(row_idx, COL_APPROVED_EDIT)
+            if edit_box is not None:
+                yield edit_box
+            actions = self.fields_table.cellWidget(row_idx, COL_ACTIONS)
+            if actions is not None:
+                yield from actions.findChildren(QPushButton)
+
+    def _capture_row_state(self) -> FieldRowState:
+        """Record unsaved edit text, except in the acted row, and the focused control."""
+        unsaved: dict[str, str] = {}
+        for control in self._row_controls():
+            if not isinstance(control, QLineEdit):
+                continue
+            field_name = str(control.property(ROW_FIELD_PROPERTY))
+            changed = control.text() != control.property(LOADED_TEXT_PROPERTY)
+            if changed and field_name != self._acted_field:
+                unsaved[field_name] = control.text()
+        focused = QApplication.focusWidget()
+        in_rows = focused is not None and self.fields_table.isAncestorOf(focused)
+        return FieldRowState(unsaved, focused.objectName() if in_rows else None)
+
+    def _restore_row_state(self, state: FieldRowState) -> None:
+        """Put back unsaved edit text and move focus to the same row control.
+
+        When the rebuilt row lacks that control, focus moves to the row's edit box.
+        """
+        by_name: dict[str, QWidget] = {}
+        for control in self._row_controls():
+            by_name[control.objectName()] = control
+            field_name = str(control.property(ROW_FIELD_PROPERTY))
+            if isinstance(control, QLineEdit) and field_name in state.unsaved_edits:
+                control.setText(state.unsaved_edits[field_name])
+        if not state.focused_name:
+            return
+        field_name = state.focused_name.split(ROW_NAME_SEPARATOR, 1)[0]
+        target = by_name.get(state.focused_name) or by_name.get(
+            row_widget_name(field_name, ROLE_EDIT)
+        )
+        if target is not None:
+            target.setFocus()
 
     def _populate_single_field_row(
         self,
@@ -487,6 +747,10 @@ class DetailPanel(QWidget):
 
         edit_box = QLineEdit(app_val, self.fields_table)
         edit_box.setMaxLength(MAX_MANUAL_FIELD_LENGTH)
+        edit_box.setObjectName(row_widget_name(field_name, ROLE_EDIT))
+        edit_box.setProperty(ROW_FIELD_PROPERTY, field_name)
+        edit_box.setProperty(LOADED_TEXT_PROPERTY, app_val)
+        edit_box.setAccessibleName(f"Approved value for {field_label(field_name)}")
         self.fields_table.setCellWidget(row_idx, COL_APPROVED_EDIT, edit_box)
 
         action_widget = self._create_row_action_widget(
@@ -513,27 +777,44 @@ class DetailPanel(QWidget):
         )
 
         if top_prop is not None:
-            acc_btn = QPushButton("Accept", container)
-            acc_btn.clicked.connect(lambda _c=False, pid=top_prop.id: self._on_accept_proposal(pid))
-            layout.addWidget(acc_btn)
+            acc_btn = self._add_row_button(layout, field_name, ROLE_ACCEPT, "Accept")
+            acc_btn.setAccessibleName(f"Accept proposal for {field_label(field_name)}")
+            acc_btn.clicked.connect(
+                lambda _c=False, fn=field_name, pid=top_prop.id: self._accept_row_proposal(fn, pid)
+            )
 
-        save_btn = QPushButton("Save", container)
+        save_btn = self._add_row_button(layout, field_name, ROLE_SAVE, "Save")
         save_btn.clicked.connect(
             lambda _c=False, fid=file_id, fn=field_name, eb=edit_box: self._on_save_manual(
                 fid, fn, eb.text()
             )
         )
-        layout.addWidget(save_btn)
 
         is_locked = bool(approved and approved.locked)
-        lock_btn = QPushButton("Unlock" if is_locked else "Lock", container)
+        lock_text = "Unlock" if is_locked else "Lock"
+        lock_btn = self._add_row_button(layout, field_name, ROLE_LOCK, lock_text)
         lock_btn.clicked.connect(
             lambda _c=False, fid=file_id, fn=field_name, lk=not is_locked: self._on_toggle_lock(
                 fid, fn, lk
             )
         )
-        layout.addWidget(lock_btn)
         return container
+
+    def _add_row_button(
+        self, layout: QHBoxLayout, field_name: str, role: str, text: str
+    ) -> QPushButton:
+        """Add one row button named for its field, so each row's buttons sound different."""
+        button = QPushButton(text, layout.parentWidget())
+        button.setObjectName(row_widget_name(field_name, role))
+        button.setProperty(ROW_FIELD_PROPERTY, field_name)
+        button.setAccessibleName(f"{text} {field_label(field_name)}")
+        layout.addWidget(button)
+        return button
+
+    def _accept_row_proposal(self, field_name: str, proposal_id: str) -> bool:
+        """Accept a row's proposal. The accepted value replaces unsaved text in that row."""
+        self._acted_field = field_name
+        return self._on_accept_proposal(proposal_id)
 
     def _format_display_val(self, field_name: str, raw_val: str) -> str:
         """Format canonical key according to active KeyDisplayNotation when displaying KEY."""
@@ -585,24 +866,25 @@ class DetailPanel(QWidget):
         """Accept a proposal and refresh UI state."""
         ok = self.review_service.accept_proposal(proposal_id)
         if self.current_file_id:
-            self.load_file_asset(self.current_file_id)
+            self.select_file_asset(self.current_file_id)
         if self.on_change_callback:
             self.on_change_callback()
         return ok
 
     def _on_save_manual(self, file_id: str, field_name: str, value: str) -> None:
         """Save a manual field edit with lock=True and refresh UI state."""
+        self._acted_field = field_name
         cleaned = value.strip()
         if len(cleaned) > MAX_MANUAL_FIELD_LENGTH:
             cleaned = cleaned[:MAX_MANUAL_FIELD_LENGTH]
         self.review_service.set_manual_field_value(file_id, field_name, cleaned, lock=True)
-        self.load_file_asset(file_id)
+        self.select_file_asset(file_id)
         if self.on_change_callback:
             self.on_change_callback()
 
     def _on_toggle_lock(self, file_id: str, field_name: str, locked: bool) -> None:
         """Toggle field lock and refresh UI state."""
         self.review_service.set_field_lock(file_id, field_name, locked=locked)
-        self.load_file_asset(file_id)
+        self.select_file_asset(file_id)
         if self.on_change_callback:
             self.on_change_callback()

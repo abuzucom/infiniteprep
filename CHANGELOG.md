@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.75.1] (2026-11-17)
+## [0.76.1] (2026-11-17)
 
 ### Added
 
@@ -17,6 +17,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The other tags, write preview, journal, and recovery tables pass Tab to the next control. Tab walked every cell before.
 - The new `tests/unit/test_accessible_names_and_keyboard_sort.py` covers the names, the read-only tables, and the keyboard sort.
   - The version advances from 0.74.1 to 0.75.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- The library selection no longer stops playback (issue 249, D407).
+  - A row click updates the detail panel only. The player keeps its track, its position, and its play state until an explicit load.
+  - A `Play Selected` button in the detail panel header loads and plays the selected file.
+  - `Ctrl+Enter` on the library table loads and plays the selected file.
+  - A `Play` item in the library row context menu loads and plays the row under the pointer. A right-click outside a row opens no menu.
+  - A double-click on a library row loads and plays that row.
+  - The player `Play` button loads the selection when the selection differs from the loaded track.
+  - A library row dragged onto the waveform loads that track paused at the start. A drop while a track plays asks first. `Cancel` keeps the playing track and its position.
+  - The player shows a `Loaded:` line with the file name it holds. A mismatch with the detail panel stays visible.
+  - The new `tests/unit/test_selection_keeps_playback.py` covers the selection, the four play paths, and the drop paths.
+  - The version advances from 0.75.3 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - The new `tests/unit/test_destructive_action_guards.py` checks the guards in front of destructive UI actions (accessibility audit).
   - The version advances from 0.72.4 to 0.72.5 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
@@ -60,6 +71,27 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The Discogs, MusicBrainz, and AcoustID adapters and the LLM reasoning adapter send through the new `adapters/http_openers.py` opener. That opener holds no redirect handler, so a redirect response raises an error.
   - urllib copied every header, the Discogs token and the LLM Bearer key included, to the redirect target. A redirect could also move a request from https to plain http. The AcoustID key rides in the query string and followed every redirect too.
   - The LLM endpoint check covered the first URL only. A redirect now ends the request before it reaches a host the check never saw.
+  - The version advances from 0.76.0 to 0.76.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- Status changes reach screen readers, and toolbar actions say what they did (accessibility audit).
+  - A playback status, a spectrum analysis failure, a finished batch, and the write preview status each raise a screen reader announcement. A label update alone was silent before. The new `announce` helper in `ui/accessible_names.py` sends them.
+  - Identify & Analyze, Bulk Approve, Preview & Apply Writes, Transcode, and Export say why they did nothing when no file is visible. Each ended without a word before.
+  - Bulk Approve reports how many fields it approved.
+  - The library status column shows labels such as "Ready to Write" instead of stored values such as `ready_to_write`. The detail header shows Yes or No for write support instead of True or False.
+  - The new `tests/unit/test_status_feedback.py` covers the announcements, the empty library messages, the approved count, and the labels.
+  - The version advances from 0.75.2 to 0.75.3 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- Warning text and the waveform reach WCAG contrast minimums (accessibility audit).
+  - The detail panel warnings use a dark amber on a light theme and a light amber on a dark theme. The fixed amber read at about 3:1 on a light theme. Each choice reaches 4.5:1, and a theme switch picks the amber again.
+  - Unplayed waveform bars use gray 500. Gray 600 read at 2.3:1 on the waveform background. The bars now reach 3:1.
+  - The zoom view draws the low, mid, and high bands in Okabe-Ito sky blue, orange, and yellow. Red and green ran together for red-green color blindness. Each band reaches 3:1 at its overlay alpha.
+  - The zoom view shows a legend that names each band next to its color. Color alone named the bands before.
+  - The new `ui/contrast.py` computes WCAG contrast. The new `tests/unit/test_contrast_and_spectrum_legend.py` checks every color pair and the legend.
+  - The version advances from 0.75.1 to 0.75.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- The field rows of the detail panel keep keyboard and screen reader users in place (accessibility audit).
+  - Each row's edit box and its Accept, Save, and Lock buttons name their field, such as "Save artist". Every row announced the same "Save" before.
+  - Accept, Save, and Lock keep focus on the same control of the same row. The rows rebuild after each action, and focus fell out of the table before.
+  - Text typed in one row stays when another row's action runs. The rebuild wiped every unsaved row before. The acted row shows its new stored value.
+  - The new `tests/unit/test_detail_panel_row_actions.py` covers the names, the focus, and the unsaved text.
+  - The open list of each named picker carries the picker's name. A screen reader announced an unnamed list once a picker opened. The new `ui/accessible_names.py` names a picker and its list together.
   - The version advances from 0.75.0 to 0.75.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Catalog, fingerprint, and LLM responses pass type and length checks before they reach a proposal.
   - The new `adapters/provider_fields.py` checks every field the Discogs, MusicBrainz, and AcoustID adapters read. Text stays printable and stops at 500 characters. A field of the wrong type reads as absent. A list keeps at most 100 items.
