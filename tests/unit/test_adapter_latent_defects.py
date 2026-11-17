@@ -379,6 +379,23 @@ def test_musicbrainz_array_response_returns_no_candidates(
     assert adapter.search(QUERY, file_id=FIRST_FILE_ID) == []
 
 
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        (("a", "b-c"), ("a-b", "c")),
+        (("a", "b:c"), ("a:b", "c")),
+        (("", "a"), ("a", "")),
+        (("a%3Ab", "c"), ("a:b", "c")),
+    ],
+)
+def test_candidate_ids_never_collide_across_part_boundaries(
+    first: tuple[str, str], second: tuple[str, str]
+) -> None:
+    assert http_json.build_candidate_id("mb-rel", *first) != http_json.build_candidate_id(
+        "mb-rel", *second
+    )
+
+
 def test_itunes_request_limiter_is_the_shared_limiter() -> None:
     limiter = RequestLimiter()
     assert isinstance(limiter, http_json.RequestLimiter)

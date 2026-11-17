@@ -24,15 +24,20 @@ DEFAULT_REQUEST_TIMEOUT_SEC: Final[float] = 15.0
 LOOKUP_ERRORS: Final[tuple[type[Exception], ...]] = (OSError, ValueError)
 
 logger = logging.getLogger(__name__)
+# Percent-encoding turns ":" inside a part into "%3A", so the separator stays unique.
+CANDIDATE_ID_SEPARATOR: Final[str] = ":"
 
 
 def build_candidate_id(prefix: str, file_id: str, *entity_ids: str) -> str:
     """Return a candidate id unique per file and per provider entity.
 
     The id holds the file id, because the same recording found for two files
-    must stay two candidate rows. Empty parts drop out of the id.
+    must stay two candidate rows. Each part is percent-encoded before the join,
+    so the separator never appears inside a part and two different part tuples
+    never yield the same id. An empty part keeps its slot.
     """
-    return "-".join(part for part in (prefix, file_id, *entity_ids) if part)
+    parts = (prefix, file_id, *entity_ids)
+    return CANDIDATE_ID_SEPARATOR.join(urllib.parse.quote(part, safe="") for part in parts)
 
 
 def log_lookup_failure(provider: str, error: Exception) -> str:
