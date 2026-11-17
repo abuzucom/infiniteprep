@@ -9,6 +9,7 @@ import time
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any, Final
 
 from infiniteprep.adapters.provider_fields import (
@@ -34,6 +35,21 @@ MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
 # characters out of that path. IDs start at 1 and carry no leading zero.
 # Sixteen digits exceed every issued release ID.
 SAFE_RELEASE_ID_RE: Final[re.Pattern[str]] = re.compile(r"[1-9][0-9]{0,15}")
+
+
+def _release_details(payload: dict[str, Any]) -> ReleaseDetails:
+    """Return the release-level details of a Discogs release object.
+
+    Each track candidate copies these details and adds its own position.
+    """
+    labels = provider_dicts(payload.get("labels")) or [{}]
+    return ReleaseDetails(
+        release_title=provider_text(payload.get("title")),
+        label=provider_text(labels[0].get("name")),
+        catalog_number=provider_text(labels[0].get("catno")),
+        country=provider_text(payload.get("country")),
+        year=provider_text(payload.get("year")),
+    )
 
 
 class DiscogsAdapter:
@@ -185,14 +201,9 @@ class DiscogsAdapter:
     def _parse_release_payload(self, payload: dict[str, Any], file_id: str) -> list[CandidateMatch]:
         """Convert a full Discogs release object with tracklist into CandidateMatches."""
         rel_id = provider_text(payload.get("id")) or "unknown"
-        labels = provider_dicts(payload.get("labels")) or [{}]
-        label_name = provider_text(labels[0].get("name"))
-        cat_no = provider_text(labels[0].get("catno"))
         artists = [provider_text(a.get("name")) for a in provider_dicts(payload.get("artists"))]
         rel_artist = ", ".join(a for a in artists if a) or None
-        release_title = provider_text(payload.get("title"))
-        country = provider_text(payload.get("country"))
-        year = provider_text(payload.get("year"))
+        release = _release_details(payload)
         results: list[CandidateMatch] = []
         for idx, trk in enumerate(provider_dicts(payload.get("tracklist"))):
             pos = provider_text(trk.get("position")) or f"{idx + 1}"
@@ -205,15 +216,7 @@ class DiscogsAdapter:
                     entity_type=EntityType.RELEASE,
                     artist=rel_artist,
                     title=provider_text(trk.get("title")) or "",
-                    release_details=ReleaseDetails(
-                        release_title=release_title,
-                        label=label_name,
-                        catalog_number=cat_no,
-                        country=country,
-                        year=year,
-                        track_number=pos,
-                        vinyl_position=pos,
-                    ),
+                    release_details=replace(release, track_number=pos, vinyl_position=pos),
                     match_evidence={"discogs_id": rel_id, "position": pos},
                     match_score=0.91,
                 )
