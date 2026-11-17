@@ -5,10 +5,11 @@ from __future__ import annotations
 import base64
 import binascii
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from PySide6.QtCore import QByteArray, Qt
+from PySide6.QtCore import QByteArray, Qt, QTimer
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -43,7 +44,7 @@ from infiniteprep.domain.enums import (
     parse_key_string,
 )
 from infiniteprep.domain.metadata_values import resolve_effective_value, top_proposal_values
-from infiniteprep.domain.models import FileAsset
+from infiniteprep.domain.models import ApprovedField, FileAsset
 from infiniteprep.services.import_service import ImportBatchReport, ImportService
 from infiniteprep.services.job_orchestrator import BatchKind, BatchState, QueuedBatch
 from infiniteprep.services.review_service import ReviewService
@@ -109,6 +110,8 @@ def format_status_label(status: ReviewStatus) -> str:
 STATUS_FILTER_VALUES: Final[dict[str, str]] = {
     format_status_label(status): status.value for status in ReviewStatus
 }
+# Milliseconds after the last column resize before the layout saves.
+LAYOUT_SAVE_DELAY_MS: Final[int] = 300
 SEARCH_INPUT_STRETCH: Final[int] = 3
 STATUS_FILTER_STRETCH: Final[int] = 1
 SPLITTER_TOP_HEIGHT: Final[int] = 380
@@ -127,6 +130,36 @@ CLOSE_PROMPT_TEXT: Final[str] = (
 )
 # Runs a queued Analyze batch on a worker thread: file IDs, cancel check, progress report.
 AnalyzeRunner = Callable[[list[str], CancelCheck, ProgressReport], object]
+
+
+@dataclass(frozen=True)
+class LibrarySnapshot:
+    """The per-file values one table refresh reads, loaded in three queries.
+
+    A refresh read approved fields, proposals, and analysis results per file, twice for
+    the analysis. A 5,000-file library ran about 20,000 queries on the GUI thread.
+    """
+
+    approved: dict[str, dict[str, ApprovedField]]
+    top_proposals: dict[str, dict[str, str]]
+    analysis_warnings: dict[str, list[str]]
+
+
+def load_library_snapshot(repo: Repository) -> LibrarySnapshot:
+    """Read the approved fields, top proposals, and analysis warnings of every file."""
+    proposals = repo.field_proposals_by_file()
+    analyses = repo.analysis_results_by_file()
+    return LibrarySnapshot(
+        approved=repo.approved_fields_by_file(),
+        top_proposals={
+            file_id: top_proposal_values(file_proposals)
+            for file_id, file_proposals in proposals.items()
+        },
+        analysis_warnings={
+            file_id: [warning for result in results for warning in result.warnings]
+            for file_id, results in analyses.items()
+        },
+    )
 
 
 def format_duration(seconds: float) -> str:
@@ -336,10 +369,26 @@ class MainWindow(QMainWindow):
                 settings.detail_table_column_count,
             ),
         )
+        # A column drag emits sectionResized for each pixel. One save runs after the drag
+        # settles, so the settings file is written once per resize, not once per pixel.
+        self._layout_save_timer = QTimer(self)
+        self._layout_save_timer.setSingleShot(True)
+        self._layout_save_timer.setInterval(LAYOUT_SAVE_DELAY_MS)
+        self._layout_save_timer.timeout.connect(self._save_table_layouts)
         for header, encoded_state, saved_column_count in headers:
             if saved_column_count == header.count() and encoded_state:
                 self._restore_header_state(header, encoded_state)
-            header.sectionResized.connect(self._save_table_layouts)
+            header.sectionResized.connect(self._schedule_layout_save)
+
+    def _schedule_layout_save(self, *_args: int) -> None:
+        """Restart the layout save timer after a column resize."""
+        self._layout_save_timer.start()
+
+    def flush_layout_save(self) -> None:
+        """Save a pending column layout now. A close must not lose the last resize."""
+        if self._layout_save_timer.isActive():
+            self._layout_save_timer.stop()
+            self._save_table_layouts()
 
     @staticmethod
     def _restore_header_state(header: QHeaderView, encoded_state: str) -> None:
@@ -352,7 +401,7 @@ class MainWindow(QMainWindow):
             return
         header.restoreState(QByteArray(state))
 
-    def _save_table_layouts(self, *_args: int) -> None:
+    def _save_table_layouts(self) -> None:
         """Persist file and detail header states after a user resizes a column."""
         settings_manager = SettingsManager()
         settings = settings_manager.load()
@@ -371,8 +420,9 @@ class MainWindow(QMainWindow):
     def refresh_file_table(self) -> None:
         """Reload all FileAssets from Repository and populate the filtered table."""
         all_files = self.repo.list_files()
-        filtered = [f for f in all_files if self._matches_status_filter(f)]
-        rows = [self._build_library_row(asset) for asset in filtered]
+        snapshot = load_library_snapshot(self.repo)
+        filtered = [f for f in all_files if self._matches_status_filter(f, snapshot)]
+        rows = [self._build_library_row(asset, snapshot) for asset in filtered]
         query = self.search_input.text().strip().casefold()
         if query:
             # The search reads the cells the table shows, so a match is always visible.
@@ -442,18 +492,18 @@ class MainWindow(QMainWindow):
         row_idx = self.visible_file_ids.index(self._selected_file_id)
         self.file_table.selectRow(row_idx)
 
-    def _asset_warnings(self, asset: FileAsset) -> list[str]:
+    @staticmethod
+    def _asset_warnings(asset: FileAsset, snapshot: LibrarySnapshot) -> list[str]:
         """Collect technical and analysis warnings for one library asset."""
         warnings: list[str] = list(asset.original_tags.get("technical", {}).get("warnings", []))
-        for ana in self.repo.list_analysis_results(asset.id):
-            warnings.extend(ana.warnings)
+        warnings.extend(snapshot.analysis_warnings.get(asset.id, []))
         return warnings
 
-    def _matches_status_filter(self, asset: FileAsset) -> bool:
+    def _matches_status_filter(self, asset: FileAsset, snapshot: LibrarySnapshot) -> bool:
         """Return True if asset matches the status filter dropdown."""
         status_choice = self.status_filter_combo.currentText()
         if status_choice == HAS_WARNINGS_FILTER:
-            return bool(self._asset_warnings(asset))
+            return bool(self._asset_warnings(asset, snapshot))
         status_value = STATUS_FILTER_VALUES.get(status_choice)
         return status_value is None or str(asset.review_status) == status_value
 
@@ -465,14 +515,15 @@ class MainWindow(QMainWindow):
                 item.setData(Qt.ItemDataRole.UserRole, row.file_id)
             self.file_table.setItem(row_idx, col_idx, item)
 
-    def _build_library_row(self, asset: FileAsset) -> LibraryRow:
+    def _build_library_row(self, asset: FileAsset, snapshot: LibrarySnapshot) -> LibraryRow:
         """Build the table row for one asset with the values the sort needs."""
         std = asset.original_tags.get("standard_tags", {})
-        approved = self.repo.get_approved_fields_map(asset.id)
-        top_by_field = top_proposal_values(self.repo.list_field_proposals(asset.id))
+        approved = snapshot.approved.get(asset.id, {})
+        top_by_field = snapshot.top_proposals.get(asset.id, {})
         raw_key = self._effective_val(std, approved, top_by_field, FieldName.KEY.value)
         raw_bpm = self._effective_val(std, approved, top_by_field, FieldName.BPM.value)
-        cells = self._build_table_row_cells(asset, std, approved, top_by_field)
+        warnings = self._asset_warnings(asset, snapshot)
+        cells = self._build_table_row_cells(asset, std, approved, top_by_field, warnings)
         return LibraryRow(
             file_id=asset.id,
             cells=tuple(cells),
@@ -489,12 +540,12 @@ class MainWindow(QMainWindow):
         std: dict[str, str],
         approved: dict,
         top_by_field: dict[str, str],
+        warnings: list[str],
     ) -> list[str]:
         """Compute string cells for a single FileAsset row in the batch review table."""
         lbl_str = self._effective_val(std, approved, top_by_field, FieldName.LABEL.value)
         cat_str = self._effective_val(std, approved, top_by_field, FieldName.CATALOG_NUMBER.value)
         raw_key = self._effective_val(std, approved, top_by_field, FieldName.KEY.value)
-        warnings = self._asset_warnings(asset)
 
         return [
             Path(asset.current_path).name,
@@ -686,6 +737,7 @@ class MainWindow(QMainWindow):
         close requests during that wait ask nothing.
         """
         if not self.batch_queue.is_busy():
+            self.flush_layout_save()
             # A child widget gets no closeEvent of its own. Closing the panel cancels
             # its analysis so no late result writes after the window closes.
             self.detail_panel.close()

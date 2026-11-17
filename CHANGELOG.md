@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.73.0] (2026-11-17)
+## [0.74.0] (2026-11-17)
 
 ### Added
 
@@ -32,6 +32,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The library status filter lists every review status (issue 288). The filter lacked `ready_for_review`, `conflicting_candidates`, `no_match`, and four more statuses that the pipeline sets.
 - The library search reads the cells the table shows (issue 288). It read the stored tag structure before, so `tags` matched every file and an approved artist matched none.
 - The version advances from 0.72.7 to 0.73.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`. The keyword rename is an incompatible change of a public method.
+- Library work runs in a fixed number of queries and off the GUI thread (issue 288).
+  - A library table refresh reads approved fields, proposals, and analysis results for every file in three queries. It ran about four queries per file before, on each search keystroke.
+  - A playlist sort reads its tracks in three queries inside its write transaction. It ran three queries per track before and held the write lock for all of them.
+  - The interrupted-write check reads only the in-progress journal records. It loaded the whole journal before each write.
+  - A column resize saves the table layout once, 300 ms after the drag settles, and on window close. It rewrote the settings file on each pixel of a drag before.
+  - Transcode to XDJ runs as a queued batch on a worker thread, with progress, cancel, and a stuck-file prompt. It froze the window for the whole batch before. The batch dock shows the result.
+  - `Repository` gains `approved_fields_by_file`, `field_proposals_by_file`, `analysis_results_by_file`, `files_by_id`, and `list_change_records_with_status`.
+  - `run_transcode_with_confirmation` gains an optional `queue_batch` keyword. Without it, the function runs the transcode on the calling thread as before.
+  - `transcode_files` gains optional `should_cancel` and `progress` keywords. `TranscodeBatchSummary` gains `stopped_early`. `BatchKind` gains `TRANSCODE`.
+  - `tests/unit/test_ui_d78_layout_persistence.py` waits for the layout save before it opens the second window. The repository owner approved this edit.
+  - The new `tests/unit/test_library_refresh_and_queue_performance.py` covers each change.
+  - The version advances from 0.73.0 to 0.74.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ### Fixed
 

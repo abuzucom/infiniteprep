@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from infiniteprep.domain.enums import (
@@ -15,11 +16,27 @@ from infiniteprep.domain.metadata_values import resolve_effective_value, top_pro
 
 if TYPE_CHECKING:
     from infiniteprep.db.repositories import Repository
+    from infiniteprep.domain.models import ApprovedField, FileAsset
 
 
 def order_tracks(repository: Repository, file_ids: list[str], *, bpm_first: bool) -> list[str]:
-    """Keep ties and incomplete tracks in their prior relative order."""
-    values = {file_id: _track_values(repository, file_id) for file_id in dict.fromkeys(file_ids)}
+    """Keep ties and incomplete tracks in their prior relative order.
+
+    The values of every track load in three queries. The order runs inside the playlist
+    write transaction, so one query per track held the write lock for the whole playlist.
+    """
+    unique_ids = list(dict.fromkeys(file_ids))
+    assets = repository.files_by_id(unique_ids)
+    approved = repository.approved_fields_by_file(unique_ids)
+    proposals = repository.field_proposals_by_file(unique_ids)
+    values = {
+        file_id: _track_values(
+            assets.get(file_id),
+            approved.get(file_id, {}),
+            top_proposal_values(proposals.get(file_id, [])),
+        )
+        for file_id in unique_ids
+    }
     complete = [file_id for file_id in file_ids if values[file_id] is not None]
     incomplete = [file_id for file_id in file_ids if values[file_id] is None]
 
@@ -32,14 +49,15 @@ def order_tracks(repository: Repository, file_ids: list[str], *, bpm_first: bool
     return sorted(complete, key=sort_key) + incomplete
 
 
-def _track_values(repository: Repository, file_id: str) -> tuple[int, float] | None:
-    asset = repository.get_file_by_id(file_id)
+def _track_values(
+    asset: FileAsset | None,
+    approved: Mapping[str, ApprovedField],
+    proposals: Mapping[str, str],
+) -> tuple[int, float] | None:
+    """Return the Camelot position and BPM of one track, or None when either is missing."""
     if asset is None:
         return None
     tags = asset.original_tags.get("standard_tags", {})
-    approved = repository.get_approved_fields_map(file_id)
-    proposals = top_proposal_values(repository.list_field_proposals(file_id))
-
     key = parse_key_string(resolve_effective_value(tags, approved, proposals, FieldName.KEY.value))
     bpm_text = resolve_effective_value(tags, approved, proposals, FieldName.BPM.value)
     try:

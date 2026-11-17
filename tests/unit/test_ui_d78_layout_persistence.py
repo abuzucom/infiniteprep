@@ -43,6 +43,8 @@ def test_file_and_detail_column_widths_persist_between_windows(
     qtbot.addWidget(first_window)
     first_window.file_table.horizontalHeader().resizeSection(0, 217)
     first_window.detail_panel.fields_table.horizontalHeader().resizeSection(0, 143)
+    # The layout saves once the resizes settle, not on each resize.
+    qtbot.waitUntil(lambda: bool(settings_manager.settings.file_table_layout))
 
     second_window = MainWindow(repository, ImportService(repository), review_service)
     qtbot.addWidget(second_window)

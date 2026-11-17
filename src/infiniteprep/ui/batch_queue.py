@@ -20,6 +20,7 @@ from infiniteprep.services.job_orchestrator import (
     BatchState,
     QueuedBatch,
 )
+from infiniteprep.services.transcode_batch import TranscodeBatchSummary
 from infiniteprep.services.write_service import WriteBatchResult
 from infiniteprep.ui.folder_import import STUCK_EXIT_CODE, FolderImportController
 from infiniteprep.ui.stuck_file_watcher import StuckFileWatcher, StuckPrompt
@@ -51,6 +52,14 @@ WRITE_STUCK_PROMPT: Final[StuckPrompt] = StuckPrompt(
     "interrupted file. Keep Waiting lets the write continue.",
     WRITE_STUCK_TIMEOUT_MS,
 )
+# A transcode decodes, resamples, and encodes a whole track, so it gets the analysis limit.
+TRANSCODE_STUCK_PROMPT: Final[StuckPrompt] = StuckPrompt(
+    "Transcode Not Responding",
+    "One file has taken more than 5 minutes and the transcode is not responding. "
+    "Quit Now ends InfinitePrep at once. Files transcoded so far stay transcoded. "
+    "Keep Waiting lets the transcode continue.",
+    ANALYZE_STUCK_TIMEOUT_MS,
+)
 MAX_LISTED_FAILURES: Final[int] = 10
 STATE_TEXT: Final[dict[BatchState, str]] = {
     BatchState.WAITING: "Waiting",
@@ -69,6 +78,8 @@ def _result_counts(result: object) -> str:
         return f"Written: {len(result.records)}. Failed: {len(result.failures)}."
     if isinstance(result, ImportBatchReport):
         return f"Imported: {len(result.imported_files)}. Failed: {len(result.failed_files)}."
+    if isinstance(result, TranscodeBatchSummary):
+        return f"Transcoded: {len(result.results)}. Failed: {len(result.failures)}."
     return ""
 
 
@@ -78,6 +89,8 @@ def _result_failures(result: object) -> list[str]:
         return [f"{file_id}: {reason}" for file_id, reason in result.errors.items()]
     if isinstance(result, WriteBatchResult):
         return [f"{path}: {reason}" for path, reason in result.failures]
+    if isinstance(result, TranscodeBatchSummary):
+        return [f"{file_id}: {reason}" for file_id, reason in result.failures.items()]
     return []
 
 
@@ -191,6 +204,7 @@ class BatchQueueController(QObject):
         self._stuck_prompts = stuck_prompts or {
             BatchKind.ANALYZE: ANALYZE_STUCK_PROMPT,
             BatchKind.WRITE: WRITE_STUCK_PROMPT,
+            BatchKind.TRANSCODE: TRANSCODE_STUCK_PROMPT,
         }
         self.stuck_watcher = StuckFileWatcher(
             prompt_parent,

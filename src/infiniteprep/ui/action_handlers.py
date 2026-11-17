@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
@@ -16,6 +17,7 @@ from infiniteprep.adapters.transcoder.safe_transcoder import (
 )
 from infiniteprep.config.settings import SettingsManager
 from infiniteprep.db.repositories import Repository
+from infiniteprep.services.job_orchestrator import BatchKind, QueuedBatch
 from infiniteprep.services.playlist_exporter import UNSAFE_PATH_CHARACTERS, PlaylistExporter
 from infiniteprep.services.transcode_batch import (
     TranscodeBatchSummary,
@@ -24,6 +26,13 @@ from infiniteprep.services.transcode_batch import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Adds a batch to the queue: kind, label, and a body that takes a cancel check and a
+# progress report. MainWindow.queue_batch has this shape.
+QueueBatch = Callable[
+    [BatchKind, str, Callable[[Callable[[], bool], Callable[[int, int, str], None]], object]],
+    QueuedBatch,
+]
 
 TRANSCODE_DIALOG_TITLE: Final[str] = "Transcode to XDJ"
 EXPORT_DIALOG_TITLE: Final[str] = "Export Playlist (.m3u8)"
@@ -120,8 +129,16 @@ def run_transcode_with_confirmation(
     transcoder: SafeTranscoderAdapter,
     file_ids: list[str],
     settings_manager: SettingsManager,
-) -> TranscodeBatchSummary | None:
-    """Confirm the batch with the user, transcode on Yes, and show the result summary."""
+    *,
+    queue_batch: QueueBatch | None = None,
+) -> TranscodeBatchSummary | QueuedBatch | None:
+    """Confirm the batch with the user, then transcode on Yes.
+
+    With queue_batch, the transcode joins the batch queue and runs on a worker thread
+    with progress and cancel, and the queued batch returns. The batch dock shows its
+    result. Without queue_batch, the transcode runs on the calling thread, shows the
+    result summary, and returns it.
+    """
     if not file_ids:
         return None
     settings = settings_manager.load()
@@ -133,6 +150,20 @@ def run_transcode_with_confirmation(
     # The confirmation and the summary both list file names from imported files.
     if not ask_plain_question(parent, TRANSCODE_DIALOG_TITLE, confirmation):
         return None
+    if queue_batch is not None:
+        queued_ids = list(file_ids)
+        return queue_batch(
+            BatchKind.TRANSCODE,
+            f"Transcode {len(queued_ids)} file(s) to XDJ",
+            lambda should_cancel, progress: transcode_files(
+                transcoder,
+                queued_ids,
+                preset=preset,
+                mode=mode,
+                should_cancel=should_cancel,
+                progress=progress,
+            ),
+        )
     summary = transcode_files(transcoder, file_ids, preset=preset, mode=mode)
     message = build_transcode_summary_text(repo, summary)
     icon = QMessageBox.Icon.Warning if summary.failures else QMessageBox.Icon.Information
