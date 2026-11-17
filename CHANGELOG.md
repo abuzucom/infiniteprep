@@ -5,7 +5,17 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.72.2] (2026-11-17)
+## [0.72.3] (2026-11-17)
+
+### Added
+
+- The new `tests/unit/test_keyboard_defaults.py` checks three keyboard paths (accessibility audit).
+  - Enter in the rename template field keeps the write preview open.
+  - Tab leaves the library table.
+  - Tab from a field edit box reaches the action buttons of the same row.
+  - The new `tests/unit/test_write_preview_enter_refresh.py` checks that Enter rebuilds the preview once with the typed template.
+  - The new `tests/unit/test_detail_panel_row_tab_order.py` checks that Tab visits Save, then Lock, in one field row.
+  - The version advances from 0.72.1 to 0.72.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ### Fixed
 
@@ -15,8 +25,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The tempo estimate computes only the lags of the tempo range. A full autocorrelation of a 30 minute file needed over 100 billion steps.
   - The transcoder refuses a file that declares more than 8 channels, a sample rate above 384 kHz, or more decoded samples than a 2 hour stereo file at 48 kHz holds.
   - A decode that runs out of memory fails that one file. The analysis reports a decode failure, and a transcode batch continues with the next file.
-  - The version advances from 0.72.1 to 0.72.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
-
+  - The version advances from 0.72.2 to 0.72.3 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- Enter in the rename template field of the write preview refreshes the preview. Enter applied the writes and closed the dialog before. Refresh Preview holds the default button role.
+- Tab leaves the library table in one press. Tab walked every cell before.
+- Tab from a field edit box in the detail panel reaches the Accept, Save, and Lock buttons of the same row. Tab returned focus to the table and skipped the buttons before.
 - Crafted tag data costs bounded time and memory in the tag parsers and the library table sort.
   - An ID3 text frame decodes at most 4096 values and at most 16 MiB of text. A larger frame shows as a byte summary in Other Tags. The ID3v2.3 renderer rejects a tag that holds such a frame.
   - An ID3 picture frame reads its description without a text split of the picture bytes.

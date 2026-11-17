@@ -237,6 +237,9 @@ class DetailPanel(QWidget):
         header = self.fields_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setStretchLastSection(True)
+        # Tab moves through the edit box and the buttons of each row. With cell
+        # navigation on, Tab returns focus to the table and skips the buttons.
+        self.fields_table.setTabKeyNavigation(False)
         root.addWidget(self.fields_table, stretch=FIELDS_TABLE_STRETCH)
 
         other_box = QGroupBox("Other Tags", self)
