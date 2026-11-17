@@ -10,8 +10,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - A push to `main` after a merge skips checks that already passed on the pull request.
-  - The `lint-and-style` and `agents-lint` jobs of `ci.yml` run on pull requests only. The test matrix still runs on `main`.
+  - `ci.yml` and `os-tests.yml` trigger on pull requests only. A push to `main` runs neither the lint jobs nor the test matrix nor the Windows and macOS jobs.
   - The `check-sync` job of `sync-check.yml` runs on pull requests only.
+  - `security-devops.yml` still runs on a push to `main`. Its scan keeps the code scanning baseline of `main` current.
   - `agents-md-compliance.yml` triggers on pull requests to `main` instead of pushes to `main`. The `static-checks` job now runs before merge.
   - The version advances from 0.72.5 to 0.72.6 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 

@@ -56,9 +56,9 @@ class OsTestsTriggerTest(unittest.TestCase):
         self.workflow = load_workflow(OS_TESTS_WORKFLOW)
         self.triggers = self.workflow[OS_TESTS_TRIGGER_KEY]
 
-    def test_runs_on_pushes_to_the_primary_branch(self) -> None:
-        """A merged change still gets its cross-platform run."""
-        self.assertEqual(self.triggers["push"]["branches"], [PRIMARY_BRANCH])
+    def test_push_starts_no_run(self) -> None:
+        """A merged change already passed its cross-platform run on the pull request."""
+        self.assertNotIn("push", self.triggers)
 
     def test_pull_request_edits_start_no_run(self) -> None:
         """The pull request trigger lists the code events and omits edited."""

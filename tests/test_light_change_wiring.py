@@ -26,9 +26,7 @@ CLASSIFYING_JOBS = (
 )
 # The scan jobs classify in their own steps, so each keeps a single checkout.
 SCAN_JOBS = CLASSIFYING_JOBS[1:]
-# The lint jobs run on pull requests only. tests/test_main_push_check_skips.py
-# covers their condition.
-ALWAYS_RUNNING_CI_JOBS = ("changes", "checks")
+ALWAYS_RUNNING_CI_JOBS = ("changes", "checks", "lint-and-style", "agents-lint")
 
 
 def load_jobs(workflow_name: str) -> dict[str, Any]:
@@ -90,7 +88,7 @@ class TestMatrixSkipTest(unittest.TestCase):
         self.assertIn(LINT_SUCCEEDED, self.jobs["test-matrix"]["if"])
 
     def test_cheap_ci_jobs_always_run(self) -> None:
-        """The classifier and the wiring tests carry no condition."""
+        """The classifier, the wiring tests, and both lint jobs carry no condition."""
         for job_name in ALWAYS_RUNNING_CI_JOBS:
             with self.subTest(job=job_name):
                 self.assertNotIn("if", self.jobs[job_name])
