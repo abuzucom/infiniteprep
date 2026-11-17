@@ -4,17 +4,15 @@ name: Cross-platform gate tests
 # sync-check.yml. That workflow also runs on pull request title and
 # description edits, and it cancels the older run of a branch. An edit there
 # cancelled a running platform job. This workflow omits the edited event, so
-# only a code event starts or replaces a platform run.
+# only a code event starts or replaces a platform run. A push starts no run.
+# The merged commit already passed both platform jobs on its pull request.
 
 "on":
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
 
-# A newer pull request commit replaces the run for the older commit. A push
-# to main gets its own group per commit, and its run always completes.
+# A newer pull request commit replaces the run for the older commit.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

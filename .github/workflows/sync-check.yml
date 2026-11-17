@@ -19,10 +19,8 @@ permissions:
 # a platform run.
 jobs:
   pr-authorship:
-    # agents-md-compliance.yml stays push-only by design, so the pr-checks
-    # job of the reusable agents-compliance.yml never runs here: its
-    # pull_request condition is false on a push. These two checkers live
-    # only in that job, so without this one they run on no event at all.
+    # The pr-checks job of the reusable agents-compliance.yml skips draft
+    # pull requests. This job also covers drafts.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -70,7 +68,10 @@ jobs:
             --base "$PR_BASE_SHA" \
             --head "$PR_HEAD_SHA"
 
+  # The job runs on pull requests only. A push to main does not run it. The
+  # merged commit already passed it on the pull request head.
   check-sync:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
