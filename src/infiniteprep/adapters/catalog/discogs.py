@@ -69,6 +69,25 @@ def _release_details(payload: dict[str, Any]) -> ReleaseDetails:
     )
 
 
+def _track_keys(tracks: list[dict[str, Any]]) -> list[str]:
+    """Return one distinct key per tracklist entry, in tracklist order.
+
+    A heading or an index track carries an empty position and often precedes a track
+    at position "1". The key of an entry without a position holds a "#" and its list
+    number, and a repeated key gains the list number again, so no two entries share
+    a key.
+    """
+    keys: list[str] = []
+    seen: set[str] = set()
+    for idx, trk in enumerate(tracks):
+        key = provider_text(trk.get("position")) or f"#{idx + 1}"
+        while key in seen:
+            key = f"{key}#{idx + 1}"
+        seen.add(key)
+        keys.append(key)
+    return keys
+
+
 class DiscogsAdapter:
     """Queries Discogs database search and release endpoints with 6-hour TTL caching."""
 
@@ -227,18 +246,17 @@ class DiscogsAdapter:
         rel_artist = ", ".join(a for a in artists if a) or None
         release = _release_details(payload)
         results: list[CandidateMatch] = []
-        for idx, trk in enumerate(provider_dicts(payload.get("tracklist"))):
-            # A heading or an index track carries an empty position. The list index
-            # keeps its candidate id and its entity id distinct from the other tracks.
+        tracks = provider_dicts(payload.get("tracklist"))
+        for idx, (trk, track_key) in enumerate(zip(tracks, _track_keys(tracks), strict=True)):
             pos = provider_text(trk.get("position")) or f"{idx + 1}"
             results.append(
                 CandidateMatch(
-                    id=build_candidate_id("discogs-trk", file_id, rel_id, pos),
+                    id=build_candidate_id("discogs-trk", file_id, rel_id, track_key),
                     file_id=file_id,
                     provider=self.provider_name,
                     # The stored candidate key holds the entity id. One id per track
                     # keeps every track of the release as its own candidate row.
-                    provider_entity_id=f"{rel_id}:{pos}",
+                    provider_entity_id=f"{rel_id}:{track_key}",
                     entity_type=EntityType.RELEASE,
                     artist=rel_artist,
                     title=provider_text(trk.get("title")) or "",

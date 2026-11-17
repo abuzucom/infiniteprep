@@ -172,9 +172,32 @@ def test_discogs_release_tracks_keep_distinct_entity_ids_and_drop_year_zero() ->
     positions = [c.release_details.track_number for c in candidates]
     assert positions == ["1", "A1", "3"]
     entity_ids = [c.provider_entity_id for c in candidates]
-    assert entity_ids == ["249504:1", "249504:A1", "249504:3"]
+    assert entity_ids == ["249504:#1", "249504:A1", "249504:#3"]
     assert len({c.id for c in candidates}) == len(candidates)
     assert all(c.release_details.year is None for c in candidates)
+
+
+def test_discogs_unpositioned_entry_never_collides_with_a_numbered_track() -> None:
+    payload = {
+        "id": 249504,
+        "tracklist": [
+            {"position": "", "title": "Part One"},
+            {"position": "1", "title": "The Dream"},
+            {"position": "#1", "title": "Odd Position"},
+            {"position": "1", "title": "Repeated Position"},
+        ],
+    }
+    adapter = DiscogsAdapter(
+        _repository(),
+        user_token=DISCOGS_STUB_KEY,
+        http_get_json=_returning(payload),
+        min_interval_sec=0.0,
+    )
+    candidates = adapter.fetch("249504", file_id=FIRST_FILE_ID)
+    entity_ids = [c.provider_entity_id for c in candidates]
+    assert len(set(entity_ids)) == len(candidates) == 4
+    assert len({c.id for c in candidates}) == 4
+    assert entity_ids[1] == "249504:1"
 
 
 # MusicBrainz release lookup.
