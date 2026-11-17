@@ -17,6 +17,7 @@ from scipy.signal import resample_poly
 from infiniteprep import storage_paths
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
+    approved_values_to_write,
     copy_to_new_verified_file,
     operation_backup_path,
 )
@@ -173,8 +174,21 @@ class SafeTranscoderAdapter:
             rec.post_write_hash = post_hash
             rec.operation_status = OperationStatus.COMPLETED
             self.repo.upsert_change_record(rec)
+            self._point_asset_at_output(asset, out_path, post_hash)
             return rec.operation_id
         return None
+
+    def _point_asset_at_output(self, asset: FileAsset, out_path: Path, post_hash: str) -> None:
+        """Store the path, hash, size, and format of the file that replaced the source.
+
+        A later tag write compares the stored hash with the file on disk. A stale row makes
+        that write refuse the file as externally modified.
+        """
+        asset.current_path = str(out_path)
+        asset.content_hash = post_hash
+        asset.file_size = out_path.stat().st_size
+        asset.format = self.tag_adapter.detect_format(out_path)
+        self.repo.upsert_file_asset(asset)
 
     def _verify_audio_bounds(self, src_path: Path) -> None:
         """Reject audio files exceeding size or duration safety caps before PCM decode."""
@@ -285,9 +299,7 @@ class SafeTranscoderAdapter:
     def _apply_effective_tags_to_output(self, asset: FileAsset, out_path: Path) -> None:
         """Write original standard tags merged with user-approved fields onto output file."""
         std = dict(asset.original_tags.get("standard_tags", {}))
-        approved = {
-            k: v.approved_value for k, v in self.repo.get_approved_fields_map(asset.id).items()
-        }
+        approved = approved_values_to_write(self.repo.get_approved_fields_map(asset.id))
         effective = {**std, **approved}
         if effective:
             self.tag_adapter._write_tags_by_format(

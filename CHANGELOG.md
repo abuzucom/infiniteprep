@@ -5,6 +5,34 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.1] (2026-11-17)
+
+### Fixed
+
+- The library table sorts by Key and by Review Status when a row holds no value for the column (issue 288).
+  - A file without a key and a file with a status outside the sort order join the unsorted group. The sort no longer raises.
+  - A very long run of digits in a text cell no longer raises during a sort.
+- An in-place transcode updates the library record of the file (issue 288).
+  - The record takes the path, the SHA-256 hash, the size, and the format of the new file. A later tag write accepts the file.
+  - A blank approved value no longer erases the tag on the transcoded copy. The transcoder and the tag write share one rule for approved values.
+- A WAV tag write keeps the LIST-INFO fields the write does not name (issue 288).
+  - The write replaces the subchunk of each written field and keeps every other stored subchunk.
+- The title parser reads a mix keyword only as a whole word (issue 288).
+  - `Live in Dublin` and `feat. Meredith` no longer count as a mix.
+  - A mix name built from descriptors alone, such as `Extended Club Mix`, yields no remixer.
+  - A contraction, such as `It's Alright Mix`, yields no remixer.
+- Bulk approve reads pending proposals only (issue 288).
+  - An accepted, rejected, or superseded proposal takes no part in a new approval. A second run approves nothing twice.
+- The library table and the playlist order skip rejected and superseded proposals (issue 288).
+  - Both read the top proposal through the new `top_proposal_values` in `domain/metadata_values.py`.
+- A re-analysis with a changed BPM or key no longer fails the file (issue 288).
+  - The ID of an analysis proposal covers the whole unique key of the proposal table.
+  - Only the newest result of each analyzer supplies proposals. An earlier pending value of that analyzer turns superseded.
+- A file that processes after an earlier failure no longer keeps the old error message (issue 288).
+  - `Repository.update_file_status` takes the new `clear_error` keyword and updates the row in one statement.
+- Six new test modules under `tests/unit/` cover these fixes.
+- The version advances from 0.69.0 to 0.69.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+
 ## [0.69.0] (2026-11-16)
 
 ### Added

@@ -111,10 +111,14 @@ class ReviewService:
     def _group_pending_proposals_by_field(
         self, proposals: list[FieldProposal]
     ) -> dict[str, list[FieldProposal]]:
-        """Group non-rejected proposals by field_name."""
+        """Group the pending proposals by field_name.
+
+        An accepted proposal already holds its field. A rejected or superseded proposal
+        lost it. None of them takes part in a new approval.
+        """
         grouped: dict[str, list[FieldProposal]] = {}
         for prop in proposals:
-            if prop.review_status == ProposalReviewStatus.REJECTED:
+            if prop.review_status != ProposalReviewStatus.PENDING:
                 continue
             grouped.setdefault(prop.field_name, []).append(prop)
         return grouped

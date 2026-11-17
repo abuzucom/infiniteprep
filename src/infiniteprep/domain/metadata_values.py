@@ -1,8 +1,29 @@
 """Resolve the metadata shown in the library table."""
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
+from typing import Final
 
-from infiniteprep.domain.models import ApprovedField
+from infiniteprep.domain.enums import ProposalReviewStatus
+from infiniteprep.domain.models import ApprovedField, FieldProposal
+
+# A rejected or superseded proposal lost its field and supplies no effective value.
+INACTIVE_PROPOSAL_STATUSES: Final[frozenset[ProposalReviewStatus]] = frozenset(
+    {ProposalReviewStatus.REJECTED, ProposalReviewStatus.SUPERSEDED}
+)
+
+
+def top_proposal_values(proposals: Iterable[FieldProposal]) -> dict[str, str]:
+    """Return the first active proposed value of each field.
+
+    The caller passes the proposals in rank order, best first. Rejected and superseded
+    proposals are skipped.
+    """
+    values: dict[str, str] = {}
+    for proposal in proposals:
+        if proposal.review_status in INACTIVE_PROPOSAL_STATUSES:
+            continue
+        values.setdefault(proposal.field_name, proposal.proposed_value)
+    return values
 
 
 def resolve_effective_value(

@@ -80,6 +80,8 @@ REVIEW_STATUS_ORDER: Final[tuple[str, ...]] = (
 )
 
 BLANK_TEXTS: Final[frozenset[str]] = frozenset({"", "-"})
+# The compared value every row of the unsorted group shares.
+UNSORTED_PRIMARY: Final[int] = 0
 _NUMBER_PATTERN = re.compile(r"(\d+)")
 
 
@@ -133,7 +135,10 @@ def natural_key(text: str) -> tuple[tuple[int, object], ...]:
     tokens: list[tuple[int, object]] = []
     for index, part in enumerate(parts):
         if index % 2:
-            tokens.append((0, int(part)))
+            # int() refuses a very long digit run. Digits without leading zeros order by
+            # value when the length compares first and the text second.
+            digits = part.lstrip("0")
+            tokens.append((0, (len(digits), digits)))
         else:
             tokens.append((1, part))
     return tuple(tokens)
@@ -201,7 +206,12 @@ def _build_entry(
 ) -> _SortEntry:
     """Build the compared values for one row."""
     unsorted = _is_unsorted(row, kind, column)
-    primary, mode_rank = _primary_value(row, kind, column, notation)
+    # A row without a value has nothing to compare. The group rank alone places it, so every
+    # unsorted row shares one neutral value and falls through to the title and path order.
+    primary: object = UNSORTED_PRIMARY
+    mode_rank = 0
+    if not unsorted:
+        primary, mode_rank = _primary_value(row, kind, column, notation)
     return _SortEntry(
         row=row,
         group_rank=_group_rank(unsorted, placement),

@@ -333,6 +333,7 @@ class JobOrchestrator:
             asset.id,
             task_status=TaskStatus.COMPLETED,
             review_status=ReviewStatus.PROPOSED,
+            clear_error=True,
         )
 
     def _run_fingerprint_step(self, asset: FileAsset, audio_path: Path) -> None:
