@@ -5,9 +5,12 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.72.4] (2026-11-17)
+## [0.72.5] (2026-11-17)
 
 ### Added
+
+- The new `tests/unit/test_destructive_action_guards.py` checks the guards in front of destructive UI actions (accessibility audit).
+  - The version advances from 0.72.4 to 0.72.5 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - The new `tests/unit/test_keyboard_defaults.py` checks three keyboard paths (accessibility audit).
   - Enter in the rename template field keeps the write preview open.
@@ -19,6 +22,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Enter in the USB export confirm dialog cancels the export. Enter confirmed the export before. Confirm Export takes an explicit click or Space.
+- Enter in the interrupted USB export prompt leaves the drive unchanged. Enter resumed the export before. Resume and Restore take an explicit click or Space.
+- Clean Up USB Recovery Journal asks before it deletes any entry. No is the default. The result shows in a message. The result showed only in a tooltip before.
+- Apply Safe Writes with no safe plan keeps the write preview open and names the reason. The preview closed without a word before.
 - A crafted audio header no longer claims unbounded decode memory or analysis time.
   - The local analyzer decodes in blocks and keeps only the mono mix. The memory in use follows the frame count, not the frame count times the channel count. The mono mix decodes into one buffer and never exists twice. A stream without a declared length decodes twice. The first pass counts its frames, and the second pass fills the buffer.
   - The local analyzer refuses a file that declares more than 8 channels or a sample rate above 384 kHz. It decodes at most 30 minutes at 48 kHz, about 691 MB of mono samples. A file above 48 kHz analyzes a shorter span.

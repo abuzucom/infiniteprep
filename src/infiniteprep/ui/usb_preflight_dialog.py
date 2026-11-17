@@ -178,6 +178,9 @@ class UsbPreflightDialog(QDialog):
         root.addLayout(buttons)
         self.confirm_btn.clicked.connect(self.accept)
         self.cancel_btn.clicked.connect(self.reject)
+        # Enter cancels. The export changes the drive, so it takes an explicit choice.
+        self.cancel_btn.setDefault(True)
+        self.confirm_btn.setAutoDefault(False)
 
     def _add_titled_list(self, root: QVBoxLayout, title: str, widget: QListWidget) -> None:
         """Add a fixed section title and its list to the layout."""
