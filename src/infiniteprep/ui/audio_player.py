@@ -489,6 +489,8 @@ class AudioPreviewWidget(QWidget):
         for seconds in ZOOM_SECONDS:
             self.zoom_combo.addItem(f"{seconds} seconds", seconds)
         self.zoom_combo.setCurrentIndex(self.zoom_combo.findData(self.waveform_zoom_seconds))
+        self.view_combo.setAccessibleName("Waveform view")
+        self.zoom_combo.setAccessibleName("Waveform zoom")
         self.position_slider = QSlider(Qt.Orientation.Horizontal, self)
         self.position_slider.setRange(0, 0)
         self.position_slider.setSingleStep(SLIDER_SINGLE_STEP_MS)

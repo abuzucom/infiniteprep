@@ -95,6 +95,11 @@ class WritePlanDialog(QDialog):
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setStretchLastSection(True)
+        # The rows preview computed plans. An edit in a cell changed nothing and was lost.
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setTabKeyNavigation(False)
+        self.table.setAccessibleName("Write plan")
+        self.template_input.setAccessibleName("Rename template")
         root.addWidget(self.table, stretch=1)
 
         bottom = QHBoxLayout()

@@ -70,6 +70,10 @@ class JournalDialog(QDialog):
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setStretchLastSection(True)
+        # The rows record past writes. Tab reaches the Restore buttons, not each cell.
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setTabKeyNavigation(False)
+        self.table.setAccessibleName("Change journal")
         root.addWidget(self.table, stretch=1)
 
         bottom = QHBoxLayout()
