@@ -13,6 +13,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Enter in the rename template field keeps the write preview open.
   - Tab leaves the library table.
   - Tab from a field edit box reaches the action buttons of the same row.
+  - The new `tests/unit/test_write_preview_enter_refresh.py` checks that Enter rebuilds the preview once with the typed template.
   - The version advances from 0.71.1 to 0.71.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ### Fixed
