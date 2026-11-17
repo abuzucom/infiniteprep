@@ -7,6 +7,7 @@ import json
 import re
 import urllib.request
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any, Final
 
 from infiniteprep.adapters.http_json import (
@@ -15,6 +16,14 @@ from infiniteprep.adapters.http_json import (
     build_candidate_id,
     fetch_json,
     log_lookup_failure,
+)
+from infiniteprep.adapters.provider_fields import (
+    first_provider_text,
+    provider_dict,
+    provider_dicts,
+    provider_text,
+    provider_texts,
+    require_payload_dict,
 )
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
@@ -43,6 +52,21 @@ def normalize_release_year(raw_year: object) -> str | None:
     if not year_text or year_text == "0":
         return None
     return year_text
+
+
+def _release_details(payload: dict[str, Any]) -> ReleaseDetails:
+    """Return the release-level details of a Discogs release object.
+
+    Each track candidate copies these details and adds its own position.
+    """
+    labels = provider_dicts(payload.get("labels")) or [{}]
+    return ReleaseDetails(
+        release_title=provider_text(payload.get("title")),
+        label=provider_text(labels[0].get("name")),
+        catalog_number=provider_text(labels[0].get("catno")),
+        country=provider_text(payload.get("country")),
+        year=normalize_release_year(provider_text(payload.get("year"))),
+    )
 
 
 class DiscogsAdapter:
@@ -93,7 +117,8 @@ class DiscogsAdapter:
         payload = self._cached_get(cache_key, f"{DISCOGS_BASE_URL}/database/search", params)
         if payload is None:
             return []
-        return self._parse_search_results(payload.get("results", []), query, file_id)
+        results = provider_dicts(provider_dict(payload).get("results"))
+        return self._parse_search_results(results, query, file_id)
 
     def fetch(
         self, entity_id: str, entity_type: EntityType = EntityType.RELEASE, file_id: str = ""
@@ -113,7 +138,7 @@ class DiscogsAdapter:
         )
         if payload is None:
             return []
-        return self._parse_release_payload(payload, file_id)
+        return self._parse_release_payload(provider_dict(payload), file_id)
 
     def _cached_get(
         self, cache_key: str, url: str, params: dict[str, str]
@@ -128,7 +153,9 @@ class DiscogsAdapter:
             return payload
         self._respect_rate_limit()
         try:
-            payload = self.http_get_json(url, params)
+            # The JSON object check runs before the cache write, so a malformed body
+            # never reaches the shared cache.
+            payload = require_payload_dict(self.http_get_json(url, params), "Discogs")
         except LOOKUP_ERRORS as error:
             log_lookup_failure("Discogs", error)
             return None
@@ -159,17 +186,18 @@ class DiscogsAdapter:
         query: MetadataSearchQuery,
         file_id: str,
     ) -> CandidateMatch:
-        """Build a single CandidateMatch from a Discogs search result dictionary."""
-        rel_id = str(item.get("id", ""))
-        raw_title = str(item.get("title", ""))
+        """Build a single CandidateMatch from a Discogs search result dictionary.
+
+        Every field passes the provider field checks. A wrong type reads as an absent value.
+        """
+        rel_id = provider_text(item.get("id")) or ""
+        raw_title = provider_text(item.get("title")) or ""
         artist_part, _, title_part = (
             raw_title.partition(" - ")
             if " - " in raw_title
             else (query.artist or "", "", raw_title)
         )
-        labels = item.get("label") or []
-        formats = item.get("format") or []
-        genres = item.get("style") or item.get("genre") or []
+        formats = provider_texts(item.get("format"))
         return CandidateMatch(
             id=build_candidate_id("discogs-rel", file_id, rel_id),
             file_id=file_id,
@@ -180,14 +208,13 @@ class DiscogsAdapter:
             title=query.title or title_part.strip(),
             release_details=ReleaseDetails(
                 release_title=title_part.strip() or None,
-                label=str(labels[0]) if isinstance(labels, list) and labels else None,
-                catalog_number=item.get("catno"),
-                country=item.get("country"),
-                year=normalize_release_year(item.get("year")),
-                genre=str(genres[0]) if isinstance(genres, list) and genres else None,
-                format_description=(
-                    ", ".join(str(f) for f in formats) if isinstance(formats, list) else None
-                ),
+                label=first_provider_text(item.get("label")),
+                catalog_number=provider_text(item.get("catno")),
+                country=provider_text(item.get("country")),
+                year=normalize_release_year(provider_text(item.get("year"))),
+                genre=first_provider_text(item.get("style"))
+                or first_provider_text(item.get("genre")),
+                format_description=", ".join(formats) or None,
             ),
             match_evidence={"discogs_id": rel_id, "raw_title": raw_title},
             match_score=0.90,
@@ -195,18 +222,15 @@ class DiscogsAdapter:
 
     def _parse_release_payload(self, payload: dict[str, Any], file_id: str) -> list[CandidateMatch]:
         """Convert a full Discogs release object with tracklist into CandidateMatches."""
-        rel_id = str(payload.get("id", "unknown"))
-        labels = payload.get("labels") or [{}]
-        label_name = labels[0].get("name")
-        cat_no = labels[0].get("catno")
-        artists = [a.get("name", "") for a in payload.get("artists", []) if isinstance(a, dict)]
+        rel_id = provider_text(payload.get("id")) or "unknown"
+        artists = [provider_text(a.get("name")) for a in provider_dicts(payload.get("artists"))]
         rel_artist = ", ".join(a for a in artists if a) or None
-        tracks = payload.get("tracklist") or []
+        release = _release_details(payload)
         results: list[CandidateMatch] = []
-        for idx, trk in enumerate(tracks):
+        for idx, trk in enumerate(provider_dicts(payload.get("tracklist"))):
             # A heading or an index track carries an empty position. The list index
             # keeps its candidate id and its entity id distinct from the other tracks.
-            pos = str(trk.get("position") or "").strip() or str(idx + 1)
+            pos = provider_text(trk.get("position")) or f"{idx + 1}"
             results.append(
                 CandidateMatch(
                     id=build_candidate_id("discogs-trk", file_id, rel_id, pos),
@@ -217,16 +241,8 @@ class DiscogsAdapter:
                     provider_entity_id=f"{rel_id}:{pos}",
                     entity_type=EntityType.RELEASE,
                     artist=rel_artist,
-                    title=str(trk.get("title", "")),
-                    release_details=ReleaseDetails(
-                        release_title=payload.get("title"),
-                        label=label_name,
-                        catalog_number=cat_no,
-                        country=payload.get("country"),
-                        year=normalize_release_year(payload.get("year")),
-                        track_number=pos,
-                        vinyl_position=pos,
-                    ),
+                    title=provider_text(trk.get("title")) or "",
+                    release_details=replace(release, track_number=pos, vinyl_position=pos),
                     match_evidence={"discogs_id": rel_id, "position": pos},
                     match_score=0.91,
                 )

@@ -114,6 +114,16 @@ STATUS_FILTER_VALUES: Final[dict[str, str]] = {
 LAYOUT_SAVE_DELAY_MS: Final[int] = 300
 SEARCH_INPUT_STRETCH: Final[int] = 3
 STATUS_FILTER_STRETCH: Final[int] = 1
+SORT_ASCENDING_TEXT: Final[str] = "Ascending"
+SORT_DESCENDING_TEXT: Final[str] = "Descending"
+# Screen readers announce these names. Placeholder text vanishes once a field holds text.
+SEARCH_INPUT_NAME: Final[str] = "Filter library"
+STATUS_FILTER_NAME: Final[str] = "Filter by review status"
+SORT_COLUMN_NAME: Final[str] = "Sort library by"
+SORT_DIRECTION_NAME: Final[str] = "Sort direction"
+KEY_NOTATION_NAME: Final[str] = "Key notation"
+THEME_PICKER_NAME: Final[str] = "Theme"
+FILE_TABLE_NAME: Final[str] = "Library"
 SPLITTER_TOP_HEIGHT: Final[int] = 380
 SPLITTER_BOTTOM_HEIGHT: Final[int] = 420
 PLAYLIST_SUFFIX: Final[str] = ".m3u8"
@@ -295,6 +305,7 @@ class MainWindow(QMainWindow):
             self.key_notation_combo.addItem(notation.value)
         self.key_notation_combo.setCurrentText(self.current_key_notation.value)
         self.key_notation_combo.currentTextChanged.connect(self._on_key_notation_changed)
+        self.key_notation_combo.setAccessibleName(KEY_NOTATION_NAME)
         toolbar.addWidget(self.key_notation_combo)
 
         toolbar.addSeparator()
@@ -305,6 +316,7 @@ class MainWindow(QMainWindow):
         self._applied_theme = self._selectable_theme(current_theme)
         self.theme_combo.setCurrentText(self._applied_theme)
         self.theme_combo.currentTextChanged.connect(self._on_theme_changed)
+        self.theme_combo.setAccessibleName(THEME_PICKER_NAME)
         toolbar.addWidget(self.theme_combo)
 
     def _selectable_theme(self, theme: str) -> str:
@@ -324,16 +336,22 @@ class MainWindow(QMainWindow):
             "Filter by filename, artist, title, label, or warning..."
         )
         self.search_input.textChanged.connect(self.refresh_file_table)
+        self.search_input.setAccessibleName(SEARCH_INPUT_NAME)
         filter_bar.addWidget(self.search_input, stretch=SEARCH_INPUT_STRETCH)
 
         self.status_filter_combo.addItems(
             [ALL_FILES_FILTER, HAS_WARNINGS_FILTER, *STATUS_FILTER_VALUES]
         )
         self.status_filter_combo.currentTextChanged.connect(self.refresh_file_table)
+        self.status_filter_combo.setAccessibleName(STATUS_FILTER_NAME)
         filter_bar.addWidget(self.status_filter_combo, stretch=STATUS_FILTER_STRETCH)
+        self._add_sort_controls(filter_bar)
         root_layout.addLayout(filter_bar)
 
         self.file_table.setHorizontalHeaderLabels(list(TABLE_COLUMNS))
+        self.file_table.setAccessibleName(FILE_TABLE_NAME)
+        # The cells show computed values. An edit in a cell changed nothing and was lost.
+        self.file_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         file_header = self.file_table.horizontalHeader()
         file_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         file_header.setStretchLastSection(True)
@@ -470,6 +488,26 @@ class MainWindow(QMainWindow):
         self._set_picker_theme(self._applied_theme)
         self.refresh_file_table()
 
+    def _add_sort_controls(self, filter_bar: QHBoxLayout) -> None:
+        """Add a sort column picker and a direction button for keyboard users.
+
+        The table header takes no keyboard focus, so a header click is the only other
+        way to sort. The controls and the header stay in step.
+        """
+        sort_label = QLabel("Sort by:", self)
+        self.sort_column_combo = QComboBox(self)
+        self.sort_column_combo.addItems(list(TABLE_COLUMNS))
+        self.sort_column_combo.setCurrentIndex(self._sort_column)
+        self.sort_column_combo.setAccessibleName(SORT_COLUMN_NAME)
+        sort_label.setBuddy(self.sort_column_combo)
+        self.sort_direction_btn = QPushButton(SORT_ASCENDING_TEXT, self)
+        self.sort_direction_btn.setAccessibleName(SORT_DIRECTION_NAME)
+        self.sort_column_combo.currentIndexChanged.connect(self._on_sort_column_chosen)
+        self.sort_direction_btn.clicked.connect(self._on_sort_direction_toggled)
+        filter_bar.addWidget(sort_label)
+        filter_bar.addWidget(self.sort_column_combo)
+        filter_bar.addWidget(self.sort_direction_btn)
+
     def _on_table_header_clicked(self, column: int) -> None:
         """Sort by the clicked column and reverse the direction on a second click."""
         if column == self._sort_column:
@@ -477,10 +515,33 @@ class MainWindow(QMainWindow):
         else:
             self._sort_column = column
             self._sort_descending = False
+        self._apply_sort()
+
+    def _on_sort_column_chosen(self, column: int) -> None:
+        """Sort ascending by the column chosen in the sort picker."""
+        if column < 0 or column == self._sort_column:
+            return
+        self._sort_column = column
+        self._sort_descending = False
+        self._apply_sort()
+
+    def _on_sort_direction_toggled(self) -> None:
+        """Reverse the sort direction of the current column."""
+        self._sort_descending = not self._sort_descending
+        self._apply_sort()
+
+    def _apply_sort(self) -> None:
+        """Show the sort state on the header and the sort controls, then repaint."""
         order = (
             Qt.SortOrder.DescendingOrder if self._sort_descending else Qt.SortOrder.AscendingOrder
         )
         self.file_table.horizontalHeader().setSortIndicator(self._sort_column, order)
+        self.sort_column_combo.blockSignals(True)
+        self.sort_column_combo.setCurrentIndex(self._sort_column)
+        self.sort_column_combo.blockSignals(False)
+        self.sort_direction_btn.setText(
+            SORT_DESCENDING_TEXT if self._sort_descending else SORT_ASCENDING_TEXT
+        )
         self.refresh_file_table()
 
     def _restore_selected_file(self) -> None:

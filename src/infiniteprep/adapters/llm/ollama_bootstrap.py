@@ -12,6 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
 
+from infiniteprep.adapters.provider_fields import provider_dict, provider_dicts, provider_text
 from infiniteprep.config.settings import validate_endpoint_url
 
 OLLAMA_DEFAULT_BASE_URL: Final[str] = "http://127.0.0.1:11434"
@@ -20,7 +21,9 @@ OLLAMA_TAGS_URL: Final[str] = f"{OLLAMA_DEFAULT_BASE_URL}/api/tags"
 # The tags endpoint lives at the server root.
 OPENAI_PATH_SUFFIX: Final[str] = "/v1"
 OLLAMA_TAGS_TIMEOUT_SEC: Final[float] = 3.0
-MAX_TAGS_RESPONSE_BYTES: Final[int] = 1_048_576  # 1 MiB holds any local model list
+# A model list of a few hundred entries stays far below 1 MiB. Any local process can
+# answer on the tags port, so the read stops one byte past the cap.
+MAX_TAGS_RESPONSE_BYTES: Final[int] = 1_048_576
 
 
 def build_tags_url(base_url: str) -> str:
@@ -35,13 +38,14 @@ def build_tags_url(base_url: str) -> str:
 
 
 def parse_model_names(data: Any) -> list[str]:
-    """Return the model names in an /api/tags response, ignoring malformed entries."""
-    if not isinstance(data, dict):
-        return []
-    models = data.get("models")
-    if not isinstance(models, list):
-        return []
-    return [str(m["name"]) for m in models if isinstance(m, dict) and m.get("name")]
+    """Return the valid model names in an /api/tags response, ignoring malformed entries.
+
+    Any local process can answer on the tags port, so a name must pass the model reference
+    grammar before it reaches a caller. dict.fromkeys drops repeats and keeps order.
+    """
+    models = provider_dicts(provider_dict(data).get("models"))
+    names = (provider_text(model.get("name")) for model in models)
+    return list(dict.fromkeys(name for name in names if name and is_safe_model_reference(name)))
 
 
 # A model reference is [host/][namespace/]model:tag, e.g. hf.co/user/model:q4.

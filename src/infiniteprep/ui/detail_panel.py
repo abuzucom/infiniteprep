@@ -240,12 +240,17 @@ class DetailPanel(QWidget):
         # Tab moves through the edit box and the buttons of each row. With cell
         # navigation on, Tab returns focus to the table and skips the buttons.
         self.fields_table.setTabKeyNavigation(False)
+        # Edits go through the edit box of each row. A typed cell value was discarded.
+        self.fields_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.fields_table.setAccessibleName("Field proposals")
         root.addWidget(self.fields_table, stretch=FIELDS_TABLE_STRETCH)
 
         other_box = QGroupBox("Other Tags", self)
         other_layout = QVBoxLayout(other_box)
         self.other_tags_table.setHorizontalHeaderLabels(["Key", "Value"])
         self.other_tags_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.other_tags_table.setTabKeyNavigation(False)
+        self.other_tags_table.setAccessibleName("Other tags")
         self.other_tags_table.verticalHeader().setVisible(False)
         other_header = self.other_tags_table.horizontalHeader()
         other_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
@@ -255,6 +260,7 @@ class DetailPanel(QWidget):
 
         cand_box = QGroupBox("Candidate Releases & Analysis Evidence", self)
         cand_layout = QVBoxLayout(cand_box)
+        self.candidates_list.setAccessibleName("Candidate releases and analysis evidence")
         cand_layout.addWidget(self.candidates_list)
         root.addWidget(cand_box, stretch=CANDIDATE_BOX_STRETCH)
 
