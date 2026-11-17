@@ -5,13 +5,31 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.72.1] (2026-11-17)
+## [0.72.3] (2026-11-17)
+
+### Added
+
+- The new `tests/unit/test_keyboard_defaults.py` checks three keyboard paths (accessibility audit).
+  - Enter in the rename template field keeps the write preview open.
+  - Tab leaves the library table.
+  - Tab from a field edit box reaches the action buttons of the same row.
+  - The new `tests/unit/test_write_preview_enter_refresh.py` checks that Enter rebuilds the preview once with the typed template.
+  - The new `tests/unit/test_detail_panel_row_tab_order.py` checks that Tab visits Save, then Lock, in one field row.
+  - The version advances from 0.72.1 to 0.72.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ### Fixed
 
+- Enter in the rename template field of the write preview refreshes the preview. Enter applied the writes and closed the dialog before. Refresh Preview holds the default button role.
+- Tab leaves the library table in one press. Tab walked every cell before.
+- Tab from a field edit box in the detail panel reaches the Accept, Save, and Lock buttons of the same row. Tab returned focus to the table and skipped the buttons before.
+- Crafted tag data costs bounded time and memory in the tag parsers and the library table sort.
+  - An ID3 text frame decodes at most 4096 values and at most 16 MiB of text. A larger frame shows as a byte summary in Other Tags. The ID3v2.3 renderer rejects a tag that holds such a frame.
+  - An ID3 picture frame reads its description without a text split of the picture bytes.
+  - The Ogg reader checks the packet size with a running total. A packet near the 16 MiB cap needed billions of steps before.
+  - The library table sorts a text with a digit run above 4300 digits. Such a tag value stopped every table refresh before.
+  - The version advances from 0.72.0 to 0.72.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The library table sorts by Key and by Review Status when a row holds no value for the column (issue 288).
   - A file without a key and a file with a status outside the sort order join the unsorted group. The sort no longer raises.
-  - A very long run of digits in a text cell no longer raises during a sort.
 - An in-place transcode updates the library record of the file (issue 288).
   - The record takes the path, the SHA-256 hash, the size, and the format of the new file. A later tag write accepts the file.
   - A blank approved value no longer erases the tag on the transcoded copy. The transcoder and the tag write share one rule for approved values.
@@ -31,7 +49,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A file that processes after an earlier failure no longer keeps the old error message (issue 288).
   - `Repository.update_file_status` takes the new `clear_error` keyword and updates the row in one statement.
 - Six new test modules under `tests/unit/` cover these fixes.
-- The version advances from 0.72.0 to 0.72.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- The version advances from 0.72.2 to 0.72.3 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The change journal and the recovery prompt show local time.
   - Both tables showed the stored UTC text with microseconds and an offset. They now show the local date and time of this computer. Stored values stay unchanged.
   - A MusicBrainz release date yields a year only when it starts with four digits followed by the end or a hyphen. Any other shape yields no year.

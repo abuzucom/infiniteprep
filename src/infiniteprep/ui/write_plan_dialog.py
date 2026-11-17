@@ -57,6 +57,7 @@ class WritePlanDialog(QDialog):
         self.template_input = QLineEdit(default_template, self)
         self.table = QTableWidget(0, WRITE_PLAN_TABLE_COLUMNS, self)
         self.status_label = QLabel("", self)
+        self.refresh_btn = QPushButton("Refresh Preview", self)
         self.apply_btn = QPushButton("Apply Safe Writes", self)
         self.close_btn = QPushButton("Cancel", self)
 
@@ -69,9 +70,13 @@ class WritePlanDialog(QDialog):
         top_row = QHBoxLayout()
         top_row.addWidget(self.rename_checkbox)
         top_row.addWidget(self.template_input, stretch=1)
-        refresh_btn = QPushButton("Refresh Preview", self)
-        refresh_btn.clicked.connect(self.refresh_preview)
-        top_row.addWidget(refresh_btn)
+        self.refresh_btn.clicked.connect(self.refresh_preview)
+        # Enter activates the default button of a dialog. Refresh holds that role, so
+        # Enter in the template field updates the preview and never writes a file.
+        self.refresh_btn.setDefault(True)
+        self.apply_btn.setAutoDefault(False)
+        self.close_btn.setAutoDefault(False)
+        top_row.addWidget(self.refresh_btn)
         root.addLayout(top_row)
 
         self.table.setHorizontalHeaderLabels(

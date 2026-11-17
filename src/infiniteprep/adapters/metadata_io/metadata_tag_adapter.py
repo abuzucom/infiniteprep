@@ -49,6 +49,7 @@ from infiniteprep.adapters.metadata_io.id3v2 import (
     Id3FormatError,
     Id3Frame,
     Id3Tag,
+    decode_description,
     decode_language_text,
     decode_text_values,
     decode_txxx,
@@ -650,8 +651,8 @@ def _picture_fields(body: bytes) -> tuple[str, str]:
     """Return the MIME type and description of an APIC body, or empty strings when damaged.
 
     APIC holds an encoding byte, a Latin-1 MIME type with a terminator, and a picture type
-    byte, then a description in the frame encoding. The description and the rest split the
-    same way a TXXX body does, so decode_txxx reads it.
+    byte, then a description in the frame encoding. The picture bytes follow the description.
+    decode_description stops at the description, so the picture bytes never split as text.
     """
     mime_end = body.find(MIME_TERMINATOR, 1)
     if mime_end < 0:
@@ -659,7 +660,7 @@ def _picture_fields(body: bytes) -> tuple[str, str]:
     mime = body[1:mime_end].decode("latin-1")
     described = body[:1] + body[mime_end + 2 :]
     try:
-        return mime, decode_txxx(Id3Frame(PICTURE_FRAME, described))[0]
+        return mime, decode_description(described)
     except Id3FormatError:
         return mime, ""
 
