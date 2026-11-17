@@ -5,9 +5,12 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.72.2] (2026-11-17)
+## [0.72.3] (2026-11-17)
 
 ### Added
+
+- The new `tests/unit/test_destructive_action_guards.py` checks the guards in front of destructive UI actions (accessibility audit).
+  - The version advances from 0.72.2 to 0.72.3 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - The new `tests/unit/test_keyboard_defaults.py` checks three keyboard paths (accessibility audit).
   - Enter in the rename template field keeps the write preview open.
@@ -19,6 +22,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Enter in the USB export confirm dialog cancels the export. Enter confirmed the export before. Confirm Export takes an explicit click or Space.
+- Enter in the interrupted USB export prompt leaves the drive unchanged. Enter resumed the export before. Resume and Restore take an explicit click or Space.
+- Clean Up USB Recovery Journal asks before it deletes any entry. No is the default. The result shows in a message. The result showed only in a tooltip before.
+- Apply Safe Writes with no safe plan keeps the write preview open and names the reason. The preview closed without a word before.
 - Enter in the rename template field of the write preview refreshes the preview. Enter applied the writes and closed the dialog before. Refresh Preview holds the default button role.
 - Tab leaves the library table in one press. Tab walked every cell before.
 - Tab from a field edit box in the detail panel reaches the Accept, Save, and Lock buttons of the same row. Tab returned focus to the table and skipped the buttons before.

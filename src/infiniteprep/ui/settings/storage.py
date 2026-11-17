@@ -24,10 +24,17 @@ from infiniteprep.config.settings import (
     AppSettings,
 )
 from infiniteprep.services.usb.recovery import UsbRecoveryJournalStore
+from infiniteprep.ui.action_handlers import ask_plain_question, show_plain_message
 from infiniteprep.ui.settings.base import FormSettingsTab
 
 CLEANUP_BUTTON_LABEL: Final[str] = "Delete InfinitePrep Data..."
 RECOVERY_CLEANUP_BUTTON_LABEL: Final[str] = "Clean Up USB Recovery Journal..."
+RECOVERY_CLEANUP_TITLE: Final[str] = "Clean Up USB Recovery Journal"
+RECOVERY_CLEANUP_QUESTION: Final[str] = (
+    "Delete every unresolved USB recovery entry?\n\n"
+    "An interrupted USB export can no longer be resumed or restored after this. "
+    "This cannot be undone."
+)
 USB_RESERVE_PERCENT_DECIMALS: Final[int] = 1
 logger = logging.getLogger(__name__)
 
@@ -46,12 +53,17 @@ class StorageTab(FormSettingsTab):
         settings: AppSettings,
         cleanup_enabled: bool = True,
         parent: QWidget | None = None,
+        *,
+        journal_store: UsbRecoveryJournalStore | None = None,
     ) -> None:
         """Initialize the tab from the stored settings.
 
-        A false cleanup_enabled disables the cleanup button.
+        A false cleanup_enabled disables the cleanup button. journal_store names the
+        USB recovery journal the cleanup button clears. The default store uses the
+        application journal path.
         """
         super().__init__(parent)
+        self._journal_store = journal_store
         self.usb_reserve_percent_spin = QDoubleSpinBox(self)
         self.usb_reserve_percent_spin.setDecimals(USB_RESERVE_PERCENT_DECIMALS)
         self.usb_reserve_percent_spin.setRange(0.0, MAX_USB_RESERVE_PERCENT)
@@ -113,8 +125,23 @@ class StorageTab(FormSettingsTab):
         return count
 
     def _cleanup_usb_recovery_journal(self) -> None:
-        """Remove unresolved USB recovery journal entries manually (D193)."""
-        self.clean_usb_recovery_journal()
+        """Ask first, then remove unresolved USB recovery journal entries (D193).
+
+        The removal ends every resume and restore path for those exports, so it waits
+        for a Yes. The result shows in a message, since a tooltip never reaches a
+        keyboard or screen reader user.
+        """
+        if not ask_plain_question(self, RECOVERY_CLEANUP_TITLE, RECOVERY_CLEANUP_QUESTION):
+            return
+        count = self.clean_usb_recovery_journal(journal_store=self._journal_store)
+        if count is None:
+            return
+        show_plain_message(
+            self,
+            QMessageBox.Icon.Information,
+            RECOVERY_CLEANUP_TITLE,
+            f"Removed {count} unresolved USB recovery entry(s).",
+        )
 
     def apply_to(self, settings: AppSettings) -> None:
         """Copy USB reserve and recovery expiry inputs into settings."""

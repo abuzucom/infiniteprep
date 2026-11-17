@@ -26,6 +26,9 @@ from infiniteprep.services.write_service import PendingRecoveryError, WriteServi
 WRITE_PLAN_DIALOG_WIDTH: Final[int] = 980
 WRITE_PLAN_DIALOG_HEIGHT: Final[int] = 560
 WRITE_PLAN_TABLE_COLUMNS: Final[int] = 6
+NO_SAFE_PLANS_TEXT: Final[str] = (
+    "No file is ready for a safe write. Resolve the blocked rows, or close the preview."
+)
 
 
 class WritePlanDialog(QDialog):
@@ -148,13 +151,18 @@ class WritePlanDialog(QDialog):
         self.submit_plans(safe_plans)
 
     def execute_safe_writes(self) -> None:
-        """Apply or submit all safe plans in current_plans and accept the dialog."""
+        """Apply or submit all safe plans in current_plans and accept the dialog.
+
+        Without a safe plan, the dialog stays open and says why nothing was applied.
+        """
         safe_plans = [p for p in self.current_plans if p.is_safe_to_apply]
-        if safe_plans:
-            try:
-                self._apply_or_submit(safe_plans)
-            except PendingRecoveryError as exc:
-                # The dialog stays open, because no file changed.
-                QMessageBox.warning(self, "Writes Blocked", str(exc))
-                return
+        if not safe_plans:
+            self.status_label.setText(NO_SAFE_PLANS_TEXT)
+            return
+        try:
+            self._apply_or_submit(safe_plans)
+        except PendingRecoveryError as exc:
+            # The dialog stays open, because no file changed.
+            QMessageBox.warning(self, "Writes Blocked", str(exc))
+            return
         self.accept()
