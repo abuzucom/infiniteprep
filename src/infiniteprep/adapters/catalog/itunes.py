@@ -23,6 +23,7 @@ from infiniteprep.adapters.http_json import (
     fetch_json,
     log_lookup_failure,
 )
+from infiniteprep.adapters.provider_fields import require_payload_dict
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
 from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
@@ -225,7 +226,11 @@ class ItunesSearchAdapter:
         if payload is not None:
             return payload
         try:
-            payload = self.http_get_json(ITUNES_SEARCH_URL, params)
+            # The JSON object check runs before the cache write, so a malformed body
+            # never reaches the shared cache.
+            payload = require_payload_dict(
+                self.http_get_json(ITUNES_SEARCH_URL, params), "iTunes Search"
+            )
         except LOOKUP_ERRORS as error:
             log_lookup_failure("iTunes Search", error)
             return None

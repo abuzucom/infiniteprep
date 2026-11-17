@@ -280,6 +280,22 @@ def test_itunes_lookup_failure_returns_no_candidates(error: Exception) -> None:
     assert adapter.search(QUERY, file_id=FIRST_FILE_ID) == []
 
 
+@pytest.mark.parametrize("payload", [["unexpected"], "text", 7])
+def test_itunes_non_object_response_returns_nothing_and_is_not_cached(payload: Any) -> None:
+    requested: list[str] = []
+
+    def http_get_json(url: str, _params: dict[str, str]) -> Any:
+        requested.append(url)
+        return payload
+
+    adapter = ItunesSearchAdapter(
+        _repository(), http_get_json=http_get_json, limiter=RequestLimiter(0.0)
+    )
+    assert adapter.search(QUERY, file_id=FIRST_FILE_ID) == []
+    assert adapter.search(QUERY, file_id=FIRST_FILE_ID) == []
+    assert len(requested) == 2
+
+
 def test_failed_lookup_is_not_cached() -> None:
     repository = _repository()
     failing = MusicBrainzAdapter(
