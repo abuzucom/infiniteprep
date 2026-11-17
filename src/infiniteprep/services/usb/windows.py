@@ -43,7 +43,7 @@ POWERSHELL_EXE: Final[str] = _SYSTEM_ROOT + r"\System32\WindowsPowerShell\v1.0\p
 MAX_COMMAND_OUTPUT_BYTES: Final[int] = 8 * 1024 * 1024
 MAX_ERROR_TEXT_LEN: Final[int] = 4096
 # Windows PowerShell 5.1 writes redirected output in the OEM code page. The runner decodes
-# UTF-8, so a label such as "MÜZİK" read back as replacement characters. Each command sets
+# UTF-8, so a label with accented letters read back as replacement characters. Each command sets
 # the console output encoding to UTF-8 first.
 UTF8_OUTPUT_PREFIX: Final[str] = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
 DISK_COMMAND_TEXT: Final[str] = (
