@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.71.2] (2026-11-17)
+## [0.72.1] (2026-11-17)
 
 ### Fixed
 
@@ -14,8 +14,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - An ID3 picture frame reads its description without a text split of the picture bytes.
   - The Ogg reader checks the packet size with a running total. A packet near the 16 MiB cap needed billions of steps before.
   - The library table sorts a text with a digit run above 4300 digits. Such a tag value stopped every table refresh before.
-  - The version advances from 0.71.1 to 0.71.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
-
+  - The version advances from 0.72.0 to 0.72.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- The change journal and the recovery prompt show local time.
+  - Both tables showed the stored UTC text with microseconds and an offset. They now show the local date and time of this computer. Stored values stay unchanged.
+  - A MusicBrainz release date yields a year only when it starts with four digits followed by the end or a hyphen. Any other shape yields no year.
+  - `WriteService`, `MetadataTagAdapter`, and `SafeTranscoderAdapter` accept an optional `now_iso` clock. Each default is `utc_now_iso`, so every journal timestamp carries the fixed-width UTC form.
+  - The version advances from 0.71.1 to 0.72.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - File names and decoder warnings show as literal text in the detail panel and the transcode dialogs.
   - The detail panel header and warnings labels used the default Qt text format. A file name with HTML tags rendered as markup. Both labels now use the plain text format.
   - The transcode confirmation and the transcode summary now use the plain text message helpers. Both dialogs list file names from imported files.

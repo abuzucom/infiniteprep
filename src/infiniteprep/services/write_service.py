@@ -8,7 +8,6 @@ import shutil
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 
 from infiniteprep import storage_paths
@@ -21,7 +20,7 @@ from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
 )
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import OperationStatus, ReviewStatus
-from infiniteprep.domain.models import ChangeRecord
+from infiniteprep.domain.models import ChangeRecord, utc_now_iso
 from infiniteprep.domain.ports import FileWritePlan
 from infiniteprep.hashing import compute_sha256
 
@@ -56,8 +55,14 @@ class WriteService:
         tag_adapter: MetadataTagAdapter | None = None,
         backup_dir: Path | None = None,
         allowed_library_root: Path | None = None,
+        *,
+        now_iso: Callable[[], str] = utc_now_iso,
     ) -> None:
-        """Initialize WriteService with Repository, MetadataTagAdapter, and backup directory."""
+        """Initialize WriteService with Repository, MetadataTagAdapter, and backup directory.
+
+        now_iso supplies the journal timestamp of each write. A test passes a fixed clock.
+        """
+        self._now_iso = now_iso
         self.repo = repository
         self.tag_adapter = tag_adapter or MetadataTagAdapter()
         self.backup_dir = backup_dir or storage_paths.current().backup_dir
@@ -243,7 +248,7 @@ class WriteService:
             written_tags=plan.proposed_tags_to_write,
             backup_reference=str(backup_path),
             operation_status=OperationStatus.IN_PROGRESS,
-            timestamp=datetime.now(UTC).isoformat(),
+            timestamp=self._now_iso(),
             batch_operation_id=batch_operation_id,
             pre_write_hash=plan.expected_content_hash,
         )

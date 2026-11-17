@@ -14,7 +14,6 @@ import shutil
 import struct
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
@@ -69,7 +68,7 @@ from infiniteprep.domain.enums import (
     OperationStatus,
     parse_key_string,
 )
-from infiniteprep.domain.models import ApprovedField, ChangeRecord, FileAsset
+from infiniteprep.domain.models import ApprovedField, ChangeRecord, FileAsset, utc_now_iso
 from infiniteprep.domain.ports import FileWritePlan, TechnicalAndTagMetadata
 from infiniteprep.domain.tag_output import TagOutputFormat
 from infiniteprep.hashing import compute_sha256
@@ -624,9 +623,18 @@ class MetadataTagAdapter:
 
     supported_write_formats: frozenset[AudioFormat] = WRITE_SUPPORTED_FORMATS
 
-    def __init__(self, load_tag_output: Callable[[], TagOutputFormat] = TagOutputFormat) -> None:
-        """Initialize the adapter with the preferences to use for newly prepared writes."""
+    def __init__(
+        self,
+        load_tag_output: Callable[[], TagOutputFormat] = TagOutputFormat,
+        *,
+        now_iso: Callable[[], str] = utc_now_iso,
+    ) -> None:
+        """Initialize the adapter with the preferences to use for newly prepared writes.
+
+        now_iso supplies the timestamp of each completed write. A test passes a fixed clock.
+        """
         self._load_tag_output = load_tag_output
+        self._now_iso = now_iso
 
     def format_output_tags(self, tags: dict[str, str]) -> dict[str, str]:
         """Prepare key and BPM text for the destination file."""
@@ -906,7 +914,7 @@ class MetadataTagAdapter:
             written_tags=write_plan.proposed_tags_to_write,
             backup_reference=str(backup_path),
             operation_status=OperationStatus.COMPLETED,
-            timestamp=datetime.now(UTC).isoformat(),
+            timestamp=self._now_iso(),
         )
 
     def _write_verified_copy(
