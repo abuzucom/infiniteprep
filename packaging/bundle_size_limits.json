@@ -1,0 +1,6 @@
+{
+  "note": "Each record holds the measured unpacked size of the bundle on main in bytes. The limit is that size plus 50 percent. A record of null means the size was not measured yet.",
+  "linux": null,
+  "macos": null,
+  "windows": null
+}

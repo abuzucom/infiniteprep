@@ -492,6 +492,12 @@ Before it packages anything, `build-packages` runs `packaging/check_bundle.py` o
 python packaging/check_bundle.py dist/InfinitePrep linux
 ```
 
+After the packages exist, `build-packages` reports the unpacked size of each bundle, the size of every package, and the largest folders in the bundle. A bundle past the limit for its operating system fails the job. The limit is the measured size on `main` plus 50 percent. `packaging/bundle_size_limits.json` holds the measured size of each operating system. Raising a limit means changing that file in a deliberate change. To run the report locally, pass the operating system and the bundle folder:
+
+```bash
+python packaging/bundle_size.py check --os linux --bundle dist/InfinitePrep
+```
+
 Every bundle ships `LICENSE`, `NOTICE`, and `ICU-LICENSE.txt`. NOTICE also carries the written offer for the source code of the LGPL-2.1 components.
 
 ### Releases

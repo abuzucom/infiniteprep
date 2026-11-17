@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.74.1] (2026-11-17)
+## [0.74.2] (2026-11-17)
 
 ### Added
 
@@ -19,6 +19,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `tests/unit/test_write_preview_enter_refresh.py` checks that Enter rebuilds the preview once with the typed template.
   - The new `tests/unit/test_detail_panel_row_tab_order.py` checks that Tab visits Save, then Lock, in one field row.
   - The version advances from 0.72.1 to 0.72.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+
+- The bundle job reports the size of the built bundle, the size of every package, and the largest folders in the bundle (D354, issue 181).
+  - The new `packaging/bundle_size.py` measures the unpacked bundle, reads the limit, and writes a Markdown report and a JSON report.
+  - The new `packaging/bundle_size_limits.json` holds the measured size of each operating system on `main`. The limit is that size plus 50 percent.
+  - A bundle past the limit fails the job. A record of null means the size was not measured yet. The check then reports the sizes and passes.
+  - The new `tests/test_bundle_size.py` checks the measurement, the limit, the command, and the workflow wiring.
+  - The README documents the size report and the limits file.
+  - The version advances from 0.74.1 to 0.74.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ### Changed
 
