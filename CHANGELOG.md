@@ -65,7 +65,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The Beatport and ACRCloud stubs report unavailable with the reason. They reported available while every lookup returned nothing.
   - `OllamaBootstrapService` gains an optional `base_url` keyword. The model list follows the configured server. A server address that fails the endpoint rules lists no models.
   - `forget_all_credentials` attempts every key after a failed delete. It stopped at the first failure before.
-  - The new module `infiniteprep.adapters.http_json` holds the bounded HTTPS JSON fetch and the request limiter. `RequestLimiter` stays importable from the iTunes adapter.
+  - The new module `infiniteprep.adapters.http_json` holds the bounded HTTPS JSON fetch, the request limiter, and `cached_lookup`. The MusicBrainz, Discogs, and iTunes Search adapters run their cache check, fetch, JSON object check, and cache write through `cached_lookup`. `RequestLimiter` stays importable from the iTunes adapter.
   - The new `tests/unit/test_adapter_latent_defects.py` covers each change.
   - `test_discogs_never_caches_a_response_that_is_not_an_object` in `tests/unit/test_provider_and_llm_validation.py` checks for an empty result and a second request in place of a raised error. The repository owner approved this edit.
   - The version advances from 0.75.3 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.

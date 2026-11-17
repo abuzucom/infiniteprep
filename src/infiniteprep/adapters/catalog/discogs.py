@@ -11,11 +11,10 @@ from dataclasses import replace
 from typing import Any, Final
 
 from infiniteprep.adapters.http_json import (
-    LOOKUP_ERRORS,
     RequestLimiter,
     build_candidate_id,
+    cached_lookup,
     fetch_json,
-    log_lookup_failure,
 )
 from infiniteprep.adapters.provider_fields import (
     first_provider_text,
@@ -23,7 +22,6 @@ from infiniteprep.adapters.provider_fields import (
     provider_dicts,
     provider_text,
     provider_texts,
-    require_payload_dict,
 )
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
@@ -162,29 +160,16 @@ class DiscogsAdapter:
     def _cached_get(
         self, cache_key: str, url: str, params: dict[str, str]
     ) -> dict[str, Any] | None:
-        """Return the cached or fetched payload, or None after a failed lookup.
-
-        A network failure or a malformed response fails this lookup only. The
-        identification job continues with the other providers.
-        """
-        payload = self.repo.get_cached_response(cache_key)
-        if payload is not None:
-            return payload
-        self._respect_rate_limit()
-        try:
-            # The JSON object check runs before the cache write, so a malformed body
-            # never reaches the shared cache.
-            payload = require_payload_dict(self.http_get_json(url, params), "Discogs")
-        except LOOKUP_ERRORS as error:
-            log_lookup_failure("Discogs", error)
-            return None
-        self.repo.set_cached_response(
+        """Return the cached or fetched payload, or None after a failed lookup."""
+        return cached_lookup(
+            self.repo,
             cache_key=cache_key,
             provider=self.provider_name,
-            response_data=payload,
+            label="Discogs",
             ttl_seconds=DISCOGS_TTL_SEC,
+            fetch=lambda: self.http_get_json(url, params),
+            before_request=self._respect_rate_limit,
         )
-        return payload
 
     def _respect_rate_limit(self) -> None:
         """Throttle requests to respect Discogs 60 req/min rate limit."""

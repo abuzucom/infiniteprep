@@ -18,12 +18,10 @@ from typing import Any, Final
 
 from infiniteprep.adapters import http_json
 from infiniteprep.adapters.http_json import (
-    LOOKUP_ERRORS,
     build_candidate_id,
+    cached_lookup,
     fetch_json,
-    log_lookup_failure,
 )
-from infiniteprep.adapters.provider_fields import require_payload_dict
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
 from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
@@ -222,25 +220,15 @@ class ItunesSearchAdapter:
         response while this one waited, so the cache check runs again first. A
         failed lookup fails this file only. The job continues.
         """
-        payload = self.repo.get_cached_response(cache_key)
-        if payload is not None:
-            return payload
-        try:
-            # The JSON object check runs before the cache write, so a malformed body
-            # never reaches the shared cache.
-            payload = require_payload_dict(
-                self.http_get_json(ITUNES_SEARCH_URL, params), "iTunes Search"
-            )
-        except LOOKUP_ERRORS as error:
-            log_lookup_failure("iTunes Search", error)
-            return None
-        self.repo.set_cached_response(
+        return cached_lookup(
+            self.repo,
             cache_key=cache_key,
             provider=self.provider_name,
-            response_data=_cacheable_payload(payload),
+            label="iTunes Search",
             ttl_seconds=ITUNES_CACHE_TTL_SEC,
+            fetch=lambda: self.http_get_json(ITUNES_SEARCH_URL, params),
+            cache_form=_cacheable_payload,
         )
-        return payload
 
     def _search_term(self, query: MetadataSearchQuery) -> str:
         """Return the search term built from the artist and the title."""

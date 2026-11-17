@@ -14,7 +14,9 @@ import urllib.parse
 import urllib.request
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from typing import Any, Final
+from typing import Any, Final, Protocol
+
+from infiniteprep.adapters.provider_fields import require_payload_dict
 
 MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
 DEFAULT_REQUEST_TIMEOUT_SEC: Final[float] = 15.0
@@ -49,6 +51,56 @@ def log_lookup_failure(provider: str, error: Exception) -> str:
     warning = f"{provider} lookup failed ({type(error).__name__}); the provider returned no result."
     logger.warning(warning)
     return warning
+
+
+class ResponseCache(Protocol):
+    """The provider response cache that the Repository offers."""
+
+    def get_cached_response(self, cache_key: str) -> dict[str, Any] | None:
+        """Return the cached response, or None when absent or expired."""
+        ...
+
+    def set_cached_response(
+        self, *, cache_key: str, provider: str, response_data: dict[str, Any], ttl_seconds: int
+    ) -> None:
+        """Store a response under cache_key for ttl_seconds."""
+        ...
+
+
+def cached_lookup(
+    cache: ResponseCache,
+    *,
+    cache_key: str,
+    provider: str,
+    label: str,
+    ttl_seconds: int,
+    fetch: Callable[[], object],
+    before_request: Callable[[], None] | None = None,
+    cache_form: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """Return the cached or fetched JSON object, or None after a failed lookup.
+
+    Every online adapter runs this one sequence: cache check, request pacing,
+    fetch, JSON object check, and cache write. A network failure or a malformed
+    response fails this lookup only, is logged under label, and stays out of the
+    cache. before_request runs only when the cache misses. cache_form selects the
+    part of the response that the cache keeps. The caller gets the full response.
+    """
+    cached = cache.get_cached_response(cache_key)
+    if cached is not None:
+        return cached
+    if before_request is not None:
+        before_request()
+    try:
+        payload = require_payload_dict(fetch(), label)
+    except LOOKUP_ERRORS as error:
+        log_lookup_failure(label, error)
+        return None
+    stored = cache_form(payload) if cache_form is not None else payload
+    cache.set_cached_response(
+        cache_key=cache_key, provider=provider, response_data=stored, ttl_seconds=ttl_seconds
+    )
+    return payload
 
 
 class RequestLimiter:
