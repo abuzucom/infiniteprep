@@ -5,6 +5,15 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.71.1] (2026-11-17)
+
+### Fixed
+
+- File names and decoder warnings show as literal text in the detail panel and the transcode dialogs.
+  - The detail panel header and warnings labels used the default Qt text format. A file name with HTML tags rendered as markup. Both labels now use the plain text format.
+  - The transcode confirmation and the transcode summary now use the plain text message helpers. Both dialogs list file names from imported files.
+  - The version advances from 0.71.0 to 0.71.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+
 ## [0.71.0] (2026-11-16)
 
 ### Added
