@@ -11,6 +11,13 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any, Final
 
+from infiniteprep.adapters.provider_fields import (
+    provider_dict,
+    provider_dicts,
+    provider_number,
+    provider_text,
+    require_payload_dict,
+)
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
 from infiniteprep.domain.models import CandidateMatch, ReleaseDetails
@@ -18,6 +25,7 @@ from infiniteprep.domain.ports import MetadataSearchQuery
 from infiniteprep.user_agent import USER_AGENT
 
 MB_BASE_URL: Final[str] = "https://musicbrainz.org/ws/2"
+MS_PER_SECOND: Final[float] = 1000.0
 MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
 MB_USER_AGENT: Final[str] = USER_AGENT
 MB_CACHE_TTL_SEC: Final[int] = 86400
@@ -83,9 +91,12 @@ class MusicBrainzAdapter:
         payload = self.repo.get_cached_response(cache_key)
         if payload is None:
             self._respect_rate_limit()
-            payload = self.http_get_json(
-                f"{MB_BASE_URL}/recording",
-                {"query": lucene_query, "fmt": "json", "limit": "10"},
+            payload = require_payload_dict(
+                self.http_get_json(
+                    f"{MB_BASE_URL}/recording",
+                    {"query": lucene_query, "fmt": "json", "limit": "10"},
+                ),
+                "MusicBrainz",
             )
             self.repo.set_cached_response(
                 cache_key=cache_key,
@@ -93,7 +104,8 @@ class MusicBrainzAdapter:
                 response_data=payload,
                 ttl_seconds=MB_CACHE_TTL_SEC,
             )
-        return self._parse_recording_list(payload.get("recordings", []), file_id=file_id)
+        recordings = provider_dicts(provider_dict(payload).get("recordings"))
+        return self._parse_recording_list(recordings, file_id=file_id)
 
     def fetch(
         self, entity_id: str, entity_type: EntityType = EntityType.RELEASE, file_id: str = ""
@@ -106,9 +118,12 @@ class MusicBrainzAdapter:
         payload = self.repo.get_cached_response(cache_key)
         if payload is None:
             self._respect_rate_limit()
-            payload = self.http_get_json(
-                f"{MB_BASE_URL}/{endpoint}/{entity_id}",
-                {"inc": "artists+releases+labels+media", "fmt": "json"},
+            payload = require_payload_dict(
+                self.http_get_json(
+                    f"{MB_BASE_URL}/{endpoint}/{entity_id}",
+                    {"inc": "artists+releases+labels+media", "fmt": "json"},
+                ),
+                "MusicBrainz",
             )
             self.repo.set_cached_response(
                 cache_key=cache_key,
@@ -117,7 +132,7 @@ class MusicBrainzAdapter:
                 ttl_seconds=MB_CACHE_TTL_SEC,
             )
         if entity_type == EntityType.RECORDING:
-            return self._parse_recording_list([payload], file_id=file_id)
+            return self._parse_recording_list([provider_dict(payload)], file_id=file_id)
         return []
 
     def _respect_rate_limit(self) -> None:
@@ -140,13 +155,13 @@ class MusicBrainzAdapter:
 
     def _candidates_from_recording(self, rec: dict[str, Any], file_id: str) -> list[CandidateMatch]:
         """Extract CandidateMatch objects from a single MusicBrainz recording entry."""
-        rec_id = str(rec.get("id", "unknown"))
-        title = str(rec.get("title", ""))
-        artists = [a.get("name", "") for a in rec.get("artist-credit", []) if isinstance(a, dict)]
+        rec_id = provider_text(rec.get("id")) or "unknown"
+        title = provider_text(rec.get("title")) or ""
+        artists = [provider_text(a.get("name")) for a in provider_dicts(rec.get("artist-credit"))]
         artist_str = ", ".join(a for a in artists if a) or None
-        dur_ms = rec.get("length")
-        duration = float(dur_ms) / 1000.0 if dur_ms else None
-        releases = rec.get("releases", [])
+        dur_ms = provider_number(rec.get("length"))
+        duration = dur_ms / MS_PER_SECOND if dur_ms else None
+        releases = provider_dicts(rec.get("releases"))
         if not releases:
             return [
                 CandidateMatch(
@@ -185,13 +200,13 @@ class MusicBrainzAdapter:
         file_id: str,
     ) -> CandidateMatch:
         """Build a Release CandidateMatch from a MusicBrainz release sub-object."""
-        rel_id = str(rel.get("id", rec_id))
-        lbl_info = (rel.get("label-info") or [{}])[0]
-        label_name = (lbl_info.get("label") or {}).get("name")
-        cat_no = lbl_info.get("catalog-number")
-        media = (rel.get("media") or [{}])[0]
-        tracks = media.get("track") or [{}]
-        track_num = str(tracks[0].get("number", "")) if tracks else None
+        rel_id = provider_text(rel.get("id")) or rec_id
+        lbl_info = (provider_dicts(rel.get("label-info")) or [{}])[0]
+        label_name = provider_text(provider_dict(lbl_info.get("label")).get("name"))
+        cat_no = provider_text(lbl_info.get("catalog-number"))
+        media = (provider_dicts(rel.get("media")) or [{}])[0]
+        tracks = provider_dicts(media.get("track"))
+        track_num = provider_text(tracks[0].get("number")) if tracks else None
         return CandidateMatch(
             id=f"mb-rel-{rel_id}",
             file_id=file_id,
@@ -202,14 +217,14 @@ class MusicBrainzAdapter:
             title=title,
             duration=duration,
             release_details=ReleaseDetails(
-                release_title=rel.get("title"),
+                release_title=provider_text(rel.get("title")),
                 label=label_name,
                 catalog_number=cat_no,
-                country=rel.get("country"),
-                year=extract_release_year(rel.get("date")),
+                country=provider_text(rel.get("country")),
+                year=extract_release_year(provider_text(rel.get("date"))),
                 track_number=track_num,
                 vinyl_position=track_num,
-                format_description=media.get("format"),
+                format_description=provider_text(media.get("format")),
             ),
             match_evidence={"recording_id": rec_id, "release_id": rel_id},
             match_score=0.88,

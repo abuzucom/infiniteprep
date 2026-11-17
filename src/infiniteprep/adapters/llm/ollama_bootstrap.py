@@ -12,7 +12,11 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
+from infiniteprep.adapters.provider_fields import provider_dict, provider_dicts, provider_text
+
 OLLAMA_TAGS_URL: Final[str] = "http://127.0.0.1:11434/api/tags"
+# A model list of a few hundred entries stays far below 1 MiB.
+MAX_TAGS_RESPONSE_BYTES: Final[int] = 1_048_576
 # A model reference is [host/][namespace/]model:tag, e.g. hf.co/user/model:q4.
 # Each slash-separated segment and the tag must start with a letter or digit.
 # The CLI parses an argument as an option only when it starts with a hyphen.
@@ -57,10 +61,20 @@ class OllamaBootstrapService:
         req = urllib.request.Request(OLLAMA_TAGS_URL)
         try:
             with urllib.request.urlopen(req, timeout=3) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                return [str(m.get("name", "")) for m in data.get("models", []) if m.get("name")]
-        except (OSError, ValueError):
+                # Any local process can answer on this port. The read stops one byte past the cap.
+                raw = resp.read(MAX_TAGS_RESPONSE_BYTES + 1)
+        except OSError:
             return []
+        if len(raw) > MAX_TAGS_RESPONSE_BYTES:
+            return []
+        try:
+            data = provider_dict(json.loads(raw.decode("utf-8")))
+        except ValueError:
+            return []
+        # Any local process can answer on this port, so a name must pass the model reference
+        # grammar before it reaches a caller. dict.fromkeys drops repeats and keeps order.
+        names = (provider_text(model.get("name")) for model in provider_dicts(data.get("models")))
+        return list(dict.fromkeys(name for name in names if name and is_safe_model_reference(name)))
 
     def install_ollama(self, *, user_consented: bool) -> str:
         """Install Ollama using official OS package manager only when user_consented is True."""
