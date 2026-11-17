@@ -14,7 +14,7 @@ from typing import Any
 import pytest
 from PySide6.QtCore import QMimeData, QPoint, QPointF, Qt
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QMenu
+from PySide6.QtWidgets import QApplication, QMenu, QSplitter
 
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.db.connection import DatabaseManager
@@ -32,6 +32,11 @@ TRACK_SECONDS = 2.0
 SEEK_SECONDS = 0.5
 FIRST_NAME = "first.wav"
 SECOND_NAME = "second.wav"
+WINDOW_WIDTH = 1360
+WINDOW_HEIGHT = 820
+TABLE_HEIGHT_PX = 700
+PANEL_HEIGHT_PX = 100
+PANEL_MINIMUM_HEIGHT_PX = 40
 
 
 @dataclass
@@ -84,6 +89,28 @@ def row_for(library: Library, name: str) -> int:
         if table.item(row, 0).text() == name:
             return row
     raise AssertionError(f"The library table has no row for {name}.")
+
+
+def empty_position(library: Library) -> QPoint:
+    """Return a viewport point that rests on no row."""
+    window = library.window
+    window.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
+    window.show()
+    # The detail panel claims the space of a window that never grew. A shorter
+    # panel leaves empty table space under the last row.
+    window.detail_panel.setMinimumHeight(PANEL_MINIMUM_HEIGHT_PX)
+    splitter = window.findChild(QSplitter)
+    if splitter is not None:
+        splitter.setSizes([TABLE_HEIGHT_PX, PANEL_HEIGHT_PX])
+    QApplication.processEvents()
+    table = window.file_table
+    viewport = table.viewport()
+    for x_coord in (5, max(0, viewport.width() - 5)):
+        for y_coord in range(viewport.height() - 1, 0, -20):
+            point = QPoint(x_coord, y_coord)
+            if not table.indexAt(point).isValid():
+                return point
+    raise AssertionError("The library table covers its whole viewport.")
 
 
 def select_row(library: Library, name: str) -> None:
@@ -205,6 +232,25 @@ def test_the_context_menu_play_item_loads_and_plays_the_row(
     actions[0].trigger()
     assert panel.audio_player.current_file_path == library.second_path
     assert panel.audio_player.play_btn.text() == "Pause"
+
+
+def test_a_context_menu_outside_a_row_opens_nothing(
+    library: Library, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A right-click on empty table space opens no menu and plays nothing."""
+    panel = library.window.detail_panel
+    menus: list[QMenu] = []
+
+    def capture(menu: QMenu, position: QPoint) -> None:
+        menus.append(menu)
+
+    monkeypatch.setattr(library.window, "_exec_context_menu", capture)
+    select_row(library, FIRST_NAME)
+
+    library.window.file_table.customContextMenuRequested.emit(empty_position(library))
+
+    assert menus == []
+    assert panel.audio_player.current_file_path is None
 
 
 def test_a_double_click_loads_and_plays_the_row(library: Library) -> None:

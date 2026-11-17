@@ -771,14 +771,16 @@ class MainWindow(QMainWindow):
         """Open the context menu of the row under the pointer.
 
         The right-click selects the row first, so the menu acts on the row the
-        pointer rests on.
+        pointer rests on. The action takes its file ID from that row. A click
+        outside every row opens no menu, so the action never targets another row.
         """
         index = self.file_table.indexAt(position)
-        if index.isValid():
-            self.file_table.selectRow(index.row())
-        if self._selected_file_id is None:
+        if not index.isValid():
             return
-        file_id = self._selected_file_id
+        file_id = self._file_id_for_row(index.row())
+        if file_id is None:
+            return
+        self.file_table.selectRow(index.row())
         menu = QMenu(self.file_table)
         play_action = menu.addAction(PLAY_MENU_ITEM_LABEL)
         play_action.triggered.connect(lambda: self.detail_panel.load_and_play_file_asset(file_id))

@@ -21,7 +21,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A row click updates the detail panel only. The player keeps its track, its position, and its play state until an explicit load.
   - A `Play Selected` button in the detail panel header loads and plays the selected file.
   - `Ctrl+Enter` on the library table loads and plays the selected file.
-  - A `Play` item in the library row context menu loads and plays the row under the pointer.
+  - A `Play` item in the library row context menu loads and plays the row under the pointer. A right-click outside a row opens no menu.
   - A double-click on a library row loads and plays that row.
   - The player `Play` button loads the selection when the selection differs from the loaded track.
   - A library row dragged onto the waveform loads that track paused at the start. A drop while a track plays asks first. `Cancel` keeps the playing track and its position.
