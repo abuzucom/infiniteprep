@@ -89,15 +89,19 @@ def _extract_page_packets(
 ) -> None:
     """Consume lacing entries and body slices, appending completed packets."""
     body_pos = 0
+    # A running total keeps the size check linear. A packet near the cap spans tens of
+    # thousands of segments, and a fresh sum per segment costs the square of that count.
+    pending_size = sum(len(chunk) for chunk in pending)
     for seg_len in lacing:
         pending.append(body[body_pos : body_pos + seg_len])
         body_pos += seg_len
-        current_size = sum(len(chunk) for chunk in pending)
-        if current_size > MAX_PACKET_SIZE:
+        pending_size += seg_len
+        if pending_size > MAX_PACKET_SIZE:
             raise OggFormatError(f"Packet size exceeds {MAX_PACKET_SIZE} bytes.")
         if seg_len < 255:
             packets.append(b"".join(pending))
             pending.clear()
+            pending_size = 0
 
 
 def _validate_continuation(flags: int, has_pending: bool) -> None:
