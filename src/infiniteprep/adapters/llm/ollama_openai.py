@@ -8,7 +8,11 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any, Final
 
-from infiniteprep.adapters.llm.validator import ClosedWorldValidator
+from infiniteprep.adapters.llm.validator import (
+    ClosedWorldValidator,
+    find_candidate,
+    normalize_candidate_value,
+)
 from infiniteprep.config.settings import validate_endpoint_url
 
 logger = logging.getLogger(__name__)
@@ -16,6 +20,22 @@ logger = logging.getLogger(__name__)
 DEFAULT_OLLAMA_MODEL: Final[str] = "qwen2.5:3b"
 RECOMMENDED_MODELS: Final[tuple[str, ...]] = ("qwen2.5:3b", "qwen2.5:7b", "llama3.2:3b")
 MAX_LLM_RESPONSE_BYTES: Final[int] = 262_144
+# The rationale is model text shown to a person. A short explanation fits well inside this.
+MAX_RATIONALE_CHARS: Final[int] = 500
+DEFAULT_RATIONALE: Final[str] = "Validated LLM arbitration."
+
+
+def bounded_rationale(value: object) -> str:
+    """Return the model rationale as printable text within MAX_RATIONALE_CHARS.
+
+    A missing or non-string rationale reads as the default text.
+    """
+    if not isinstance(value, str):
+        return DEFAULT_RATIONALE
+    head = value[: MAX_RATIONALE_CHARS * 2]
+    cleaned = "".join(ch if ch.isprintable() else " " for ch in head).strip()
+    return cleaned[:MAX_RATIONALE_CHARS] or DEFAULT_RATIONALE
+
 
 SYSTEM_PROMPT: Final[str] = (
     "You are a strict closed-world DJ music metadata arbitrator. "
@@ -79,11 +99,15 @@ class OllamaOpenAIReasoningAdapter:
             raw_resp = self.http_post_json(f"{self.base_url}/chat/completions", body)
             parsed = self._extract_json_message(raw_resp)
         except Exception as exc:
-            logger.warning("LLM arbitration request failed: %s", exc)
+            # The exception text can quote the response body, so only the class name leaves.
+            logger.warning("LLM arbitration request failed: %s", exc.__class__.__name__)
             return {
                 "selected_candidate_id": None,
                 "proposed_value": None,
-                "rationale": f"LLM request failed ({exc}); falling back to deterministic scoring.",
+                "rationale": (
+                    f"LLM request failed ({exc.__class__.__name__}); "
+                    "falling back to deterministic scoring."
+                ),
             }
 
         is_valid, err_msg = self.validator.validate_response(parsed, allowed)
@@ -93,10 +117,36 @@ class OllamaOpenAIReasoningAdapter:
                 "proposed_value": None,
                 "rationale": err_msg or "Discarded hallucinated LLM output.",
             }
+        return self._validated_result(parsed, allowed)
+
+    def _validated_result(
+        self, parsed: dict[str, Any], allowed: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        """Return the candidate's own ID and value, never the model's spelling of them.
+
+        The validator has matched the model output to one candidate. Its stored ID and value
+        are the trusted copies. The rationale stays model text, cut to plain bounded text.
+        """
+        selected = parsed.get("selected_candidate_id")
+        candidate = find_candidate(selected, allowed) if selected is not None else None
+        proposed = parsed.get("proposed_value")
+        if candidate is not None and proposed is not None:
+            proposed = candidate.get("value")
+        elif candidate is None and proposed is not None:
+            proposed = next(
+                (
+                    c.get("value")
+                    for c in allowed
+                    if c.get("value") is not None
+                    and normalize_candidate_value(c.get("value"))
+                    == normalize_candidate_value(proposed)
+                ),
+                None,
+            )
         return {
-            "selected_candidate_id": parsed.get("selected_candidate_id"),
-            "proposed_value": parsed.get("proposed_value"),
-            "rationale": str(parsed.get("rationale", "Validated LLM arbitration.")),
+            "selected_candidate_id": candidate.get("id") if candidate is not None else None,
+            "proposed_value": proposed,
+            "rationale": bounded_rationale(parsed.get("rationale")),
         }
 
     def _extract_json_message(self, raw_resp: dict[str, Any]) -> dict[str, Any]:

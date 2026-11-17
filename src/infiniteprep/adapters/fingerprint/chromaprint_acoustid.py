@@ -12,6 +12,13 @@ from pathlib import Path
 from typing import Any, Final
 
 from infiniteprep.adapters.fingerprint.fpcalc_bootstrap import FpcalcBootstrapService
+from infiniteprep.adapters.provider_fields import (
+    provider_dict,
+    provider_dicts,
+    provider_number,
+    provider_text,
+    require_payload_dict,
+)
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.ports import FingerprintMatchItem, FingerprintResult
 from infiniteprep.user_agent import USER_AGENT
@@ -114,7 +121,7 @@ class ChromaprintAcoustIDAdapter:
             "duration": str(max(1, round(duration))),
             "fingerprint": fingerprint,
         }
-        response = self.http_get_json(ACOUSTID_API_URL, params)
+        response = require_payload_dict(self.http_get_json(ACOUSTID_API_URL, params), "AcoustID")
         self.repo.set_cached_response(
             cache_key=cache_key,
             provider=self.provider_name,
@@ -126,10 +133,12 @@ class ChromaprintAcoustIDAdapter:
     def _parse_acoustid_results(self, payload: dict[str, Any]) -> list[FingerprintMatchItem]:
         """Convert AcoustID JSON results into FingerprintMatchItem domain objects."""
         items: list[FingerprintMatchItem] = []
-        for res in payload.get("results", []):
-            score = float(res.get("score", 0.0))
-            acid_id = str(res.get("id", ""))
-            for rec in res.get("recordings", []):
+        for res in provider_dicts(provider_dict(payload).get("results")):
+            # AcoustID scores lie in [0, 1]. A value outside that range reads as no confidence.
+            score = provider_number(res.get("score")) or 0.0
+            score = score if score <= 1.0 else 0.0
+            acid_id = provider_text(res.get("id")) or ""
+            for rec in provider_dicts(res.get("recordings")):
                 items.append(self._build_match_item(acid_id, score, rec))
         return items
 
@@ -137,16 +146,18 @@ class ChromaprintAcoustIDAdapter:
         self, acid_id: str, score: float, rec: dict[str, Any]
     ) -> FingerprintMatchItem:
         """Build a single FingerprintMatchItem from an AcoustID recording dictionary."""
-        rec_id = str(rec.get("id", ""))
-        artists = [a.get("name", "") for a in rec.get("artists", []) if a.get("name")]
-        rgs = [rg.get("id", "") for rg in rec.get("releasegroups", []) if rg.get("id")]
+        rec_id = provider_text(rec.get("id")) or ""
+        names = (provider_text(a.get("name")) for a in provider_dicts(rec.get("artists")))
+        artists = [name for name in names if name]
+        group_ids = (provider_text(rg.get("id")) for rg in provider_dicts(rec.get("releasegroups")))
+        rgs = [group_id for group_id in group_ids if group_id]
         return FingerprintMatchItem(
             fingerprint_id=acid_id,
             confidence=score,
             recording_ids=[rec_id] if rec_id else [],
             artist=", ".join(artists) if artists else None,
-            title=rec.get("title"),
-            duration=float(rec["duration"]) if "duration" in rec else None,
+            title=provider_text(rec.get("title")),
+            duration=provider_number(rec.get("duration")),
             release_group_ids=rgs,
             raw_evidence={"acoustid_id": acid_id, "recording": rec},
         )
