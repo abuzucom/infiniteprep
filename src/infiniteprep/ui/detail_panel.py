@@ -333,7 +333,7 @@ class DetailPanel(QWidget):
 
         self.header_label.setText(
             f"File: {Path(asset.current_path).name} | Format: {asset.format} | "
-            f"Write Supported: {asset.is_write_supported}"
+            f"Write Supported: {'Yes' if asset.is_write_supported else 'No'}"
         )
         self._populate_warnings(asset)
         self._load_audio_if_changed(asset)

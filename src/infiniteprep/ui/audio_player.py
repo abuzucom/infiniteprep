@@ -27,7 +27,7 @@ from infiniteprep.config.settings import (
     SUPPORTED_WAVEFORM_ZOOM_SECONDS,
     SettingsManager,
 )
-from infiniteprep.ui.accessible_names import name_combo_box
+from infiniteprep.ui.accessible_names import announce, name_combo_box
 from infiniteprep.ui.time_format import split_time_seconds
 
 logger = logging.getLogger(__name__)
@@ -599,8 +599,9 @@ class AudioPreviewWidget(QWidget):
             self.player.playbackStateChanged.connect(self._on_playback_state_changed)
 
     def show_status(self, text: str) -> None:
-        """Show a plain-text playback status message, or clear it with an empty string."""
+        """Show and announce a plain-text playback status, or clear it with an empty string."""
         self.status_label.setText(text)
+        announce(self.status_label, text)
 
     def _on_player_error(self, _error: QMediaPlayer.Error, error_string: str) -> None:
         """Report a playback failure and return the transport to its stopped state."""
@@ -677,8 +678,10 @@ class AudioPreviewWidget(QWidget):
         self.analysis_status_label.setText("Analyzing waveform...")
 
     def show_analysis_failure(self, message: str) -> None:
-        """Report analysis failure while retaining the current overview."""
-        self.analysis_status_label.setText(f"Spectrum analysis failed: {message}")
+        """Report and announce analysis failure while retaining the current overview."""
+        text = f"Spectrum analysis failed: {message}"
+        self.analysis_status_label.setText(text)
+        announce(self.analysis_status_label, text)
 
     def show_analysis_complete(self) -> None:
         """Clear analysis progress without changing playback status."""

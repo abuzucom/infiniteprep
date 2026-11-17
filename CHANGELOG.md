@@ -68,7 +68,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new module `infiniteprep.adapters.http_json` holds the bounded HTTPS JSON fetch and the request limiter. `RequestLimiter` stays importable from the iTunes adapter.
   - The new `tests/unit/test_adapter_latent_defects.py` covers each change.
   - `test_discogs_never_caches_a_response_that_is_not_an_object` in `tests/unit/test_provider_and_llm_validation.py` checks for an empty result and a second request in place of a raised error. The repository owner approved this edit.
-  - The version advances from 0.75.2 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.75.3 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- Status changes reach screen readers, and toolbar actions say what they did (accessibility audit).
+  - A playback status, a spectrum analysis failure, a finished batch, and the write preview status each raise a screen reader announcement. A label update alone was silent before. The new `announce` helper in `ui/accessible_names.py` sends them.
+  - Identify & Analyze, Bulk Approve, Preview & Apply Writes, Transcode, and Export say why they did nothing when no file is visible. Each ended without a word before.
+  - Bulk Approve reports how many fields it approved.
+  - The library status column shows labels such as "Ready to Write" instead of stored values such as `ready_to_write`. The detail header shows Yes or No for write support instead of True or False.
+  - The new `tests/unit/test_status_feedback.py` covers the announcements, the empty library messages, the approved count, and the labels.
+  - The version advances from 0.75.2 to 0.75.3 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Warning text and the waveform reach WCAG contrast minimums (accessibility audit).
   - The detail panel warnings use a dark amber on a light theme and a light amber on a dark theme. The fixed amber read at about 3:1 on a light theme. Each choice reaches 4.5:1, and a theme switch picks the amber again.
   - Unplayed waveform bars use gray 500. Gray 600 read at 2.3:1 on the waveform background. The bars now reach 3:1.

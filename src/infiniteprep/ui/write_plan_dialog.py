@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from infiniteprep.domain.ports import FileWritePlan
 from infiniteprep.services.write_service import PendingRecoveryError, WriteService
+from infiniteprep.ui.accessible_names import announce
 
 WRITE_PLAN_DIALOG_WIDTH: Final[int] = 980
 WRITE_PLAN_DIALOG_HEIGHT: Final[int] = 560
@@ -123,7 +124,7 @@ class WritePlanDialog(QDialog):
         for idx, plan in enumerate(self.current_plans):
             self._populate_plan_row(idx, plan)
         safe_count = sum(1 for p in self.current_plans if p.is_safe_to_apply)
-        self.status_label.setText(
+        self._show_status(
             f"{safe_count} of {len(self.current_plans)} files ready for safe backed-up write."
         )
 
@@ -155,6 +156,11 @@ class WritePlanDialog(QDialog):
         self.write_service.ensure_no_pending_recovery()
         self.submit_plans(safe_plans)
 
+    def _show_status(self, text: str) -> None:
+        """Show and announce the preview status, so a screen reader hears each change."""
+        self.status_label.setText(text)
+        announce(self.status_label, text)
+
     def execute_safe_writes(self) -> None:
         """Apply or submit all safe plans in current_plans and accept the dialog.
 
@@ -162,7 +168,7 @@ class WritePlanDialog(QDialog):
         """
         safe_plans = [p for p in self.current_plans if p.is_safe_to_apply]
         if not safe_plans:
-            self.status_label.setText(NO_SAFE_PLANS_TEXT)
+            self._show_status(NO_SAFE_PLANS_TEXT)
             return
         try:
             self._apply_or_submit(safe_plans)
