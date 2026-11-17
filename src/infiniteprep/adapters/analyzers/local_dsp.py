@@ -270,16 +270,33 @@ def _decode_mono_into_buffer(audio_reference: Path, frame_count: int) -> np.ndar
     for chunk in _mono_blocks(audio_reference, frame_count):
         mono[filled : filled + chunk.size] = chunk
         filled += chunk.size
-    if filled == frame_count:
-        return mono
-    # The header declared more frames than the stream holds. The copy releases the rest.
-    return mono[:filled].copy()
+    if filled < frame_count:
+        # The header declared more frames than the stream holds. An in-place shrink releases
+        # the rest without a second copy of the decoded frames.
+        mono.resize(filled, refcheck=False)
+    return mono
+
+
+def _count_stream_frames(audio_reference: Path, frame_limit: int) -> int:
+    """Count the frames a stream holds, up to frame_limit, without keeping decoded samples."""
+    counted = 0
+    for block in sf.blocks(
+        str(audio_reference), blocksize=DSP_BLOCK_FRAMES, dtype="float32", always_2d=True
+    ):
+        counted += int(block.shape[0])
+        if counted >= frame_limit:
+            return frame_limit
+    return counted
 
 
 def _decode_mono_chunks(audio_reference: Path, frame_limit: int) -> np.ndarray:
-    """Decode a stream of unknown length. The join holds the mono mix twice for a moment."""
-    chunks = list(_mono_blocks(audio_reference, frame_limit))
-    return np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float64)
+    """Decode a stream of unknown length into one buffer of its counted length.
+
+    A first pass counts the frames and keeps no samples. The second pass fills one buffer.
+    The stream decodes twice, and the mono mix exists only once.
+    """
+    frame_count = _count_stream_frames(audio_reference, frame_limit)
+    return _decode_mono_into_buffer(audio_reference, frame_count)
 
 
 class LocalDspAnalyzer:
