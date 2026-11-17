@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QCloseEvent, QPalette
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -42,6 +42,7 @@ from infiniteprep.services.fake_lossless import ANALYZER_VERSION as FAKE_LOSSLES
 from infiniteprep.services.fake_lossless import FakeLosslessResult
 from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
 from infiniteprep.ui.audio_player import AudioPreviewWidget
+from infiniteprep.ui.contrast import warning_text_color
 from infiniteprep.ui.waveform_worker import CANCEL_WAIT_MS, WaveformAnalysisPool
 
 DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = tuple(FieldName)
@@ -90,6 +91,10 @@ ROLE_LOCK: Final[str] = "lock"
 ROW_FIELD_PROPERTY: Final[str] = "field_name"
 LOADED_TEXT_PROPERTY: Final[str] = "loaded_text"
 ROW_NAME_SEPARATOR: Final[str] = ":"
+# Events after which the label background can differ, so the warning amber can too.
+THEME_CHANGE_EVENTS: Final[frozenset[QEvent.Type]] = frozenset(
+    {QEvent.Type.StyleChange, QEvent.Type.PaletteChange}
+)
 
 
 @dataclass(frozen=True)
@@ -233,7 +238,7 @@ class DetailPanel(QWidget):
         # AutoText format renders markup in them as HTML.
         self.header_label.setTextFormat(Qt.TextFormat.PlainText)
         self.warnings_label.setTextFormat(Qt.TextFormat.PlainText)
-        self.warnings_label.setStyleSheet("color: #d97706; font-weight: bold;")
+        self._apply_warning_color()
         self.play_selected_btn = QPushButton(PLAY_SELECTED_LABEL, self)
         self.play_selected_btn.setEnabled(False)
         self.play_selected_btn.setAccessibleName(PLAY_SELECTED_LABEL)
@@ -585,6 +590,24 @@ class DetailPanel(QWidget):
             value_item.setToolTip(plain_text_tooltip(full_text))
             self.other_tags_table.setItem(row_idx, COL_OTHER_KEY, key_item)
             self.other_tags_table.setItem(row_idx, COL_OTHER_VALUE, value_item)
+
+    def _apply_warning_color(self) -> None:
+        """Color the warnings with the amber that reaches 4.5:1 on the label background.
+
+        A fixed amber read at about 3:1 on a light theme. The label background
+        follows the theme, so the amber follows it too.
+        """
+        # Polish first. Before polish, the palette lacks the theme style sheet colors.
+        self.warnings_label.ensurePolished()
+        background = self.warnings_label.palette().color(QPalette.ColorRole.Window)
+        color = warning_text_color(background).name()
+        self.warnings_label.setStyleSheet(f"color: {color}; font-weight: bold;")
+
+    def changeEvent(self, event: QEvent) -> None:
+        """Pick the warning amber again after a theme or palette change."""
+        super().changeEvent(event)
+        if event.type() in THEME_CHANGE_EVENTS:
+            self._apply_warning_color()
 
     def _populate_warnings(self, asset: FileAsset) -> None:
         """Render XDJ-RX3 hardware warnings, pitch drift alerts, and rip diagnostics."""
