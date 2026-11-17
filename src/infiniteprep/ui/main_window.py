@@ -48,6 +48,7 @@ from infiniteprep.domain.models import ApprovedField, FileAsset
 from infiniteprep.services.import_service import ImportBatchReport, ImportService
 from infiniteprep.services.job_orchestrator import BatchKind, BatchState, QueuedBatch
 from infiniteprep.services.review_service import ReviewService
+from infiniteprep.ui.accessible_names import name_combo_box
 from infiniteprep.ui.batch_queue import (
     BatchQueueController,
     BatchRun,
@@ -305,7 +306,7 @@ class MainWindow(QMainWindow):
             self.key_notation_combo.addItem(notation.value)
         self.key_notation_combo.setCurrentText(self.current_key_notation.value)
         self.key_notation_combo.currentTextChanged.connect(self._on_key_notation_changed)
-        self.key_notation_combo.setAccessibleName(KEY_NOTATION_NAME)
+        name_combo_box(self.key_notation_combo, KEY_NOTATION_NAME)
         toolbar.addWidget(self.key_notation_combo)
 
         toolbar.addSeparator()
@@ -316,7 +317,7 @@ class MainWindow(QMainWindow):
         self._applied_theme = self._selectable_theme(current_theme)
         self.theme_combo.setCurrentText(self._applied_theme)
         self.theme_combo.currentTextChanged.connect(self._on_theme_changed)
-        self.theme_combo.setAccessibleName(THEME_PICKER_NAME)
+        name_combo_box(self.theme_combo, THEME_PICKER_NAME)
         toolbar.addWidget(self.theme_combo)
 
     def _selectable_theme(self, theme: str) -> str:
@@ -343,7 +344,7 @@ class MainWindow(QMainWindow):
             [ALL_FILES_FILTER, HAS_WARNINGS_FILTER, *STATUS_FILTER_VALUES]
         )
         self.status_filter_combo.currentTextChanged.connect(self.refresh_file_table)
-        self.status_filter_combo.setAccessibleName(STATUS_FILTER_NAME)
+        name_combo_box(self.status_filter_combo, STATUS_FILTER_NAME)
         filter_bar.addWidget(self.status_filter_combo, stretch=STATUS_FILTER_STRETCH)
         self._add_sort_controls(filter_bar)
         root_layout.addLayout(filter_bar)
@@ -498,7 +499,7 @@ class MainWindow(QMainWindow):
         self.sort_column_combo = QComboBox(self)
         self.sort_column_combo.addItems(list(TABLE_COLUMNS))
         self.sort_column_combo.setCurrentIndex(self._sort_column)
-        self.sort_column_combo.setAccessibleName(SORT_COLUMN_NAME)
+        name_combo_box(self.sort_column_combo, SORT_COLUMN_NAME)
         sort_label.setBuddy(self.sort_column_combo)
         self.sort_direction_btn = QPushButton(SORT_ASCENDING_TEXT, self)
         self.sort_direction_btn.setAccessibleName(SORT_DIRECTION_NAME)

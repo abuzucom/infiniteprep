@@ -120,12 +120,14 @@ def test_dialog_tables_are_read_only_and_leave_on_tab(qtbot: Any) -> None:
     """The write, journal, and recovery tables open no editor and pass Tab to the next control."""
     repository = Repository(DatabaseManager(":memory:"))
     write_service = WriteService(repository)
-    tables: list[QTableWidget] = []
-    for dialog in (
+    # The list keeps each dialog alive. A dropped dialog deletes its table with it.
+    dialogs = [
         WritePlanDialog(write_service, []),
         JournalDialog(repository, write_service),
         RecoveryDialog(write_service),
-    ):
+    ]
+    tables: list[QTableWidget] = []
+    for dialog in dialogs:
         qtbot.addWidget(dialog)
         tables.append(dialog.table)
 

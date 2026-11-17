@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.75.0] (2026-11-17)
+## [0.75.1] (2026-11-17)
 
 ### Added
 
@@ -56,6 +56,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The field rows of the detail panel keep keyboard and screen reader users in place (accessibility audit).
+  - Each row's edit box and its Accept, Save, and Lock buttons name their field, such as "Save artist". Every row announced the same "Save" before.
+  - Accept, Save, and Lock keep focus on the same control of the same row. The rows rebuild after each action, and focus fell out of the table before.
+  - Text typed in one row stays when another row's action runs. The rebuild wiped every unsaved row before. The acted row shows its new stored value.
+  - The new `tests/unit/test_detail_panel_row_actions.py` covers the names, the focus, and the unsaved text.
+  - The open list of each named picker carries the picker's name. A screen reader announced an unnamed list once a picker opened. The new `ui/accessible_names.py` names a picker and its list together.
+  - The version advances from 0.75.0 to 0.75.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Catalog, fingerprint, and LLM responses pass type and length checks before they reach a proposal.
   - The new `adapters/provider_fields.py` checks every field the Discogs, MusicBrainz, and AcoustID adapters read. Text stays printable and stops at 500 characters. A field of the wrong type reads as absent. A list keeps at most 100 items.
   - A response that is not a JSON object raises before the cache write, so a malformed body never reaches the shared cache.
