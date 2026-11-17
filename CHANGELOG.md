@@ -68,7 +68,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new module `infiniteprep.adapters.http_json` holds the bounded HTTPS JSON fetch and the request limiter. `RequestLimiter` stays importable from the iTunes adapter.
   - The new `tests/unit/test_adapter_latent_defects.py` covers each change.
   - `test_discogs_never_caches_a_response_that_is_not_an_object` in `tests/unit/test_provider_and_llm_validation.py` checks for an empty result and a second request in place of a raised error. The repository owner approved this edit.
-  - The version advances from 0.75.1 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.75.2 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- Warning text and the waveform reach WCAG contrast minimums (accessibility audit).
+  - The detail panel warnings use a dark amber on a light theme and a light amber on a dark theme. The fixed amber read at about 3:1 on a light theme. Each choice reaches 4.5:1, and a theme switch picks the amber again.
+  - Unplayed waveform bars use gray 500. Gray 600 read at 2.3:1 on the waveform background. The bars now reach 3:1.
+  - The zoom view draws the low, mid, and high bands in Okabe-Ito sky blue, orange, and yellow. Red and green ran together for red-green color blindness. Each band reaches 3:1 at its overlay alpha.
+  - The zoom view shows a legend that names each band next to its color. Color alone named the bands before.
+  - The new `ui/contrast.py` computes WCAG contrast. The new `tests/unit/test_contrast_and_spectrum_legend.py` checks every color pair and the legend.
+  - The version advances from 0.75.1 to 0.75.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The field rows of the detail panel keep keyboard and screen reader users in place (accessibility audit).
   - Each row's edit box and its Accept, Save, and Lock buttons name their field, such as "Save artist". Every row announced the same "Save" before.
   - Accept, Save, and Lock keep focus on the same control of the same row. The rows rebuild after each action, and focus fell out of the table before.
