@@ -10,7 +10,6 @@ import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github/workflows/ci.yml"
-PRIMARY_BRANCH = "main"
 PULL_REQUEST_ONLY = "${{ github.event_name == 'pull_request' }}"
 PULL_REQUEST_NUMBER = "github.event.pull_request.number"
 COMMIT_SHA = "github.sha"
@@ -26,9 +25,9 @@ class CiWorkflowTriggerTest(unittest.TestCase):
         """Parse the workflow once for every check."""
         cls.workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
 
-    def test_push_runs_on_the_primary_branch_only(self) -> None:
-        """A push to a pull request branch starts no second ci run."""
-        self.assertEqual(self.workflow["on"]["push"]["branches"], [PRIMARY_BRANCH])
+    def test_push_starts_no_run(self) -> None:
+        """A push to any branch, main included, starts no ci run."""
+        self.assertNotIn("push", self.workflow["on"])
 
     def test_pull_request_trigger_stays_unfiltered(self) -> None:
         """The review callers need a pull_request ci run for every pull request."""
