@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import math
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Final
@@ -23,7 +23,7 @@ from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
 )
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, OperationStatus
-from infiniteprep.domain.models import ChangeRecord, FileAsset
+from infiniteprep.domain.models import ChangeRecord, FileAsset, utc_now_iso
 from infiniteprep.hashing import compute_sha256
 
 MAX_TRANSCODE_FILE_BYTES: Final[int] = 1_073_741_824  # 1 GiB
@@ -83,8 +83,14 @@ class SafeTranscoderAdapter:
         tag_adapter: MetadataTagAdapter | None = None,
         backup_dir: Path | None = None,
         allowed_export_root: Path | None = None,
+        *,
+        now_iso: Callable[[], str] = utc_now_iso,
     ) -> None:
-        """Initialize SafeTranscoderAdapter with Repository, MetadataTagAdapter, and backup_dir."""
+        """Initialize SafeTranscoderAdapter with Repository, MetadataTagAdapter, and backup_dir.
+
+        now_iso supplies the journal timestamp of each transcode. A test passes a fixed clock.
+        """
+        self._now_iso = now_iso
         self.repo = repository
         self.tag_adapter = tag_adapter or MetadataTagAdapter()
         self.backup_dir = backup_dir or storage_paths.current().backup_dir
@@ -290,7 +296,7 @@ class SafeTranscoderAdapter:
             written_tags={},
             backup_reference=str(backup_path),
             operation_status=OperationStatus.IN_PROGRESS,
-            timestamp=datetime.now(UTC).isoformat(),
+            timestamp=self._now_iso(),
             pre_write_hash=pre_hash,
         )
         self.repo.upsert_change_record(rec)

@@ -41,6 +41,25 @@ from infiniteprep.domain.models import (
 logger = logging.getLogger(__name__)
 
 
+def _format_utc_instant(moment: datetime) -> str:
+    """Return the stored text form of an instant, which matches utc_now_iso().
+
+    SQLite compares these columns as text. One fixed-width UTC form keeps that order correct.
+    """
+    return moment.astimezone(UTC).isoformat(timespec="microseconds")
+
+
+def _normalize_instant_text(instant_text: str, field_name: str) -> str:
+    """Convert caller ISO-8601 text with any UTC offset into the stored text form."""
+    parsed = datetime.fromisoformat(instant_text)
+    if parsed.utcoffset() is None:
+        raise ValueError(
+            f"{field_name} must include a UTC offset. Pass a value such as "
+            "2026-01-01T00:00:00+00:00."
+        )
+    return _format_utc_instant(parsed)
+
+
 class BatchIntegrityError(RuntimeError):
     """A failed item could not roll back to its savepoint, so the whole batch must roll back."""
 
@@ -594,16 +613,26 @@ class Repository:
     # Change Journal Records
     # ------------------------------------------------------------------
     def upsert_change_record(self, record: ChangeRecord) -> ChangeRecord:
+        """Insert a journal record, or update the outcome fields of an existing one.
+
+        The stored timestamp marks the first write of the operation. An update keeps it.
+        updated_at takes the current time on every write. A caller timestamp must carry a
+        UTC offset. Any offset form normalizes to the stored form.
+        """
+        # Validation runs before any assignment. A rejected call leaves the record unchanged.
+        if record.timestamp:
+            record.timestamp = _normalize_instant_text(record.timestamp, "timestamp")
+        record.updated_at = utc_now_iso()
         if not record.timestamp:
-            record.timestamp = utc_now_iso()
+            record.timestamp = record.updated_at
         conn = self.db.connect()
         conn.execute(
             """
             INSERT INTO change_records (
                 operation_id, batch_operation_id, file_id, previous_path, new_path,
                 pre_write_hash, post_write_hash, previous_tags, written_tags,
-                backup_reference, operation_status, error_message, timestamp
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                backup_reference, operation_status, error_message, timestamp, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(operation_id) DO UPDATE SET
                 new_path = excluded.new_path,
                 post_write_hash = excluded.post_write_hash,
@@ -611,7 +640,7 @@ class Repository:
                 backup_reference = excluded.backup_reference,
                 operation_status = excluded.operation_status,
                 error_message = excluded.error_message,
-                timestamp = excluded.timestamp
+                updated_at = excluded.updated_at
             """,
             (
                 record.operation_id,
@@ -627,6 +656,7 @@ class Repository:
                 str(record.operation_status),
                 record.error_message,
                 record.timestamp,
+                record.updated_at,
             ),
         )
         self._commit(conn)
@@ -640,14 +670,18 @@ class Repository:
         return self._row_to_change_record(row) if row else None
 
     def list_change_records(self, file_id: str | None = None) -> list[ChangeRecord]:
+        """Return journal records, newest first.
+
+        rowid gives insertion order. A wall-clock step cannot reorder the journal.
+        """
         conn = self.db.connect()
         if file_id:
             rows = conn.execute(
-                "SELECT * FROM change_records WHERE file_id = ? ORDER BY timestamp DESC",
+                "SELECT * FROM change_records WHERE file_id = ? ORDER BY rowid DESC",
                 (file_id,),
             ).fetchall()
         else:
-            rows = conn.execute("SELECT * FROM change_records ORDER BY timestamp DESC").fetchall()
+            rows = conn.execute("SELECT * FROM change_records ORDER BY rowid DESC").fetchall()
         return [self._row_to_change_record(r) for r in rows]
 
     # ------------------------------------------------------------------
@@ -691,13 +725,20 @@ class Repository:
         self._commit(conn)
 
     def list_pending_jobs(self) -> list[dict[str, Any]]:
+        """Return queued and processing jobs in insertion order, which rowid records."""
         conn = self.db.connect()
         rows = conn.execute(
-            "SELECT * FROM jobs WHERE status IN ('queued', 'processing') ORDER BY created_at"
+            "SELECT * FROM jobs WHERE status IN ('queued', 'processing') ORDER BY rowid"
         ).fetchall()
         return [dict(r) for r in rows]
 
     def get_cached_response(self, cache_key: str) -> dict[str, Any] | None:
+        """Return the cached response for cache_key, or None when absent or expired.
+
+        The comparison runs on text. A row from an older version may lack the microsecond
+        fraction. That form means fraction zero and sorts before every fraction of the same
+        second, since "+" sorts before ".". Text order therefore still equals time order.
+        """
         now = utc_now_iso()
         conn = self.db.connect()
         row = conn.execute(
@@ -716,10 +757,16 @@ class Repository:
         expires_at_iso: str | None = None,
         ttl_seconds: int = 86400,
     ) -> None:
-        """Persist a provider HTTP response in SQLite cache with TTL expiration."""
+        """Persist a provider HTTP response in SQLite cache with TTL expiration.
+
+        expires_at_iso must carry a UTC offset. Any offset form normalizes to the stored form.
+        """
         now_dt = datetime.now(UTC)
-        now = now_dt.isoformat()
-        exp = expires_at_iso or (now_dt + timedelta(seconds=ttl_seconds)).isoformat()
+        now = _format_utc_instant(now_dt)
+        if expires_at_iso:
+            exp = _normalize_instant_text(expires_at_iso, "expires_at_iso")
+        else:
+            exp = _format_utc_instant(now_dt + timedelta(seconds=ttl_seconds))
         conn = self.db.connect()
         conn.execute(
             """
@@ -862,4 +909,5 @@ class Repository:
             operation_status=OperationStatus(row["operation_status"]),
             error_message=row["error_message"],
             timestamp=row["timestamp"],
+            updated_at=row["updated_at"] or row["timestamp"],
         )

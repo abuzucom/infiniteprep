@@ -22,6 +22,7 @@ from infiniteprep.domain.enums import OperationStatus
 from infiniteprep.domain.models import ChangeRecord
 from infiniteprep.services.write_service import RestoreConflictError, WriteService
 from infiniteprep.ui.action_handlers import ask_plain_question, show_plain_message
+from infiniteprep.ui.time_format import format_local_timestamp
 
 JOURNAL_DIALOG_TITLE: Final[str] = "Change Journal & Backup Restore"
 JOURNAL_DIALOG_WIDTH: Final[int] = 960
@@ -88,7 +89,7 @@ class JournalDialog(QDialog):
         """Render a single ChangeRecord row with a Restore button."""
         written_str = ", ".join(f"{k}={v}" for k, v in rec.written_tags.items())
         cells = [
-            rec.timestamp,
+            format_local_timestamp(rec.timestamp),
             Path(rec.previous_path).name,
             Path(rec.new_path).name,
             written_str,

@@ -23,6 +23,19 @@ MB_USER_AGENT: Final[str] = USER_AGENT
 MB_CACHE_TTL_SEC: Final[int] = 86400
 LUCENE_SPECIAL_RE: Final[re.Pattern[str]] = re.compile(r'([+\-!(){}\[\]^"~*?:\\/]|&&|\|\|)')
 SAFE_ENTITY_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+# A MusicBrainz release date reads YYYY, YYYY-MM, or YYYY-MM-DD. The class names ASCII
+# digits, because \d also matches other Unicode decimal digits.
+RELEASE_YEAR_RE: Final[re.Pattern[str]] = re.compile(r"([0-9]{4})(?:-|\Z)")
+
+
+def extract_release_year(raw_date: object) -> str | None:
+    """Return the four-digit year a release date starts with, or None for any other shape."""
+    if not isinstance(raw_date, str):
+        return None
+    year_match = RELEASE_YEAR_RE.match(raw_date.strip())
+    if year_match is None:
+        return None
+    return year_match.group(1)
 
 
 def escape_lucene_term(raw_value: str) -> str:
@@ -193,7 +206,7 @@ class MusicBrainzAdapter:
                 label=label_name,
                 catalog_number=cat_no,
                 country=rel.get("country"),
-                year=str(rel.get("date", ""))[:4] or None,
+                year=extract_release_year(rel.get("date")),
                 track_number=track_num,
                 vinyl_position=track_num,
                 format_description=media.get("format"),

@@ -9,6 +9,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -190,6 +191,10 @@ class DetailPanel(QWidget):
 
         self.header_label = QLabel("Select a track to inspect metadata and proposals.", self)
         self.warnings_label = QLabel("", self)
+        # File names and decoder messages come from imported files. The default
+        # AutoText format renders markup in them as HTML.
+        self.header_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.warnings_label.setTextFormat(Qt.TextFormat.PlainText)
         self.warnings_label.setStyleSheet("color: #d97706; font-weight: bold;")
         self.settings_manager = settings_manager or SettingsManager()
         self.audio_player = AudioPreviewWidget(

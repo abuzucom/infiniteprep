@@ -8,7 +8,11 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Final
 
-from infiniteprep.db.migrations import m0001_initial, m0002_collections
+from infiniteprep.db.migrations import (
+    m0001_initial,
+    m0002_collections,
+    m0003_change_record_updated_at,
+)
 
 
 @dataclass(frozen=True)
@@ -30,6 +34,11 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
     Migration(m0001_initial.VERSION, m0001_initial.apply, m0001_initial.ROW_COUNT_QUERIES),
     Migration(
         m0002_collections.VERSION, m0002_collections.apply, m0002_collections.ROW_COUNT_QUERIES
+    ),
+    Migration(
+        m0003_change_record_updated_at.VERSION,
+        m0003_change_record_updated_at.apply,
+        m0003_change_record_updated_at.ROW_COUNT_QUERIES,
     ),
 )
 LATEST_VERSION: Final[int] = MIGRATIONS[-1].version
