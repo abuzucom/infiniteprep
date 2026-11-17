@@ -21,7 +21,12 @@ def format_local_timestamp(stored_text: str, zone: tzinfo | None = None) -> str:
         return stored_text
     if parsed.utcoffset() is None:
         return stored_text
-    return parsed.astimezone(zone).strftime(LOCAL_TIMESTAMP_FORMAT)
+    try:
+        local = parsed.astimezone(zone)
+    except OverflowError:
+        # A date at the edge of the supported range has no local form in some zones.
+        return stored_text
+    return local.strftime(LOCAL_TIMESTAMP_FORMAT)
 
 
 def split_time_seconds(total_seconds: int) -> tuple[int, int, int]:

@@ -33,6 +33,8 @@ TRANSCODER_CLOCK_TIME = "2026-11-16T12:00:09.000000+00:00"
 FIVE_HOURS_BEHIND_UTC = timezone(timedelta(hours=-5))
 HALF_HOUR_ZONE = timezone(timedelta(hours=5, minutes=30))
 TIMESTAMP_COLUMN = 0
+# The first representable instant. A zone west of UTC has no local form for it.
+EARLIEST_SUPPORTED_INSTANT = "0001-01-01T00:00:00+00:00"
 # Fullwidth digits one, nine, nine, nine. They are decimal digits outside ASCII.
 FULLWIDTH_ONE = chr(0xFF11)
 FULLWIDTH_NINE = chr(0xFF19)
@@ -52,7 +54,9 @@ def test_local_display_crosses_the_date_line_of_the_zone() -> None:
     assert format_local_timestamp(early_utc, FIVE_HOURS_BEHIND_UTC) == "2026-02-28 21:00:00"
 
 
-@pytest.mark.parametrize("unreadable", ["", "not a time", "2026-11-16T12:00:00"])
+@pytest.mark.parametrize(
+    "unreadable", ["", "not a time", "2026-11-16T12:00:00", EARLIEST_SUPPORTED_INSTANT]
+)
 def test_text_that_names_no_instant_displays_unchanged(unreadable: str) -> None:
     """Damaged or offset-less text stays visible as stored."""
     assert format_local_timestamp(unreadable, FIVE_HOURS_BEHIND_UTC) == unreadable
