@@ -23,6 +23,12 @@ class DialogRecorder:
         for kind in ("question", "information", "warning"):
             monkeypatch.setattr(QMessageBox, kind, self._make_handler(kind))
         monkeypatch.setattr(action_handlers, "show_plain_message", self._record_plain_message)
+        monkeypatch.setattr(action_handlers, "ask_plain_question", self._record_plain_question)
+
+    def _record_plain_question(self, _parent: Any, _title: str, text: str) -> bool:
+        """Record a plain-text question and return whether the fixed answer is Yes."""
+        self.calls.append(("question", text))
+        return self.answer == QMessageBox.StandardButton.Yes
 
     def _record_plain_message(
         self, _parent: Any, icon: QMessageBox.Icon, _title: str, text: str
