@@ -15,6 +15,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Tab from a field edit box reaches the action buttons of the same row.
   - The version advances from 0.71.0 to 0.71.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
+### Fixed
+
+- Enter in the rename template field of the write preview refreshes the preview. Enter applied the writes and closed the dialog before. Refresh Preview holds the default button role.
+- Tab leaves the library table in one press. Tab walked every cell before.
+- Tab from a field edit box in the detail panel reaches the Accept, Save, and Lock buttons of the same row. Tab returned focus to the table and skipped the buttons before.
+
 ## [0.71.0] (2026-11-16)
 
 ### Added

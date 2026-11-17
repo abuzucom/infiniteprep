@@ -298,6 +298,8 @@ class MainWindow(QMainWindow):
         file_header.setSortIndicator(self._sort_column, Qt.SortOrder.AscendingOrder)
         file_header.sectionClicked.connect(self._on_table_header_clicked)
         self.file_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        # Tab leaves the table in one press. The arrow keys move between cells.
+        self.file_table.setTabKeyNavigation(False)
         self.file_table.itemSelectionChanged.connect(self._on_table_selection_changed)
 
         splitter = QSplitter(Qt.Orientation.Vertical, self)
