@@ -61,6 +61,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Accept, Save, and Lock keep focus on the same control of the same row. The rows rebuild after each action, and focus fell out of the table before.
   - Text typed in one row stays when another row's action runs. The rebuild wiped every unsaved row before. The acted row shows its new stored value.
   - The new `tests/unit/test_detail_panel_row_actions.py` covers the names, the focus, and the unsaved text.
+  - The open list of each named picker carries the picker's name. A screen reader announced an unnamed list once a picker opened. The new `ui/accessible_names.py` names a picker and its list together.
   - The version advances from 0.75.0 to 0.75.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Catalog, fingerprint, and LLM responses pass type and length checks before they reach a proposal.
   - The new `adapters/provider_fields.py` checks every field the Discogs, MusicBrainz, and AcoustID adapters read. Text stays printable and stops at 500 characters. A field of the wrong type reads as absent. A list keeps at most 100 items.
