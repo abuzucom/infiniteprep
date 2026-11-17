@@ -48,6 +48,7 @@ class BatchQueueDock(QDockWidget):
         self._refreshing = False
         self._drag_sync_pending = False
         self.batch_list = QListWidget(self)
+        self.batch_list.setAccessibleName("Batch queue")
         self.move_up_btn = QPushButton("Move Up", self)
         self.move_down_btn = QPushButton("Move Down", self)
         self.cancel_btn = QPushButton("Cancel Batch", self)

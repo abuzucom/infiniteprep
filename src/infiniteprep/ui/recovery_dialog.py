@@ -61,6 +61,10 @@ class RecoveryDialog(QDialog):
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setStretchLastSection(True)
+        # The rows record interrupted writes. Tab reaches the row buttons, not each cell.
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setTabKeyNavigation(False)
+        self.table.setAccessibleName("Interrupted writes")
         root.addWidget(self.table, stretch=1)
         bottom = QHBoxLayout()
         bottom.addStretch()
