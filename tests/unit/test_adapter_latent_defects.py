@@ -12,6 +12,7 @@ from typing import Any, cast
 import pytest
 
 from infiniteprep.adapters import http_json
+from infiniteprep.adapters.catalog import musicbrainz as musicbrainz_module
 from infiniteprep.adapters.catalog.acrcloud_optin import ACRCloudOptInAdapter
 from infiniteprep.adapters.catalog.beatport_stub import BeatportStubAdapter
 from infiniteprep.adapters.catalog.discogs import DiscogsAdapter
@@ -330,6 +331,29 @@ def test_fetch_json_reads_a_bounded_body() -> None:
         "https://example.invalid/x", {"q": "a b"}, {}, provider="Example", open_url=open_url
     )
     assert result == {"ok": True}
+
+
+@pytest.mark.parametrize("body", [b'[{"id": "x"}]', b'[{"a": 1, "b": 2}]', b"[1]", b'"text"'])
+def test_fetch_json_rejects_a_body_that_is_not_an_object(body: bytes) -> None:
+    with pytest.raises(ValueError, match="not a JSON object"):
+        http_json.fetch_json(
+            "https://example.invalid/x",
+            {},
+            {},
+            provider="Example",
+            open_url=lambda _request, timeout: _Response(body),
+        )
+
+
+@pytest.mark.parametrize("body", [b'[{"id": "x"}]', b"[1]"])
+def test_musicbrainz_array_response_returns_no_candidates(
+    body: bytes, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        musicbrainz_module.urllib.request, "urlopen", lambda *_a, **_k: _Response(body)
+    )
+    adapter = MusicBrainzAdapter(_repository(), min_interval_sec=0.0)
+    assert adapter.search(QUERY, file_id=FIRST_FILE_ID) == []
 
 
 def test_itunes_request_limiter_is_the_shared_limiter() -> None:

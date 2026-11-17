@@ -112,4 +112,9 @@ def fetch_json(
         raw_bytes = response.read(max_bytes + 1)
     if len(raw_bytes) > max_bytes:
         raise ValueError(f"{provider} HTTP response exceeded maximum byte size limit.")
-    return dict(json.loads(raw_bytes.decode("utf-8")))
+    decoded = json.loads(raw_bytes.decode("utf-8"))
+    # Every caller reads named fields. Any other JSON shape counts as a malformed
+    # response, which LOOKUP_ERRORS covers as ValueError.
+    if not isinstance(decoded, dict):
+        raise ValueError(f"{provider} HTTP response is not a JSON object.")
+    return decoded
