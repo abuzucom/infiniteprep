@@ -56,9 +56,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- The popup list of each main window and audio player picker carries an accessible name. A screen reader announced the six popup lists with no name.
-  - The new `infiniteprep.ui.accessibility.set_combo_box_name` names a picker and its popup list together.
-  - `test_dialog_tables_are_read_only_and_leave_on_tab` in `tests/unit/test_accessible_names_and_keyboard_sort.py` keeps each dialog referenced until its assertions run. The dialogs were deleted before the check. The repository owner approved this edit.
 - Latent defects in the online adapters and key removal (issue 288).
   - A network failure, a timeout, or a malformed response from MusicBrainz, Discogs, iTunes Search, or AcoustID fails that lookup only. The identification job continues with the other providers. AcoustID returns the failure as a warning. A failed lookup stays out of the cache. A response that is not a JSON object counts as malformed and returns no candidate. It raised out of the adapter before.
   - Candidate ids from MusicBrainz, Discogs, and iTunes Search hold the file id. The same release found for two files collided on one candidate id before. Each id part is percent-encoded and joined with `:`, so no two part tuples share an id.
@@ -71,7 +68,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new module `infiniteprep.adapters.http_json` holds the bounded HTTPS JSON fetch and the request limiter. `RequestLimiter` stays importable from the iTunes adapter.
   - The new `tests/unit/test_adapter_latent_defects.py` covers each change.
   - `test_discogs_never_caches_a_response_that_is_not_an_object` in `tests/unit/test_provider_and_llm_validation.py` checks for an empty result and a second request in place of a raised error. The repository owner approved this edit.
-  - The version advances from 0.75.0 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.75.1 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- The field rows of the detail panel keep keyboard and screen reader users in place (accessibility audit).
+  - Each row's edit box and its Accept, Save, and Lock buttons name their field, such as "Save artist". Every row announced the same "Save" before.
+  - Accept, Save, and Lock keep focus on the same control of the same row. The rows rebuild after each action, and focus fell out of the table before.
+  - Text typed in one row stays when another row's action runs. The rebuild wiped every unsaved row before. The acted row shows its new stored value.
+  - The new `tests/unit/test_detail_panel_row_actions.py` covers the names, the focus, and the unsaved text.
+  - The open list of each named picker carries the picker's name. A screen reader announced an unnamed list once a picker opened. The new `ui/accessible_names.py` names a picker and its list together.
+  - The version advances from 0.75.0 to 0.75.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Catalog, fingerprint, and LLM responses pass type and length checks before they reach a proposal.
   - The new `adapters/provider_fields.py` checks every field the Discogs, MusicBrainz, and AcoustID adapters read. Text stays printable and stops at 500 characters. A field of the wrong type reads as absent. A list keeps at most 100 items.
   - A response that is not a JSON object raises before the cache write, so a malformed body never reaches the shared cache.
