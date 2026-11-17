@@ -101,18 +101,20 @@ def test_field_actions_keep_playback(panel_parts: Any) -> None:
     assert approved.approved_value == "Techno"
 
 
-def test_selecting_another_file_loads_it(panel_parts: Any) -> None:
-    """A different file replaces the track and starts it from the beginning."""
-    panel, repository, first_id, second_id = panel_parts
+def test_selecting_another_file_keeps_playback(panel_parts: Any) -> None:
+    """A selection shows another file and leaves the playing track untouched."""
+    panel, _repository, first_id, second_id = panel_parts
     panel.load_file_asset(first_id)
+    loaded_path = panel.audio_player.current_file_path
+    assert loaded_path is not None
     _start_playback_mid_track(panel)
 
-    panel.load_file_asset(second_id)
+    panel.select_file_asset(second_id)
 
-    second_asset = repository.get_file_by_id(second_id)
-    assert second_asset is not None
-    assert panel.audio_player.current_file_path == Path(second_asset.current_path)
-    assert panel.audio_player.current_position_sec == 0.0
+    assert panel.current_file_id == second_id
+    assert panel.audio_player.current_file_path == loaded_path
+    assert panel.audio_player.current_position_sec == pytest.approx(SEEK_SECONDS)
+    assert panel.audio_player.play_btn.text() == "Pause"
 
 
 def test_every_field_name_has_a_row(panel_parts: Any) -> None:
