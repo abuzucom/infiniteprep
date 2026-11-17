@@ -17,6 +17,13 @@ logger = logging.getLogger(__name__)
 
 MAX_ANALYSIS_FILE_BYTES: Final[int] = 524_288_000  # 500 MiB
 MAX_ANALYSIS_DURATION_SEC: Final[float] = 1800.0  # 30 minutes
+# A file header declares the channel count and the sample rate. A crafted header can claim
+# values that expand a small file to many gigabytes. The values match the preview decoder caps.
+MAX_DSP_CHANNELS: Final[int] = 8
+MAX_DSP_SAMPLE_RATE_HZ: Final[int] = 384_000
+# 200 million mono frames cover 30 minutes at 96 kHz.
+MAX_DSP_MONO_FRAMES: Final[int] = 200_000_000
+DSP_BLOCK_FRAMES: Final[int] = 65_536
 ENVELOPE_BINS: Final[int] = 64
 
 PITCH_CLASSES_ORDERED: Final[tuple[PitchClass, ...]] = (
@@ -117,12 +124,16 @@ def estimate_bpm_from_onset_envelope(
     norm = float(np.sum(env * env))
     if norm <= 1e-12:
         return None
-    autocorr = np.correlate(env, env, mode="full")[env.size - 1 :] / norm
     min_lag = max(1, round((60.0 / max_bpm) * env_rate))
-    max_lag = min(autocorr.size - 1, round((60.0 / min_bpm) * env_rate))
+    max_lag = min(env.size - 1, round((60.0 / min_bpm) * env_rate))
     if max_lag <= min_lag:
         return None
-    best_lag = min_lag + int(np.argmax(autocorr[min_lag : max_lag + 1]))
+    # Only the lags of the tempo range matter. A full autocorrelation costs the square of
+    # the envelope length, which reaches 360,000 points for a 30 minute file.
+    autocorr = [
+        float(np.dot(env[: env.size - lag], env[lag:])) for lag in range(min_lag, max_lag + 1)
+    ]
+    best_lag = min_lag + int(np.argmax(autocorr))
     return round((60.0 * env_rate) / float(best_lag), 1) if best_lag > 0 else None
 
 
@@ -202,7 +213,11 @@ def read_bounded_mono_pcm(
     max_bytes: int = MAX_ANALYSIS_FILE_BYTES,
     max_duration_sec: float = MAX_ANALYSIS_DURATION_SEC,
 ) -> tuple[np.ndarray, int]:
-    """Read up to max_duration_sec of audio as mono float64 after checking file size."""
+    """Read up to max_duration_sec of audio as mono float64 after checking file size.
+
+    The decode runs in blocks and keeps only the mono mix. The memory in use then follows
+    the frame count, not the frame count times the channel count.
+    """
     size_bytes = audio_reference.stat().st_size
     if size_bytes > max_bytes:
         raise ValueError(
@@ -210,14 +225,40 @@ def read_bounded_mono_pcm(
             f"analysis limit ({max_bytes} bytes)."
         )
     info = sf.info(str(audio_reference))
-    sr = max(1, int(info.samplerate))
-    max_frames = max(1, round(sr * max_duration_sec))
-    frames_to_read = min(int(info.frames), max_frames) if info.frames > 0 else max_frames
-    data, sample_rate = sf.read(
-        str(audio_reference), frames=frames_to_read, dtype="float64", always_2d=True
-    )
-    mono = np.mean(data, axis=1) if data.size > 0 else np.zeros(0, dtype=np.float64)
-    return mono, int(sample_rate)
+    sample_rate = int(info.samplerate)
+    frame_limit = _bounded_dsp_frames(sample_rate, int(info.channels), max_duration_sec)
+    frames_to_read = min(int(info.frames), frame_limit) if info.frames > 0 else frame_limit
+    return _decode_mono_blocks(audio_reference, frames_to_read), sample_rate
+
+
+def _bounded_dsp_frames(sample_rate: int, channels: int, max_duration_sec: float) -> int:
+    """Validate the declared stream shape and return the largest frame count to decode."""
+    if channels <= 0 or channels > MAX_DSP_CHANNELS:
+        raise ValueError(
+            f"Channel count {channels} is outside 1 to {MAX_DSP_CHANNELS}; "
+            "convert the file to stereo."
+        )
+    if sample_rate <= 0 or sample_rate > MAX_DSP_SAMPLE_RATE_HZ:
+        raise ValueError(
+            f"Sample rate {sample_rate} Hz is outside 1 to {MAX_DSP_SAMPLE_RATE_HZ} Hz; "
+            "convert the file to a standard sample rate."
+        )
+    return min(max(1, round(sample_rate * max_duration_sec)), MAX_DSP_MONO_FRAMES)
+
+
+def _decode_mono_blocks(audio_reference: Path, frame_limit: int) -> np.ndarray:
+    """Decode at most frame_limit frames in blocks and return the mono mix as float64."""
+    chunks: list[np.ndarray] = []
+    filled = 0
+    for block in sf.blocks(
+        str(audio_reference), blocksize=DSP_BLOCK_FRAMES, dtype="float64", always_2d=True
+    ):
+        take = min(int(block.shape[0]), frame_limit - filled)
+        if take <= 0:
+            break
+        chunks.append(np.mean(block[:take], axis=1))
+        filled += take
+    return np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.float64)
 
 
 class LocalDspAnalyzer:
@@ -234,7 +275,8 @@ class LocalDspAnalyzer:
         """Analyze audio file locally for BPM, canonical musical key, and rip warnings."""
         try:
             mono, sample_rate = read_bounded_mono_pcm(audio_reference)
-        except (OSError, ValueError, RuntimeError) as exc:
+        except (OSError, ValueError, RuntimeError, MemoryError) as exc:
+            # A decode that runs out of memory fails this one file. The batch continues.
             logger.warning("Local DSP decode failed for %s: %s", audio_reference, exc)
             return AnalysisResult(
                 id=str(uuid.uuid4()),

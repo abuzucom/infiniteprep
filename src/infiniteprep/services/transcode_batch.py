@@ -18,11 +18,13 @@ from infiniteprep.adapters.transcoder.safe_transcoder import (
 logger = logging.getLogger(__name__)
 
 # soundfile raises SoundFileRuntimeError, the base of LibsndfileError, on decode and
-# encode failures. Other RuntimeError types surface as programming errors.
+# encode failures. Other RuntimeError types surface as programming errors. A decode that
+# runs out of memory fails that one file, and the batch continues.
 EXPECTED_TRANSCODE_ERRORS: Final[tuple[type[Exception], ...]] = (
     OSError,
     ValueError,
     sf.SoundFileRuntimeError,
+    MemoryError,
 )
 
 
