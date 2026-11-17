@@ -84,6 +84,7 @@ ROLE_SAVE: Final[str] = "save"
 ROLE_LOCK: Final[str] = "lock"
 ROW_FIELD_PROPERTY: Final[str] = "field_name"
 LOADED_TEXT_PROPERTY: Final[str] = "loaded_text"
+ROW_NAME_SEPARATOR: Final[str] = ":"
 
 
 @dataclass(frozen=True)
@@ -96,7 +97,7 @@ class FieldRowState:
 
 def row_widget_name(field_name: str, role: str) -> str:
     """Return the object name of one row control."""
-    return f"{field_name}:{role}"
+    return f"{field_name}{ROW_NAME_SEPARATOR}{role}"
 
 
 def field_label(field_name: str) -> str:
@@ -527,13 +528,24 @@ class DetailPanel(QWidget):
         return FieldRowState(unsaved, focused.objectName() if in_rows else None)
 
     def _restore_row_state(self, state: FieldRowState) -> None:
-        """Put back unsaved edit text and move focus to the same row control."""
+        """Put back unsaved edit text and move focus to the same row control.
+
+        When the rebuilt row lacks that control, focus moves to the row's edit box.
+        """
+        by_name: dict[str, QWidget] = {}
         for control in self._row_controls():
+            by_name[control.objectName()] = control
             field_name = str(control.property(ROW_FIELD_PROPERTY))
             if isinstance(control, QLineEdit) and field_name in state.unsaved_edits:
                 control.setText(state.unsaved_edits[field_name])
-            if state.focused_name and control.objectName() == state.focused_name:
-                control.setFocus()
+        if not state.focused_name:
+            return
+        field_name = state.focused_name.split(ROW_NAME_SEPARATOR, 1)[0]
+        target = by_name.get(state.focused_name) or by_name.get(
+            row_widget_name(field_name, ROLE_EDIT)
+        )
+        if target is not None:
+            target.setFocus()
 
     def _populate_single_field_row(
         self,

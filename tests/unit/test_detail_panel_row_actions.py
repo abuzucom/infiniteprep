@@ -92,13 +92,14 @@ def test_space_on_save_keeps_focus_on_the_same_save_button(qtbot: Any, panel: De
     assert focused is row_button(panel, ARTIST_ROW, "Save")
 
 
-def test_lock_in_one_row_keeps_unsaved_text_in_another(panel: DetailPanel) -> None:
-    """Lock on the artist row leaves text typed in the title row in place."""
+def test_save_in_one_row_keeps_unsaved_text_in_another(panel: DetailPanel) -> None:
+    """Save on the artist row leaves text typed in the title row in place."""
+    edit_box(panel, ARTIST_ROW).setText("Saved Artist")
     edit_box(panel, TITLE_ROW).setText(TYPED_TITLE)
 
-    row_button(panel, ARTIST_ROW, "Lock").click()
+    row_button(panel, ARTIST_ROW, "Save").click()
 
-    assert row_button(panel, ARTIST_ROW, "Unlock") is not None
+    assert edit_box(panel, ARTIST_ROW).text() == "Saved Artist"
     assert edit_box(panel, TITLE_ROW).text() == TYPED_TITLE
 
 
