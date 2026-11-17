@@ -48,13 +48,15 @@ from infiniteprep.domain.models import ApprovedField, FileAsset
 from infiniteprep.services.import_service import ImportBatchReport, ImportService
 from infiniteprep.services.job_orchestrator import BatchKind, BatchState, QueuedBatch
 from infiniteprep.services.review_service import ReviewService
-from infiniteprep.ui.accessible_names import name_combo_box
+from infiniteprep.ui.accessible_names import announce, name_combo_box
+from infiniteprep.ui.action_handlers import show_plain_message
 from infiniteprep.ui.batch_queue import (
     BatchQueueController,
     BatchRun,
     CancelCheck,
     ProgressReport,
     format_batch_result,
+    format_batch_row,
 )
 from infiniteprep.ui.batch_queue_dock import BatchQueueDock
 from infiniteprep.ui.detail_panel import DetailPanel
@@ -106,6 +108,18 @@ def format_status_label(status: ReviewStatus) -> str:
     )
 
 
+def format_status_cell(value: str) -> str:
+    """Return the label a status cell shows, such as "Ready to Write".
+
+    An unknown stored value shows as stored, so no row loses its status.
+    """
+    try:
+        status = ReviewStatus(value)
+    except ValueError:
+        return value
+    return format_status_label(status)
+
+
 # One filter entry per review status. The pipeline sets statuses such as no_match and
 # ready_for_review, so a fixed short list left those files reachable only through All Files.
 STATUS_FILTER_VALUES: Final[dict[str, str]] = {
@@ -115,6 +129,15 @@ STATUS_FILTER_VALUES: Final[dict[str, str]] = {
 LAYOUT_SAVE_DELAY_MS: Final[int] = 300
 SEARCH_INPUT_STRETCH: Final[int] = 3
 STATUS_FILTER_STRETCH: Final[int] = 1
+NO_VISIBLE_FILES_TEXT: Final[str] = (
+    "No files are visible. Import a folder, or clear the filter and the status choice."
+)
+ANALYZE_TITLE: Final[str] = "Identify & Analyze All"
+BULK_APPROVE_TITLE: Final[str] = "Bulk Approve Non-Conflicting"
+BULK_APPROVE_RESULT_TEMPLATE: Final[str] = "Approved {count} field(s) where every proposal agreed."
+WRITE_TITLE: Final[str] = "Preview & Apply Writes"
+TRANSCODE_TITLE: Final[str] = "Transcode to XDJ"
+EXPORT_TITLE: Final[str] = "Export Playlist (.m3u8)"
 SORT_ASCENDING_TEXT: Final[str] = "Ascending"
 SORT_DESCENDING_TEXT: Final[str] = "Descending"
 # Screen readers announce these names. Placeholder text vanishes once a field holds text.
@@ -619,7 +642,7 @@ class MainWindow(QMainWindow):
             f"{lbl_str} [{cat_str}]" if cat_str else lbl_str,
             self._effective_val(std, approved, top_by_field, FieldName.BPM.value),
             self._format_key_cell(raw_key),
-            str(asset.review_status),
+            format_status_cell(str(asset.review_status)),
             "; ".join(warnings) if warnings else "OK",
         ]
 
@@ -714,8 +737,9 @@ class MainWindow(QMainWindow):
         """Add a library-changing batch to the queue. run executes on a worker thread."""
         return self.batch_queue.enqueue_job(kind, label, run)
 
-    def _on_batch_finished(self, _batch: QueuedBatch) -> None:
-        """Show the changes of a finished batch in the table and the detail panel."""
+    def _on_batch_finished(self, batch: QueuedBatch) -> None:
+        """Show the changes of a finished batch and announce its result."""
+        announce(self.batch_dock.batch_list, format_batch_row(batch))
         self.refresh_file_table()
         if self.detail_panel.current_file_id:
             self.detail_panel.load_file_asset(self.detail_panel.current_file_id)
@@ -818,7 +842,7 @@ class MainWindow(QMainWindow):
 
         Without an analyze_runner, the on_analyze_batch callback runs on this thread.
         """
-        if not self.visible_file_ids:
+        if not self._has_visible_files(ANALYZE_TITLE):
             return
         file_ids = list(self.visible_file_ids)
         runner = self.analyze_runner
@@ -833,28 +857,46 @@ class MainWindow(QMainWindow):
             self.on_analyze_batch(file_ids)
             self.refresh_file_table()
 
-    def _trigger_bulk_approve(self) -> None:
-        """Bulk approve non-conflicting proposals for all visible files."""
+    def _has_visible_files(self, title: str) -> bool:
+        """Return True with files visible. Otherwise say why the action did nothing.
+
+        Each toolbar action works on the visible files. With none, the action ended
+        without a word before.
+        """
         if self.visible_file_ids:
-            self.review_service.bulk_approve_non_conflicting(self.visible_file_ids)
-            self.refresh_file_table()
-            if self.detail_panel.current_file_id:
-                self.detail_panel.load_file_asset(self.detail_panel.current_file_id)
+            return True
+        show_plain_message(self, QMessageBox.Icon.Information, title, NO_VISIBLE_FILES_TEXT)
+        return False
+
+    def _trigger_bulk_approve(self) -> None:
+        """Bulk approve non-conflicting proposals for all visible files, then report the count."""
+        if not self._has_visible_files(BULK_APPROVE_TITLE):
+            return
+        approved = self.review_service.bulk_approve_non_conflicting(self.visible_file_ids)
+        self.refresh_file_table()
+        if self.detail_panel.current_file_id:
+            self.detail_panel.load_file_asset(self.detail_panel.current_file_id)
+        show_plain_message(
+            self,
+            QMessageBox.Icon.Information,
+            BULK_APPROVE_TITLE,
+            BULK_APPROVE_RESULT_TEMPLATE.format(count=approved),
+        )
 
     def _trigger_open_write_dialog(self) -> None:
         """Open write preview and execution dialog if callback is registered."""
-        if self.on_open_write_dialog:
+        if self.on_open_write_dialog and self._has_visible_files(WRITE_TITLE):
             self.on_open_write_dialog(list(self.visible_file_ids))
 
     def _trigger_transcode_batch(self) -> None:
         """Invoke the batch transcode callback on visible files and refresh the table."""
-        if self.on_transcode_batch and self.visible_file_ids:
+        if self.on_transcode_batch and self._has_visible_files(TRANSCODE_TITLE):
             self.on_transcode_batch(list(self.visible_file_ids))
             self.refresh_file_table()
 
     def _trigger_export_playlist(self) -> None:
         """Ask for a .m3u8 destination and invoke the playlist export callback."""
-        if not self.on_export_playlist or not self.visible_file_ids:
+        if not self.on_export_playlist or not self._has_visible_files(EXPORT_TITLE):
             return
         chosen, _ = QFileDialog.getSaveFileName(
             self, "Export Playlist", "crate.m3u8", "M3U8 Playlist (*.m3u8)"
