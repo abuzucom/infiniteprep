@@ -195,21 +195,9 @@ class ItunesSearchAdapter:
         payload = self.repo.get_cached_response(cache_key)
         if payload is None:
             with self.limiter.request_slot():
-                # Another thread may have cached the response while this one waited.
-                payload = self.repo.get_cached_response(cache_key)
-                if payload is None:
-                    try:
-                        payload = self.http_get_json(ITUNES_SEARCH_URL, params)
-                    except LOOKUP_ERRORS as error:
-                        # A failed lookup fails this file only. The job continues.
-                        log_lookup_failure("iTunes Search", error)
-                        return []
-                    self.repo.set_cached_response(
-                        cache_key=cache_key,
-                        provider=self.provider_name,
-                        response_data=_cacheable_payload(payload),
-                        ttl_seconds=ITUNES_CACHE_TTL_SEC,
-                    )
+                payload = self._fetch_uncached(cache_key, params)
+        if payload is None:
+            return []
         results = payload.get("results", [])
         if not isinstance(results, list):
             return []
@@ -225,6 +213,29 @@ class ItunesSearchAdapter:
         """Return no candidate. iTunes Search has no endpoint that fetches one entity."""
         _ = (entity_id, entity_type, file_id)
         return []
+
+    def _fetch_uncached(self, cache_key: str, params: dict[str, str]) -> dict[str, Any] | None:
+        """Return the cached or fetched response, or None after a failed lookup.
+
+        The caller holds the provider slot. Another thread may have cached the
+        response while this one waited, so the cache check runs again first. A
+        failed lookup fails this file only. The job continues.
+        """
+        payload = self.repo.get_cached_response(cache_key)
+        if payload is not None:
+            return payload
+        try:
+            payload = self.http_get_json(ITUNES_SEARCH_URL, params)
+        except LOOKUP_ERRORS as error:
+            log_lookup_failure("iTunes Search", error)
+            return None
+        self.repo.set_cached_response(
+            cache_key=cache_key,
+            provider=self.provider_name,
+            response_data=_cacheable_payload(payload),
+            ttl_seconds=ITUNES_CACHE_TTL_SEC,
+        )
+        return payload
 
     def _search_term(self, query: MetadataSearchQuery) -> str:
         """Return the search term built from the artist and the title."""
