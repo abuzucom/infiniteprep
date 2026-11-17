@@ -18,8 +18,9 @@ def string_similarity(left: str | None, right: str | None) -> float:
     """
     if not left or not right:
         return 0.0
-    a = left.strip().lower()[:MAX_SIMILARITY_CHARS]
-    b = right.strip().lower()[:MAX_SIMILARITY_CHARS]
+    # The cut runs first, so the copies that strip and lower make stay bounded too.
+    a = left[:MAX_SIMILARITY_CHARS].strip().lower()
+    b = right[:MAX_SIMILARITY_CHARS].strip().lower()
     if a == b:
         return 1.0
     return round(SequenceMatcher(None, a, b).ratio(), SIMILARITY_PRECISION_DIGITS)
