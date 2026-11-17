@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.75.2] (2026-11-17)
+## [0.75.3] (2026-11-17)
 
 ### Added
 
@@ -56,6 +56,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Status changes reach screen readers, and toolbar actions say what they did (accessibility audit).
+  - A playback status, a spectrum analysis failure, a finished batch, and the write preview status each raise a screen reader announcement. A label update alone was silent before. The new `announce` helper in `ui/accessible_names.py` sends them.
+  - Identify & Analyze, Bulk Approve, Preview & Apply Writes, Transcode, and Export say why they did nothing when no file is visible. Each ended without a word before.
+  - Bulk Approve reports how many fields it approved.
+  - The library status column shows labels such as "Ready to Write" instead of stored values such as `ready_to_write`. The detail header shows Yes or No for write support instead of True or False.
+  - The new `tests/unit/test_status_feedback.py` covers the announcements, the empty library messages, the approved count, and the labels.
+  - The version advances from 0.75.2 to 0.75.3 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Warning text and the waveform reach WCAG contrast minimums (accessibility audit).
   - The detail panel warnings use a dark amber on a light theme and a light amber on a dark theme. The fixed amber read at about 3:1 on a light theme. Each choice reaches 4.5:1, and a theme switch picks the amber again.
   - Unplayed waveform bars use gray 500. Gray 600 read at 2.3:1 on the waveform background. The bars now reach 3:1.

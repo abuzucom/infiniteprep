@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QComboBox
+from PySide6.QtGui import QAccessible, QAccessibleAnnouncementEvent
+from PySide6.QtWidgets import QComboBox, QWidget
 
 
 def name_combo_box(combo: QComboBox, name: str) -> None:
@@ -13,3 +14,13 @@ def name_combo_box(combo: QComboBox, name: str) -> None:
     """
     combo.setAccessibleName(name)
     combo.view().setAccessibleName(name)
+
+
+def announce(widget: QWidget, text: str) -> None:
+    """Ask a screen reader to speak a status change that the widget shows.
+
+    A label update alone is silent to a screen reader. Empty text announces nothing.
+    """
+    if not text.strip():
+        return
+    QAccessible.updateAccessibility(QAccessibleAnnouncementEvent(widget, text))
