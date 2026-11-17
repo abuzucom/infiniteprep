@@ -200,6 +200,32 @@ def test_discogs_unpositioned_entry_never_collides_with_a_numbered_track() -> No
     assert entity_ids[1] == "249504:1"
 
 
+@pytest.mark.parametrize(
+    "positions",
+    [
+        ["1#2", "1"],
+        ["1", "1", "1#2"],
+        ["1", "", "#2", "1#2", "1"],
+    ],
+)
+def test_discogs_suffixed_key_never_matches_another_position(positions: list[str]) -> None:
+    payload = {
+        "id": 249504,
+        "tracklist": [
+            {"position": pos, "title": f"Track {idx}"} for idx, pos in enumerate(positions)
+        ],
+    }
+    adapter = DiscogsAdapter(
+        _repository(),
+        user_token=DISCOGS_STUB_KEY,
+        http_get_json=_returning(payload),
+        min_interval_sec=0.0,
+    )
+    candidates = adapter.fetch("249504", file_id=FIRST_FILE_ID)
+    assert len({c.provider_entity_id for c in candidates}) == len(positions)
+    assert len({c.id for c in candidates}) == len(positions)
+
+
 # MusicBrainz release lookup.
 
 

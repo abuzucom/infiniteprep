@@ -74,8 +74,8 @@ def _track_keys(tracks: list[dict[str, Any]]) -> list[str]:
 
     A heading or an index track carries an empty position and often precedes a track
     at position "1". The key of an entry without a position holds a "#" and its list
-    number, and a repeated key gains the list number again, so no two entries share
-    a key.
+    number. A key already in the set of every earlier key, explicit or generated,
+    gains the list number again until it is new, so no two entries share a key.
     """
     keys: list[str] = []
     seen: set[str] = set()
