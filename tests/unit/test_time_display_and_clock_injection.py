@@ -32,6 +32,10 @@ TRANSCODER_CLOCK_TIME = "2026-11-16T12:00:09.000000+00:00"
 FIVE_HOURS_BEHIND_UTC = timezone(timedelta(hours=-5))
 HALF_HOUR_ZONE = timezone(timedelta(hours=5, minutes=30))
 TIMESTAMP_COLUMN = 0
+# Fullwidth digits one, nine, nine, nine. They are decimal digits outside ASCII.
+FULLWIDTH_ONE = chr(0xFF11)
+FULLWIDTH_NINE = chr(0xFF19)
+FULLWIDTH_DIGIT_DATE = f"{FULLWIDTH_ONE}{FULLWIDTH_NINE}{FULLWIDTH_NINE}{FULLWIDTH_NINE}-01"
 
 
 def test_stored_utc_time_displays_in_the_given_zone() -> None:
@@ -65,6 +69,7 @@ def test_text_that_names_no_instant_displays_unchanged(unreadable: str) -> None:
         ("19990704", None),
         ("July 1999", None),
         ("abcd-07-04", None),
+        (FULLWIDTH_DIGIT_DATE, None),
         (None, None),
         (1999, None),
     ],

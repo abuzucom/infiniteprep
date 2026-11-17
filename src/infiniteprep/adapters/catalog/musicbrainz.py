@@ -23,8 +23,9 @@ MB_USER_AGENT: Final[str] = USER_AGENT
 MB_CACHE_TTL_SEC: Final[int] = 86400
 LUCENE_SPECIAL_RE: Final[re.Pattern[str]] = re.compile(r'([+\-!(){}\[\]^"~*?:\\/]|&&|\|\|)')
 SAFE_ENTITY_ID_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
-# A MusicBrainz release date reads YYYY, YYYY-MM, or YYYY-MM-DD.
-RELEASE_YEAR_RE: Final[re.Pattern[str]] = re.compile(r"(\d{4})(?:-|\Z)")
+# A MusicBrainz release date reads YYYY, YYYY-MM, or YYYY-MM-DD. The class names ASCII
+# digits, because \d also matches other Unicode decimal digits.
+RELEASE_YEAR_RE: Final[re.Pattern[str]] = re.compile(r"([0-9]{4})(?:-|\Z)")
 
 
 def extract_release_year(raw_date: object) -> str | None:
