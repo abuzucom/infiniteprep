@@ -1,8 +1,8 @@
 """Cover the workflow wiring that skips pull request checks on a push to main.
 
-A merge to main replays checks that already passed on the pull request head.
-The lint jobs and the sync check run on pull requests only. The AGENTS.md
-compliance workflow moves from push to pull_request.
+The lint jobs and the sync check run on pull requests only. A push to main
+does not run them. The AGENTS.md compliance workflow triggers on
+pull_request only.
 """
 
 from __future__ import annotations
