@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -51,8 +52,9 @@ class PillowVersionTest(unittest.TestCase):
 
     def test_the_expected_release_matches_the_lock(self) -> None:
         """The converter expects the release that the lockfile pins."""
-        lock_lines = (ROOT / "requirements-lock.txt").read_text(encoding="utf-8").splitlines()
-        self.assertIn(f"pillow=={self.converter.EXPECTED_PILLOW_VERSION}", lock_lines)
+        lock_text = (ROOT / "requirements-lock.txt").read_text(encoding="utf-8")
+        pin = f"pillow=={self.converter.EXPECTED_PILLOW_VERSION}"
+        self.assertRegex(lock_text, rf"(?m)^{re.escape(pin)} ?\\?$")
 
 
 class ConversionTest(unittest.TestCase):

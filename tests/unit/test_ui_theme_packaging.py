@@ -174,7 +174,7 @@ def test_the_notice_names_the_bundled_theme_package_versions() -> None:
 
     for package in ("qt-material", "Jinja2", "MarkupSafe"):
         version = next(
-            line.split("==")[1]
+            line.split("==")[1].rstrip("\\").strip()
             for line in lock_text.splitlines()
             if line.startswith(f"{package}==")
         )
