@@ -31,7 +31,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `JobOrchestrator.process_files` takes `raise_on_failure` in place of `raise_on_unexpected` (issue 288). The flag raises for the expected job errors, so the old name misstated it. No caller in `src/` passed the old keyword.
 - The library status filter lists every review status (issue 288). The filter lacked `ready_for_review`, `conflicting_candidates`, `no_match`, and four more statuses that the pipeline sets.
 - The library search reads the cells the table shows (issue 288). It read the stored tag structure before, so `tags` matched every file and an approved artist matched none.
-- The version advances from 0.72.6 to 0.73.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`. The keyword rename is an incompatible change of a public method.
+- The version advances from 0.72.7 to 0.73.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`. The keyword rename is an incompatible change of a public method.
 
 ### Fixed
 
@@ -52,6 +52,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A failed queued write logs its traceback.
   - A library file that is not a database releases its handle. The evaluation run closes its database on an error.
   - New test modules `test_tag_write_round_trips.py`, `test_import_analysis_and_jobs.py`, `test_usb_recovery_and_runner_fixes.py`, and `test_library_filters_and_theme_sync.py` under `tests/unit/` cover these fixes.
+- The transcoder, the tag reader, and the Ogg reader no longer hold a whole file or a whole tag value in memory.
+  - The transcoder reads, resamples, and writes in blocks of about 262,000 frames. Each block reads enough frames on both sides to cover the resampling filter, so the output equals the whole-file resample. One block stays in memory at a time.
+  - A stream without a declared frame count gets a counting pass before the block transcode.
+  - A raw custom tag value above 4096 characters shows as its first 200 characters, its length, and its SHA-256 digest. The summary reaches the library row and the Other Tags table only. A tag write reads the file itself.
+  - Catalog matching compares the first 512 characters of an artist or a title. The cut runs before the case fold, so no full copy of a long text forms.
+  - The MP4 reader caps a tag data payload at 16 MiB, the same cap the ID3, FLAC, and Ogg readers apply while they parse. A larger payload reads as its size and is never copied or decoded. An integer payload longer than 8 bytes reads as binary.
+  - The Ogg reader maps the file and touches only the pages it parses. It read the whole file before.
+  - A new test covers the analyzer rejection of a sample rate above 384 kHz.
+  - The version advances from 0.72.6 to 0.72.7 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Enter in the USB export confirm dialog cancels the export. Enter confirmed the export before. Confirm Export takes an explicit click or Space.
 - Enter in the interrupted USB export prompt leaves the drive unchanged. Enter resumed the export before. Resume and Restore take an explicit click or Space.
 - Clean Up USB Recovery Journal asks before it deletes any entry. No is the default. The result shows in a message. The result showed only in a tooltip before.
