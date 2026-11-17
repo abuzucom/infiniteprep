@@ -5,7 +5,15 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.72.4] (2026-11-17)
+## [0.72.5] (2026-11-17)
+
+### Changed
+
+- A push to `main` after a merge skips checks that already passed on the pull request.
+  - The `lint-and-style` and `agents-lint` jobs of `ci.yml` run on pull requests only. The test matrix still runs on `main`.
+  - The `check-sync` job of `sync-check.yml` runs on pull requests only.
+  - `agents-md-compliance.yml` triggers on pull requests to `main` instead of pushes to `main`. The `static-checks` job now runs before merge.
+  - The version advances from 0.72.4 to 0.72.5 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ### Added
 

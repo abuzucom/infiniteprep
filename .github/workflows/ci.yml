@@ -2,7 +2,8 @@
 name: ci
 
 # Runs the repository checks on every pull request and on every push to
-# main. The security-review-pr and quality-review-pr callers trigger on
+# main. A push to main skips the lint jobs. The merged commit already passed
+# them on the pull request. The security-review-pr and quality-review-pr callers trigger on
 # completion of this workflow by its name. Renaming it stops both reviews.
 
 # A push trigger for every branch starts a second run for each pull request
@@ -23,7 +24,8 @@ permissions:
 
 jobs:
   # Sorts the change into a class. A change to prose or to the landing site
-  # alone is light, and test-matrix skips it. Every other job always runs.
+  # alone is light, and test-matrix skips it. The lint jobs run on pull
+  # requests only. Every other job always runs.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -84,6 +86,7 @@ jobs:
         run: python3 scripts/check_action_versions.py
 
   lint-and-style:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -114,6 +117,7 @@ jobs:
   # Ruff skips the copied abuzucom/agents gate files. This job lints them
   # with the agents style and prose checks.
   agents-lint:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -131,11 +135,14 @@ jobs:
         run: make lint PYTHON=python
 
   # The status function replaces the implicit success check on needs. A
-  # failed changes job yields no light flag, and the tests then run.
+  # failed changes job yields no light flag, and the tests then run. A push
+  # to main skips lint-and-style. The push branch of the lint condition keeps
+  # the tests running on main.
   test-matrix:
     needs: [changes, lint-and-style]
     if: >-
-      ${{ !cancelled() && needs.lint-and-style.result == 'success' &&
+      ${{ !cancelled() &&
+      (needs.lint-and-style.result == 'success' || github.event_name == 'push') &&
       needs.changes.outputs.light != 'true' }}
     strategy:
       fail-fast: false

@@ -52,6 +52,9 @@ The earlier record named `b452348`. The copied files matched `59c6d95`.
 - `tests/test_push_event_workflow_wiring.py` and
   `tests/test_parallel_test_runner.py` read the suite steps from both
   workflows.
+- `agents-md-compliance.yml` triggers on pull requests to `main` instead of
+  pushes to `main`. The `check-sync` job of `sync-check.yml` runs on pull
+  requests only. A push to `main` replays checks that already passed.
 - `.gitattributes` keeps `* text=auto eol=lf` and adds the policy entries.
 - `pyproject.toml` excludes the copied gate files from Ruff. The agents lint
   in `ci.yml` covers those files.

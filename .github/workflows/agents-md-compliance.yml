@@ -1,8 +1,11 @@
 name: AGENTS.md Compliance
 
+# The checks run before merge. A push to main replays them after the fact.
+# The ready_for_review type starts the pr-checks job, which skips drafts.
 on:
-  push:
+  pull_request:
     branches: [ main ]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
