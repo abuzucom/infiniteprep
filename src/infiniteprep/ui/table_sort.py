@@ -128,12 +128,17 @@ def natural_key(text: str) -> tuple[tuple[int, object], ...]:
 
     The text is folded to lower case. Each number becomes a token that sorts
     before each text token, so "Track 2" comes before "Track 10".
+
+    A number compares by its digit count, then by its digits, with leading
+    zeros removed. That order equals the numeric order. It needs no integer
+    conversion, which Python refuses for a run above 4300 digits.
     """
     parts = _NUMBER_PATTERN.split(text.casefold())
     tokens: list[tuple[int, object]] = []
     for index, part in enumerate(parts):
         if index % 2:
-            tokens.append((0, int(part)))
+            digits = part.lstrip("0")
+            tokens.append((0, (len(digits), digits)))
         else:
             tokens.append((1, part))
     return tuple(tokens)
