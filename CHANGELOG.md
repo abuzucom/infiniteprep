@@ -26,7 +26,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The transcoder reads, resamples, and writes in blocks of about 262,000 frames. Each block reads enough frames on both sides to cover the resampling filter, so the output equals the whole-file resample. One block stays in memory at a time.
   - A stream without a declared frame count gets a counting pass before the block transcode.
   - A raw custom tag value above 4096 characters shows as its first 200 characters, its length, and its SHA-256 digest. The summary reaches the library row and the Other Tags table only. A tag write reads the file itself.
-  - Catalog matching compares the first 512 characters of an artist or a title.
+  - Catalog matching compares the first 512 characters of an artist or a title. The cut runs before the case fold, so no full copy of a long text forms.
+  - The MP4 reader caps a tag data payload at 16 MiB, the same cap the ID3, FLAC, and Ogg readers apply while they parse. A larger payload reads as its size and is never copied or decoded. An integer payload longer than 8 bytes reads as binary.
   - The Ogg reader maps the file and touches only the pages it parses. It read the whole file before.
   - A new test covers the analyzer rejection of a sample rate above 384 kHz.
   - The version advances from 0.72.5 to 0.72.6 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
