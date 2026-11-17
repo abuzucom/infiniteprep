@@ -17,6 +17,7 @@ from scipy.signal import resample_poly
 from infiniteprep import storage_paths
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
+    approved_values_to_write,
     copy_to_new_verified_file,
     operation_backup_path,
 )
@@ -27,6 +28,12 @@ from infiniteprep.hashing import compute_sha256
 
 MAX_TRANSCODE_FILE_BYTES: Final[int] = 1_073_741_824  # 1 GiB
 MAX_TRANSCODE_DURATION_SEC: Final[float] = 7200.0  # 2 hours
+# A file header declares the channel count, the sample rate, and the frame count. A crafted
+# header can claim a shape that decodes a small file to many gigabytes of float64 samples.
+MAX_TRANSCODE_CHANNELS: Final[int] = 8
+MAX_TRANSCODE_SAMPLE_RATE_HZ: Final[int] = 384_000
+# The budget equals a 2 hour stereo file at 48 kHz.
+MAX_TRANSCODE_DECODED_SAMPLES: Final[int] = 7200 * 48_000 * 2
 SAMPLE_RATE_44K1: Final[int] = 44100
 SAMPLE_RATE_48K: Final[int] = 48000
 # Headroom guard against inter-sample peaks during polyphase resampling
@@ -179,8 +186,21 @@ class SafeTranscoderAdapter:
             rec.post_write_hash = post_hash
             rec.operation_status = OperationStatus.COMPLETED
             self.repo.upsert_change_record(rec)
+            self._point_asset_at_output(asset, out_path, post_hash)
             return rec.operation_id
         return None
+
+    def _point_asset_at_output(self, asset: FileAsset, out_path: Path, post_hash: str) -> None:
+        """Store the path, hash, size, and format of the file that replaced the source.
+
+        A later tag write compares the stored hash with the file on disk. A stale row makes
+        that write refuse the file as externally modified.
+        """
+        asset.current_path = str(out_path)
+        asset.content_hash = post_hash
+        asset.file_size = out_path.stat().st_size
+        asset.format = self.tag_adapter.detect_format(out_path)
+        self.repo.upsert_file_asset(asset)
 
     def _verify_audio_bounds(self, src_path: Path) -> None:
         """Reject audio files exceeding size or duration safety caps before PCM decode."""
@@ -195,6 +215,28 @@ class SafeTranscoderAdapter:
             raise ValueError(
                 f"Audio file '{src_path.name}' duration ({info.duration:.1f}s) exceeds "
                 f"maximum transcode limit ({MAX_TRANSCODE_DURATION_SEC:.0f}s)."
+            )
+        self._verify_decoded_size(
+            src_path.name, int(info.channels), int(info.samplerate), int(info.frames)
+        )
+
+    def _verify_decoded_size(self, name: str, channels: int, sample_rate: int, frames: int) -> None:
+        """Reject a declared stream shape whose decoded samples exceed the memory budget."""
+        if channels <= 0 or channels > MAX_TRANSCODE_CHANNELS:
+            raise ValueError(
+                f"Audio file '{name}' declares {channels} channels; the transcoder accepts "
+                f"1 to {MAX_TRANSCODE_CHANNELS}."
+            )
+        if sample_rate <= 0 or sample_rate > MAX_TRANSCODE_SAMPLE_RATE_HZ:
+            raise ValueError(
+                f"Audio file '{name}' declares a {sample_rate} Hz sample rate; the transcoder "
+                f"accepts 1 to {MAX_TRANSCODE_SAMPLE_RATE_HZ} Hz."
+            )
+        decoded_samples = frames * channels
+        if decoded_samples > MAX_TRANSCODE_DECODED_SAMPLES:
+            raise ValueError(
+                f"Audio file '{name}' decodes to {decoded_samples} samples, above the "
+                f"transcode limit ({MAX_TRANSCODE_DECODED_SAMPLES}); split the file first."
             )
 
     def _resolve_target_params(
@@ -291,9 +333,7 @@ class SafeTranscoderAdapter:
     def _apply_effective_tags_to_output(self, asset: FileAsset, out_path: Path) -> None:
         """Write original standard tags merged with user-approved fields onto output file."""
         std = dict(asset.original_tags.get("standard_tags", {}))
-        approved = {
-            k: v.approved_value for k, v in self.repo.get_approved_fields_map(asset.id).items()
-        }
+        approved = approved_values_to_write(self.repo.get_approved_fields_map(asset.id))
         effective = {**std, **approved}
         if effective:
             self.tag_adapter._write_tags_by_format(

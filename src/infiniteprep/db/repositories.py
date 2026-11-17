@@ -301,21 +301,30 @@ class Repository:
         task_status: TaskStatus | None = None,
         review_status: ReviewStatus | None = None,
         error_message: str | None = None,
+        clear_error: bool = False,
     ) -> None:
+        """Update the named status columns of one file in a single statement.
+
+        A None argument keeps the stored value. clear_error removes the stored error
+        message, because a None error_message already means "keep". One statement leaves
+        no gap between a read and a write for another thread to change the row.
+        """
         conn = self.db.connect()
-        asset = self.get_file_by_id(file_id)
-        if not asset:
-            return
-        new_task = str(task_status) if task_status is not None else str(asset.task_status)
-        new_review = str(review_status) if review_status is not None else str(asset.review_status)
-        new_err = error_message if error_message is not None else asset.error_message
         conn.execute(
             """
             UPDATE file_assets
-            SET task_status = ?, review_status = ?, error_message = ?
+            SET task_status = COALESCE(?, task_status),
+                review_status = COALESCE(?, review_status),
+                error_message = CASE WHEN ? THEN NULL ELSE COALESCE(?, error_message) END
             WHERE id = ?
             """,
-            (new_task, new_review, new_err, file_id),
+            (
+                str(task_status) if task_status is not None else None,
+                str(review_status) if review_status is not None else None,
+                1 if clear_error else 0,
+                error_message,
+                file_id,
+            ),
         )
         self._commit(conn)
 

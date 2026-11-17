@@ -81,6 +81,8 @@ REVIEW_STATUS_ORDER: Final[tuple[str, ...]] = (
 )
 
 BLANK_TEXTS: Final[frozenset[str]] = frozenset({"", "-"})
+# The compared value every row of the unsorted group shares.
+UNSORTED_PRIMARY: Final[int] = 0
 _NUMBER_PATTERN = re.compile(r"(\d+)")
 
 
@@ -216,7 +218,12 @@ def _build_entry(
 ) -> _SortEntry:
     """Build the compared values for one row."""
     unsorted = _is_unsorted(row, kind, column)
-    primary, mode_rank = _primary_value(row, kind, column, notation)
+    # A row without a value has nothing to compare. The group rank alone places it, so every
+    # unsorted row shares one neutral value and falls through to the title and path order.
+    primary: object = UNSORTED_PRIMARY
+    mode_rank = 0
+    if not unsorted:
+        primary, mode_rank = _primary_value(row, kind, column, notation)
     return _SortEntry(
         row=row,
         group_rank=_group_rank(unsorted, placement),

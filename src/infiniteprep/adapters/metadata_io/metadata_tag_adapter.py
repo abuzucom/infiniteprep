@@ -75,6 +75,13 @@ from infiniteprep.hashing import compute_sha256
 
 XDJ_RX3_MAX_SAMPLE_RATE_HZ: Final[int] = 48000
 XDJ_RX3_MAX_BIT_DEPTH: Final[int] = 24
+# A RIFF form opens with "RIFF", a 4-byte size, and the 4-byte form type.
+RIFF_FORM_HEADER_SIZE: Final[int] = 12
+# A RIFF chunk opens with a 4-byte ID and a 4-byte payload size.
+RIFF_CHUNK_HEADER_SIZE: Final[int] = 8
+RIFF_FOURCC_SIZE: Final[int] = 4
+# RIFF chunks start on even offsets. A payload of odd length takes one pad byte.
+RIFF_CHUNK_ALIGNMENT: Final[int] = 2
 FLAC_VENDOR: Final[str] = f"InfinitePrep {__version__}"
 
 ILLEGAL_FILENAME_CHARS_RE: Final[re.Pattern[str]] = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -262,38 +269,104 @@ def evaluate_xdj_rx3_warnings(
     return warnings
 
 
-def build_riff_list_info_chunk(tags_to_write: dict[str, str]) -> bytes:
-    """Build a valid RIFF LIST-INFO chunk for WAV files so standalone hardware reads basic tags."""
-    subchunks: list[bytes] = []
+def approved_values_to_write(approved_fields: Mapping[str, ApprovedField]) -> dict[str, str]:
+    """Return the stripped approved values, without the fields whose value is blank.
+
+    A blank approved value states no tag. Writing it would erase the tag the file holds.
+    """
+    values: dict[str, str] = {}
+    for field_name, approved in approved_fields.items():
+        if approved.approved_value is None:
+            continue
+        cleaned = str(approved.approved_value).strip()
+        if cleaned:
+            values[field_name] = cleaned
+    return values
+
+
+def _riff_chunk_bytes(chunk_id: bytes, payload: bytes) -> bytes:
+    """Return one RIFF chunk with its size field and the pad byte of an odd payload."""
+    pad = b"\x00" * (len(payload) % RIFF_CHUNK_ALIGNMENT)
+    return chunk_id + struct.pack("<I", len(payload)) + payload + pad
+
+
+def build_riff_list_info_chunk(
+    tags_to_write: dict[str, str], existing_subchunks: Mapping[bytes, bytes] | None = None
+) -> bytes:
+    """Build a valid RIFF LIST-INFO chunk for WAV files so standalone hardware reads basic tags.
+
+    existing_subchunks holds the payloads the file already stores, keyed by subchunk ID. A
+    written field replaces its own subchunk. Every other stored subchunk stays.
+    """
+    payloads: dict[bytes, bytes] = dict(existing_subchunks or {})
     for field_name, fourcc in RIFF_INFO_TAG_MAP.items():
         raw_val = tags_to_write.get(field_name, "").strip()
-        if not raw_val:
-            continue
-        encoded = raw_val.encode("utf-8", errors="replace") + b"\x00"
-        padded = encoded + (b"\x00" if len(encoded) % 2 == 1 else b"")
-        subchunks.append(fourcc + struct.pack("<I", len(encoded)) + padded)
-    if not subchunks:
+        if raw_val:
+            payloads[fourcc] = raw_val.encode("utf-8", errors="replace") + b"\x00"
+    if not payloads:
         return b""
-    body = b"INFO" + b"".join(subchunks)
-    padded_body = body + (b"\x00" if len(body) % 2 == 1 else b"")
-    return b"LIST" + struct.pack("<I", len(body)) + padded_body
+    subchunks = [_riff_chunk_bytes(fourcc, payload) for fourcc, payload in payloads.items()]
+    return _riff_chunk_bytes(b"LIST", b"INFO" + b"".join(subchunks))
+
+
+def _riff_chunk_spans(
+    data: bytes, start: int, *, stop_at_damage: bool = False
+) -> list[tuple[bytes, int, int, int]]:
+    """Return (ID, payload start, payload end, chunk end) for each RIFF chunk from start.
+
+    A chunk whose size passes the end of data raises ValueError. With stop_at_damage the
+    walk ends there and returns the chunks before the damage.
+    """
+    spans: list[tuple[bytes, int, int, int]] = []
+    offset = start
+    total_len = len(data)
+    while offset + RIFF_CHUNK_HEADER_SIZE <= total_len:
+        chunk_id = data[offset : offset + RIFF_FOURCC_SIZE]
+        size_field = data[offset + RIFF_FOURCC_SIZE : offset + RIFF_CHUNK_HEADER_SIZE]
+        payload_start = offset + RIFF_CHUNK_HEADER_SIZE
+        payload_end = payload_start + struct.unpack("<I", size_field)[0]
+        if payload_end > total_len:
+            if stop_at_damage:
+                return spans
+            raise ValueError("Malformed WAV file: RIFF subchunk size exceeds file bounds.")
+        pad_size = (payload_end - payload_start) % RIFF_CHUNK_ALIGNMENT
+        chunk_end = min(total_len, payload_end + pad_size)
+        spans.append((chunk_id, payload_start, payload_end, chunk_end))
+        offset = chunk_end
+    return spans
+
+
+def _is_list_info(data: bytes, chunk_id: bytes, payload_start: int) -> bool:
+    """Return whether the chunk is a LIST chunk of the INFO type."""
+    return chunk_id == b"LIST" and data[payload_start : payload_start + RIFF_FOURCC_SIZE] == b"INFO"
 
 
 def _strip_existing_riff_list_info_chunks(raw_bytes: bytes) -> list[bytes]:
     """Return all RIFF WAVE subchunks except existing LIST-INFO chunks."""
-    kept_chunks: list[bytes] = []
-    offset = 12
-    total_len = len(raw_bytes)
-    while offset + 8 <= total_len:
-        chunk_id = raw_bytes[offset : offset + 4]
-        chunk_size = struct.unpack("<I", raw_bytes[offset + 4 : offset + 8])[0]
-        if offset + 8 + chunk_size > total_len:
-            raise ValueError("Malformed WAV file: RIFF subchunk size exceeds file bounds.")
-        chunk_end = min(total_len, offset + 8 + chunk_size + (chunk_size % 2))
-        if not (chunk_id == b"LIST" and raw_bytes[offset + 8 : offset + 12] == b"INFO"):
-            kept_chunks.append(raw_bytes[offset:chunk_end])
-        offset = chunk_end
-    return kept_chunks
+    return [
+        raw_bytes[payload_start - RIFF_CHUNK_HEADER_SIZE : chunk_end]
+        for chunk_id, payload_start, _payload_end, chunk_end in _riff_chunk_spans(
+            raw_bytes, RIFF_FORM_HEADER_SIZE
+        )
+        if not _is_list_info(raw_bytes, chunk_id, payload_start)
+    ]
+
+
+def _existing_riff_info_subchunks(raw_bytes: bytes) -> dict[bytes, bytes]:
+    """Return the payload of each stored LIST-INFO subchunk, keyed by subchunk ID."""
+    payloads: dict[bytes, bytes] = {}
+    for chunk_id, payload_start, payload_end, _chunk_end in _riff_chunk_spans(
+        raw_bytes, RIFF_FORM_HEADER_SIZE
+    ):
+        if not _is_list_info(raw_bytes, chunk_id, payload_start):
+            continue
+        info_body = raw_bytes[payload_start + RIFF_FOURCC_SIZE : payload_end]
+        # A damaged INFO list must not block the tag write. The readable subchunks stay.
+        for sub_id, sub_start, sub_end, _sub_chunk_end in _riff_chunk_spans(
+            info_body, 0, stop_at_damage=True
+        ):
+            payloads[sub_id] = info_body[sub_start:sub_end]
+    return payloads
 
 
 MAX_WAV_REWRITE_BYTES: Final[int] = 1_073_741_824  # 1 GiB
@@ -301,8 +374,7 @@ MAX_WAV_REWRITE_BYTES: Final[int] = 1_073_741_824  # 1 GiB
 
 def synchronize_wav_list_info_chunk(file_path: Path, tags_to_write: dict[str, str]) -> None:
     """Synchronize the RIFF LIST-INFO chunk in a WAV file without modifying the PCM data chunk."""
-    new_list_chunk = build_riff_list_info_chunk(tags_to_write)
-    if not new_list_chunk:
+    if not build_riff_list_info_chunk(tags_to_write):
         return
     if file_path.stat().st_size > MAX_WAV_REWRITE_BYTES:
         raise ValueError(
@@ -316,7 +388,9 @@ def synchronize_wav_list_info_chunk(file_path: Path, tags_to_write: dict[str, st
         raise ValueError("Malformed WAV file: RIFF header size exceeds file bounds.")
 
     kept_chunks = _strip_existing_riff_list_info_chunks(raw_bytes)
-    kept_chunks.append(new_list_chunk)
+    kept_chunks.append(
+        build_riff_list_info_chunk(tags_to_write, _existing_riff_info_subchunks(raw_bytes))
+    )
     wave_payload = b"WAVE" + b"".join(kept_chunks)
     file_path.write_bytes(b"RIFF" + struct.pack("<I", len(wave_payload)) + wave_payload)
 
@@ -773,11 +847,7 @@ class MetadataTagAdapter:
         existing_std = dict(file_asset.original_tags.get("standard_tags", {}))
         preserved_custom = dict(file_asset.original_tags.get("raw_custom_tags", {}))
 
-        proposed_to_write = {
-            fname: str(af.approved_value).strip()
-            for fname, af in approved_fields.items()
-            if af.approved_value is not None and str(af.approved_value).strip() != ""
-        }
+        proposed_to_write = approved_values_to_write(approved_fields)
         effective_tags = {**existing_std, **proposed_to_write}
         destination_path, collision_warnings = self._resolve_destination_path(
             source_path, effective_tags, rename_template, enable_rename
