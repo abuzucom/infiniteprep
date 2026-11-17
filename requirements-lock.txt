@@ -1,4 +1,4 @@
-# Pinned direct and transitive dependency lockfile for InfinitePrep v0.75.1
+# Pinned direct and transitive dependency lockfile for InfinitePrep v0.76.0
 # Pins verified unchanged through v0.67.1; update together with pyproject.toml.
 # Every pin carries the SHA-256 digest of each artifact PyPI publishes for the
 # pinned release, so pip verifies the bytes it installs.

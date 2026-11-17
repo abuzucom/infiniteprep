@@ -87,6 +87,9 @@ POSITION_SLIDER_NAME: Final[str] = "Playback position"
 # the file moves, and the ID is what the player and the panel both address.
 FILE_ID_MIME_TYPE: Final[str] = "application/x-infiniteprep-file-id"
 DROP_HIGHLIGHT_COLOR: Final[str] = "#f59e0b"
+# The border sits one pixel inside the widget edge and stays two pixels wide.
+DROP_HIGHLIGHT_INSET_PX: Final[int] = 1
+DROP_HIGHLIGHT_BORDER_PX: Final[int] = 2
 LOADED_TRACK_LABEL_PREFIX: Final[str] = "Loaded: "
 LOADED_TRACK_NONE_TEXT: Final[str] = "Loaded: none"
 BACKEND_UNAVAILABLE_TEXT: Final[str] = (
@@ -368,7 +371,14 @@ class WaveformOverviewBar(QWidget):
     def _paint_drop_highlight(self, painter: QPainter) -> None:
         """Draw the border that marks the waveform as a drop target."""
         painter.setPen(QColor(DROP_HIGHLIGHT_COLOR))
-        painter.drawRect(self.rect().adjusted(1, 1, -2, -2))
+        painter.drawRect(
+            self.rect().adjusted(
+                DROP_HIGHLIGHT_INSET_PX,
+                DROP_HIGHLIGHT_INSET_PX,
+                -DROP_HIGHLIGHT_BORDER_PX,
+                -DROP_HIGHLIGHT_BORDER_PX,
+            )
+        )
 
     def paintEvent(self, event: QPaintEvent) -> None:
         """Render waveform vertical bars and the current playhead indicator."""
