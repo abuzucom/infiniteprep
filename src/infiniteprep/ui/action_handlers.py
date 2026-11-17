@@ -127,23 +127,16 @@ def run_transcode_with_confirmation(
     settings = settings_manager.load()
     mode, preset = resolve_transcode_options(settings.transcode_mode, settings.transcode_preset)
     preflight_warnings = collect_transcode_preflight_warnings(repo, file_ids)
-    answer = QMessageBox.question(
-        parent,
-        TRANSCODE_DIALOG_TITLE,
-        build_transcode_confirmation_text(
-            len(file_ids), mode, preset, preflight_warnings=preflight_warnings
-        ),
-        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        QMessageBox.StandardButton.No,
+    confirmation = build_transcode_confirmation_text(
+        len(file_ids), mode, preset, preflight_warnings=preflight_warnings
     )
-    if answer != QMessageBox.StandardButton.Yes:
+    # The confirmation and the summary both list file names from imported files.
+    if not ask_plain_question(parent, TRANSCODE_DIALOG_TITLE, confirmation):
         return None
     summary = transcode_files(transcoder, file_ids, preset=preset, mode=mode)
     message = build_transcode_summary_text(repo, summary)
-    if summary.failures:
-        QMessageBox.warning(parent, TRANSCODE_DIALOG_TITLE, message)
-    else:
-        QMessageBox.information(parent, TRANSCODE_DIALOG_TITLE, message)
+    icon = QMessageBox.Icon.Warning if summary.failures else QMessageBox.Icon.Information
+    show_plain_message(parent, icon, TRANSCODE_DIALOG_TITLE, message)
     return summary
 
 
