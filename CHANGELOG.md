@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.75.0] (2026-11-17)
+## [0.76.0] (2026-11-17)
 
 ### Added
 
@@ -17,6 +17,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The other tags, write preview, journal, and recovery tables pass Tab to the next control. Tab walked every cell before.
 - The new `tests/unit/test_accessible_names_and_keyboard_sort.py` covers the names, the read-only tables, and the keyboard sort.
   - The version advances from 0.74.1 to 0.75.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- The library selection no longer stops playback (issue 249, D407).
+  - A row click updates the detail panel only. The player keeps its track, its position, and its play state until an explicit load.
+  - A `Play Selected` button in the detail panel header loads and plays the selected file.
+  - `Ctrl+Enter` on the library table loads and plays the selected file.
+  - A `Play` item in the library row context menu loads and plays the row under the pointer.
+  - A double-click on a library row loads and plays that row.
+  - The player `Play` button loads the selection when the selection differs from the loaded track.
+  - A library row dragged onto the waveform loads that track paused at the start. A drop while a track plays asks first. `Cancel` keeps the playing track and its position.
+  - The player shows a `Loaded:` line with the file name it holds. A mismatch with the detail panel stays visible.
+  - The new `tests/unit/test_selection_keeps_playback.py` covers the selection, the four play paths, and the drop paths.
+  - The version advances from 0.75.0 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - The new `tests/unit/test_destructive_action_guards.py` checks the guards in front of destructive UI actions (accessibility audit).
   - The version advances from 0.72.4 to 0.72.5 in `pyproject.toml` and `src/infiniteprep/__init__.py`.

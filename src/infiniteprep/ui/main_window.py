@@ -9,9 +9,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from PySide6.QtCore import QByteArray, Qt, QTimer
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtCore import QByteArray, QMimeData, QPoint, Qt, QTimer, Signal
+from PySide6.QtGui import QCloseEvent, QDrag, QKeyEvent, QMouseEvent
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QComboBox,
     QFileDialog,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSplitter,
@@ -48,6 +50,7 @@ from infiniteprep.domain.models import ApprovedField, FileAsset
 from infiniteprep.services.import_service import ImportBatchReport, ImportService
 from infiniteprep.services.job_orchestrator import BatchKind, BatchState, QueuedBatch
 from infiniteprep.services.review_service import ReviewService
+from infiniteprep.ui.audio_player import FILE_ID_MIME_TYPE
 from infiniteprep.ui.batch_queue import (
     BatchQueueController,
     BatchRun,
@@ -140,6 +143,67 @@ CLOSE_PROMPT_TEXT: Final[str] = (
 )
 # Runs a queued Analyze batch on a worker thread: file IDs, cancel check, progress report.
 AnalyzeRunner = Callable[[list[str], CancelCheck, ProgressReport], object]
+# The first column carries the file ID of the row.
+FILE_ID_COLUMN: Final[int] = 0
+PLAY_MENU_ITEM_LABEL: Final[str] = "Play"
+
+
+class LibraryTableWidget(QTableWidget):
+    """Library table that carries a file ID in a drag and asks for a play on Ctrl+Enter."""
+
+    play_selection_requested = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        """Initialize the table as a drag source for library rows."""
+        super().__init__(parent)
+        self._drag_press_pos: QPoint | None = None
+        self.setAcceptDrops(False)
+        self.setDragEnabled(True)
+        self.setDragDropMode(QAbstractItemView.DragDropMode.DragOnly)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        """Record the press position so a drag carries the row under the pointer."""
+        self._drag_press_pos = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Ask for the selected track to play on Ctrl+Enter."""
+        if (
+            event.key() == Qt.Key.Key_Return
+            and event.modifiers() & Qt.KeyboardModifier.ControlModifier
+        ):
+            self.play_selection_requested.emit()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def startDrag(self, supported_actions: Qt.DropActions) -> None:
+        """Start a drag that carries the file ID of the dragged row."""
+        mime_data = self.drag_mime_data()
+        if mime_data is None:
+            return
+        drag = QDrag(self)
+        drag.setMimeData(mime_data)
+        drag.exec(Qt.DropAction.CopyAction)
+
+    def drag_mime_data(self) -> QMimeData | None:
+        """Return the payload of the dragged row, or None when the row holds no file ID."""
+        index = self.currentIndex()
+        if self._drag_press_pos is not None:
+            pressed_index = self.indexAt(self._drag_press_pos)
+            if pressed_index.isValid():
+                index = pressed_index
+        if not index.isValid():
+            return None
+        item = self.item(index.row(), FILE_ID_COLUMN)
+        if item is None:
+            return None
+        file_id = item.data(Qt.ItemDataRole.UserRole)
+        if not file_id:
+            return None
+        mime_data = QMimeData()
+        mime_data.setData(FILE_ID_MIME_TYPE, str(file_id).encode("utf-8"))
+        return mime_data
 
 
 @dataclass(frozen=True)
@@ -230,7 +294,8 @@ class MainWindow(QMainWindow):
         self.key_notation_combo = QComboBox(self)
         self.theme_combo = QComboBox(self)
         self._applied_theme = NATIVE_THEME
-        self.file_table = QTableWidget(0, len(TABLE_COLUMNS), self)
+        self.file_table = LibraryTableWidget(self)
+        self.file_table.setColumnCount(len(TABLE_COLUMNS))
         self.detail_panel = DetailPanel(
             repository=self.repo,
             review_service=self.review_service,
@@ -364,6 +429,10 @@ class MainWindow(QMainWindow):
         # Tab leaves the table in one press. The arrow keys move between cells.
         self.file_table.setTabKeyNavigation(False)
         self.file_table.itemSelectionChanged.connect(self._on_table_selection_changed)
+        self.file_table.cellDoubleClicked.connect(self._on_table_cell_double_clicked)
+        self.file_table.play_selection_requested.connect(self._play_selected_file)
+        self.file_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.file_table.customContextMenuRequested.connect(self._on_library_context_menu)
 
         splitter = QSplitter(Qt.Orientation.Vertical, self)
         splitter.addWidget(self.file_table)
@@ -658,19 +727,65 @@ class MainWindow(QMainWindow):
         return format_canonical_key(parsed[0], parsed[1], self.current_key_notation)
 
     def _on_table_selection_changed(self) -> None:
-        """Load selected file into DetailPanel when table selection changes."""
+        """Show the selected file in DetailPanel when table selection changes.
+
+        The selection never touches the player. The player keeps its track, its
+        position, and its play state until an explicit load (D407).
+        """
         selected_rows = self.file_table.selectionModel().selectedRows()
         if not selected_rows:
             return
         row_idx = selected_rows[0].row()
-        item = self.file_table.item(row_idx, 0)
+        item = self.file_table.item(row_idx, FILE_ID_COLUMN)
         if item is None:
             return
         file_id = item.data(Qt.ItemDataRole.UserRole)
         if not file_id:
             return
         self._selected_file_id = str(file_id)
-        self.detail_panel.load_file_asset(self._selected_file_id)
+        self.detail_panel.select_file_asset(self._selected_file_id)
+
+    def _file_id_for_row(self, row: int) -> str | None:
+        """Return the file ID of the table row, or None when the row holds none."""
+        item = self.file_table.item(row, FILE_ID_COLUMN)
+        if item is None:
+            return None
+        file_id = item.data(Qt.ItemDataRole.UserRole)
+        return str(file_id) if file_id else None
+
+    def _play_selected_file(self) -> None:
+        """Load and play the file the library table has selected."""
+        if self._selected_file_id is None:
+            return
+        self.detail_panel.load_and_play_file_asset(self._selected_file_id)
+
+    def _on_table_cell_double_clicked(self, row: int, column: int) -> None:
+        """Load and play the double-clicked row."""
+        file_id = self._file_id_for_row(row)
+        if file_id is None:
+            return
+        self.detail_panel.load_and_play_file_asset(file_id)
+
+    def _on_library_context_menu(self, position: QPoint) -> None:
+        """Open the context menu of the row under the pointer.
+
+        The right-click selects the row first, so the menu acts on the row the
+        pointer rests on.
+        """
+        index = self.file_table.indexAt(position)
+        if index.isValid():
+            self.file_table.selectRow(index.row())
+        if self._selected_file_id is None:
+            return
+        file_id = self._selected_file_id
+        menu = QMenu(self.file_table)
+        play_action = menu.addAction(PLAY_MENU_ITEM_LABEL)
+        play_action.triggered.connect(lambda: self.detail_panel.load_and_play_file_asset(file_id))
+        self._exec_context_menu(menu, position)
+
+    def _exec_context_menu(self, menu: QMenu, position: QPoint) -> None:
+        """Show the context menu at the pointer position."""
+        menu.exec(self.file_table.viewport().mapToGlobal(position))
 
     def _on_key_notation_changed(self, text: str) -> None:
         """Update key notation across table and DetailPanel."""
@@ -717,7 +832,7 @@ class MainWindow(QMainWindow):
         """Show the changes of a finished batch in the table and the detail panel."""
         self.refresh_file_table()
         if self.detail_panel.current_file_id:
-            self.detail_panel.load_file_asset(self.detail_panel.current_file_id)
+            self.detail_panel.select_file_asset(self.detail_panel.current_file_id)
 
     def _on_queue_idle(self) -> None:
         """Close the window once the queue empties after Cancel and Exit."""
@@ -838,7 +953,7 @@ class MainWindow(QMainWindow):
             self.review_service.bulk_approve_non_conflicting(self.visible_file_ids)
             self.refresh_file_table()
             if self.detail_panel.current_file_id:
-                self.detail_panel.load_file_asset(self.detail_panel.current_file_id)
+                self.detail_panel.select_file_asset(self.detail_panel.current_file_id)
 
     def _trigger_open_write_dialog(self) -> None:
         """Open write preview and execution dialog if callback is registered."""
