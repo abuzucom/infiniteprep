@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from infiniteprep.domain.models import ChangeRecord
 from infiniteprep.services.write_service import WriteService
 from infiniteprep.ui.action_handlers import show_plain_message
+from infiniteprep.ui.time_format import format_local_timestamp
 
 RECOVERY_DIALOG_TITLE: Final[str] = "Recover Interrupted Writes"
 RECOVERY_DIALOG_WIDTH: Final[int] = 900
@@ -78,7 +79,11 @@ class RecoveryDialog(QDialog):
 
     def _populate_row(self, row_idx: int, record: ChangeRecord) -> None:
         """Render one interrupted write with its Restore and Keep buttons."""
-        cells = (record.timestamp, Path(record.previous_path).name, record.backup_reference)
+        cells = (
+            format_local_timestamp(record.timestamp),
+            Path(record.previous_path).name,
+            record.backup_reference,
+        )
         for col_idx, text in enumerate(cells):
             self.table.setItem(row_idx, col_idx, QTableWidgetItem(text))
         restore_btn = QPushButton("Restore from backup", self.table)
