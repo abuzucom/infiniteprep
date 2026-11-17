@@ -12,11 +12,13 @@ from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAd
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.services.import_service import ImportService
+from infiniteprep.services.job_orchestrator import BatchKind
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
 from infiniteprep.ui import accessible_names as accessible_names_module
 from infiniteprep.ui import main_window as main_window_module
 from infiniteprep.ui.audio_player import AudioPreviewWidget
+from infiniteprep.ui.batch_queue import format_batch_row
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.main_window import (
     NO_VISIBLE_FILES_TEXT,
@@ -30,6 +32,8 @@ from tests.fixtures.memory_settings import MemorySettingsManager
 
 STATUS_COLUMN: int = TABLE_COLUMNS.index("Review Status")
 PLAYBACK_ERROR: str = "Playback failed: decoder error."
+BATCH_LABEL: str = "Announce check"
+BATCH_TIMEOUT_MS: int = 10_000
 
 
 @pytest.fixture
@@ -118,11 +122,28 @@ def test_toolbar_actions_explain_an_empty_library(
         on_export_playlist=lambda ids, destination: calls.append((ids, destination)),
     )
 
-    for button in (window.bulk_btn, window.transcode_btn, window.export_playlist_btn):
+    buttons = (window.bulk_btn, window.transcode_btn, window.export_playlist_btn)
+    for button in buttons:
         button.click()
 
     assert calls == []
-    assert [text for _icon, _title, text in messages] == [NO_VISIBLE_FILES_TEXT] * 3
+    assert [text for _icon, _title, text in messages] == [NO_VISIBLE_FILES_TEXT] * len(buttons)
+
+
+def test_finished_batch_is_announced(
+    qtbot: Any,
+    tmp_path: Path,
+    messages: list[tuple[QMessageBox.Icon, str, str]],
+    announcements: list[str],
+) -> None:
+    """A batch that finishes in the queue reaches a screen reader with its result row."""
+    window = build_window(qtbot, tmp_path, with_track=False)
+
+    with qtbot.waitSignal(window.batch_queue.idle, timeout=BATCH_TIMEOUT_MS):
+        batch = window.queue_batch(BatchKind.ANALYZE, BATCH_LABEL, lambda _cancel, _progress: None)
+
+    assert announcements[-1] == format_batch_row(batch)
+    assert announcements[-1].startswith(BATCH_LABEL)
 
 
 def test_bulk_approve_reports_the_approved_count(
