@@ -44,16 +44,24 @@ def walk_chunks(data: bytes, offset: int, end: int) -> list[tuple[bytes, bytes]]
     return chunks
 
 
-def read_list_info(path: Path) -> dict[bytes, str]:
-    """Return the LIST-INFO fields of a WAV file as text keyed by subchunk id."""
+def read_list_info_payloads(path: Path) -> dict[bytes, bytes]:
+    """Return the declared payload bytes of each LIST-INFO subchunk of a WAV file."""
     data = path.read_bytes()
-    fields: dict[bytes, str] = {}
+    payloads: dict[bytes, bytes] = {}
     for chunk_id, payload in walk_chunks(data, RIFF_HEADER_SIZE, len(data)):
         if chunk_id != b"LIST" or payload[:FOURCC_SIZE] != b"INFO":
             continue
         for sub_id, sub_payload in walk_chunks(payload, FOURCC_SIZE, len(payload)):
-            fields[sub_id] = sub_payload.rstrip(b"\x00").decode("utf-8")
-    return fields
+            payloads[sub_id] = sub_payload
+    return payloads
+
+
+def read_list_info(path: Path) -> dict[bytes, str]:
+    """Return the LIST-INFO fields of a WAV file as text keyed by subchunk id."""
+    return {
+        sub_id: payload.rstrip(b"\x00").decode("utf-8")
+        for sub_id, payload in read_list_info_payloads(path).items()
+    }
 
 
 class WavListInfoMergeTests(unittest.TestCase):
@@ -101,6 +109,24 @@ class WavListInfoMergeTests(unittest.TestCase):
         ]
 
         self.assertEqual(len(list_info), 1)
+
+    def test_fields_of_a_second_list_info_chunk_survive(self) -> None:
+        append_list_info(self.wav, info_subchunk(b"IENG", "Mastering Engineer"))
+
+        synchronize_wav_list_info_chunk(self.wav, {FieldName.GENRE.value: "House"})
+
+        fields = read_list_info(self.wav)
+        self.assertEqual(fields[b"IENG"], "Mastering Engineer")
+        self.assertEqual(fields[b"ICMT"], "Ripped from vinyl")
+        self.assertEqual(fields[b"IGNR"], "House")
+
+    def test_odd_sized_payload_keeps_its_exact_bytes(self) -> None:
+        odd_payload = b"Recorder 1.0\x00"
+        self.assertEqual(len(odd_payload) % 2, 1)
+
+        synchronize_wav_list_info_chunk(self.wav, {FieldName.GENRE.value: "House"})
+
+        self.assertEqual(read_list_info_payloads(self.wav)[b"ISFT"], odd_payload)
 
 
 if __name__ == "__main__":

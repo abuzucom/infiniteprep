@@ -79,6 +79,8 @@ RIFF_FORM_HEADER_SIZE: Final[int] = 12
 # A RIFF chunk opens with a 4-byte ID and a 4-byte payload size.
 RIFF_CHUNK_HEADER_SIZE: Final[int] = 8
 RIFF_FOURCC_SIZE: Final[int] = 4
+# RIFF chunks start on even offsets. A payload of odd length takes one pad byte.
+RIFF_CHUNK_ALIGNMENT: Final[int] = 2
 FLAC_VENDOR: Final[str] = f"InfinitePrep {__version__}"
 
 ILLEGAL_FILENAME_CHARS_RE: Final[re.Pattern[str]] = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -283,7 +285,7 @@ def approved_values_to_write(approved_fields: Mapping[str, ApprovedField]) -> di
 
 def _riff_chunk_bytes(chunk_id: bytes, payload: bytes) -> bytes:
     """Return one RIFF chunk with its size field and the pad byte of an odd payload."""
-    pad = b"\x00" if len(payload) % 2 == 1 else b""
+    pad = b"\x00" * (len(payload) % RIFF_CHUNK_ALIGNMENT)
     return chunk_id + struct.pack("<I", len(payload)) + payload + pad
 
 
@@ -326,7 +328,8 @@ def _riff_chunk_spans(
             if stop_at_damage:
                 return spans
             raise ValueError("Malformed WAV file: RIFF subchunk size exceeds file bounds.")
-        chunk_end = min(total_len, payload_end + ((payload_end - payload_start) % 2))
+        pad_size = (payload_end - payload_start) % RIFF_CHUNK_ALIGNMENT
+        chunk_end = min(total_len, payload_end + pad_size)
         spans.append((chunk_id, payload_start, payload_end, chunk_end))
         offset = chunk_end
     return spans
