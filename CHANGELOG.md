@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.75.3] (2026-11-17)
+## [0.75.4] (2026-11-17)
 
 ### Added
 
@@ -56,6 +56,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Field row actions and the write recovery prompt guard typed text and backups (accessibility audit).
+  - A Save or Accept that raises no longer leaves its row marked. The marker dropped that row's unsaved text on the next refresh before.
+  - A refused Accept keeps the row's typed text. Only an accepted value replaces it.
+  - Lock on a field without an approved value says to save or accept a value first. It changed nothing and said nothing before.
+  - Mark as finished in the interrupted write recovery dialog asks first, with No as the default. One click ended the backup restore path before.
+  - The new `tests/unit/test_row_action_failures.py` covers the failed save, the refused accept, and Lock. `tests/unit/test_ui_recovery_dialog.py` answers the new prompt and adds a declined prompt test.
+  - The version advances from 0.75.3 to 0.75.4 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Status changes reach screen readers, and toolbar actions say what they did (accessibility audit).
   - A playback status, a spectrum analysis failure, a finished batch, and the write preview status each raise a screen reader announcement. A label update alone was silent before. The new `announce` helper in `ui/accessible_names.py` sends them.
   - Identify & Analyze, Bulk Approve, Preview & Apply Writes, Transcode, and Export say why they did nothing when no file is visible. Each ended without a word before.

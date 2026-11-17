@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -40,6 +41,7 @@ from infiniteprep.domain.models import AnalysisResult, ApprovedField, FieldPropo
 from infiniteprep.services.fake_lossless import ANALYZER_VERSION as FAKE_LOSSLESS_VERSION
 from infiniteprep.services.fake_lossless import FakeLosslessResult
 from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
+from infiniteprep.ui.action_handlers import show_plain_message
 from infiniteprep.ui.audio_player import AudioPreviewWidget
 from infiniteprep.ui.contrast import warning_text_color
 from infiniteprep.ui.waveform_worker import CANCEL_WAIT_MS, WaveformAnalysisPool
@@ -86,6 +88,10 @@ ROLE_LOCK: Final[str] = "lock"
 ROW_FIELD_PROPERTY: Final[str] = "field_name"
 LOADED_TEXT_PROPERTY: Final[str] = "loaded_text"
 ROW_NAME_SEPARATOR: Final[str] = ":"
+LOCK_TITLE: Final[str] = "Lock Field"
+LOCK_NEEDS_VALUE_TEXT: Final[str] = (
+    "The {field} field has no approved value to lock. Save or accept a value first."
+)
 # Events after which the label background can differ, so the warning amber can too.
 THEME_CHANGE_EVENTS: Final[frozenset[QEvent.Type]] = frozenset(
     {QEvent.Type.StyleChange, QEvent.Type.PaletteChange}
@@ -662,9 +668,26 @@ class DetailPanel(QWidget):
         return button
 
     def _accept_row_proposal(self, field_name: str, proposal_id: str) -> bool:
-        """Accept a row's proposal. The accepted value replaces unsaved text in that row."""
-        self._acted_field = field_name
-        return self._on_accept_proposal(proposal_id)
+        """Accept a row's proposal. Only an accepted value replaces unsaved text in that row.
+
+        A refused accept keeps the row's typed text. The marker clears even when the
+        accept raises, so a later refresh never drops that row's text.
+        """
+        try:
+            accepted = self.review_service.accept_proposal(proposal_id)
+            if accepted:
+                self._acted_field = field_name
+            self._refresh_after_row_action()
+            return accepted
+        finally:
+            self._acted_field = None
+
+    def _refresh_after_row_action(self) -> None:
+        """Reload the current file and tell the owner the library changed."""
+        if self.current_file_id:
+            self.load_file_asset(self.current_file_id)
+        if self.on_change_callback:
+            self.on_change_callback()
 
     def _format_display_val(self, field_name: str, raw_val: str) -> str:
         """Format canonical key according to active KeyDisplayNotation when displaying KEY."""
@@ -722,18 +745,37 @@ class DetailPanel(QWidget):
         return ok
 
     def _on_save_manual(self, file_id: str, field_name: str, value: str) -> None:
-        """Save a manual field edit with lock=True and refresh UI state."""
+        """Save a manual field edit with lock=True and refresh UI state.
+
+        The marker clears even when the save raises, so a later refresh never drops
+        that row's unsaved text.
+        """
         self._acted_field = field_name
-        cleaned = value.strip()
-        if len(cleaned) > MAX_MANUAL_FIELD_LENGTH:
-            cleaned = cleaned[:MAX_MANUAL_FIELD_LENGTH]
-        self.review_service.set_manual_field_value(file_id, field_name, cleaned, lock=True)
-        self.load_file_asset(file_id)
-        if self.on_change_callback:
-            self.on_change_callback()
+        try:
+            cleaned = value.strip()
+            if len(cleaned) > MAX_MANUAL_FIELD_LENGTH:
+                cleaned = cleaned[:MAX_MANUAL_FIELD_LENGTH]
+            self.review_service.set_manual_field_value(file_id, field_name, cleaned, lock=True)
+            self.load_file_asset(file_id)
+            if self.on_change_callback:
+                self.on_change_callback()
+        finally:
+            self._acted_field = None
 
     def _on_toggle_lock(self, file_id: str, field_name: str, locked: bool) -> None:
-        """Toggle field lock and refresh UI state."""
+        """Toggle field lock and refresh UI state.
+
+        The repository locks only a stored approved value. Lock on a field without one
+        changed nothing and said nothing, so it now says what to do first.
+        """
+        if locked and self.repo.get_approved_field(file_id, field_name) is None:
+            show_plain_message(
+                self,
+                QMessageBox.Icon.Information,
+                LOCK_TITLE,
+                LOCK_NEEDS_VALUE_TEXT.format(field=field_label(field_name)),
+            )
+            return
         self.review_service.set_field_lock(file_id, field_name, locked=locked)
         self.load_file_asset(file_id)
         if self.on_change_callback:
