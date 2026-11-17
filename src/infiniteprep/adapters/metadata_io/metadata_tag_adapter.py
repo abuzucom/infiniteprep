@@ -58,6 +58,7 @@ from infiniteprep.adapters.metadata_io.id3v2 import (
     remove_frames,
     replace_text_frame,
     replace_txxx,
+    v23_date_text,
 )
 from infiniteprep.adapters.metadata_io.mp4_reader import read_mp4
 from infiniteprep.adapters.metadata_io.ogg_reader import read_ogg
@@ -174,6 +175,7 @@ ID3_STORED_FIELDS: Final[frozenset[str]] = frozenset({*ID3_FRAME_TO_FIELD.values
 VORBIS_STORED_FIELDS: Final[frozenset[str]] = frozenset(VORBIS_FIELD_MAP)
 BACKUP_NAME_FORBIDDEN_CHARS: Final[frozenset[str]] = frozenset({"/", "\\", ":"})
 FIRST_PRINTABLE_ASCII: Final[int] = 0x20
+BACKUP_NAME_REPLACEMENT: Final[str] = "_"
 
 
 class SourceChangedDuringWriteError(OSError):
@@ -203,6 +205,21 @@ def _require_plain_name(component: str) -> str:
             "backup path."
         )
     return component
+
+
+def portable_backup_name(file_name: str) -> str:
+    """Return file_name with every backup-forbidden character replaced by an underscore.
+
+    macOS stores a slash typed in Finder as a colon, so "AC/DC - x.mp3" reaches the app as
+    "AC:DC - x.mp3". operation_backup_path refuses that name. The backup keeps the source
+    name only as a label, so a replaced character loses nothing.
+    """
+    return "".join(
+        BACKUP_NAME_REPLACEMENT
+        if char in BACKUP_NAME_FORBIDDEN_CHARS or ord(char) < FIRST_PRINTABLE_ASCII
+        else char
+        for char in file_name
+    )
 
 
 def operation_backup_path(
@@ -559,6 +576,17 @@ def _apply_id3_fields(tag: Id3Tag | None, tags_to_write: dict[str, str]) -> Id3T
         if field_key in tags_to_write:
             updated = replace_txxx(updated, description, tags_to_write[field_key])
     return updated
+
+
+def _expected_read_back(field_name: str, value: str, is_flac: bool) -> str:
+    """Return the value a written field reads back as.
+
+    The ID3v2.3 date frames hold a year, a calendar date, and a time of day. A YEAR
+    such as 2020-05 then reads back as 2020. FLAC stores the text as written.
+    """
+    if is_flac or field_name != FieldName.YEAR:
+        return value
+    return v23_date_text(value)
 
 
 def _classify_id3_tag(tag: Id3Tag | None) -> tuple[dict[str, str], dict[str, Any]]:
@@ -992,7 +1020,7 @@ class MetadataTagAdapter:
                 write_plan.backup_destination_path.parent,
                 write_plan.file_id,
                 operation_id,
-                source_path.name,
+                portable_backup_name(source_path.name),
             )
         self._create_verified_backup(source_path, backup_path, current_hash)
         self._write_verified_copy(
@@ -1065,11 +1093,14 @@ class MetadataTagAdapter:
             problems.append("the audio no longer parses")
         if (after.sample_rate, after.channels) != (baseline.sample_rate, baseline.channels):
             problems.append("the sample rate or channel count changed")
-        stored = VORBIS_STORED_FIELDS if after.format == AudioFormat.FLAC else ID3_STORED_FIELDS
+        is_flac = after.format == AudioFormat.FLAC
+        stored = VORBIS_STORED_FIELDS if is_flac else ID3_STORED_FIELDS
         problems.extend(
             f"{field_name} reads back as {after.standard_tags.get(field_name)!r}"
             for field_name, value in tags_to_write.items()
-            if field_name in stored and after.standard_tags.get(field_name) != value
+            if field_name in stored
+            and after.standard_tags.get(field_name)
+            != _expected_read_back(field_name, value, is_flac)
         )
         if problems:
             raise OSError(

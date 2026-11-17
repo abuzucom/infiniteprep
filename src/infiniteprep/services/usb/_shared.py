@@ -44,6 +44,7 @@ _WIN32_FILE_DISPOSITION_INFO: Final[int] = 4
 _WIN32_ERR_FILE_NOT_FOUND: Final[int] = 2
 _WIN32_ERR_PATH_NOT_FOUND: Final[int] = 3
 _WIN32_PATH_BUF_LEN: Final[int] = 32768
+WIN32_NO_ERROR_MESSAGE: Final[str] = "The Win32 call failed without an error code."
 _KERNEL32_CACHE: list[Any] = []
 
 
@@ -109,7 +110,8 @@ def clean_int(val: Any, default: int = 0) -> int:
     try:
         parsed = int(val)
         return max(0, parsed)
-    except (ValueError, TypeError):
+    # JSON and plist both accept an infinite number, and int() of it overflows.
+    except (ValueError, TypeError, OverflowError):
         return default
 
 
@@ -201,6 +203,19 @@ def _normalize_win32_final_path(raw_path: str) -> str:
     return raw_path
 
 
+def win32_error(code: int, path: Path | None = None) -> OSError:
+    """Return an OSError for a Win32 error code with its Windows message.
+
+    os.strerror reads C errno values. A Win32 code such as 32 (sharing violation) then
+    named the wrong error, here "Broken pipe". The winerror argument lets Python pick
+    the matching subclass and errno. Code 0 means the call set no error.
+    """
+    if code == 0:
+        return OSError(None, WIN32_NO_ERROR_MESSAGE, None if path is None else str(path))
+    message = ctypes.FormatError(code)
+    return OSError(None, message, None if path is None else str(path), code)
+
+
 def _open_win32_handle(path: Path, access: int, share: int, flags: int) -> int | None:
     """Open path on Win32 without following reparse points, returning None when absent."""
     k32 = _win32_kernel32()
@@ -218,7 +233,7 @@ def _open_win32_handle(path: Path, access: int, share: int, flags: int) -> int |
         err = ctypes.get_last_error()
         if err in (_WIN32_ERR_FILE_NOT_FOUND, _WIN32_ERR_PATH_NOT_FOUND):
             return None
-        raise OSError(err, os.strerror(err), str(path))
+        raise win32_error(err, path)
     return int(handle)
 
 
@@ -229,17 +244,17 @@ def _validate_win32_handle(
     k32 = _win32_kernel32()
     info = _Win32HandleFileInfo()
     if not k32.GetFileInformationByHandle(ctypes.c_void_p(handle), ctypes.byref(info)):
-        err = ctypes.get_last_error()
-        raise OSError(err, os.strerror(err))
+        raise win32_error(ctypes.get_last_error())
     if info.dwFileAttributes & _WIN32_ATTR_REPARSE_POINT:
         raise ValueError("USB metadata path cannot be a symbolic link.")
     if bool(info.dwFileAttributes & _WIN32_ATTR_DIRECTORY) != expect_dir:
         raise ValueError("USB metadata entry has unexpected filesystem type.")
     buf = ctypes.create_unicode_buffer(_WIN32_PATH_BUF_LEN)
     length = k32.GetFinalPathNameByHandleW(ctypes.c_void_p(handle), buf, _WIN32_PATH_BUF_LEN, 0)
-    if length == 0 or length >= _WIN32_PATH_BUF_LEN:
-        err = ctypes.get_last_error()
-        raise OSError(err, os.strerror(err))
+    if length == 0:
+        raise win32_error(ctypes.get_last_error())
+    if length >= _WIN32_PATH_BUF_LEN:
+        raise OSError(None, "The final path of the USB metadata entry exceeds the path buffer.")
     resolved = _normalize_win32_final_path(buf.value)
     actual_ref = os.path.normcase(os.path.dirname(resolved) if check_parent else resolved)
     expected_ref = os.path.normcase(str(expected.resolve(strict=True)))
@@ -296,8 +311,7 @@ def unlink_win32_confined_file(target: Path, expected_parent: Path) -> bool:
             ctypes.sizeof(disp),
         )
         if not ok:
-            err = ctypes.get_last_error()
-            raise OSError(err, os.strerror(err), str(target))
+            raise win32_error(ctypes.get_last_error(), target)
     finally:
         close_win32_handle(handle)
     return True
@@ -322,11 +336,11 @@ def read_bounded_fd_utf8(descriptor: int, *, max_bytes: int = MAX_USB_JSON_BYTES
     try:
         fd_stat = os.fstat(descriptor)
         if not stat.S_ISREG(fd_stat.st_mode):
-            os.close(descriptor)
             raise ValueError("USB JSON target must be a regular file.")
         if fd_stat.st_size > max_bytes:
-            os.close(descriptor)
             raise ValueError("USB JSON file exceeds maximum allowed size.")
+    # The handler closes the descriptor once. A second close could hit a descriptor
+    # number another thread received in between.
     except BaseException:
         with contextlib.suppress(OSError):
             os.close(descriptor)

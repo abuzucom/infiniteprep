@@ -574,11 +574,14 @@ class UsbRecoveryJournalStore:
                 )
         if choice == ReconnectChoice.RESTORE:
             _run_required_recovery_callback("restore", restore_callback, match.entry, mount_root)
-            remove_in_progress_manifest(mount_root)
         elif choice == ReconnectChoice.RESUME:
             _run_required_recovery_callback("resume", resume_callback, match.entry, mount_root)
+        # The journal records the action before the drive marker goes. A failed journal
+        # write then leaves the marker in place, and a retry still finds a matching drive.
+        updated = self._record_recovery_action(match.entry, choice)
+        if choice in (ReconnectChoice.RESTORE, ReconnectChoice.RESUME):
             remove_in_progress_manifest(mount_root)
-        return self._record_recovery_action(match.entry, choice)
+        return updated
 
     def _record_recovery_action(
         self, entry: UsbJournalEntry, choice: ReconnectChoice

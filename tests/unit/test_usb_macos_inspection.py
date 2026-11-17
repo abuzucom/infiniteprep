@@ -1071,12 +1071,16 @@ class TestUsbMacosInspection(unittest.TestCase):
         self.assertLess(elapsed, 30.0)
 
     def test_bounded_runner_survives_stderr_flood(self) -> None:
-        """A child flooding stderr fails within the deadline with bounded storage."""
+        """A child flooding stderr finishes within the deadline with bounded storage.
+
+        The runner drains stderr past its capture cap, so the child never blocks on a
+        full pipe and exits on its own.
+        """
         started = time.monotonic()
         flood = "import sys; sys.stderr.write('e' * 200000); sys.stderr.flush()"
         result = bounded_command_runner([sys.executable, "-c", flood], 2.0)
         elapsed = time.monotonic() - started
-        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 0)
         self.assertLessEqual(len(result.stderr), MAX_STDERR_BYTES)
         self.assertLess(elapsed, 30.0)
 

@@ -38,6 +38,7 @@ from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
     FieldName,
     KeyDisplayNotation,
+    ReviewStatus,
     format_canonical_key,
     parse_key_string,
 )
@@ -88,6 +89,26 @@ MAIN_WINDOW_WIDTH: Final[int] = 1360
 MAIN_WINDOW_HEIGHT: Final[int] = 820
 if len(TABLE_COLUMNS) != SORT_COLUMN_COUNT:
     raise RuntimeError("The library table columns and the sort kinds must stay aligned.")
+ALL_FILES_FILTER: Final[str] = "All Files"
+HAS_WARNINGS_FILTER: Final[str] = "Has Warnings (XDJ-RX3 / Rip)"
+# Words that stay lower case inside a status label, as in "Ready to Write".
+STATUS_LABEL_MINOR_WORDS: Final[frozenset[str]] = frozenset({"to", "for"})
+
+
+def format_status_label(status: ReviewStatus) -> str:
+    """Return the filter label of one review status, such as "Ready for Review"."""
+    words = status.value.split("_")
+    return " ".join(
+        word if index and word in STATUS_LABEL_MINOR_WORDS else word.capitalize()
+        for index, word in enumerate(words)
+    )
+
+
+# One filter entry per review status. The pipeline sets statuses such as no_match and
+# ready_for_review, so a fixed short list left those files reachable only through All Files.
+STATUS_FILTER_VALUES: Final[dict[str, str]] = {
+    format_status_label(status): status.value for status in ReviewStatus
+}
 SEARCH_INPUT_STRETCH: Final[int] = 3
 STATUS_FILTER_STRETCH: Final[int] = 1
 SPLITTER_TOP_HEIGHT: Final[int] = 380
@@ -273,16 +294,7 @@ class MainWindow(QMainWindow):
         filter_bar.addWidget(self.search_input, stretch=SEARCH_INPUT_STRETCH)
 
         self.status_filter_combo.addItems(
-            [
-                "All Files",
-                "Has Warnings (XDJ-RX3 / Rip)",
-                "Unprocessed",
-                "Proposed",
-                "Partially Approved",
-                "Ready to Write",
-                "Written",
-                "Error",
-            ]
+            [ALL_FILES_FILTER, HAS_WARNINGS_FILTER, *STATUS_FILTER_VALUES]
         )
         self.status_filter_combo.currentTextChanged.connect(self.refresh_file_table)
         filter_bar.addWidget(self.status_filter_combo, stretch=STATUS_FILTER_STRETCH)
@@ -359,8 +371,12 @@ class MainWindow(QMainWindow):
     def refresh_file_table(self) -> None:
         """Reload all FileAssets from Repository and populate the filtered table."""
         all_files = self.repo.list_files()
-        filtered = [f for f in all_files if self._matches_active_filters(f)]
+        filtered = [f for f in all_files if self._matches_status_filter(f)]
         rows = [self._build_library_row(asset) for asset in filtered]
+        query = self.search_input.text().strip().casefold()
+        if query:
+            # The search reads the cells the table shows, so a match is always visible.
+            rows = [row for row in rows if query in " ".join(row.cells).casefold()]
         ordered = sort_rows(
             rows,
             column=self._sort_column,
@@ -393,8 +409,15 @@ class MainWindow(QMainWindow):
         return UNSORTED_PLACEMENT_FIRST
 
     def reload_settings(self) -> None:
-        """Read the stored preferences again and repaint the table."""
+        """Read the stored preferences again and repaint the table.
+
+        The Settings dialog applies a theme itself. The toolbar picker follows the stored
+        theme, so a later toolbar choice compares against the theme in effect.
+        """
         self._unsorted_placement = self._read_unsorted_placement()
+        stored_theme = getattr(SettingsManager().load(), "theme", DEFAULT_DARK_THEME)
+        self._applied_theme = self._selectable_theme(stored_theme)
+        self._set_picker_theme(self._applied_theme)
         self.refresh_file_table()
 
     def _on_table_header_clicked(self, column: int) -> None:
@@ -426,28 +449,13 @@ class MainWindow(QMainWindow):
             warnings.extend(ana.warnings)
         return warnings
 
-    def _matches_active_filters(self, asset: FileAsset) -> bool:
-        """Return True if asset matches the search query and status filter dropdown."""
+    def _matches_status_filter(self, asset: FileAsset) -> bool:
+        """Return True if asset matches the status filter dropdown."""
         status_choice = self.status_filter_combo.currentText()
-        tech_warnings = self._asset_warnings(asset)
-        if status_choice == "Has Warnings (XDJ-RX3 / Rip)" and not tech_warnings:
-            return False
-        status_map = {
-            "Unprocessed": "unprocessed",
-            "Proposed": "proposed",
-            "Partially Approved": "partially_approved",
-            "Ready to Write": "ready_to_write",
-            "Written": "written",
-            "Error": "error",
-        }
-        if status_choice in status_map and str(asset.review_status) != status_map[status_choice]:
-            return False
-
-        query = self.search_input.text().strip().lower()
-        if not query:
-            return True
-        haystack = f"{asset.current_path} {asset.original_tags}".lower()
-        return query in haystack
+        if status_choice == HAS_WARNINGS_FILTER:
+            return bool(self._asset_warnings(asset))
+        status_value = STATUS_FILTER_VALUES.get(status_choice)
+        return status_value is None or str(asset.review_status) == status_value
 
     def _populate_table_row(self, row_idx: int, row: LibraryRow) -> None:
         """Render one library row and store its file ID on the first cell."""

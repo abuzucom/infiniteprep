@@ -89,18 +89,44 @@ def _scan_single_directory_children(
     max_depth: int,
     max_files: int,
 ) -> None:
-    """Append non-symlink child files to discovered and enqueue subdirectories within bounds."""
-    for child in sorted(current_dir.iterdir()):
+    """Append non-symlink child files to discovered and enqueue subdirectories within bounds.
+
+    A folder the user cannot read, such as "System Volume Information" on a drive root,
+    is skipped with a warning. The rest of the selection still imports.
+    """
+    try:
+        children = sorted(current_dir.iterdir())
+    except OSError as exc:
+        logger.warning("Import skipped one unreadable folder after %s.", type(exc).__name__)
+        return
+    for child in children:
         if len(discovered) >= max_files:
             return
-        if child.is_symlink():
-            continue
-        resolved_child = child.resolve()
-        if resolved_child.is_file():
-            discovered.append(resolved_child)
-            continue
-        if resolved_child.is_dir() and depth + 1 <= max_depth:
-            queue.append((resolved_child, depth + 1))
+        try:
+            _classify_child(child, depth, discovered, queue, max_depth=max_depth)
+        # An entry can vanish or refuse a stat between the listing and this check. That
+        # entry is skipped and the rest of the folder still scans.
+        except OSError as exc:
+            logger.warning("Import skipped one unreadable entry after %s.", type(exc).__name__)
+
+
+def _classify_child(
+    child: Path,
+    depth: int,
+    discovered: list[Path],
+    queue: deque[tuple[Path, int]],
+    *,
+    max_depth: int,
+) -> None:
+    """Append a regular file to discovered or enqueue a subdirectory within the depth bound."""
+    if child.is_symlink():
+        return
+    resolved_child = child.resolve()
+    if resolved_child.is_file():
+        discovered.append(resolved_child)
+        return
+    if resolved_child.is_dir() and depth + 1 <= max_depth:
+        queue.append((resolved_child, depth + 1))
 
 
 def discover_files_bounded(
@@ -139,7 +165,8 @@ def discover_files_bounded(
             max_files=max_files,
         )
 
-    return discovered
+    # A selection can name a folder and a file inside it. Each file imports once.
+    return list(dict.fromkeys(discovered))
 
 
 class ImportService:

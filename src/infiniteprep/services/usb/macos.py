@@ -94,17 +94,20 @@ def _terminate_process(process: subprocess.Popen[bytes], deadline: float) -> Non
         process.wait(timeout=REAP_WAIT_SECONDS)
 
 
-def _read_capped_pipe(
+def _start_capped_pipe_reader(
     pipe: BinaryIO,
     byte_cap: int,
-    deadline: float,
     name: str,
+    *,
+    drain_past_cap: bool = False,
 ) -> tuple[threading.Thread, dict[str, Any]]:
-    """Read a pipe up to byte_cap under the deadline in a daemon thread.
+    """Start a daemon thread that keeps at most byte_cap bytes of a pipe.
 
-    The read stops as soon as the cap is reached, so oversized replies never
-    buffer beyond the cap. A reader that outlives the deadline gets the pipe
-    closed by the caller, which unblocks and ends the daemon thread.
+    The stdout read stops one byte past its cap, so an oversized reply never buffers
+    beyond the cap and the caller can still detect it. With drain_past_cap the reader
+    discards bytes past the cap and keeps reading to the end. A chatty stderr then never
+    fills the pipe and blocks the child. A reader that outlives the deadline gets the
+    pipe closed by the caller, which unblocks and ends the daemon thread.
     """
     captured: dict[str, Any] = {"data": b"", "error": None}
 
@@ -113,23 +116,22 @@ def _read_capped_pipe(
         total = 0
         while True:
             remaining = byte_cap - total
-            if remaining <= 0:
+            if remaining <= 0 and not drain_past_cap:
                 break
             try:
-                chunk = pipe.read(min(CHUNK_BYTES, remaining))
+                chunk = pipe.read(CHUNK_BYTES if remaining <= 0 else min(CHUNK_BYTES, remaining))
             except (OSError, ValueError) as exc:
                 captured["error"] = exc
                 break
             if not chunk:
                 break
-            chunks.append(chunk)
-            total += len(chunk)
+            if remaining > 0:
+                chunks.append(chunk[:remaining])
+                total += min(len(chunk), remaining)
         captured["data"] = b"".join(chunks)
 
     reader = threading.Thread(target=read_capped, daemon=True, name=name)
     reader.start()
-    join_wait = max(deadline - time.monotonic(), 0.0)
-    reader.join(join_wait)
     return reader, captured
 
 
@@ -138,19 +140,25 @@ def _capture_bounded(
     deadline: float,
     timeout_seconds: float,
 ) -> subprocess.CompletedProcess[str]:
-    """Capture both pipes under the byte caps and deadline, then wait."""
-    stdout_reader, stdout_state = _read_capped_pipe(
+    """Capture both pipes under the byte caps and deadline, then wait.
+
+    Both readers start before either join. A child that fills the stderr pipe before it
+    closes stdout then still finishes. Sequential reads stalled such a child until the
+    deadline.
+    """
+    stdout_reader, stdout_state = _start_capped_pipe_reader(
         process.stdout,
         MAX_PLIST_OUTPUT_BYTES + 1,
-        deadline,
         "usb-bounded-stdout",
     )
-    stderr_reader, stderr_state = _read_capped_pipe(
+    stderr_reader, stderr_state = _start_capped_pipe_reader(
         process.stderr,
         MAX_STDERR_BYTES,
-        deadline,
         "usb-bounded-stderr",
+        drain_past_cap=True,
     )
+    for reader in (stdout_reader, stderr_reader):
+        reader.join(max(deadline - time.monotonic(), 0.0))
     for reader in (stdout_reader, stderr_reader):
         if reader.is_alive():
             _terminate_process(process, deadline)

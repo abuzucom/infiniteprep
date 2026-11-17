@@ -17,6 +17,7 @@ from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     SourceChangedDuringWriteError,
     copy_to_new_verified_file,
     operation_backup_path,
+    portable_backup_name,
 )
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import OperationStatus, ReviewStatus
@@ -200,7 +201,9 @@ class WriteService:
         # apply_single_plan already rolled the file back and journaled the failure. Any
         # error type counts as one failed file, so the rest of the batch still runs.
         except Exception as exc:
-            logger.warning("Queued write failed for one file after %s.", type(exc).__name__)
+            logger.warning(
+                "Queued write failed for one file after %s.", type(exc).__name__, exc_info=True
+            )
             result.failures.append((str(plan.source_path), f"{type(exc).__name__}: {exc}"))
             return False
         result.records.append(record)
@@ -237,7 +240,10 @@ class WriteService:
         operation_id = str(uuid.uuid4())
         # apply receives this path, so the journal always names the backup the adapter writes.
         backup_path = operation_backup_path(
-            plan.backup_destination_path.parent, plan.file_id, operation_id, plan.source_path.name
+            plan.backup_destination_path.parent,
+            plan.file_id,
+            operation_id,
+            portable_backup_name(plan.source_path.name),
         )
         pending = ChangeRecord(
             operation_id=operation_id,
@@ -428,7 +434,11 @@ class WriteService:
             if not path.is_file():
                 continue
             destination = operation_backup_path(
-                self.backup_dir, record.file_id, uuid.uuid4().hex, path.name, kind="pre_restore"
+                self.backup_dir,
+                record.file_id,
+                uuid.uuid4().hex,
+                portable_backup_name(path.name),
+                kind="pre_restore",
             )
             copy_to_new_verified_file(path, destination, compute_sha256(path))
             logger.info("Saved %s before restore of %s", destination.name, record.operation_id)

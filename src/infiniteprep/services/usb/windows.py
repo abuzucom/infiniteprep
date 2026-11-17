@@ -42,17 +42,23 @@ POWERSHELL_EXE: Final[str] = _SYSTEM_ROOT + r"\System32\WindowsPowerShell\v1.0\p
 # during parsing (foucault MEDIUM, PR #196).
 MAX_COMMAND_OUTPUT_BYTES: Final[int] = 8 * 1024 * 1024
 MAX_ERROR_TEXT_LEN: Final[int] = 4096
+# Windows PowerShell 5.1 writes redirected output in the OEM code page. The runner decodes
+# UTF-8, so a label with accented letters read back as replacement characters. Each command sets
+# the console output encoding to UTF-8 first.
+UTF8_OUTPUT_PREFIX: Final[str] = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
 DISK_COMMAND_TEXT: Final[str] = (
-    "Get-Disk | Select-Object DiskNumber, Model, Manufacturer, "
+    UTF8_OUTPUT_PREFIX + "Get-Disk | Select-Object DiskNumber, Model, Manufacturer, "
     "SerialNumber, BusType, Size, PartitionStyle, IsReadOnly "
     "| ConvertTo-Json -Depth 3"
 )
 PARTITION_COMMAND_TEXT: Final[str] = (
-    "Get-Partition | Select-Object DiskNumber, PartitionNumber, Size, Type, GptType, "
+    UTF8_OUTPUT_PREFIX
+    + "Get-Partition | Select-Object DiskNumber, PartitionNumber, Size, Type, GptType, "
     "DriveLetter, IsReadOnly, AccessPaths | ConvertTo-Json -Depth 3"
 )
 VOLUME_COMMAND_TEXT: Final[str] = (
-    "Get-Volume | Select-Object DriveLetter, FileSystemLabel, FileSystem, Size, "
+    UTF8_OUTPUT_PREFIX
+    + "Get-Volume | Select-Object DriveLetter, FileSystemLabel, FileSystem, Size, "
     "SizeRemaining, DriveType | ConvertTo-Json -Depth 3"
 )
 
