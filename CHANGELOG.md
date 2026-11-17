@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.75.1] (2026-11-17)
+## [0.75.4] (2026-11-17)
 
 ### Added
 
@@ -37,7 +37,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Every operating system needs a record in the limits file, and every record needs a byte count. A missing record or a record without a byte count is an error, so a lost record cannot disable a limit.
   - The new `tests/test_bundle_size.py` checks the measurement, the limit, the command, and the workflow wiring.
   - The README documents the size report and the limits file.
-  - The version advances from 0.75.0 to 0.75.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.75.3 to 0.75.4 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ### Changed
 
@@ -66,12 +66,27 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- The combo box popups in the main window carry the accessible name of their combo box.
-  - A screen reader announced an unnamed list while a popup was open.
-  - The new `src/infiniteprep/ui/accessibility.py` names the popup of every combo box below the main window.
-  - The new `tests/unit/test_combo_popup_names.py` checks the naming of a popup.
-  - `tests/unit/test_accessible_names_and_keyboard_sort.py` keeps every dialog alive, so its table survives until the assertions run. The repository owner approved this edit.
-
+- Status changes reach screen readers, and toolbar actions say what they did (accessibility audit).
+  - A playback status, a spectrum analysis failure, a finished batch, and the write preview status each raise a screen reader announcement. A label update alone was silent before. The new `announce` helper in `ui/accessible_names.py` sends them.
+  - Identify & Analyze, Bulk Approve, Preview & Apply Writes, Transcode, and Export say why they did nothing when no file is visible. Each ended without a word before.
+  - Bulk Approve reports how many fields it approved.
+  - The library status column shows labels such as "Ready to Write" instead of stored values such as `ready_to_write`. The detail header shows Yes or No for write support instead of True or False.
+  - The new `tests/unit/test_status_feedback.py` covers the announcements, the empty library messages, the approved count, and the labels.
+  - The version advances from 0.75.2 to 0.75.3 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- Warning text and the waveform reach WCAG contrast minimums (accessibility audit).
+  - The detail panel warnings use a dark amber on a light theme and a light amber on a dark theme. The fixed amber read at about 3:1 on a light theme. Each choice reaches 4.5:1, and a theme switch picks the amber again.
+  - Unplayed waveform bars use gray 500. Gray 600 read at 2.3:1 on the waveform background. The bars now reach 3:1.
+  - The zoom view draws the low, mid, and high bands in Okabe-Ito sky blue, orange, and yellow. Red and green ran together for red-green color blindness. Each band reaches 3:1 at its overlay alpha.
+  - The zoom view shows a legend that names each band next to its color. Color alone named the bands before.
+  - The new `ui/contrast.py` computes WCAG contrast. The new `tests/unit/test_contrast_and_spectrum_legend.py` checks every color pair and the legend.
+  - The version advances from 0.75.1 to 0.75.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- The field rows of the detail panel keep keyboard and screen reader users in place (accessibility audit).
+  - Each row's edit box and its Accept, Save, and Lock buttons name their field, such as "Save artist". Every row announced the same "Save" before.
+  - Accept, Save, and Lock keep focus on the same control of the same row. The rows rebuild after each action, and focus fell out of the table before.
+  - Text typed in one row stays when another row's action runs. The rebuild wiped every unsaved row before. The acted row shows its new stored value.
+  - The new `tests/unit/test_detail_panel_row_actions.py` covers the names, the focus, and the unsaved text.
+  - The open list of each named picker carries the picker's name. A screen reader announced an unnamed list once a picker opened. The new `ui/accessible_names.py` names a picker and its list together.
+  - The version advances from 0.75.0 to 0.75.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Catalog, fingerprint, and LLM responses pass type and length checks before they reach a proposal.
   - The new `adapters/provider_fields.py` checks every field the Discogs, MusicBrainz, and AcoustID adapters read. Text stays printable and stops at 500 characters. A field of the wrong type reads as absent. A list keeps at most 100 items.
   - A response that is not a JSON object raises before the cache write, so a malformed body never reaches the shared cache.
