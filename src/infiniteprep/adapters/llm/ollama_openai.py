@@ -13,6 +13,7 @@ from infiniteprep.adapters.llm.validator import (
     find_candidate,
     normalize_candidate_value,
 )
+from infiniteprep.adapters.provider_fields import CLEAN_SCAN_FACTOR
 from infiniteprep.config.settings import validate_endpoint_url
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ def bounded_rationale(value: object) -> str:
     """
     if not isinstance(value, str):
         return DEFAULT_RATIONALE
-    head = value[: MAX_RATIONALE_CHARS * 2]
+    head = value[: MAX_RATIONALE_CHARS * CLEAN_SCAN_FACTOR]
     cleaned = "".join(ch if ch.isprintable() else " " for ch in head).strip()
     return cleaned[:MAX_RATIONALE_CHARS] or DEFAULT_RATIONALE
 

@@ -13,6 +13,10 @@ from typing import Any, Final
 MAX_PROVIDER_TEXT_CHARS: Final[int] = 500
 # A search page holds at most a few dozen results. A larger list adds no candidate worth a look.
 MAX_PROVIDER_LIST_ITEMS: Final[int] = 100
+# The cleaning step drops control characters, so it scans more input than it keeps. Twice
+# the output cap still fills the cap when up to half of the scanned characters drop out,
+# and it bounds the work on a very long field.
+CLEAN_SCAN_FACTOR: Final[int] = 2
 
 
 def provider_text(value: object) -> str | None:
@@ -27,7 +31,7 @@ def provider_text(value: object) -> str | None:
         return str(value)
     if not isinstance(value, str):
         return None
-    head = value[: MAX_PROVIDER_TEXT_CHARS * 2]
+    head = value[: MAX_PROVIDER_TEXT_CHARS * CLEAN_SCAN_FACTOR]
     cleaned = "".join(character for character in head if character.isprintable())
     return cleaned.strip()[:MAX_PROVIDER_TEXT_CHARS] or None
 
@@ -36,7 +40,11 @@ def provider_number(value: object) -> float | None:
     """Return value as a finite non-negative float, or None for any other value."""
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
-    number = float(value)
+    try:
+        number = float(value)
+    except OverflowError:
+        # JSON integers have no size limit. One past the float range reads as absent.
+        return None
     if not math.isfinite(number) or number < 0:
         return None
     return number
