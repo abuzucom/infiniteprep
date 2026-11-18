@@ -13,6 +13,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
+from infiniteprep.hashing import compute_sha256
+
 logger = logging.getLogger(__name__)
 
 # renameat2 flag that makes the Linux kernel refuse an existing destination.
@@ -38,12 +40,15 @@ def file_identity(path: Path) -> FileIdentity:
     return info.st_dev, info.st_ino
 
 
-def discard_if_same_file(path: Path, identity: FileIdentity) -> bool:
+def discard_if_same_file(
+    path: Path, identity: FileIdentity, expected_sha256: str | None = None
+) -> bool:
     """Delete path only while it still is the file with identity, and keep any other file.
 
     A check followed by an unlink of the name can delete a file another program put there
     in between. The file first moves to a private name with the no-replace move. The
-    identity check runs on that private name. A different file moves back to path.
+    identity check and the optional content check run on that private name, so an edit
+    made in place before the move also keeps the file. A kept file moves back to path.
     """
     private = path.with_name(f"{DISCARD_NAME_PREFIX}{uuid.uuid4().hex}")
     try:
@@ -53,7 +58,7 @@ def discard_if_same_file(path: Path, identity: FileIdentity) -> bool:
     except OSError as exc:
         logger.warning("Kept %s, which could not move aside (%s).", path.name, type(exc).__name__)
         return False
-    if file_identity(private) == identity:
+    if _is_expected_file(private, identity, expected_sha256):
         private.unlink()
         return True
     try:
@@ -66,6 +71,13 @@ def discard_if_same_file(path: Path, identity: FileIdentity) -> bool:
             path.name,
         )
     return False
+
+
+def _is_expected_file(path: Path, identity: FileIdentity, expected_sha256: str | None) -> bool:
+    """Return True when path has identity and, if given, the expected SHA-256 digest."""
+    if file_identity(path) != identity:
+        return False
+    return expected_sha256 is None or compute_sha256(path) == expected_sha256
 
 
 def move_to_new_path(source: Path, destination: Path) -> None:

@@ -320,11 +320,11 @@ class WriteService:
         """
         if renamed is None or record.operation_status == OperationStatus.IN_PROGRESS:
             return
-        path, identity = renamed
-        if not record.post_write_hash or compute_sha256(path) != record.post_write_hash:
+        if not record.post_write_hash:
             return
-        # The identity check skips a file another program put at the name during the restore.
-        discard_if_same_file(path, identity)
+        # Both checks run after the move to a private name, so a replacement or an in-place
+        # edit made by another program during the restore keeps the file.
+        discard_if_same_file(*renamed, expected_sha256=record.post_write_hash)
 
     @staticmethod
     def _renamed_file(
