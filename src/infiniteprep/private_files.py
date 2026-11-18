@@ -7,9 +7,13 @@ other accounts out. Windows ignores these bits. Its per-user profile ACL applies
 
 from __future__ import annotations
 
+import errno
 import logging
 import os
 import stat
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Final
 
@@ -23,22 +27,83 @@ IS_WINDOWS: Final[bool] = os.name == "nt"
 # O_NOFOLLOW makes the open fail on a link. O_NONBLOCK keeps a FIFO open from hanging.
 NO_FOLLOW_FLAG: Final[int] = getattr(os, "O_NOFOLLOW", 0)
 NON_BLOCK_FLAG: Final[int] = getattr(os, "O_NONBLOCK", 0)
+STAGING_DIR_PREFIX: Final[str] = ".infiniteprep-staging-"
 
 
 def create_private_dirs(folder: Path) -> None:
     """Create folder and each missing parent with mode 0700.
 
-    A folder that already exists keeps its mode. A user can choose a shared parent, and the
-    app must not change it.
+    A folder that already exists keeps its mode. A user can choose a shared parent. The app
+    must not change it.
     """
     missing: list[Path] = []
     current = folder
-    # Each step moves one level up, so the walk ends at the filesystem root.
+    # Each step moves one level up. The walk therefore ends at the filesystem root.
     while not current.exists() and current.parent != current:
         missing.append(current)
         current = current.parent
     for path in reversed(missing):
         path.mkdir(mode=PRIVATE_DIR_MODE, exist_ok=True)
+    # A file under the folder name fails here. mkdir with exist_ok fails on it the same way.
+    if not folder.is_dir():
+        raise NotADirectoryError(
+            errno.ENOTDIR, "Not a folder. Free the name and retry", str(folder)
+        )
+
+
+def refuse_symlink(path: Path) -> None:
+    """Raise OSError when path is a symbolic link.
+
+    SQLite opens a path by name and follows a link. The check keeps the library and its side
+    files inside the folder the app chose.
+    """
+    if path.is_symlink():
+        raise OSError(
+            f"The library at {path} is a symbolic link. Move the real library file to that "
+            "name and start again."
+        )
+
+
+@contextmanager
+def private_staging_dir(parent: Path) -> Iterator[Path]:
+    """Yield a new owner-only folder inside parent. Remove it and its files afterwards.
+
+    Another account cannot add, rename, or replace a name inside a 0700 folder. A file
+    staged there keeps its identity between its create and every reopen by name.
+    """
+    staging = parent / f"{STAGING_DIR_PREFIX}{uuid.uuid4().hex}"
+    # mkdir without exist_ok fails on any existing name, a planted link included.
+    staging.mkdir(mode=PRIVATE_DIR_MODE)
+    try:
+        _require_owner_only_dir(staging)
+        yield staging
+    finally:
+        _remove_staging_dir(staging)
+
+
+def _require_owner_only_dir(folder: Path) -> None:
+    """Raise PermissionError unless folder is a real folder that only this account can use."""
+    if IS_WINDOWS:
+        return
+    status = folder.lstat()
+    owned = status.st_uid == os.getuid()
+    private = not stat.S_IMODE(status.st_mode) & SHARED_ACCESS_BITS
+    if not (stat.S_ISDIR(status.st_mode) and owned and private):
+        raise PermissionError(
+            f"The staging folder {folder} is not private to this account. Check the "
+            "permissions of the library folder and start again."
+        )
+
+
+def _remove_staging_dir(staging: Path) -> None:
+    """Delete the files in staging and then staging itself. A failure only logs."""
+    try:
+        leftovers = list(staging.iterdir())
+        for path in leftovers:
+            path.unlink(missing_ok=True)
+        staging.rmdir()
+    except OSError as error:
+        logger.warning("Could not remove the staging folder %s: %s", staging.name, error.strerror)
 
 
 def ensure_private_file(path: Path) -> None:
