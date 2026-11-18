@@ -44,14 +44,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The ID3 parser skips encrypted and truncated frames. The FLAC parser skips Vorbis entries without `=`. Each writer rebuilds the tag from the parsed frames. A write lost that data without notice before.
   - The new `tag_data_warnings` field of `FileWritePlan` lists each item. The Safety Status cell shows `READY WITH DATA LOSS` and names them. The write stays allowed.
   - A compressed ID3v2.2 tag yields no frames at all. The preview now blocks that write, because it would remove the whole tag.
-  - The new `tests/unit/test_dropped_tag_data_preview.py` covers each case.
+  - A tag or file that the check cannot read blocks the write with a validation error that names the reason. The preview showed `READY` for such a file before.
+  - The new `tests/unit/test_dropped_tag_data_preview.py` and `tests/unit/test_unreadable_tag_preview.py` cover each case.
 - The library, its backups, and the settings stay readable by their owner only.
   - The new `private_files.py` creates missing app folders with mode 0700 and library files with mode 0600. An existing library loses its group and other bits on open. SQLite copies that mode to the WAL and SHM files. The migration backup and the staged restore copy start owner only. Existing folders keep their mode. Windows ignores these bits.
   - The mode change never follows a link. It checks the name with `lstat`, opens it with `O_NOFOLLOW`, confirms the same file, and changes the mode through that descriptor. The backup copy and the staged restore copy start with an exclusive create. A link planted at either name fails the copy.
+  - The backup copy and the staged restore copy now live in a new owner-only staging folder beside the library until the final rename. Each step reopens its file by name. Another account cannot swap a name inside that folder between the steps. The folder and its files go away after each run.
+  - The library refuses to open through a symbolic link at its name. SQLite followed such a link before.
+  - The per-user data folder that startup creates gets mode 0700. It got the default mode before.
   - The settings write syncs the temporary file before the rename and the folder after it on POSIX. A power loss after the rename could leave an empty settings file before.
   - The fpcalc installer extracts to a random hidden name and renames it into place. An interrupted install left a partial binary under the real name before.
   - The two `uuid5` proposal ID builders state the non-security SHA-1 use that Rule 7 requires.
-  - The new `tests/unit/test_private_storage_files.py` and `tests/unit/test_private_files_symlinks.py` cover each change.
+  - The new `tests/unit/test_private_storage_files.py`, `tests/unit/test_private_files_symlinks.py`, and `tests/unit/test_private_staging_and_library_links.py` cover each change.
   - The settings dialog still loads the stored API keys into its masked fields. The fix there changes assertions in `tests/unit/test_settings_tabs.py`. The repository owner left it out of this change.
   - The version advances from 0.78.3 to 0.78.4 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - Writes, recovery, transcodes, and playlist exports no longer replace or delete a file they did not write.

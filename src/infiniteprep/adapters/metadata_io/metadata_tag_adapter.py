@@ -567,6 +567,14 @@ COMPRESSED_V22_TAG_ERROR: Final[str] = (
     "The file has a compressed ID3v2.2 tag the app cannot read; a write would remove the "
     "whole tag. Convert the tag with another tag editor before writing."
 )
+UNREADABLE_TAG_ERROR: Final[str] = (
+    "The tag cannot be read ({reason}). A write could lose tag data. "
+    "Repair the tag with another tag editor before writing."
+)
+UNREADABLE_FILE_ERROR: Final[str] = (
+    "The file cannot be read for the tag check ({reason}). "
+    "Check the file permissions and refresh the preview."
+)
 
 
 def _id3_dropped(tag: Id3Tag | None) -> tuple[str, ...]:
@@ -974,16 +982,19 @@ class MetadataTagAdapter:
     def _check_dropped_tag_data(self, source_path: Path, validation_errors: list[str]) -> list[str]:
         """Return warnings for tag data a rewrite would lose.
 
-        A compressed ID3v2.2 tag loses every frame, so its error goes into validation_errors
-        and blocks the write instead.
+        A compressed ID3v2.2 tag loses every frame. A tag or file the check cannot read gives
+        no answer. Each case adds an error to validation_errors and blocks the write instead.
         """
         if not source_path.is_file():
             return []
         try:
             dropped = read_dropped_tag_data(source_path, self.detect_format(source_path))
-        except (OSError, ValueError) as exc:
-            # The write parses the same tag and reports this failure with its own message.
-            logger.info("Skipped the dropped tag data check (%s).", type(exc).__name__)
+        except ValueError as exc:
+            validation_errors.append(UNREADABLE_TAG_ERROR.format(reason=exc))
+            return []
+        except OSError as exc:
+            reason = exc.strerror or type(exc).__name__
+            validation_errors.append(UNREADABLE_FILE_ERROR.format(reason=reason))
             return []
         if COMPRESSED_V22_TAG_NOTE in dropped:
             validation_errors.append(COMPRESSED_V22_TAG_ERROR)
