@@ -12,6 +12,7 @@ import logging
 import os
 import stat
 import uuid
+from collections import deque
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -30,6 +31,9 @@ IS_WINDOWS: Final[bool] = os.name == "nt"
 NO_FOLLOW_FLAG: Final[int] = getattr(os, "O_NOFOLLOW", 0)
 NON_BLOCK_FLAG: Final[int] = getattr(os, "O_NONBLOCK", 0)
 STAGING_DIR_PREFIX: Final[str] = ".infiniteprep-staging-"
+ROOT_UID: Final[int] = 0
+# Linux stops a lookup after 40 links with ELOOP. The manual walk uses the same bound.
+MAX_LINK_HOPS: Final[int] = 40
 
 
 def create_private_dirs(folder: Path) -> None:
@@ -53,24 +57,98 @@ def create_private_dirs(folder: Path) -> None:
         )
 
 
-def warn_if_folder_is_shared(folder: Path) -> bool:
-    """Log a warning when another account can change names in folder on POSIX.
+def resolve_library_path(library_path: Path) -> Path:
+    """Return library_path with every link in its folder resolved. The file name stays as is.
 
-    A folder owned by another account, or with group or other write access, lets that account
-    swap a file name between two opens. A portable Data folder on FAT or exFAT media shows
-    such modes. The app still opens the library there. Returns whether the folder is shared.
+    The app resolves the folder once and then opens the real path. A link above the library
+    that changes later no longer redirects the library, its side files, or its backups.
+    refuse_symlink covers a link at the file name itself.
+    """
+    return library_path.parent.resolve(strict=True) / library_path.name
+
+
+def warn_if_folder_is_shared(folder: Path) -> bool:
+    """Log a warning when another account can redirect or change files in folder on POSIX.
+
+    The check covers folder itself and every folder that the name lookup passes, the folders
+    that hold each link on the way included. A folder that another account owns or can write
+    lets that account swap a name between two opens. Above the library, root ownership and
+    the sticky bit of folders such as /tmp count as safe. A portable Data folder on FAT or
+    exFAT media shows shared modes. The app still opens the library there.
+    Returns whether any folder is shared.
     """
     if IS_WINDOWS:
         return False
-    status = folder.stat()
-    if status.st_uid == os.getuid() and not stat.S_IMODE(status.st_mode) & GROUP_OTHER_WRITE:
-        return False
+    library_folder = folder.resolve(strict=True)
+    shared = False
+    for path in dict.fromkeys(_traversed_folders(folder)):
+        is_library_folder = path == library_folder
+        if _is_trusted_folder(path.lstat(), is_library_folder=is_library_folder):
+            continue
+        shared = True
+        _warn_shared_folder(path, is_library_folder=is_library_folder)
+    return shared
+
+
+def _is_trusted_folder(status: os.stat_result, *, is_library_folder: bool) -> bool:
+    """Return whether no other account can rename or add names in the folder."""
+    mode = stat.S_IMODE(status.st_mode)
+    if is_library_folder:
+        return status.st_uid == os.getuid() and not mode & GROUP_OTHER_WRITE
+    trusted_owner = status.st_uid in (os.getuid(), ROOT_UID)
+    # The sticky bit stops other accounts from renaming or removing entries they do not own.
+    return trusted_owner and (not mode & GROUP_OTHER_WRITE or bool(mode & stat.S_ISVTX))
+
+
+def _warn_shared_folder(path: Path, *, is_library_folder: bool) -> None:
+    """Log the shared folder warning for the library folder or a folder above it."""
+    if is_library_folder:
+        logger.warning(
+            "Other accounts can change files in the library folder %s. Run chmod 700 on it as "
+            "its owner, or move the library to a folder only this account can change.",
+            path.name,
+        )
+        return
     logger.warning(
-        "Other accounts can change files in the library folder %s. Run chmod 700 on it as its "
-        "owner, or move the library to a folder only this account can change.",
-        folder.name,
+        "Other accounts can change the folder %s above the library and redirect it. Remove "
+        "group and other write access from that folder, or move the library elsewhere.",
+        path,
     )
-    return True
+
+
+def _traversed_folders(folder: Path) -> list[Path]:
+    """Return each real folder whose entries the lookup of folder reads, in lookup order.
+
+    The walk follows each link by hand. The folder that holds a link therefore joins the
+    list, as do the folders of its target. MAX_LINK_HOPS bounds a link cycle.
+    """
+    absolute = Path(os.path.abspath(folder))
+    current = Path(absolute.anchor)
+    visited = [current]
+    pending = deque(absolute.parts[1:])
+    hops = 0
+    while pending:
+        name = pending.popleft()
+        if name in ("", "."):
+            continue
+        if name == "..":
+            current = current.parent
+            visited.append(current)
+            continue
+        candidate = current / name
+        if not candidate.is_symlink():
+            current = candidate
+            visited.append(current)
+            continue
+        hops += 1
+        if hops > MAX_LINK_HOPS:
+            raise OSError(errno.ELOOP, "Too many links in the library path", str(folder))
+        target = Path(os.readlink(candidate))
+        if target.is_absolute():
+            current = Path(target.anchor)
+            visited.append(current)
+        pending.extendleft(reversed(target.parts[1:] if target.is_absolute() else target.parts))
+    return visited
 
 
 def refuse_symlink(path: Path) -> None:
@@ -104,22 +182,39 @@ def private_staging_dir(parent: Path) -> Iterator[Path]:
 
 
 def _require_owner_only_dir(folder: Path) -> None:
-    """Raise PermissionError unless folder is a real folder that only this account can use."""
+    """Raise PermissionError unless folder is a real folder. Warn when others can use it.
+
+    FAT and exFAT media ignore modes and report one owner for every file. A portable library
+    there still gets its backups. A warning names the exposure instead of a failure.
+    """
     if IS_WINDOWS:
         return
     status = folder.lstat()
+    if not stat.S_ISDIR(status.st_mode):
+        raise PermissionError(
+            f"The staging folder {folder} is not a real folder. Check the library folder "
+            "for links and start again."
+        )
     owned = status.st_uid == os.getuid()
     private = not stat.S_IMODE(status.st_mode) & SHARED_ACCESS_BITS
-    if not (stat.S_ISDIR(status.st_mode) and owned and private):
-        raise PermissionError(
-            f"The staging folder {folder} is not private to this account. Check the "
-            "permissions of the library folder and start again."
-        )
+    if owned and private:
+        return
+    logger.warning(
+        "Other accounts can change files in the staging folder %s. The media ignore folder "
+        "permissions. Keep the library on a drive only this account can reach.",
+        folder.name,
+    )
 
 
 def _remove_staging_dir(staging: Path) -> None:
-    """Delete the files in staging and then staging itself. A failure only logs."""
+    """Delete the files in staging and then staging itself. A failure only logs.
+
+    A link under the staging name loses only the link. Its target keeps every file.
+    """
     try:
+        if staging.is_symlink():
+            staging.unlink()
+            return
         leftovers = list(staging.iterdir())
         for path in leftovers:
             path.unlink(missing_ok=True)

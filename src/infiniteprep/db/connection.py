@@ -14,6 +14,7 @@ from infiniteprep.private_files import (
     create_private_dirs,
     ensure_private_file,
     refuse_symlink,
+    resolve_library_path,
     warn_if_folder_is_shared,
 )
 
@@ -39,9 +40,13 @@ class DatabaseManager:
         self._memory_name = f"infiniteprep_{uuid.uuid4().hex}"
         if not self._is_memory:
             create_private_dirs(self.db_path.parent)
-            # The link check below and the SQLite open use the name separately. Only a folder
-            # that other accounts cannot change closes that gap. A shared folder logs a warning.
+            # The link check below and the SQLite open use the name separately. Only folders
+            # that other accounts cannot change close that gap. Each shared folder on the way
+            # logs a warning.
             warn_if_folder_is_shared(self.db_path.parent)
+            # SQLite and the backups get the real folder. A link above the library that
+            # changes after this point cannot redirect them.
+            self.db_path = resolve_library_path(self.db_path)
             # SQLite follows a link at the library name. A link is refused before any open.
             refuse_symlink(self.db_path)
             # SQLite gives the -wal and -shm files the mode of the library file.
