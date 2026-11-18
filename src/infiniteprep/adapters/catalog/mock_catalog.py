@@ -21,7 +21,7 @@ class MockCatalogProviderAdapter:
         artist = query.artist or "Deep Dish"
         title = query.title or "The Dream"
         cat_no = query.catalog_number or "TRIUK014"
-        rel_title = query.release_title or f"{title} (12-Inch Single)"
+        release_title = query.release_title or f"{title} (12-Inch Single)"
         return [
             CandidateMatch(
                 id=f"mock-cat-{file_id or 'default'}-1",
@@ -35,7 +35,7 @@ class MockCatalogProviderAdapter:
                 remixer=query.remixer or "Sharam",
                 duration=query.duration or 480.0,
                 release_details=ReleaseDetails(
-                    release_title=rel_title,
+                    release_title=release_title,
                     label=query.label or "Tribal America",
                     catalog_number=cat_no,
                     country="UK",

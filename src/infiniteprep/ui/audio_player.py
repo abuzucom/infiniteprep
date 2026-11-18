@@ -114,23 +114,23 @@ BACKEND_UNAVAILABLE_TEXT: Final[str] = (
 
 def compute_cue_jump_positions(duration_sec: float) -> dict[str, float]:
     """Compute target needle-drop cue positions in seconds for a given track duration."""
-    safe_dur = max(0.0, float(duration_sec))
-    intro_pos = (
-        min(INTRO_MAX_SEC, safe_dur * INTRO_RATIO_FALLBACK)
-        if safe_dur < SHORT_TRACK_THRESHOLD_SEC
+    safe_duration = max(0.0, float(duration_sec))
+    intro_position = (
+        min(INTRO_MAX_SEC, safe_duration * INTRO_RATIO_FALLBACK)
+        if safe_duration < SHORT_TRACK_THRESHOLD_SEC
         else INTRO_MAX_SEC
     )
-    outro_pos = (
-        max(0.0, safe_dur - OUTRO_OFFSET_SEC)
-        if safe_dur >= LONG_TRACK_OUTRO_THRESHOLD_SEC
-        else safe_dur * OUTRO_RATIO_FALLBACK
+    outro_position = (
+        max(0.0, safe_duration - OUTRO_OFFSET_SEC)
+        if safe_duration >= LONG_TRACK_OUTRO_THRESHOLD_SEC
+        else safe_duration * OUTRO_RATIO_FALLBACK
     )
     return {
-        "Intro": round(intro_pos, CUE_ROUND_DIGITS),
-        "25%": round(safe_dur * CUE_RATIO_25, CUE_ROUND_DIGITS),
-        "50% Drop": round(safe_dur * CUE_RATIO_50, CUE_ROUND_DIGITS),
-        "75%": round(safe_dur * CUE_RATIO_75, CUE_ROUND_DIGITS),
-        "Outro": round(outro_pos, CUE_ROUND_DIGITS),
+        "Intro": round(intro_position, CUE_ROUND_DIGITS),
+        "25%": round(safe_duration * CUE_RATIO_25, CUE_ROUND_DIGITS),
+        "50% Drop": round(safe_duration * CUE_RATIO_50, CUE_ROUND_DIGITS),
+        "75%": round(safe_duration * CUE_RATIO_75, CUE_ROUND_DIGITS),
+        "Outro": round(outro_position, CUE_ROUND_DIGITS),
     }
 
 
@@ -216,15 +216,15 @@ def extract_waveform_envelope(
         return [FALLBACK_ENVELOPE_ERROR] * bins
     if not raw_peaks:
         return [FALLBACK_ENVELOPE_EMPTY] * bins
-    arr = np.interp(
+    resampled_peaks = np.interp(
         np.linspace(0.0, max(0, len(raw_peaks) - 1), bins),
         np.arange(len(raw_peaks), dtype=np.float64),
         np.array(raw_peaks, dtype=np.float64),
     )
-    max_peak = float(np.max(arr)) if arr.size > 0 else 0.0
+    max_peak = float(np.max(resampled_peaks)) if resampled_peaks.size > 0 else 0.0
     if max_peak <= 0.0:
         return [FALLBACK_ENVELOPE_SILENT] * bins
-    return [round(float(p) / max_peak, ENVELOPE_ROUND_DIGITS) for p in arr]
+    return [round(float(peak) / max_peak, ENVELOPE_ROUND_DIGITS) for peak in resampled_peaks]
 
 
 class WaveformOverviewBar(QWidget):
@@ -413,17 +413,17 @@ class WaveformOverviewBar(QWidget):
         count = max(1, len(self.envelope))
         bar_w = max(1.0, rect.width() / float(count))
         mid_y = rect.height() * ZOOM_PLAYHEAD_CENTER_RATIO
-        for idx, amp in enumerate(self.envelope):
+        for index, amp in enumerate(self.envelope):
             half_h = max(
                 WAVEFORM_MIN_HALF_BAR_PX, amp * (rect.height() * WAVEFORM_HALF_HEIGHT_SCALE)
             )
             color = (
                 QColor(PLAYED_BAR_COLOR)
-                if (idx / float(count)) <= self.playhead_ratio
+                if (index / float(count)) <= self.playhead_ratio
                 else QColor(UNPLAYED_BAR_COLOR)
             )
             painter.fillRect(
-                int(idx * bar_w),
+                int(index * bar_w),
                 int(mid_y - half_h),
                 max(1, int(bar_w - 1)),
                 int(half_h * WAVEFORM_FULL_HEIGHT_SCALE),
@@ -656,10 +656,10 @@ class AudioPreviewWidget(QWidget):
         controls.addWidget(self.stop_btn)
         controls.addWidget(self.loaded_track_label)
         for label in ("Intro", "25%", "50% Drop", "75%", "Outro"):
-            btn = QPushButton(label, self)
-            btn.clicked.connect(lambda _checked=False, cue=label: self.jump_to_cue(cue))
-            self.cue_buttons[label] = btn
-            controls.addWidget(btn)
+            cue_button = QPushButton(label, self)
+            cue_button.clicked.connect(lambda _checked=False, cue=label: self.jump_to_cue(cue))
+            self.cue_buttons[label] = cue_button
+            controls.addWidget(cue_button)
         controls.addStretch()
         controls.addWidget(self.time_label)
         root.addLayout(controls)

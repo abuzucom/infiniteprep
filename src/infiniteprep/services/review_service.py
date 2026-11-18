@@ -103,8 +103,8 @@ class ReviewService:
         for file_id in file_ids:
             proposals = self.repo.list_field_proposals(file_id)
             by_field = self._group_pending_proposals_by_field(proposals)
-            for field_name, field_props in by_field.items():
-                if self._try_auto_approve_field(file_id, field_name, field_props, min_score):
+            for field_name, field_proposals in by_field.items():
+                if self._try_auto_approve_field(file_id, field_name, field_proposals, min_score):
                     approved_count += 1
         return approved_count
 
@@ -117,17 +117,17 @@ class ReviewService:
         lost it. None of them takes part in a new approval.
         """
         grouped: dict[str, list[FieldProposal]] = {}
-        for prop in proposals:
-            if prop.review_status != ProposalReviewStatus.PENDING:
+        for proposal in proposals:
+            if proposal.review_status != ProposalReviewStatus.PENDING:
                 continue
-            grouped.setdefault(prop.field_name, []).append(prop)
+            grouped.setdefault(proposal.field_name, []).append(proposal)
         return grouped
 
     def _try_auto_approve_field(
         self,
         file_id: str,
         field_name: str,
-        field_props: list[FieldProposal],
+        field_proposals: list[FieldProposal],
         min_score: float,
     ) -> bool:
         """Approve top proposal if all distinct proposed values agree and score >= min_score."""
@@ -135,11 +135,11 @@ class ReviewService:
         if existing is not None and existing.locked:
             return False
 
-        distinct_values = {p.proposed_value.strip().lower() for p in field_props}
+        distinct_values = {proposal.proposed_value.strip().lower() for proposal in field_proposals}
         if len(distinct_values) != 1:
             return False
 
-        best = field_props[0]
+        best = field_proposals[0]
         score = best.application_match_score
         if score is None:
             score = best.provider_confidence or 0.0
@@ -153,13 +153,13 @@ class ReviewService:
     ) -> int:
         """Propagate shared release-level fields from a CandidateMatch to a SourceGroup."""
         files = self.repo.list_files(source_group_id=source_group_id)
-        rel = candidate.release_details
+        release = candidate.release_details
         shared_fields: list[tuple[str, str | None]] = [
-            (FieldName.RELEASE_TITLE.value, rel.release_title),
-            (FieldName.LABEL.value, rel.label),
-            (FieldName.CATALOG_NUMBER.value, rel.catalog_number),
-            (FieldName.YEAR.value, rel.year),
-            (FieldName.GENRE.value, rel.genre),
+            (FieldName.RELEASE_TITLE.value, release.release_title),
+            (FieldName.LABEL.value, release.label),
+            (FieldName.CATALOG_NUMBER.value, release.catalog_number),
+            (FieldName.YEAR.value, release.year),
+            (FieldName.GENRE.value, release.genre),
         ]
         updated_files = 0
         for asset in files:
@@ -176,8 +176,8 @@ class ReviewService:
     ) -> bool:
         """Write non-empty release fields onto unlocked fields of a single file."""
         wrote_any = False
-        for field_name, val in shared_fields:
-            if not val:
+        for field_name, value in shared_fields:
+            if not value:
                 continue
             existing = self.repo.get_approved_field(file_id, field_name)
             if existing is not None and existing.locked:
@@ -185,7 +185,7 @@ class ReviewService:
             approved = ApprovedField(
                 file_id=file_id,
                 field_name=field_name,
-                approved_value=val,
+                approved_value=value,
                 approval_origin=ApprovalOrigin.PROPOSAL_ACCEPTED,
                 approved_at=utc_now_iso(),
                 locked=False,

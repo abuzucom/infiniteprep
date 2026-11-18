@@ -27,11 +27,11 @@ from typing import Any, Final
 from infiniteprep.services.usb.models import SpaceInfo
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS: Final[float] = 15.0
-MAX_METADATA_STR_LEN: Final[int] = 512
+MAX_METADATA_TEXT_LENGTH: Final[int] = 512
 # PATH_MAX on Linux. No mounted volume has a longer path.
-MAX_MOUNT_PATH_LEN: Final[int] = 4096
+MAX_MOUNT_PATH_LENGTH: Final[int] = 4096
 FIRST_PRINTABLE_CODE_POINT: Final[int] = 0x20
-DEL_CODE_POINT: Final[int] = 0x7F
+DELETE_CODE_POINT: Final[int] = 0x7F
 PARENT_DIR_PART: Final[str] = ".."
 # Path components that add no folder: an empty part between separators and ".".
 CURRENT_DIR_PARTS: Final[frozenset[str]] = frozenset({"", "."})
@@ -52,7 +52,7 @@ WINDOWS_RESERVED_DEVICE_NAMES: Final[frozenset[str]] = frozenset(
 )
 # A colon inside a Windows name selects a drive or an alternate data stream.
 WINDOWS_STREAM_SEPARATOR: Final[str] = ":"
-MAX_TEMP_ATTEMPTS: Final[int] = 16
+MAX_TEMPORARY_ATTEMPTS: Final[int] = 16
 MAX_USB_JSON_BYTES: Final[int] = 16 * 1024 * 1024
 ANSI_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
@@ -64,12 +64,12 @@ _WIN32_SHARE_ALL: Final[int] = _WIN32_SHARE_READ_WRITE | 0x00000004
 _WIN32_OPEN_EXISTING: Final[int] = 3
 _WIN32_FLAG_BACKUP_SEMANTICS: Final[int] = 0x02000000
 _WIN32_FLAG_OPEN_REPARSE_POINT: Final[int] = 0x00200000
-_WIN32_ATTR_DIRECTORY: Final[int] = 0x0010
-_WIN32_ATTR_REPARSE_POINT: Final[int] = 0x0400
+_WIN32_ATTRIBUTE_DIRECTORY: Final[int] = 0x0010
+_WIN32_ATTRIBUTE_REPARSE_POINT: Final[int] = 0x0400
 _WIN32_FILE_DISPOSITION_INFO: Final[int] = 4
-_WIN32_ERR_FILE_NOT_FOUND: Final[int] = 2
-_WIN32_ERR_PATH_NOT_FOUND: Final[int] = 3
-_WIN32_PATH_BUF_LEN: Final[int] = 32768
+_WIN32_ERROR_FILE_NOT_FOUND: Final[int] = 2
+_WIN32_ERROR_PATH_NOT_FOUND: Final[int] = 3
+_WIN32_PATH_BUFFER_LENGTH: Final[int] = 32768
 WIN32_NO_ERROR_MESSAGE: Final[str] = "The Win32 call failed without an error code."
 _KERNEL32_CACHE: list[Any] = []
 
@@ -103,10 +103,10 @@ class _Win32DispositionInfo(ctypes.Structure):
     _fields_ = [("DeleteFile", ctypes.c_ubyte)]
 
 
-def default_command_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+def default_command_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
     """Execute a fixed command array safely using subprocess.run with shell=False."""
     return subprocess.run(
-        cmd,
+        command,
         capture_output=True,
         text=True,
         check=False,
@@ -116,25 +116,25 @@ def default_command_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     )
 
 
-def clean_str(val: Any, max_len: int = MAX_METADATA_STR_LEN) -> str | None:
+def clean_str(value: Any, max_length: int = MAX_METADATA_TEXT_LENGTH) -> str | None:
     """Sanitize untrusted metadata string, removing escape sequences and control characters."""
-    if val is None:
+    if value is None:
         return None
-    raw = str(val)
+    raw = str(value)
     no_ansi = ANSI_ESCAPE_RE.sub("", raw)
-    filtered = "".join(ch for ch in no_ansi if ch.isprintable() and ch != "\x00")
+    filtered = "".join(char for char in no_ansi if char.isprintable() and char != "\x00")
     stripped = filtered.strip()
     if not stripped:
         return None
-    return stripped[:max_len]
+    return stripped[:max_length]
 
 
-def clean_int(val: Any, default: int = 0) -> int:
+def clean_int(value: Any, default: int = 0) -> int:
     """Convert value to non-negative int, returning default on failure."""
-    if val is None:
+    if value is None:
         return default
     try:
-        parsed = int(val)
+        parsed = int(value)
         return max(0, parsed)
     # JSON and plist both accept an infinite number, and int() of it overflows.
     except (ValueError, TypeError, OverflowError):
@@ -154,23 +154,27 @@ def deduplicate_space_entries(
     return tuple(unique.items())
 
 
-def sanitize_mount_point(val: Any) -> str | None:
+def sanitize_mount_point(value: Any) -> str | None:
     """Return an untrusted POSIX mount path unchanged when it is safe, or None.
 
     A cleaned copy of an unsafe path can name another folder or another volume. The probe
     output therefore keeps its exact text or yields no mount point at all.
     """
-    if not isinstance(val, str) or not val.startswith("/") or len(val) > MAX_MOUNT_PATH_LEN:
+    if (
+        not isinstance(value, str)
+        or not value.startswith("/")
+        or len(value) > MAX_MOUNT_PATH_LENGTH
+    ):
         return None
-    if PARENT_DIR_PART in val.split("/") or not val.isprintable():
+    if PARENT_DIR_PART in value.split("/") or not value.isprintable():
         return None
-    return val
+    return value
 
 
 def has_path_control_characters(text: str) -> bool:
     """Return True when text holds a C0 control character or DEL."""
     return any(
-        ord(char) < FIRST_PRINTABLE_CODE_POINT or ord(char) == DEL_CODE_POINT for char in text
+        ord(char) < FIRST_PRINTABLE_CODE_POINT or ord(char) == DELETE_CODE_POINT for char in text
     )
 
 
@@ -269,8 +273,8 @@ def _win32_kernel32() -> Any:
     """Return configured kernel32 library handle functions for Win32 confinement."""
     if _KERNEL32_CACHE:
         return _KERNEL32_CACHE[0]
-    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    k32.CreateFileW.argtypes = [
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateFileW.argtypes = [
         ctypes.c_wchar_p,
         ctypes.c_uint32,
         ctypes.c_uint32,
@@ -279,27 +283,27 @@ def _win32_kernel32() -> Any:
         ctypes.c_uint32,
         ctypes.c_void_p,
     ]
-    k32.CreateFileW.restype = ctypes.c_void_p
-    k32.CloseHandle.argtypes = [ctypes.c_void_p]
-    k32.CloseHandle.restype = ctypes.c_int
-    k32.GetFileInformationByHandle.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-    k32.GetFileInformationByHandle.restype = ctypes.c_int
-    k32.GetFinalPathNameByHandleW.argtypes = [
+    kernel32.CreateFileW.restype = ctypes.c_void_p
+    kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel32.CloseHandle.restype = ctypes.c_int
+    kernel32.GetFileInformationByHandle.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    kernel32.GetFileInformationByHandle.restype = ctypes.c_int
+    kernel32.GetFinalPathNameByHandleW.argtypes = [
         ctypes.c_void_p,
         ctypes.c_void_p,
         ctypes.c_uint32,
         ctypes.c_uint32,
     ]
-    k32.GetFinalPathNameByHandleW.restype = ctypes.c_uint32
-    k32.SetFileInformationByHandle.argtypes = [
+    kernel32.GetFinalPathNameByHandleW.restype = ctypes.c_uint32
+    kernel32.SetFileInformationByHandle.argtypes = [
         ctypes.c_void_p,
         ctypes.c_uint32,
         ctypes.c_void_p,
         ctypes.c_uint32,
     ]
-    k32.SetFileInformationByHandle.restype = ctypes.c_int
-    _KERNEL32_CACHE.append(k32)
-    return k32
+    kernel32.SetFileInformationByHandle.restype = ctypes.c_int
+    _KERNEL32_CACHE.append(kernel32)
+    return kernel32
 
 
 def close_win32_handle(handle: int) -> None:
@@ -332,8 +336,8 @@ def win32_error(code: int, path: Path | None = None) -> OSError:
 
 def _open_win32_handle(path: Path, access: int, share: int, flags: int) -> int | None:
     """Open path on Win32 without following reparse points, returning None when absent."""
-    k32 = _win32_kernel32()
-    handle = k32.CreateFileW(
+    kernel32 = _win32_kernel32()
+    handle = kernel32.CreateFileW(
         str(path),
         access,
         share,
@@ -344,10 +348,10 @@ def _open_win32_handle(path: Path, access: int, share: int, flags: int) -> int |
     )
     invalid = ctypes.c_void_p(-1).value
     if handle is None or handle == invalid:
-        err = ctypes.get_last_error()
-        if err in (_WIN32_ERR_FILE_NOT_FOUND, _WIN32_ERR_PATH_NOT_FOUND):
+        error_code = ctypes.get_last_error()
+        if error_code in (_WIN32_ERROR_FILE_NOT_FOUND, _WIN32_ERROR_PATH_NOT_FOUND):
             return None
-        raise win32_error(err, path)
+        raise win32_error(error_code, path)
     return int(handle)
 
 
@@ -355,24 +359,26 @@ def _validate_win32_handle(
     handle: int, expected: Path, *, expect_dir: bool, check_parent: bool
 ) -> None:
     """Verify open Win32 handle is not a reparse point and resolves inside expected."""
-    k32 = _win32_kernel32()
+    kernel32 = _win32_kernel32()
     info = _Win32HandleFileInfo()
-    if not k32.GetFileInformationByHandle(ctypes.c_void_p(handle), ctypes.byref(info)):
+    if not kernel32.GetFileInformationByHandle(ctypes.c_void_p(handle), ctypes.byref(info)):
         raise win32_error(ctypes.get_last_error())
-    if info.dwFileAttributes & _WIN32_ATTR_REPARSE_POINT:
+    if info.dwFileAttributes & _WIN32_ATTRIBUTE_REPARSE_POINT:
         raise ValueError("USB metadata path cannot be a symbolic link.")
-    if bool(info.dwFileAttributes & _WIN32_ATTR_DIRECTORY) != expect_dir:
+    if bool(info.dwFileAttributes & _WIN32_ATTRIBUTE_DIRECTORY) != expect_dir:
         raise ValueError("USB metadata entry has unexpected filesystem type.")
-    buf = ctypes.create_unicode_buffer(_WIN32_PATH_BUF_LEN)
-    length = k32.GetFinalPathNameByHandleW(ctypes.c_void_p(handle), buf, _WIN32_PATH_BUF_LEN, 0)
+    path_buffer = ctypes.create_unicode_buffer(_WIN32_PATH_BUFFER_LENGTH)
+    length = kernel32.GetFinalPathNameByHandleW(
+        ctypes.c_void_p(handle), path_buffer, _WIN32_PATH_BUFFER_LENGTH, 0
+    )
     if length == 0:
         raise win32_error(ctypes.get_last_error())
-    if length >= _WIN32_PATH_BUF_LEN:
+    if length >= _WIN32_PATH_BUFFER_LENGTH:
         raise OSError(None, "The final path of the USB metadata entry exceeds the path buffer.")
-    resolved = _normalize_win32_final_path(buf.value)
-    actual_ref = os.path.normcase(os.path.dirname(resolved) if check_parent else resolved)
-    expected_ref = os.path.normcase(str(expected.resolve(strict=True)))
-    if actual_ref != expected_ref:
+    resolved = _normalize_win32_final_path(path_buffer.value)
+    actual_compare_path = os.path.normcase(os.path.dirname(resolved) if check_parent else resolved)
+    expected_compare_path = os.path.normcase(str(expected.resolve(strict=True)))
+    if actual_compare_path != expected_compare_path:
         raise ValueError("USB metadata path resolves outside the mount root.")
 
 
@@ -401,8 +407,8 @@ def open_win32_confined_read_fd(target: Path, expected_parent: Path) -> int | No
         return None
     try:
         _validate_win32_handle(handle, expected_parent, expect_dir=False, check_parent=True)
-        msvcrt_mod = importlib.import_module("msvcrt")
-        return int(msvcrt_mod.open_osfhandle(handle, os.O_RDONLY))
+        msvcrt_module = importlib.import_module("msvcrt")
+        return int(msvcrt_module.open_osfhandle(handle, os.O_RDONLY))
     except BaseException:
         close_win32_handle(handle)
         raise
@@ -414,17 +420,17 @@ def unlink_win32_confined_file(target: Path, expected_parent: Path) -> bool:
     handle = _open_win32_handle(target, access, _WIN32_SHARE_ALL, 0)
     if handle is None:
         return False
-    k32 = _win32_kernel32()
+    kernel32 = _win32_kernel32()
     try:
         _validate_win32_handle(handle, expected_parent, expect_dir=False, check_parent=True)
-        disp = _Win32DispositionInfo(1)
-        ok = k32.SetFileInformationByHandle(
+        disposition_info = _Win32DispositionInfo(1)
+        disposition_set = kernel32.SetFileInformationByHandle(
             ctypes.c_void_p(handle),
             _WIN32_FILE_DISPOSITION_INFO,
-            ctypes.byref(disp),
-            ctypes.sizeof(disp),
+            ctypes.byref(disposition_info),
+            ctypes.sizeof(disposition_info),
         )
-        if not ok:
+        if not disposition_set:
             raise win32_error(ctypes.get_last_error(), target)
     finally:
         close_win32_handle(handle)
@@ -666,10 +672,10 @@ def _write_temp_json_via_fd(dir_fd: int, file_name: str, text: str) -> str:
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
-    for _ in range(MAX_TEMP_ATTEMPTS):
-        temp_name = f".{file_name}.{secrets.token_hex(8)}.tmp"
+    for _ in range(MAX_TEMPORARY_ATTEMPTS):
+        temporary_name = f".{file_name}.{secrets.token_hex(8)}.tmp"
         try:
-            descriptor = os.open(temp_name, flags, 0o600, dir_fd=dir_fd)
+            descriptor = os.open(temporary_name, flags, 0o600, dir_fd=dir_fd)
         except FileExistsError:
             continue
         try:
@@ -679,18 +685,18 @@ def _write_temp_json_via_fd(dir_fd: int, file_name: str, text: str) -> str:
                 os.fsync(handle.fileno())
         except BaseException:
             with contextlib.suppress(OSError):
-                os.unlink(temp_name, dir_fd=dir_fd)
+                os.unlink(temporary_name, dir_fd=dir_fd)
             raise
-        return temp_name
+        return temporary_name
     raise OSError("Unable to allocate unique temporary JSON file.")
 
 
 def _write_temp_json_via_path(parent_dir: Path, file_name: str, text: str) -> Path:
     """Create and flush a temporary JSON file inside parent_dir."""
-    descriptor, temp_name = tempfile.mkstemp(
+    descriptor, temporary_name = tempfile.mkstemp(
         dir=parent_dir, prefix=f".{file_name}.", suffix=".tmp", text=True
     )
-    temp_path = Path(temp_name)
+    temporary_path = Path(temporary_name)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
             handle.write(text)
@@ -698,9 +704,9 @@ def _write_temp_json_via_path(parent_dir: Path, file_name: str, text: str) -> Pa
             os.fsync(handle.fileno())
     except BaseException:
         with contextlib.suppress(OSError):
-            temp_path.unlink(missing_ok=True)
+            temporary_path.unlink(missing_ok=True)
         raise
-    return temp_path
+    return temporary_path
 
 
 def write_json_atomic(
@@ -723,16 +729,16 @@ def write_json_atomic(
         raise ValueError(f"Metadata folder cannot be a symbolic link: {parent_dir}")
     if reject_target_symlink:
         reject_symlink_target(parent_dir, file_name)
-    temp_path = _write_temp_json_via_path(parent_dir, file_name, text)
+    temporary_path = _write_temp_json_via_path(parent_dir, file_name, text)
     try:
         if is_symlink_or_reparse_point(parent_dir):
             raise ValueError(f"Metadata folder cannot be a symbolic link: {parent_dir}")
         if reject_target_symlink:
             reject_symlink_target(parent_dir, file_name)
-        os.replace(temp_path, target)
+        os.replace(temporary_path, target)
     except BaseException:
         with contextlib.suppress(OSError):
-            temp_path.unlink(missing_ok=True)
+            temporary_path.unlink(missing_ok=True)
         raise
     return target
 
@@ -747,13 +753,13 @@ def _write_json_atomic_dir_fd(
     """Atomically write UTF-8 JSON through an open dir_fd without following symlinks."""
     if reject_target_symlink:
         reject_symlink_target(parent_dir, file_name, dir_fd=dir_fd)
-    temp_name = _write_temp_json_via_fd(dir_fd, file_name, text)
+    temporary_name = _write_temp_json_via_fd(dir_fd, file_name, text)
     try:
         if reject_target_symlink:
             reject_symlink_target(parent_dir, file_name, dir_fd=dir_fd)
-        os.replace(temp_name, file_name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+        os.replace(temporary_name, file_name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
     except BaseException:
         with contextlib.suppress(OSError):
-            os.unlink(temp_name, dir_fd=dir_fd)
+            os.unlink(temporary_name, dir_fd=dir_fd)
         raise
     return parent_dir / file_name

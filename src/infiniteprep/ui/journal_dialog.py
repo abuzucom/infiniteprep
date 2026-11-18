@@ -28,7 +28,7 @@ JOURNAL_DIALOG_TITLE: Final[str] = "Change Journal & Backup Restore"
 JOURNAL_DIALOG_WIDTH: Final[int] = 960
 JOURNAL_DIALOG_HEIGHT: Final[int] = 520
 JOURNAL_TABLE_COLUMNS: Final[int] = 6
-COL_RESTORE_ACTION: Final[int] = 5
+COLUMN_RESTORE_ACTION: Final[int] = 5
 
 
 class JournalDialog(QDialog):
@@ -86,31 +86,35 @@ class JournalDialog(QDialog):
         """Load ChangeRecords from Repository and populate the table."""
         self.records = self.repo.list_change_records()
         self.table.setRowCount(len(self.records))
-        for idx, rec in enumerate(self.records):
-            self._populate_record_row(idx, rec)
+        for index, record in enumerate(self.records):
+            self._populate_record_row(index, record)
 
-    def _populate_record_row(self, row_idx: int, rec: ChangeRecord) -> None:
+    def _populate_record_row(self, row_index: int, record: ChangeRecord) -> None:
         """Render a single ChangeRecord row with a Restore button."""
-        written_str = ", ".join(f"{k}={v}" for k, v in rec.written_tags.items())
+        written_text = ", ".join(
+            f"{tag_name}={tag_value}" for tag_name, tag_value in record.written_tags.items()
+        )
         cells = [
-            format_local_timestamp(rec.timestamp),
-            Path(rec.previous_path).name,
-            Path(rec.new_path).name,
-            written_str,
-            str(rec.operation_status),
+            format_local_timestamp(record.timestamp),
+            Path(record.previous_path).name,
+            Path(record.new_path).name,
+            written_text,
+            str(record.operation_status),
         ]
-        for col_idx, text in enumerate(cells):
-            self.table.setItem(row_idx, col_idx, QTableWidgetItem(text))
+        for column_index, text in enumerate(cells):
+            self.table.setItem(row_index, column_index, QTableWidgetItem(text))
 
-        if rec.operation_status == OperationStatus.COMPLETED:
-            btn = QPushButton("Restore Backup", self.table)
-            btn.clicked.connect(
-                lambda _c=False, op_id=rec.operation_id: self._restore_single(op_id)
+        if record.operation_status == OperationStatus.COMPLETED:
+            restore_button = QPushButton("Restore Backup", self.table)
+            restore_button.clicked.connect(
+                lambda _c=False, operation_id=record.operation_id: self._restore_single(
+                    operation_id
+                )
             )
-            self.table.setCellWidget(row_idx, COL_RESTORE_ACTION, btn)
+            self.table.setCellWidget(row_index, COLUMN_RESTORE_ACTION, restore_button)
         else:
             self.table.setItem(
-                row_idx, COL_RESTORE_ACTION, QTableWidgetItem(str(rec.operation_status))
+                row_index, COLUMN_RESTORE_ACTION, QTableWidgetItem(str(record.operation_status))
             )
 
     def _restore_single(self, operation_id: str) -> None:

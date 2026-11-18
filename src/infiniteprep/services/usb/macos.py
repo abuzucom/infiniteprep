@@ -54,7 +54,7 @@ WAIT_GRACE_SECONDS: Final[float] = 1.0
 KILL_SIGNAL: Final[int] = getattr(signal, "SIGKILL", signal.SIGTERM)
 
 
-def _signal_child(process: subprocess.Popen[bytes], sig: int) -> bool:
+def _signal_child(process: subprocess.Popen[bytes], signal_number: int) -> bool:
     """Deliver a signal to the child, targeting its process group on POSIX.
 
     The child runs in its own session, so the group signal reaches descendants
@@ -63,10 +63,10 @@ def _signal_child(process: subprocess.Popen[bytes], sig: int) -> bool:
     """
     if hasattr(os, "killpg"):
         with contextlib.suppress(OSError):
-            os.killpg(os.getpgid(process.pid), sig)
+            os.killpg(os.getpgid(process.pid), signal_number)
             return True
     try:
-        process.send_signal(sig)
+        process.send_signal(signal_number)
         return True
     except ProcessLookupError:
         return False
@@ -80,8 +80,8 @@ def _terminate_process(process: subprocess.Popen[bytes], deadline: float) -> Non
     exited (ProcessLookupError) and a child stuck in an uninterruptible state,
     which reaps when the inspector process exits.
     """
-    for sig in (signal.SIGTERM, KILL_SIGNAL):
-        if not _signal_child(process, sig):
+    for signal_number in (signal.SIGTERM, KILL_SIGNAL):
+        if not _signal_child(process, signal_number):
             with contextlib.suppress(ChildProcessError):
                 process.wait(timeout=WAIT_GRACE_SECONDS)
             return
@@ -198,7 +198,7 @@ def _close_pipes(process: subprocess.Popen[bytes]) -> None:
 
 
 def bounded_command_runner(
-    cmd: list[str],
+    command: list[str],
     timeout_seconds: float,
 ) -> subprocess.CompletedProcess[str]:
     """Execute a fixed command array with bounded capture and a hard deadline.
@@ -219,7 +219,7 @@ def bounded_command_runner(
     }
     if sys.platform != "win32":
         popen_kwargs["start_new_session"] = True
-    process = subprocess.Popen(cmd, **popen_kwargs)
+    process = subprocess.Popen(command, **popen_kwargs)
     try:
         return _capture_bounded(process, deadline, timeout_seconds)
     except Exception:
@@ -229,11 +229,11 @@ def bounded_command_runner(
         _close_pipes(process)
 
 
-def _sanitize_diskutil_identifier(val: Any) -> str:
+def _sanitize_diskutil_identifier(value: Any) -> str:
     """Validate and sanitize a diskutil device identifier from untrusted output."""
-    raw = clean_str(val)
+    raw = clean_str(value)
     if not raw or ".." in raw or "/" in raw or not MACOS_DEVICE_SAFE_RE.match(raw):
-        raise InspectionParseError(f"Invalid or unsafe diskutil device identifier: {val!r}")
+        raise InspectionParseError(f"Invalid or unsafe diskutil device identifier: {value!r}")
     return raw
 
 
@@ -250,9 +250,9 @@ def _partition_number_from_identifier(identifier: str, fallback_index: int) -> i
     return fallback_index
 
 
-def _normalize_filesystem(val: Any) -> str | None:
+def _normalize_filesystem(value: Any) -> str | None:
     """Normalize macOS filesystem names so FAT32 and exFAT variants are detectable."""
-    raw = clean_str(val)
+    raw = clean_str(value)
     if not raw:
         return None
     lowered = raw.casefold()
@@ -295,9 +295,9 @@ class MacOSDriveInspector:
         self._timeout_seconds = timeout_seconds
         self._command_runner = command_runner or self._bounded_runner
 
-    def _bounded_runner(self, cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    def _bounded_runner(self, command: list[str]) -> subprocess.CompletedProcess[str]:
         """Run a fixed command array. Stdout above the byte cap raises InspectionParseError."""
-        return bounded_command_runner(cmd, self._timeout_seconds)
+        return bounded_command_runner(command, self._timeout_seconds)
 
     def inspect_all(self) -> tuple[DriveInspection, ...]:
         """Inspect all physical disks and return DriveInspection records."""
@@ -341,8 +341,8 @@ class MacOSDriveInspector:
             raise CommandExecutionError(f"diskutil list execution failed: {exc}") from exc
 
         if completed.returncode != 0:
-            err = completed.stderr.strip() or f"exit code {completed.returncode}"
-            raise CommandExecutionError(f"diskutil list failed with {err}")
+            error_text = completed.stderr.strip() or f"exit code {completed.returncode}"
+            raise CommandExecutionError(f"diskutil list failed with {error_text}")
 
         data = self._parse_plist_dict(completed.stdout, "diskutil list")
         if "AllDisksAndPartitions" not in data:
@@ -376,8 +376,8 @@ class MacOSDriveInspector:
             raise CommandExecutionError(f"diskutil info execution failed: {exc}") from exc
 
         if completed.returncode != 0:
-            err = completed.stderr.strip() or f"exit code {completed.returncode}"
-            raise CommandExecutionError(f"diskutil info failed with {err}")
+            error_text = completed.stderr.strip() or f"exit code {completed.returncode}"
+            raise CommandExecutionError(f"diskutil info failed with {error_text}")
 
         return self._parse_plist_dict(completed.stdout, "diskutil info")
 

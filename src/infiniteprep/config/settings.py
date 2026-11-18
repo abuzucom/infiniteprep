@@ -71,19 +71,19 @@ MAX_USB_RECOVERY_EXPIRY_DAYS: Final[int] = 365
 def _is_disallowed_ip(ip_text: str) -> bool:
     """Return True if ip_text parses as a non-public, loopback, private, or reserved IP."""
     try:
-        addr = ipaddress.ip_address(ip_text)
+        ip_address = ipaddress.ip_address(ip_text)
     except ValueError:
         return False
-    if isinstance(addr, ipaddress.IPv4Address) and addr in CGNAT_NETWORK:
+    if isinstance(ip_address, ipaddress.IPv4Address) and ip_address in CGNAT_NETWORK:
         return True
     return (
-        addr.is_private
-        or addr.is_loopback
-        or addr.is_link_local
-        or addr.is_multicast
-        or addr.is_reserved
-        or addr.is_unspecified
-        or not addr.is_global
+        ip_address.is_private
+        or ip_address.is_loopback
+        or ip_address.is_link_local
+        or ip_address.is_multicast
+        or ip_address.is_reserved
+        or ip_address.is_unspecified
+        or not ip_address.is_global
     )
 
 

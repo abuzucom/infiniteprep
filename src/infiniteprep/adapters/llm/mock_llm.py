@@ -24,10 +24,10 @@ class MockReasoningAdapter:
                 "rationale": "No allowed candidates supplied in evidence packet.",
             }
         first = allowed[0]
-        cand_id = first.get("id") if isinstance(first, dict) else str(first)
-        val = first.get("value") if isinstance(first, dict) else str(first)
+        candidate_id = first.get("id") if isinstance(first, dict) else str(first)
+        value = first.get("value") if isinstance(first, dict) else str(first)
         return {
-            "selected_candidate_id": cand_id,
-            "proposed_value": val,
+            "selected_candidate_id": candidate_id,
+            "proposed_value": value,
             "rationale": "Deterministic mock arbitration selected top allowed candidate.",
         }

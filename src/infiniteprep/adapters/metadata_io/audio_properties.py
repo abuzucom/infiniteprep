@@ -150,10 +150,10 @@ class _MpegHeader:
 def read_wav_stream(data: bytes) -> StreamRead:
     """Read WAV properties from the fmt and data chunks, plus the first id3 chunk body."""
     chunks = _walk_form(data, b"RIFF", WAV_FORM_TYPES, "<I")
-    fmt = _first_chunk(chunks, frozenset({b"fmt "}))
-    if fmt is None or fmt.size < WAV_FMT_SIZE:
+    fmt_chunk = _first_chunk(chunks, frozenset({b"fmt "}))
+    if fmt_chunk is None or fmt_chunk.size < WAV_FMT_SIZE:
         raise AudioPropertiesError("The WAV file has no usable fmt chunk; the file is damaged.")
-    fields = struct.unpack(WAV_FMT_LAYOUT, data[fmt.start : fmt.start + WAV_FMT_SIZE])
+    fields = struct.unpack(WAV_FMT_LAYOUT, data[fmt_chunk.start : fmt_chunk.start + WAV_FMT_SIZE])
     _, channels, rate, _, block_align, bits = fields
     audio = _first_chunk(chunks, frozenset({b"data"}))
     frames = audio.size // block_align if audio and block_align else 0
@@ -164,10 +164,10 @@ def read_wav_stream(data: bytes) -> StreamRead:
 def read_aiff_stream(data: bytes) -> StreamRead:
     """Read AIFF or AIFC properties from the COMM chunk, plus the first ID3 chunk body."""
     chunks = _walk_form(data, b"FORM", AIFF_FORM_TYPES, ">I")
-    comm = _first_chunk(chunks, frozenset({b"COMM"}))
-    if comm is None or comm.size < AIFF_COMM_FIELDS + EXTENDED_FLOAT_SIZE:
+    comm_chunk = _first_chunk(chunks, frozenset({b"COMM"}))
+    if comm_chunk is None or comm_chunk.size < AIFF_COMM_FIELDS + EXTENDED_FLOAT_SIZE:
         raise AudioPropertiesError("The AIFF file has no usable COMM chunk; the file is damaged.")
-    body = data[comm.start : comm.start + AIFF_COMM_FIELDS + EXTENDED_FLOAT_SIZE]
+    body = data[comm_chunk.start : comm_chunk.start + AIFF_COMM_FIELDS + EXTENDED_FLOAT_SIZE]
     channels, frames, bits = struct.unpack(AIFF_COMM_LAYOUT, body[:AIFF_COMM_FIELDS])
     rate = _extended_to_int(body[AIFF_COMM_FIELDS:])
     properties = _pcm_properties(channels, rate, bits, frames)

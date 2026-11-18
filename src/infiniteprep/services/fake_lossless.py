@@ -37,9 +37,9 @@ MAX_STORED_FRAMES = 512
 SILENCE_RMS_THRESHOLD = 1e-5
 POWER_EPSILON = 1e-12
 
-REF_BAND_LOW_HZ = 1000.0
-REF_BAND_HIGH_HZ = 10000.0
-REF_PERCENTILE = 90.0
+REFERENCE_BAND_LOW_HZ = 1000.0
+REFERENCE_BAND_HIGH_HZ = 10000.0
+REFERENCE_PERCENTILE = 90.0
 TIME_PERCENTILE = 90.0
 
 SMOOTH_BAND_HZ = 200.0
@@ -201,44 +201,50 @@ def _extract_fft_frames(
 
 def _relative_db_profile(spectra: np.ndarray, sample_rate: int) -> tuple[np.ndarray, np.ndarray]:
     """Compute frequency bins and 90th-percentile relative dB profile."""
-    freqs = np.fft.rfftfreq(FFT_SIZE, d=1.0 / sample_rate)
+    frequencies = np.fft.rfftfreq(FFT_SIZE, d=1.0 / sample_rate)
     percentile_power = np.percentile(spectra, TIME_PERCENTILE, axis=0)
     db_profile = 10.0 * np.log10(np.maximum(percentile_power, POWER_EPSILON))
-    ref_mask = (freqs >= REF_BAND_LOW_HZ) & (freqs <= REF_BAND_HIGH_HZ)
-    ref_db = float(np.percentile(db_profile[ref_mask], REF_PERCENTILE)) if ref_mask.any() else 0.0
-    return freqs, db_profile - ref_db
+    reference_mask = (frequencies >= REFERENCE_BAND_LOW_HZ) & (
+        frequencies <= REFERENCE_BAND_HIGH_HZ
+    )
+    ref_db = (
+        float(np.percentile(db_profile[reference_mask], REFERENCE_PERCENTILE))
+        if reference_mask.any()
+        else 0.0
+    )
+    return frequencies, db_profile - ref_db
 
 
-def _smooth_profile(freqs: np.ndarray, rel_db: np.ndarray) -> np.ndarray:
+def _smooth_profile(frequencies: np.ndarray, rel_db: np.ndarray) -> np.ndarray:
     """Apply a uniform frequency smoothing kernel of roughly SMOOTH_BAND_HZ.
 
     The profile is in dB relative to the reference band. Zero padding mixes
     0 dB into the edge bins. That lift moves a deep stopband near Nyquist above
     the cutoff threshold. Edge padding repeats each edge value instead.
     """
-    if len(freqs) < 2:
+    if len(frequencies) < 2:
         return rel_db
-    bin_hz = float(freqs[1] - freqs[0])
-    kernel_len = max(1, round(SMOOTH_BAND_HZ / bin_hz))
-    if kernel_len <= 1:
+    bin_hz = float(frequencies[1] - frequencies[0])
+    kernel_length = max(1, round(SMOOTH_BAND_HZ / bin_hz))
+    if kernel_length <= 1:
         return rel_db
-    kernel = np.ones(kernel_len, dtype=np.float64) / kernel_len
-    pad_before = kernel_len // 2
-    pad_after = kernel_len - 1 - pad_before
+    kernel = np.ones(kernel_length, dtype=np.float64) / kernel_length
+    pad_before = kernel_length // 2
+    pad_after = kernel_length - 1 - pad_before
     padded = np.pad(rel_db, (pad_before, pad_after), mode="edge")
     return np.convolve(padded, kernel, mode="valid")
 
 
 def _detect_spectral_cutoff(
-    freqs: np.ndarray,
+    frequencies: np.ndarray,
     smoothed_db: np.ndarray,
     nyquist_hz: float,
 ) -> tuple[float, bool, float]:
     """Return (cutoff_hz, is_suspect, score) from smoothed relative dB profile."""
     active = np.flatnonzero(
-        (freqs >= MIN_CUTOFF_SEARCH_HZ) & (smoothed_db >= CUTOFF_ENERGY_DROP_DB)
+        (frequencies >= MIN_CUTOFF_SEARCH_HZ) & (smoothed_db >= CUTOFF_ENERGY_DROP_DB)
     )
-    cutoff_hz = float(freqs[active[-1]]) if len(active) else 0.0
+    cutoff_hz = float(frequencies[active[-1]]) if len(active) else 0.0
     expected_min = min(nyquist_hz * CUTOFF_NYQUIST_RATIO, MAX_EXPECTED_CUTOFF_HZ)
     if cutoff_hz >= expected_min:
         return cutoff_hz, False, 0.0
@@ -249,27 +255,27 @@ def _detect_spectral_cutoff(
 
 
 def _band_mean(
-    freqs: np.ndarray,
+    frequencies: np.ndarray,
     rel_db: np.ndarray,
     low_hz: float,
     high_hz: float,
 ) -> float | None:
     """Return mean relative dB in [low_hz, high_hz), or None when empty."""
-    mask = (freqs >= low_hz) & (freqs < high_hz)
+    mask = (frequencies >= low_hz) & (frequencies < high_hz)
     if not mask.any():
         return None
     return float(np.mean(rel_db[mask]))
 
 
-def _detect_mp3_shelf(freqs: np.ndarray, rel_db: np.ndarray, nyquist_hz: float) -> float:
+def _detect_mp3_shelf(frequencies: np.ndarray, rel_db: np.ndarray, nyquist_hz: float) -> float:
     """Return confidence score in [0, 1] for an MP3 lowpass shelf."""
-    max_freq = min(SHELF_MAX_HZ, nyquist_hz - SHELF_WINDOW_HZ)
+    max_frequency = min(SHELF_MAX_HZ, nyquist_hz - SHELF_WINDOW_HZ)
     best_drop = 0.0
     edge = SHELF_MIN_HZ
-    while edge <= max_freq:
-        below = _band_mean(freqs, rel_db, edge - SHELF_WINDOW_HZ, edge)
-        above = _band_mean(freqs, rel_db, edge, edge + SHELF_WINDOW_HZ)
-        tail = _band_mean(freqs, rel_db, edge + SHELF_WINDOW_HZ, nyquist_hz)
+    while edge <= max_frequency:
+        below = _band_mean(frequencies, rel_db, edge - SHELF_WINDOW_HZ, edge)
+        above = _band_mean(frequencies, rel_db, edge, edge + SHELF_WINDOW_HZ)
+        tail = _band_mean(frequencies, rel_db, edge + SHELF_WINDOW_HZ, nyquist_hz)
         if below is not None and above is not None and tail is not None:
             drop = below - above
             if drop >= SHELF_DROP_DB and tail <= SHELF_FLOOR_DB:
@@ -281,30 +287,30 @@ def _detect_mp3_shelf(freqs: np.ndarray, rel_db: np.ndarray, nyquist_hz: float) 
     return min(1.0, SHELF_BASE_CONFIDENCE + SHELF_CONFIDENCE_WEIGHT * excess_ratio)
 
 
-def _detect_sbr_gap(freqs: np.ndarray, rel_db: np.ndarray, nyquist_hz: float) -> float:
+def _detect_sbr_gap(frequencies: np.ndarray, rel_db: np.ndarray, nyquist_hz: float) -> float:
     """Return confidence score in [0, 1] for an AAC SBR spectral band gap."""
     best_score = 0.0
     for width in SBR_GAP_WIDTHS_HZ:
         max_start = min(SBR_MAX_HZ, nyquist_hz - width - SBR_FLANK_HIGH_HZ)
         start = SBR_MIN_HZ
         while start <= max_start:
-            score = _score_sbr_window(freqs, rel_db, start, width)
+            score = _score_sbr_window(frequencies, rel_db, start, width)
             best_score = max(best_score, score)
             start += SBR_STEP_HZ
     return best_score
 
 
 def _score_sbr_window(
-    freqs: np.ndarray,
+    frequencies: np.ndarray,
     rel_db: np.ndarray,
     start_hz: float,
     width_hz: float,
 ) -> float:
     """Score a candidate SBR gap window [start_hz, start_hz + width_hz]."""
-    low_flank = _band_mean(freqs, rel_db, start_hz - SBR_FLANK_LOW_HZ, start_hz)
-    gap = _band_mean(freqs, rel_db, start_hz, start_hz + width_hz)
+    low_flank = _band_mean(frequencies, rel_db, start_hz - SBR_FLANK_LOW_HZ, start_hz)
+    gap = _band_mean(frequencies, rel_db, start_hz, start_hz + width_hz)
     high_flank = _band_mean(
-        freqs, rel_db, start_hz + width_hz, start_hz + width_hz + SBR_FLANK_HIGH_HZ
+        frequencies, rel_db, start_hz + width_hz, start_hz + width_hz + SBR_FLANK_HIGH_HZ
     )
     if low_flank is None or gap is None or high_flank is None:
         return 0.0
@@ -366,11 +372,13 @@ def _evaluate_spectra(
     method_name: str,
 ) -> FakeLosslessResult:
     """Evaluate cutoff and encoder traces on collected power spectra."""
-    freqs, rel_db = _relative_db_profile(spectra, sample_rate)
-    smoothed = _smooth_profile(freqs, rel_db)
-    cutoff_hz, cutoff_suspect, cutoff_score = _detect_spectral_cutoff(freqs, smoothed, nyquist_hz)
-    shelf_score = _detect_mp3_shelf(freqs, rel_db, nyquist_hz)
-    sbr_score = _detect_sbr_gap(freqs, rel_db, nyquist_hz)
+    frequencies, rel_db = _relative_db_profile(spectra, sample_rate)
+    smoothed = _smooth_profile(frequencies, rel_db)
+    cutoff_hz, cutoff_suspect, cutoff_score = _detect_spectral_cutoff(
+        frequencies, smoothed, nyquist_hz
+    )
+    shelf_score = _detect_mp3_shelf(frequencies, rel_db, nyquist_hz)
+    sbr_score = _detect_sbr_gap(frequencies, rel_db, nyquist_hz)
 
     traces: list[str] = []
     scores: list[float] = []

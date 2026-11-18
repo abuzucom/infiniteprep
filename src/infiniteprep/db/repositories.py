@@ -109,9 +109,9 @@ class RepositoryBatch:
 class Repository:
     """Data access layer wrapping SQLite queries and domain object mapping."""
 
-    def __init__(self, db: DatabaseManager) -> None:
+    def __init__(self, database: DatabaseManager) -> None:
         """Initialize Repository with a DatabaseManager."""
-        self.db = db
+        self.db = database
         # Each thread has its own connection, so batch state is per thread too.
         self._batch_state = threading.local()
         self.collections = CollectionRepository(self)
@@ -214,7 +214,7 @@ class Repository:
     def list_source_groups(self) -> list[SourceGroup]:
         conn = self.db.connect()
         rows = conn.execute("SELECT * FROM source_groups ORDER BY user_label").fetchall()
-        return [self._row_to_source_group(r) for r in rows]
+        return [self._row_to_source_group(row) for row in rows]
 
     # ------------------------------------------------------------------
     # File Assets
@@ -285,7 +285,7 @@ class Repository:
         rows = conn.execute(
             "SELECT * FROM file_assets WHERE content_hash = ?", (content_hash,)
         ).fetchall()
-        return [self._row_to_file_asset(r) for r in rows]
+        return [self._row_to_file_asset(row) for row in rows]
 
     def list_files(self, source_group_id: str | None = None) -> list[FileAsset]:
         conn = self.db.connect()
@@ -296,7 +296,7 @@ class Repository:
             ).fetchall()
         else:
             rows = conn.execute("SELECT * FROM file_assets ORDER BY current_path").fetchall()
-        return [self._row_to_file_asset(r) for r in rows]
+        return [self._row_to_file_asset(row) for row in rows]
 
     def update_file_status(
         self,
@@ -398,7 +398,7 @@ class Repository:
                 """,
                 (file_id,),
             ).fetchall()
-        return [self._row_to_candidate_match(r) for r in rows]
+        return [self._row_to_candidate_match(row) for row in rows]
 
     # ------------------------------------------------------------------
     # Field Proposals
@@ -464,7 +464,7 @@ class Repository:
                 """,
                 (file_id,),
             ).fetchall()
-        return [self._row_to_field_proposal(r) for r in rows]
+        return [self._row_to_field_proposal(row) for row in rows]
 
     def get_field_proposal_by_id(self, proposal_id: str) -> FieldProposal | None:
         """Fetch a single FieldProposal by its ID."""
@@ -530,7 +530,7 @@ class Repository:
             "SELECT * FROM analysis_results WHERE file_id = ? ORDER BY analyzed_at DESC",
             (file_id,),
         ).fetchall()
-        return [self._row_to_analysis_result(r) for r in rows]
+        return [self._row_to_analysis_result(row) for row in rows]
 
     # ------------------------------------------------------------------
     # Approved Fields & Locks
@@ -586,7 +586,7 @@ class Repository:
             "SELECT * FROM approved_fields WHERE file_id = ? ORDER BY field_name",
             (file_id,),
         ).fetchall()
-        return {r["field_name"]: self._row_to_approved_field(r) for r in rows}
+        return {row["field_name"]: self._row_to_approved_field(row) for row in rows}
 
     def set_field_lock(self, file_id: str, field_name: str, locked: bool) -> None:
         conn = self.db.connect()
@@ -685,7 +685,7 @@ class Repository:
             ).fetchall()
         else:
             rows = conn.execute("SELECT * FROM change_records ORDER BY rowid DESC").fetchall()
-        return [self._row_to_change_record(r) for r in rows]
+        return [self._row_to_change_record(row) for row in rows]
 
     def list_change_records_with_status(self, status: OperationStatus) -> list[ChangeRecord]:
         """Return the journal records in one status, newest first.
@@ -698,7 +698,7 @@ class Repository:
             "SELECT * FROM change_records WHERE operation_status = ? ORDER BY rowid DESC",
             (str(status),),
         ).fetchall()
-        return [self._row_to_change_record(r) for r in rows]
+        return [self._row_to_change_record(row) for row in rows]
 
     # ------------------------------------------------------------------
     # Bulk readers for many files in one query
@@ -822,7 +822,7 @@ class Repository:
         rows = conn.execute(
             "SELECT * FROM jobs WHERE status IN ('queued', 'processing') ORDER BY rowid"
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [dict(row) for row in rows]
 
     def get_cached_response(self, cache_key: str) -> dict[str, Any] | None:
         """Return the cached response for cache_key, or None when absent or expired.
@@ -853,12 +853,12 @@ class Repository:
 
         expires_at_iso must carry a UTC offset. Any offset form normalizes to the stored form.
         """
-        now_dt = datetime.now(UTC)
-        now = _format_utc_instant(now_dt)
+        current_time = datetime.now(UTC)
+        now = _format_utc_instant(current_time)
         if expires_at_iso:
-            exp = _normalize_instant_text(expires_at_iso, "expires_at_iso")
+            expires_at = _normalize_instant_text(expires_at_iso, "expires_at_iso")
         else:
-            exp = _format_utc_instant(now_dt + timedelta(seconds=ttl_seconds))
+            expires_at = _format_utc_instant(current_time + timedelta(seconds=ttl_seconds))
         conn = self.db.connect()
         conn.execute(
             """
@@ -874,7 +874,7 @@ class Repository:
                 provider,
                 json.dumps(response_data, ensure_ascii=False),
                 now,
-                exp,
+                expires_at,
             ),
         )
         self._commit(conn)

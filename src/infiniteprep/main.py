@@ -78,13 +78,15 @@ def run_evaluation_sample(input_dir: Path) -> dict[str, Any]:
     if not input_dir.exists() or not input_dir.is_dir():
         raise ValueError(f"Input directory does not exist: {input_dir}")
     hashes_before = {
-        p: compute_sha256(p) for p in discover_files_bounded([input_dir]) if p.is_file()
+        file_path: compute_sha256(file_path)
+        for file_path in discover_files_bounded([input_dir])
+        if file_path.is_file()
     }
     # The context manager closes the database on every path, an error included.
-    with DatabaseManager(":memory:") as db:
-        repo = Repository(db)
-        imp_report = ImportService(repo).import_paths([input_dir], source_type=SourceType.VINYL)
-        file_ids = [f.id for f in imp_report.imported_files]
+    with DatabaseManager(":memory:") as database:
+        repo = Repository(database)
+        import_report = ImportService(repo).import_paths([input_dir], source_type=SourceType.VINYL)
+        file_ids = [asset.id for asset in import_report.imported_files]
 
         JobOrchestrator(
             repository=repo,
@@ -93,18 +95,21 @@ def run_evaluation_sample(input_dir: Path) -> dict[str, Any]:
             audio_analyzer=LocalDspAnalyzer(),
         ).process_files(file_ids)
         reconciler = ReconciliationService(repo)
-        for fid in file_ids:
-            reconciler.reconcile_file(fid)
+        for file_id in file_ids:
+            reconciler.reconcile_file(file_id)
 
         return {
             "input_dir": str(input_dir),
             "total_imported_files": len(file_ids),
-            "damaged_files": len(imp_report.damaged_files),
-            "unsupported_files": len(imp_report.unsupported_files),
-            "identified_files": sum(1 for fid in file_ids if repo.list_candidate_matches(fid)),
-            "analyzed_files": sum(1 for fid in file_ids if repo.list_analysis_results(fid)),
+            "damaged_files": len(import_report.damaged_files),
+            "unsupported_files": len(import_report.unsupported_files),
+            "identified_files": sum(
+                1 for file_id in file_ids if repo.list_candidate_matches(file_id)
+            ),
+            "analyzed_files": sum(1 for file_id in file_ids if repo.list_analysis_results(file_id)),
             "zero_unintended_file_mutations": all(
-                compute_sha256(p) == h for p, h in hashes_before.items()
+                compute_sha256(file_path) == hash_before
+                for file_path, hash_before in hashes_before.items()
             ),
             "FieldName_BPM": FieldName.BPM.value,
         }
@@ -181,12 +186,12 @@ def build_analyze_runner(
 
 
 def queue_safe_writes(
-    window: MainWindow, write_svc: WriteService, plans: list[FileWritePlan]
+    window: MainWindow, write_service: WriteService, plans: list[FileWritePlan]
 ) -> None:
     """Add the previewed safe plans to the batch queue as one write batch."""
 
     def run_write_batch(should_cancel: CancelCheck, progress: ProgressReport) -> object:
-        return write_svc.apply_batch_continuing(
+        return write_service.apply_batch_continuing(
             plans,
             should_cancel=should_cancel,
             stop_on_failure=stop_on_first_failure(),
@@ -198,13 +203,13 @@ def queue_safe_writes(
 
 def apply_saved_theme(app: QApplication) -> None:
     """Apply the stored theme and store the theme in effect when it cannot apply."""
-    settings_mgr = SettingsManager()
-    settings = settings_mgr.load()
+    settings_manager = SettingsManager()
+    settings = settings_manager.load()
     result = switch_application_theme(app, settings.theme, NATIVE_THEME)
     if result.theme == settings.theme:
         return
     settings.theme = result.theme
-    settings_mgr.save(settings)
+    settings_manager.save(settings)
 
 
 def _show_usb_recovery_notice(parent: QWidget | None, title: str, message: str) -> None:
@@ -275,7 +280,7 @@ def launch_desktop_app() -> int:
         return opened
     repo = opened.repository
     tag_adapter = MetadataTagAdapter(SettingsManager().load_tag_output)
-    write_svc = WriteService(repo, tag_adapter=tag_adapter, backup_dir=opened.locations.backup_dir)
+    writer = WriteService(repo, tag_adapter=tag_adapter, backup_dir=opened.locations.backup_dir)
     orchestrator = JobOrchestrator(repository=repo, audio_analyzer=LocalDspAnalyzer())
     reconciler = ReconciliationService(repo)
     transcoder = SafeTranscoderAdapter(
@@ -289,31 +294,31 @@ def launch_desktop_app() -> int:
         import_service=ImportService(repo),
         review_service=ReviewService(repo),
         analyze_runner=build_analyze_runner(orchestrator, reconciler),
-        on_open_write_dialog=lambda fids: WritePlanDialog(
-            write_svc,
-            fids,
+        on_open_write_dialog=lambda file_ids: WritePlanDialog(
+            writer,
+            file_ids,
             parent=window,
-            submit_plans=lambda plans: queue_safe_writes(window, write_svc, plans),
+            submit_plans=lambda plans: queue_safe_writes(window, writer, plans),
         ).exec(),
-        on_open_journal_dialog=lambda: JournalDialog(repo, write_svc, parent=window).exec(),
+        on_open_journal_dialog=lambda: JournalDialog(repo, writer, parent=window).exec(),
         on_open_settings_dialog=lambda: open_settings_dialog(window, repo),
         # The transcode runs as a queued batch, so the window stays responsive with
         # progress, cancel, and the stuck-file prompt.
-        on_transcode_batch=lambda fids: run_transcode_with_confirmation(
-            window, repo, transcoder, fids, SettingsManager(), queue_batch=window.queue_batch
+        on_transcode_batch=lambda file_ids: run_transcode_with_confirmation(
+            window, repo, transcoder, file_ids, SettingsManager(), queue_batch=window.queue_batch
         ),
-        on_export_playlist=lambda fids, dest: export_playlist_with_feedback(
+        on_export_playlist=lambda file_ids, destination: export_playlist_with_feedback(
             window,
             exporter,
-            fids,
-            dest,
+            file_ids,
+            destination,
             relative_paths=SettingsManager().load().playlist_relative_paths,
         ),
         enable_audio_backend=True,
     )
     window.show()
-    if write_svc.list_interrupted_operations():
-        RecoveryDialog(write_svc, parent=window).exec()
+    if writer.list_interrupted_operations():
+        RecoveryDialog(writer, parent=window).exec()
     process_usb_recovery_at_launch(parent=window)
     return int(qt_app.exec())
 

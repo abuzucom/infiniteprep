@@ -240,7 +240,7 @@ class JobOrchestrator:
                 summary.completed_files += 1
             except EXPECTED_JOB_ERRORS as exc:
                 logger.error("Job processing failed for file %s: %r", file_id, exc, exc_info=True)
-                msg = (
+                message = (
                     f"Processing failed ({exc.__class__.__name__}: {exc}); "
                     "retry or check provider settings."
                 )
@@ -248,12 +248,12 @@ class JobOrchestrator:
                     file_id,
                     task_status=TaskStatus.FAILED,
                     review_status=ReviewStatus.ERROR,
-                    error_message=msg,
+                    error_message=message,
                 )
                 summary.failed_files += 1
-                summary.errors[file_id] = msg
+                summary.errors[file_id] = message
                 if raise_on_failure:
-                    raise RuntimeError(msg) from exc
+                    raise RuntimeError(message) from exc
         return summary
 
     def process_files_continuing(
@@ -304,7 +304,7 @@ class JobOrchestrator:
         # bad file must not end a queued batch. The traceback goes to the log.
         except Exception as exc:
             logger.error("Queued job failed for file %s: %r", asset.id, exc, exc_info=True)
-            msg = (
+            message = (
                 f"Processing failed ({exc.__class__.__name__}: {exc}); "
                 "retry or check provider settings."
             )
@@ -312,10 +312,10 @@ class JobOrchestrator:
                 asset.id,
                 task_status=TaskStatus.FAILED,
                 review_status=ReviewStatus.ERROR,
-                error_message=msg,
+                error_message=message,
             )
             summary.failed_files += 1
-            summary.errors[asset.id] = msg
+            summary.errors[asset.id] = message
             return False
         summary.completed_files += 1
         return True
@@ -371,23 +371,23 @@ class JobOrchestrator:
 
     def _run_analysis_step(self, asset: FileAsset, audio_path: Path) -> None:
         """Analyze the audio locally and store the result on the file."""
-        ana_result = self.audio_analyzer.analyze(audio_path, asset.id)
-        ana_result.file_id = asset.id
-        self.repo.upsert_analysis_result(ana_result)
+        analysis_result = self.audio_analyzer.analyze(audio_path, asset.id)
+        analysis_result.file_id = asset.id
+        self.repo.upsert_analysis_result(analysis_result)
 
     def _run_fingerprint_step(self, asset: FileAsset, audio_path: Path) -> None:
         """Run fingerprint provider if available and persist recording CandidateMatches."""
         ready, _ = self.fp_provider.is_available()
         if not ready:
             return
-        fp_res = self.fp_provider.identify(audio_path, file_id=asset.id)
-        for idx, item in enumerate(fp_res.matches):
-            rec_id = item.recording_ids[0] if item.recording_ids else f"fp-{idx}"
-            cand = CandidateMatch(
-                id=f"cand-{asset.id}-{rec_id}",
+        fingerprint_result = self.fp_provider.identify(audio_path, file_id=asset.id)
+        for index, item in enumerate(fingerprint_result.matches):
+            recording_id = item.recording_ids[0] if item.recording_ids else f"fp-{index}"
+            candidate = CandidateMatch(
+                id=f"cand-{asset.id}-{recording_id}",
                 file_id=asset.id,
-                provider=fp_res.provider,
-                provider_entity_id=rec_id,
+                provider=fingerprint_result.provider,
+                provider_entity_id=recording_id,
                 entity_type=EntityType.RECORDING,
                 artist=item.artist,
                 title=item.title,
@@ -397,24 +397,24 @@ class JobOrchestrator:
                 match_evidence=item.raw_evidence,
                 match_score=item.confidence,
             )
-            self.repo.upsert_candidate_match(cand)
+            self.repo.upsert_candidate_match(candidate)
 
     def _run_catalog_step(self, asset: FileAsset) -> None:
         """Query all available catalog providers using existing tags and persist matches."""
-        std = asset.original_tags.get("standard_tags", {})
+        standard_tags = asset.original_tags.get("standard_tags", {})
         query = MetadataSearchQuery(
-            artist=std.get("artist"),
-            title=std.get("title"),
-            mix_name=std.get("mix_name"),
-            release_title=std.get("release_title"),
-            label=std.get("label"),
-            catalog_number=std.get("catalog_number"),
+            artist=standard_tags.get("artist"),
+            title=standard_tags.get("title"),
+            mix_name=standard_tags.get("mix_name"),
+            release_title=standard_tags.get("release_title"),
+            label=standard_tags.get("label"),
+            catalog_number=standard_tags.get("catalog_number"),
             duration=asset.duration,
         )
         for provider in self.catalog_providers:
             ready, _ = provider.is_available()
             if not ready:
                 continue
-            for cand in provider.search(query, file_id=asset.id):
-                cand.file_id = asset.id
-                self.repo.upsert_candidate_match(cand)
+            for candidate in provider.search(query, file_id=asset.id):
+                candidate.file_id = asset.id
+                self.repo.upsert_candidate_match(candidate)

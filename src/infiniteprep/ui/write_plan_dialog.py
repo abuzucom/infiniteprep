@@ -131,28 +131,34 @@ class WritePlanDialog(QDialog):
             enable_rename=self.rename_checkbox.isChecked(),
         )
         self.table.setRowCount(len(self.current_plans))
-        for idx, plan in enumerate(self.current_plans):
-            self._populate_plan_row(idx, plan)
-        safe_count = sum(1 for p in self.current_plans if p.is_safe_to_apply)
+        for index, plan in enumerate(self.current_plans):
+            self._populate_plan_row(index, plan)
+        safe_count = sum(1 for write_plan in self.current_plans if write_plan.is_safe_to_apply)
         self._show_status(
             f"{safe_count} of {len(self.current_plans)} files ready for safe backed-up write."
         )
 
-    def _populate_plan_row(self, row_idx: int, plan: FileWritePlan) -> None:
+    def _populate_plan_row(self, row_index: int, plan: FileWritePlan) -> None:
         """Render a single FileWritePlan row in the preview table."""
-        tags_str = ", ".join(f"{k}={v}" for k, v in plan.proposed_tags_to_write.items()) or "None"
-        preserved_str = ", ".join(plan.preserved_custom_tags.keys()) or "None"
-        status_str = format_plan_status(plan)
+        tags_text = (
+            ", ".join(
+                f"{tag_name}={tag_value}"
+                for tag_name, tag_value in plan.proposed_tags_to_write.items()
+            )
+            or "None"
+        )
+        preserved_text = ", ".join(plan.preserved_custom_tags.keys()) or "None"
+        status_text = format_plan_status(plan)
         cells = [
             plan.source_path.name,
             plan.destination_path.name,
-            tags_str,
-            preserved_str,
+            tags_text,
+            preserved_text,
             str(plan.backup_destination_path.name),
-            status_str,
+            status_text,
         ]
-        for col_idx, val in enumerate(cells):
-            self.table.setItem(row_idx, col_idx, QTableWidgetItem(val))
+        for column_index, cell_value in enumerate(cells):
+            self.table.setItem(row_index, column_index, QTableWidgetItem(cell_value))
 
     def _apply_or_submit(self, safe_plans: list[FileWritePlan]) -> None:
         """Hand the plans to submit_plans, or apply them here without one.
@@ -175,7 +181,9 @@ class WritePlanDialog(QDialog):
 
         Without a safe plan, the dialog stays open and says why nothing was applied.
         """
-        safe_plans = [p for p in self.current_plans if p.is_safe_to_apply]
+        safe_plans = [
+            write_plan for write_plan in self.current_plans if write_plan.is_safe_to_apply
+        ]
         if not safe_plans:
             self._show_status(NO_SAFE_PLANS_TEXT)
             return

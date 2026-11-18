@@ -7,7 +7,7 @@ from typing import Final
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, Qt
 from PySide6.QtGui import QImage, QImageReader
 
-XDJ_RX3_MAX_ART_DIM: Final[int] = 800
+XDJ_RX3_MAX_ARTWORK_DIMENSION: Final[int] = 800
 DEFAULT_JPEG_QUALITY: Final[int] = 90
 MAX_ARTWORK_BYTES: Final[int] = 16_777_216  # 16 MiB raw input cap
 MAX_DECODE_DIMENSION: Final[int] = 4096
@@ -21,7 +21,7 @@ class ArtworkService:
     def normalize_image_bytes(
         self,
         raw_image_bytes: bytes,
-        max_dimension: int = XDJ_RX3_MAX_ART_DIM,
+        max_dimension: int = XDJ_RX3_MAX_ARTWORK_DIMENSION,
         jpeg_quality: int = DEFAULT_JPEG_QUALITY,
     ) -> bytes:
         """Validate header bounds, decode image, downscale to max_dimension, and encode JPEG."""

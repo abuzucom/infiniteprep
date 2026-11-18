@@ -235,17 +235,17 @@ def format_canonical_key(
     if not tonic or not mode:
         return "unknown"
     try:
-        pc = PitchClass(tonic) if isinstance(tonic, str) else tonic
-        km = KeyMode(mode) if isinstance(mode, str) else mode
+        pitch_class = PitchClass(tonic) if isinstance(tonic, str) else tonic
+        key_mode = KeyMode(mode) if isinstance(mode, str) else mode
     except ValueError:
         return f"{tonic} {mode}".strip()
 
-    std_val, camelot_val, open_val = _KEY_NOTATION_MAP[(pc, km)]
+    standard_value, camelot_value, open_key_value = _KEY_NOTATION_MAP[(pitch_class, key_mode)]
     if notation == KeyDisplayNotation.CAMELOT:
-        return camelot_val
+        return camelot_value
     if notation == KeyDisplayNotation.OPEN_KEY:
-        return open_val
-    return std_val
+        return open_key_value
+    return standard_value
 
 
 def _parse_two_part_key(tonic_raw: str, mode_raw: str) -> tuple[PitchClass, KeyMode] | None:

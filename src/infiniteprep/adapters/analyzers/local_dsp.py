@@ -114,10 +114,10 @@ def compute_rip_quality_warnings(mono: np.ndarray, sample_rate: int) -> list[str
     if mono.size == 0 or sample_rate <= 0:
         return warnings
 
-    dc_val = float(np.mean(mono))
-    if abs(dc_val) > DC_OFFSET_LIMIT:
+    dc_offset = float(np.mean(mono))
+    if abs(dc_offset) > DC_OFFSET_LIMIT:
         warnings.append(
-            f"Rip Quality Warning: DC offset detected ({dc_val:+.3f}); "
+            f"Rip Quality Warning: DC offset detected ({dc_offset:+.3f}); "
             "apply high-pass / DC-removal filter."
         )
 
@@ -128,17 +128,19 @@ def compute_rip_quality_warnings(mono: np.ndarray, sample_rate: int) -> list[str
             "check recording gain."
         )
 
-    win = max(1, sample_rate // SILENCE_WINDOWS_PER_SECOND)
-    num_blocks = mono.size // win
-    if num_blocks >= MIN_SILENCE_WINDOWS:
-        blocks = mono[: num_blocks * win].reshape(num_blocks, win)
+    window_samples = max(1, sample_rate // SILENCE_WINDOWS_PER_SECOND)
+    block_count = mono.size // window_samples
+    if block_count >= MIN_SILENCE_WINDOWS:
+        blocks = mono[: block_count * window_samples].reshape(block_count, window_samples)
         block_ac_rms = np.sqrt(
             np.mean((blocks - np.mean(blocks, axis=1, keepdims=True)) ** 2, axis=1)
         )
         active_blocks = np.flatnonzero(block_ac_rms > SILENCE_RMS_LEVEL)
         if active_blocks.size > 0:
-            lead_sec = float(active_blocks[0] * win) / float(sample_rate)
-            trail_sec = float((num_blocks - 1 - active_blocks[-1]) * win) / float(sample_rate)
+            lead_sec = float(active_blocks[0] * window_samples) / float(sample_rate)
+            trail_sec = float((block_count - 1 - active_blocks[-1]) * window_samples) / float(
+                sample_rate
+            )
             if lead_sec >= MAX_EDGE_SILENCE_SEC or trail_sec >= MAX_EDGE_SILENCE_SEC:
                 warnings.append(
                     f"Rip Quality Warning: Excessive silence detected "
@@ -157,25 +159,26 @@ def estimate_bpm_from_onset_envelope(
     if mono.size < sample_rate or sample_rate <= 0:
         return None
     hop = max(1, sample_rate // ONSET_FRAMES_PER_SECOND)
-    env_rate = float(sample_rate) / float(hop)
+    envelope_rate = float(sample_rate) / float(hop)
     frames = mono[: (mono.size // hop) * hop].reshape(-1, hop)
     rms = np.sqrt(np.mean(frames * frames, axis=1))
-    env = rms - float(np.mean(rms))
-    norm = float(np.sum(env * env))
-    if norm <= MIN_ENVELOPE_ENERGY:
+    envelope = rms - float(np.mean(rms))
+    envelope_energy = float(np.sum(envelope * envelope))
+    if envelope_energy <= MIN_ENVELOPE_ENERGY:
         return None
-    min_lag = max(1, round((SECONDS_PER_MINUTE / max_bpm) * env_rate))
-    max_lag = min(env.size - 1, round((SECONDS_PER_MINUTE / min_bpm) * env_rate))
+    min_lag = max(1, round((SECONDS_PER_MINUTE / max_bpm) * envelope_rate))
+    max_lag = min(envelope.size - 1, round((SECONDS_PER_MINUTE / min_bpm) * envelope_rate))
     if max_lag <= min_lag:
         return None
     # Only the lags of the tempo range matter. A full autocorrelation costs the square of
     # the envelope length, which reaches 360,000 points for a 30 minute file.
     autocorr = [
-        float(np.dot(env[: env.size - lag], env[lag:])) for lag in range(min_lag, max_lag + 1)
+        float(np.dot(envelope[: envelope.size - lag], envelope[lag:]))
+        for lag in range(min_lag, max_lag + 1)
     ]
     # min_lag is at least 1, so best_lag is always positive.
     best_lag = min_lag + int(np.argmax(autocorr))
-    return round((SECONDS_PER_MINUTE * env_rate) / float(best_lag), 1)
+    return round((SECONDS_PER_MINUTE * envelope_rate) / float(best_lag), 1)
 
 
 def estimate_key_from_chroma(
@@ -187,40 +190,42 @@ def estimate_key_from_chroma(
     max_samples = min(mono.size, sample_rate * KEY_WINDOW_SEC)
     segment = mono[:max_samples] - float(np.mean(mono[:max_samples]))
     spectrum = np.abs(np.fft.rfft(segment * np.hanning(segment.size)))
-    freqs = np.fft.rfftfreq(segment.size, d=1.0 / float(sample_rate))
+    frequencies = np.fft.rfftfreq(segment.size, d=1.0 / float(sample_rate))
 
-    chroma = _accumulate_chroma_bins(spectrum, freqs)
+    chroma = _accumulate_chroma_bins(spectrum, frequencies)
     chroma_std = float(np.std(chroma))
     if chroma_std <= MIN_CHROMA_SPREAD:
         # Silence and flat noise carry no pitch. A key here would be invented.
         return None, None, 0.0
-    chroma_norm = (chroma - float(np.mean(chroma))) / chroma_std
-    return _match_key_profiles(chroma_norm)
+    normalized_chroma = (chroma - float(np.mean(chroma))) / chroma_std
+    return _match_key_profiles(normalized_chroma)
 
 
-def _accumulate_chroma_bins(spectrum: np.ndarray, freqs: np.ndarray) -> np.ndarray:
+def _accumulate_chroma_bins(spectrum: np.ndarray, frequencies: np.ndarray) -> np.ndarray:
     """Fold FFT magnitude bins in [55 Hz, 2000 Hz] into 12 semitone pitch classes."""
     chroma = np.zeros(SEMITONES_PER_OCTAVE, dtype=np.float64)
-    mask = (freqs >= CHROMA_MIN_HZ) & (freqs <= CHROMA_MAX_HZ)
-    valid_freqs = freqs[mask]
-    valid_mag = spectrum[mask]
-    if valid_freqs.size == 0:
+    mask = (frequencies >= CHROMA_MIN_HZ) & (frequencies <= CHROMA_MAX_HZ)
+    valid_frequencies = frequencies[mask]
+    valid_magnitudes = spectrum[mask]
+    if valid_frequencies.size == 0:
         return chroma
     midi_notes = np.round(
-        A4_MIDI_NOTE + SEMITONES_PER_OCTAVE * np.log2(valid_freqs / A4_FREQUENCY_HZ)
+        A4_MIDI_NOTE + SEMITONES_PER_OCTAVE * np.log2(valid_frequencies / A4_FREQUENCY_HZ)
     ).astype(int)
     pitch_classes = np.mod(midi_notes, SEMITONES_PER_OCTAVE)
-    for pc_idx in range(SEMITONES_PER_OCTAVE):
-        chroma[pc_idx] = float(np.sum(valid_mag[pitch_classes == pc_idx]))
+    for pitch_class_index in range(SEMITONES_PER_OCTAVE):
+        chroma[pitch_class_index] = float(
+            np.sum(valid_magnitudes[pitch_classes == pitch_class_index])
+        )
     return chroma
 
 
 def _match_key_profiles(
-    chroma_norm: np.ndarray,
+    normalized_chroma: np.ndarray,
 ) -> tuple[PitchClass, KeyMode, float]:
     """Correlate normalized 12-bin chroma vector against all 24 major and minor profiles."""
-    maj = np.array(MAJOR_PROFILE, dtype=np.float64)
-    maj = (maj - float(np.mean(maj))) / float(np.std(maj))
+    major_profile = np.array(MAJOR_PROFILE, dtype=np.float64)
+    major_profile = (major_profile - float(np.mean(major_profile))) / float(np.std(major_profile))
     min_p = np.array(MINOR_PROFILE, dtype=np.float64)
     min_p = (min_p - float(np.mean(min_p))) / float(np.std(min_p))
 
@@ -228,13 +233,13 @@ def _match_key_profiles(
     best_tonic = PitchClass.A
     best_mode = KeyMode.MINOR
     for shift, tonic in enumerate(PITCH_CLASSES_ORDERED):
-        rotated = np.roll(chroma_norm, -shift)
-        maj_corr = float(np.dot(rotated, maj) / SEMITONES_PER_OCTAVE)
-        min_corr = float(np.dot(rotated, min_p) / SEMITONES_PER_OCTAVE)
-        if maj_corr > best_score:
-            best_score, best_tonic, best_mode = maj_corr, tonic, KeyMode.MAJOR
-        if min_corr > best_score:
-            best_score, best_tonic, best_mode = min_corr, tonic, KeyMode.MINOR
+        rotated = np.roll(normalized_chroma, -shift)
+        major_correlation = float(np.dot(rotated, major_profile) / SEMITONES_PER_OCTAVE)
+        minor_correlation = float(np.dot(rotated, min_p) / SEMITONES_PER_OCTAVE)
+        if major_correlation > best_score:
+            best_score, best_tonic, best_mode = major_correlation, tonic, KeyMode.MAJOR
+        if minor_correlation > best_score:
+            best_score, best_tonic, best_mode = minor_correlation, tonic, KeyMode.MINOR
     strength = round(max(0.0, min(1.0, (best_score + 1.0) / 2.0)), 3)
     return best_tonic, best_mode, strength
 
@@ -245,11 +250,11 @@ def compute_compact_envelope(mono: np.ndarray, bins: int = ENVELOPE_BINS) -> lis
         return [0.0] * max(1, bins)
     abs_mono = np.abs(mono)
     chunks = np.array_split(abs_mono, bins)
-    peaks = [float(np.max(c)) if c.size > 0 else 0.0 for c in chunks]
+    peaks = [float(np.max(chunk)) if chunk.size > 0 else 0.0 for chunk in chunks]
     peak_max = max(peaks) if peaks else 0.0
     if peak_max <= 0.0:
         return [0.0] * bins
-    return [round(p / peak_max, 4) for p in peaks]
+    return [round(peak / peak_max, 4) for peak in peaks]
 
 
 def read_bounded_mono_pcm(

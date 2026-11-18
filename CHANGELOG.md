@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.78.4] (2026-11-18)
+## [0.79.0] (2026-11-18)
 
 ### Added
 
@@ -18,6 +18,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Variables, parameters, and module constants in `src/` carry descriptive names in place of short names and abbreviations.
+  - Role names such as `row`, `proposal`, `candidate`, and `frame` replace one-letter names such as `r`, `p`, `c`, and `f`.
+  - Full words replace abbreviations such as `std`, `cand`, `rel`, `val`, `idx`, and `btn`. Examples include `standard_tags`, `candidate`, `release`, `value`, `index`, and `button`.
+  - `COL_*` constants become `COLUMN_*`. `MAX_METADATA_STR_LEN` becomes `MAX_METADATA_TEXT_LENGTH`. The other renamed constants follow the same pattern.
+  - Public keyword parameters change names. Examples include `clean_str(value, max_length)`, `default_command_runner(command)`, `read_dropped_tag_data(file_path, audio_format)`, `duration_similarity(file_duration, candidate_duration)`, and `Repository(database)`. A call with an old keyword name now fails. The repository owner approved this incompatible change.
+  - Ten unit test files import the renamed constants. The imports and references in those files follow the new names. The repository owner approved these test edits. The edits change no assertion.
+  - Unit suffixes, chunk identifiers, enum note names, public `id` fields, the `__exit__` parameters, and the ignored Qt `_c` placeholder keep the existing names.
+  - The version advances from 0.78.4 to 0.79.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - Every workflow job that runs on a runner states a timeout, apart from three pinned workflows.
   - The jobs in `agents-compliance.yml`, `deploy-pages.yml`, `gate-integrity.yml`, `os-tests.yml`, and `sync-check.yml` had none. A hung step held a runner for the six hour default.
   - The Windows gate tests stop after 30 minutes and the macOS gate tests after 20. A normal Windows run takes about 8 minutes. The other jobs stop after 10 or 15 minutes.

@@ -33,7 +33,7 @@ class MockFingerprintAdapter:
     def identify(self, audio_reference: Path, file_id: str | None = None) -> FingerprintResult:
         """Compute deterministic mock fingerprint and return a FingerprintResult."""
         digest = compute_sha256(audio_reference)[:16]
-        fp_str = f"MOCK_FP_{digest}"
+        fingerprint_text = f"MOCK_FP_{digest}"
         stem = audio_reference.stem
         item = FingerprintMatchItem(
             fingerprint_id=f"acid-{digest[:8]}",
@@ -48,7 +48,7 @@ class MockFingerprintAdapter:
         )
         return FingerprintResult(
             provider=self.provider_name,
-            raw_fingerprint=fp_str,
+            raw_fingerprint=fingerprint_text,
             duration=480.0,
             matches=[item],
             warnings=[],
@@ -58,16 +58,16 @@ class MockFingerprintAdapter:
         self, audio_reference: Path, file_id: str = "mock-file"
     ) -> MockFingerprintLookupResponse:
         """Run identify() and convert matches into CandidateMatch domain entities."""
-        fp_res = self.identify(audio_reference, file_id=file_id)
+        fingerprint_result = self.identify(audio_reference, file_id=file_id)
         candidates: list[CandidateMatch] = []
-        for idx, match in enumerate(fp_res.matches):
-            rec_id = match.recording_ids[0] if match.recording_ids else f"mock-rec-{idx}"
+        for index, match in enumerate(fingerprint_result.matches):
+            recording_id = match.recording_ids[0] if match.recording_ids else f"mock-rec-{index}"
             candidates.append(
                 CandidateMatch(
-                    id=f"cand-fp-{rec_id}",
+                    id=f"cand-fp-{recording_id}",
                     file_id=file_id,
                     provider=self.provider_name,
-                    provider_entity_id=rec_id,
+                    provider_entity_id=recording_id,
                     entity_type=EntityType.RECORDING,
                     artist=match.artist or "Unknown Artist",
                     title=match.title or audio_reference.stem,
@@ -84,7 +84,7 @@ class MockFingerprintAdapter:
                 )
             )
         return MockFingerprintLookupResponse(
-            fingerprint=fp_res.raw_fingerprint or "MOCK_FP_EMPTY",
+            fingerprint=fingerprint_result.raw_fingerprint or "MOCK_FP_EMPTY",
             candidates=candidates,
-            result=fp_res,
+            result=fingerprint_result,
         )

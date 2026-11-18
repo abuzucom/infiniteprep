@@ -81,10 +81,10 @@ def _track_keys(tracks: list[dict[str, Any]]) -> list[str]:
     """
     keys: list[str] = []
     seen: set[str] = set()
-    for idx, trk in enumerate(tracks):
-        key = provider_text(trk.get("position")) or f"#{idx + 1}"
+    for index, track in enumerate(tracks):
+        key = provider_text(track.get("position")) or f"#{index + 1}"
         while key in seen:
-            key = f"{key}#{idx + 1}"
+            key = f"{key}#{index + 1}"
         seen.add(key)
         keys.append(key)
     return keys
@@ -198,7 +198,7 @@ class DiscogsAdapter:
 
         Every field passes the provider field checks. A wrong type reads as an absent value.
         """
-        rel_id = provider_text(item.get("id")) or ""
+        release_id = provider_text(item.get("id")) or ""
         raw_title = provider_text(item.get("title")) or ""
         artist_part, _, title_part = (
             raw_title.partition(" - ")
@@ -207,10 +207,10 @@ class DiscogsAdapter:
         )
         formats = provider_texts(item.get("format"))
         return CandidateMatch(
-            id=build_candidate_id("discogs-rel", file_id, rel_id),
+            id=build_candidate_id("discogs-rel", file_id, release_id),
             file_id=file_id,
             provider=self.provider_name,
-            provider_entity_id=rel_id,
+            provider_entity_id=release_id,
             entity_type=EntityType.RELEASE,
             artist=artist_part.strip() or query.artist,
             title=query.title or title_part.strip(),
@@ -224,33 +224,38 @@ class DiscogsAdapter:
                 or first_provider_text(item.get("genre")),
                 format_description=", ".join(formats) or None,
             ),
-            match_evidence={"discogs_id": rel_id, "raw_title": raw_title},
+            match_evidence={"discogs_id": release_id, "raw_title": raw_title},
             match_score=DISCOGS_SEARCH_MATCH_SCORE,
         )
 
     def _parse_release_payload(self, payload: dict[str, Any], file_id: str) -> list[CandidateMatch]:
         """Convert a full Discogs release object with tracklist into CandidateMatches."""
-        rel_id = provider_text(payload.get("id")) or "unknown"
-        artists = [provider_text(a.get("name")) for a in provider_dicts(payload.get("artists"))]
-        rel_artist = ", ".join(a for a in artists if a) or None
+        release_id = provider_text(payload.get("id")) or "unknown"
+        artists = [
+            provider_text(artist_credit.get("name"))
+            for artist_credit in provider_dicts(payload.get("artists"))
+        ]
+        release_artist = ", ".join(artist_name for artist_name in artists if artist_name) or None
         release = _release_details(payload)
         results: list[CandidateMatch] = []
         tracks = provider_dicts(payload.get("tracklist"))
-        for idx, (trk, track_key) in enumerate(zip(tracks, _track_keys(tracks), strict=True)):
-            pos = provider_text(trk.get("position")) or f"{idx + 1}"
+        for index, (track, track_key) in enumerate(zip(tracks, _track_keys(tracks), strict=True)):
+            position = provider_text(track.get("position")) or f"{index + 1}"
             results.append(
                 CandidateMatch(
-                    id=build_candidate_id("discogs-trk", file_id, rel_id, track_key),
+                    id=build_candidate_id("discogs-trk", file_id, release_id, track_key),
                     file_id=file_id,
                     provider=self.provider_name,
                     # The stored candidate key holds the entity id. One id per track
                     # keeps every track of the release as its own candidate row.
-                    provider_entity_id=f"{rel_id}:{track_key}",
+                    provider_entity_id=f"{release_id}:{track_key}",
                     entity_type=EntityType.RELEASE,
-                    artist=rel_artist,
-                    title=provider_text(trk.get("title")) or "",
-                    release_details=replace(release, track_number=pos, vinyl_position=pos),
-                    match_evidence={"discogs_id": rel_id, "position": pos},
+                    artist=release_artist,
+                    title=provider_text(track.get("title")) or "",
+                    release_details=replace(
+                        release, track_number=position, vinyl_position=position
+                    ),
+                    match_evidence={"discogs_id": release_id, "position": position},
                     match_score=DISCOGS_TRACK_MATCH_SCORE,
                 )
             )

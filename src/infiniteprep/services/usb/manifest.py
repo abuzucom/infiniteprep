@@ -126,7 +126,7 @@ def compute_my_tags_digest(
     assignments: Sequence[ManifestTrackTags],
 ) -> str:
     """Compute SHA-256 over canonicalized My Tags vocabulary and assignments (D119, D120)."""
-    vocab_rows = sorted(
+    vocabulary_rows = sorted(
         (
             {"category": item.category, "name": item.name, "parent": item.parent}
             for item in vocabulary
@@ -137,7 +137,7 @@ def compute_my_tags_digest(
         ({"relative_path": item.relative_path, "tags": sorted(item.tags)} for item in assignments),
         key=lambda row: str(row["relative_path"]),
     )
-    payload = {"assignments": assign_rows, "vocabulary": vocab_rows}
+    payload = {"assignments": assign_rows, "vocabulary": vocabulary_rows}
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -441,7 +441,7 @@ def _parse_omissions(raw: object) -> tuple[ManifestTrackOmission, ...]:
         track_raw = entry.get("track")
         if not isinstance(track_raw, Mapping):
             raise ValueError("Omission 'track' must be an object.")
-        track_ref = ManifestTrackRef(
+        track_reference = ManifestTrackRef(
             relative_path=_require_relative_path(
                 track_raw.get("relative_path"), "track.relative_path"
             ),
@@ -450,7 +450,7 @@ def _parse_omissions(raw: object) -> tuple[ManifestTrackOmission, ...]:
         )
         omissions.append(
             ManifestTrackOmission(
-                track=track_ref,
+                track=track_reference,
                 field_name=_require_str(entry.get("field_name"), "omissions.field_name"),
                 source_value=_require_str(entry.get("source_value"), "omissions.source_value"),
                 reason=_require_str(entry.get("reason"), "omissions.reason"),

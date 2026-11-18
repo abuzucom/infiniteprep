@@ -17,8 +17,8 @@ from infiniteprep.domain.enums import FieldName
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.detail_panel import (
-    COL_ACTIONS,
-    COL_APPROVED_EDIT,
+    COLUMN_ACTIONS,
+    COLUMN_APPROVED_EDIT,
     DISPLAY_FIELDS,
     DetailPanel,
 )
@@ -49,14 +49,14 @@ def panel(qtbot: Any, tmp_path: Path) -> DetailPanel:
 
 def edit_box(detail: DetailPanel, row: int) -> QLineEdit:
     """Return the edit box of one field row."""
-    widget = detail.fields_table.cellWidget(row, COL_APPROVED_EDIT)
+    widget = detail.fields_table.cellWidget(row, COLUMN_APPROVED_EDIT)
     assert isinstance(widget, QLineEdit)
     return widget
 
 
 def row_button(detail: DetailPanel, row: int, text: str) -> QPushButton:
     """Return the button with the given text in one field row."""
-    actions = detail.fields_table.cellWidget(row, COL_ACTIONS)
+    actions = detail.fields_table.cellWidget(row, COLUMN_ACTIONS)
     matches = [button for button in actions.findChildren(QPushButton) if button.text() == text]
     assert len(matches) == 1
     return matches[0]
@@ -72,7 +72,7 @@ def test_every_row_control_has_a_distinct_name(panel: DetailPanel) -> None:
     """Each row's edit box and buttons name their field, so no two controls sound alike."""
     names: list[str] = []
     for row in range(panel.fields_table.rowCount()):
-        actions = panel.fields_table.cellWidget(row, COL_ACTIONS)
+        actions = panel.fields_table.cellWidget(row, COLUMN_ACTIONS)
         controls = [edit_box(panel, row), *actions.findChildren(QPushButton)]
         names.extend(spoken_name(control) for control in controls)
 

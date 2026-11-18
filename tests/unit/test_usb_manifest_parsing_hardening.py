@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from infiniteprep.services.usb._shared import MAX_METADATA_STR_LEN, sanitize_mount_point
+from infiniteprep.services.usb._shared import MAX_METADATA_TEXT_LENGTH, sanitize_mount_point
 from infiniteprep.services.usb.manifest import (
     IN_PROGRESS_MANIFEST_FILE_NAME,
     MANIFEST_STATE_IN_PROGRESS,
@@ -187,7 +187,7 @@ def test_unsafe_mount_point_is_rejected_not_rewritten(raw_mount: str) -> None:
 
 @pytest.mark.parametrize(
     "raw_mount",
-    ["/media/dj/STICK", "/Volumes/My Stick ", "/media/" + "x" * (MAX_METADATA_STR_LEN + 10)],
+    ["/media/dj/STICK", "/Volumes/My Stick ", "/media/" + "x" * (MAX_METADATA_TEXT_LENGTH + 10)],
 )
 def test_safe_mount_point_is_returned_unchanged(raw_mount: str) -> None:
     """A safe mount point comes back exactly, with no strip and no truncation."""

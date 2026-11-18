@@ -16,9 +16,9 @@ from infiniteprep.domain.enums import FieldName, KeyDisplayNotation
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.detail_panel import (
-    COL_FIELD_NAME,
-    COL_OTHER_KEY,
-    COL_OTHER_VALUE,
+    COLUMN_FIELD_NAME,
+    COLUMN_OTHER_KEY,
+    COLUMN_OTHER_VALUE,
     OTHER_TAG_DISPLAY_LIMIT,
     TRUNCATION_MARK,
     DetailPanel,
@@ -123,7 +123,7 @@ def test_every_field_name_has_a_row(panel_parts: Any) -> None:
     panel.load_file_asset(first_id)
 
     table = panel.fields_table
-    shown = [table.item(row, COL_FIELD_NAME).text() for row in range(table.rowCount())]
+    shown = [table.item(row, COLUMN_FIELD_NAME).text() for row in range(table.rowCount())]
     assert shown == [field.value for field in FieldName]
 
 
@@ -139,8 +139,8 @@ def _other_tag_cells(panel: DetailPanel) -> list[tuple[str, str, str]]:
     table = panel.other_tags_table
     cells = []
     for row in range(table.rowCount()):
-        value_item = table.item(row, COL_OTHER_VALUE)
-        key_text = table.item(row, COL_OTHER_KEY).text()
+        value_item = table.item(row, COLUMN_OTHER_VALUE)
+        key_text = table.item(row, COLUMN_OTHER_KEY).text()
         cells.append((key_text, value_item.text(), _rendered_tooltip(value_item.toolTip())))
     return cells
 

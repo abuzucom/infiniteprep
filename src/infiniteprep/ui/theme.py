@@ -86,12 +86,12 @@ def _qt_material_package_dir() -> Path | None:
     sit next to the package in both a source tree and a packaged build.
     """
     try:
-        spec = importlib.util.find_spec("qt_material")
+        module_spec = importlib.util.find_spec("qt_material")
     except (ImportError, ValueError):
         return None
-    if spec is None or spec.origin is None:
+    if module_spec is None or module_spec.origin is None:
         return None
-    return Path(spec.origin).parent
+    return Path(module_spec.origin).parent
 
 
 def is_theme_applicable(theme: str) -> bool:

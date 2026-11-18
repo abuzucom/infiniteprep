@@ -42,7 +42,7 @@ POWERSHELL_EXE: Final[str] = _SYSTEM_ROOT + r"\System32\WindowsPowerShell\v1.0\p
 # Bounded output keeps a malfunctioning storage stack from exhausting memory
 # during parsing.
 MAX_COMMAND_OUTPUT_BYTES: Final[int] = 8 * 1024 * 1024
-MAX_ERROR_TEXT_LEN: Final[int] = 4096
+MAX_ERROR_TEXT_LENGTH: Final[int] = 4096
 # Windows PowerShell 5.1 writes redirected output in the OEM code page. The runner decodes
 # UTF-8, so a label with accented letters read back as replacement characters. Each command sets
 # the console output encoding to UTF-8 first.
@@ -96,9 +96,9 @@ VOLUME_ACCESS_PATH_RE: Final[re.Pattern[str]] = re.compile(
 )
 
 
-def _sanitize_drive_letter(val: Any) -> str | None:
+def _sanitize_drive_letter(value: Any) -> str | None:
     """Validate a single drive letter from untrusted output, uppercased."""
-    cleaned = clean_str(val)
+    cleaned = clean_str(value)
     if not cleaned or not DRIVE_LETTER_RE.match(cleaned):
         return None
     return cleaned.upper()
@@ -163,15 +163,15 @@ def _space_from_volume(volume: dict[str, Any]) -> SpaceInfo | None:
     remaining = volume.get("SizeRemaining")
     used = volume.get("SizeUsed")
     if remaining is not None:
-        avail_b = clean_int(remaining)
+        available_bytes = clean_int(remaining)
     elif used is not None:
-        avail_b = max(0, total_b - clean_int(used))
+        available_bytes = max(0, total_b - clean_int(used))
     else:
         return None
     return SpaceInfo(
         total_bytes=total_b,
-        used_bytes=max(0, total_b - avail_b),
-        available_bytes=avail_b,
+        used_bytes=max(0, total_b - available_bytes),
+        available_bytes=available_bytes,
     )
 
 
@@ -216,10 +216,10 @@ def _decode_capped(stdout: bytes, stderr: bytes) -> tuple[str, str]:
     )
 
 
-def _default_windows_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+def _default_windows_runner(command: list[str]) -> subprocess.CompletedProcess[str]:
     """Run the fixed command with byte-capped output decoded lossily."""
     completed = subprocess.run(
-        cmd,
+        command,
         capture_output=True,
         text=False,
         check=False,
@@ -227,7 +227,7 @@ def _default_windows_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
         shell=False,
     )
     stdout, stderr = _decode_capped(completed.stdout, completed.stderr)
-    return subprocess.CompletedProcess(cmd, completed.returncode, stdout, stderr)
+    return subprocess.CompletedProcess(command, completed.returncode, stdout, stderr)
 
 
 class WindowsDriveInspector:
@@ -248,7 +248,9 @@ class WindowsDriveInspector:
         partitions_by_disk = self._index_partitions(partitions)
         volume_by_letter = self._index_volumes(volumes)
         inspections: list[DriveInspection] = []
-        for disk in sorted(disks, key=lambda d: _require_disk_number(d, "Get-Disk")):
+        for disk in sorted(
+            disks, key=lambda disk_record: _require_disk_number(disk_record, "Get-Disk")
+        ):
             number = _require_disk_number(disk, "Get-Disk")
             inspections.append(
                 self._build_drive_inspection(disk, number, partitions_by_disk, volume_by_letter)
@@ -295,9 +297,9 @@ class WindowsDriveInspector:
             raise InspectionParseError(message)
 
         if completed.returncode != 0:
-            raw_err = completed.stderr.strip()[:MAX_ERROR_TEXT_LEN]
-            err = raw_err or f"exit code {completed.returncode}"
-            raise CommandExecutionError(f"{label} failed with {err}"[:MAX_ERROR_TEXT_LEN])
+            raw_error_text = completed.stderr.strip()[:MAX_ERROR_TEXT_LENGTH]
+            error_text = raw_error_text or f"exit code {completed.returncode}"
+            raise CommandExecutionError(f"{label} failed with {error_text}"[:MAX_ERROR_TEXT_LENGTH])
 
         stripped = stdout.strip()
         if not stripped:

@@ -19,7 +19,7 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
 from infiniteprep.ui import recovery_dialog as recovery_module
-from infiniteprep.ui.recovery_dialog import COL_KEEP, COL_RESTORE, RecoveryDialog
+from infiniteprep.ui.recovery_dialog import COLUMN_KEEP, COLUMN_RESTORE, RecoveryDialog
 from tests.fixtures.audio_factory import create_wav_fixture
 
 
@@ -56,7 +56,7 @@ def test_restore_button_returns_the_original_and_closes_the_dialog(qtbot, interr
     qtbot.addWidget(dialog)
     operation_id = dialog.records[0].operation_id
 
-    dialog.table.cellWidget(0, COL_RESTORE).click()
+    dialog.table.cellWidget(0, COLUMN_RESTORE).click()
 
     assert compute_sha256(source) == original_hash
     stored = repo.get_change_record(operation_id)
@@ -77,7 +77,7 @@ def test_keep_button_marks_the_write_finished(
     qtbot.addWidget(dialog)
     operation_id = dialog.records[0].operation_id
 
-    dialog.table.cellWidget(0, COL_KEEP).click()
+    dialog.table.cellWidget(0, COLUMN_KEEP).click()
 
     assert compute_sha256(source) == interrupted[3]
     stored = repo.get_change_record(operation_id)
@@ -101,7 +101,7 @@ def test_declining_mark_as_finished_keeps_the_write_pending(
     qtbot.addWidget(dialog)
     operation_id = dialog.records[0].operation_id
 
-    dialog.table.cellWidget(0, COL_KEEP).click()
+    dialog.table.cellWidget(0, COLUMN_KEEP).click()
 
     assert len(questions) == 1
     assert "track.wav" in questions[0]
@@ -130,7 +130,7 @@ def test_a_failed_restore_warns_and_keeps_the_row(
     assert record is not None
     Path(record.backup_reference).write_bytes(b"tampered")
 
-    dialog.table.cellWidget(0, COL_RESTORE).click()
+    dialog.table.cellWidget(0, COLUMN_RESTORE).click()
 
     assert len(warnings) == 1
     assert warnings[0].startswith("Restore failed")
