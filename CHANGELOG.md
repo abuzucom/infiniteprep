@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.79.0] (2026-11-18)
+## [0.79.1] (2026-11-18)
 
 ### Added
 
@@ -48,6 +48,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A portable library on FAT or exFAT media gets its pre-migration backup again. Links above the library no longer redirect it.
+  - FAT and exFAT media ignore folder modes. The backup and restore staging folder therefore could not become owner-only there. Migration backup and restore failed with `PermissionError` since 0.78.4. A staging folder with shared modes or another reported owner now logs a warning. The copy goes on. A link in place of the staging folder still fails the copy.
+  - The staging cleanup removes only a link under the staging name. It followed such a link into its target before.
+  - The library opens through its real folder. `resolve_library_path` resolves every link above the library once, at open. SQLite, the side files, the backup, and the restore then use that path. A link above the library that changes later no longer moves them. A link at the library file name itself still fails the open.
+  - The shared folder warning covers every folder that the path lookup reads. That set includes each folder that holds a link on the way and the folders of each link target. Above the library, a folder owned by this account or root counts as safe when other accounts cannot write it or when the sticky bit protects its entries, as on `/tmp`. Any other folder logs a warning that names it. The library still opens there. macOS `/var` and `/tmp` links and linked data folders keep working.
+  - The new `tests/unit/test_portable_staging_and_parent_links.py` covers each change.
+  - The version advances from 0.79.0 to 0.79.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - The write preview names tag data that a rewrite cannot keep.
   - The ID3 parser skips encrypted and truncated frames. The FLAC parser skips Vorbis entries without `=`. Each writer rebuilds the tag from the parsed frames. A write lost that data without notice before.
   - The new `tag_data_warnings` field of `FileWritePlan` lists each item. The Safety Status cell shows `READY WITH DATA LOSS` and names them. The write stays allowed.

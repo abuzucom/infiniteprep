@@ -18,7 +18,11 @@ from pathlib import Path
 from typing import Final
 
 from infiniteprep.db.migrations import LATEST_VERSION, ROW_COUNT_QUERIES
-from infiniteprep.private_files import create_new_private_file, private_staging_dir
+from infiniteprep.private_files import (
+    create_new_private_file,
+    private_staging_dir,
+    resolve_library_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -184,6 +188,8 @@ def create_verified_backup(
     then reads through a second connection, since SQLite refuses a backup from a connection
     that holds the write lock. The lock still keeps other writers out during the copy.
     """
+    # Every later step uses the real folder. A link above the library cannot move them.
+    db_path = resolve_library_path(db_path)
     backup = backup_path_for(db_path)
     counts = table_row_counts(source)
     # The copy, its record write, and its check reopen the file by name. The owner-only
@@ -337,6 +343,8 @@ def restore_pre_migration_backup(
     A backup newer than known_version stays unused. Returns the kept copy of the library,
     or None when no library file existed.
     """
+    # Every later step uses the real folder. A link above the library cannot move them.
+    db_path = resolve_library_path(db_path)
     version, counts = verified_backup_record(db_path, known_version=known_version)
     kept = newer_copy_path_for(db_path, now or _utc_now())
     _check_kept_names_free(kept)
