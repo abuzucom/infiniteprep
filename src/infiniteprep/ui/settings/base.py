@@ -13,6 +13,8 @@ class SettingsTab(QWidget):
     """One Settings dialog tab. It reads its settings at build time and writes each on save."""
 
     TITLE: ClassVar[str] = ""
+    # A tab with SHOWN False stays out of the dialog. Its apply_to still runs on save.
+    SHOWN: ClassVar[bool] = True
 
     def apply_to(self, settings: AppSettings) -> None:
         """Copy this tab's input values into settings. A tab without settings changes nothing."""

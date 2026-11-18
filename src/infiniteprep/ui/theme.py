@@ -13,11 +13,12 @@ from typing import Final
 try:
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QGuiApplication
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QComboBox
 except ImportError:
     Qt = None
     QGuiApplication = None
     QApplication = None
+    QComboBox = None
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,33 @@ AVAILABLE_THEMES: Final[tuple[str, ...]] = (
     DEFAULT_LIGHT_THEME,
     NATIVE_THEME,
 )
+# The pickers show these labels. Settings keep the identifiers, so stored files stay valid.
+THEME_LABELS: Final[dict[str, str]] = {
+    DEFAULT_DARK_THEME: "Dark Teal",
+    DEFAULT_LIGHT_THEME: "Light Teal",
+    NATIVE_THEME: "Native",
+    SYSTEM_THEME: "Match System",
+}
+
+
+def theme_label(theme: str) -> str:
+    """Return the picker label of a theme identifier, or the identifier when unknown."""
+    return THEME_LABELS.get(theme, theme)
+
+
+def fill_theme_picker(combo: QComboBox, themes: list[str]) -> None:
+    """Add one readable label per theme. Each item keeps its identifier as item data."""
+    for theme in themes:
+        combo.addItem(theme_label(theme), theme)
+
+
+def select_theme(combo: QComboBox, theme: str) -> bool:
+    """Point a theme picker at the theme identifier. Return False when it lacks the theme."""
+    index = combo.findData(theme)
+    if index < 0:
+        return False
+    combo.setCurrentIndex(index)
+    return True
 
 
 @dataclass(frozen=True)

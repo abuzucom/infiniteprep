@@ -9,6 +9,8 @@ class PlaybackTab(PlaceholderTab):
     """Settings tab for audio playback."""
 
     TITLE = "Playback"
+    # The tab holds no setting, so it stays hidden until one joins it.
+    SHOWN = False
 
 
 TAB_CLASS = PlaybackTab

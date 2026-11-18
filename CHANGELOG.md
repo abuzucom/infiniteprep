@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.76.2] (2026-11-18)
+## [0.76.5] (2026-11-18)
 
 ### Fixed
 
@@ -17,7 +17,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A playlist export writes a new file beside the playlist and swaps it in. A failed write truncated the previous playlist before.
   - The `#EXTINF` text replaces every control character, NEL, U+2028, and U+2029 with a space. A parser that splits on Unicode line boundaries read extra lines before.
   - The new `adapters/metadata_io/no_clobber_move.py` holds the shared move. The new `tests/unit/test_write_and_export_no_clobber.py` covers each change.
-  - The version advances from 0.76.1 to 0.76.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.76.4 to 0.76.5 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The theme pickers and the Settings dialog read clearly (accessibility audit).
+  - The toolbar and Settings theme pickers show Dark Teal, Light Teal, Native, and Match System. They showed file names such as `dark_teal.xml` before. Settings still store the theme identifier, so existing settings files stay valid.
+  - The Settings dialog leaves out the Playback tab, which held no setting and only said so.
+  - The new `tests/unit/test_theme_labels.py` covers the labels, the stored identifier, and the hidden tab. With active human approval, five existing theme and settings test files now select themes by identifier instead of picker text, and the tab list no longer expects Playback.
+  - The version advances from 0.76.3 to 0.76.4 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- Field row actions and the write recovery prompt guard typed text and backups (accessibility audit).
+  - A Save or Accept that raises no longer leaves its row marked. The marker dropped that row's unsaved text on the next refresh before.
+  - A refused Accept keeps the row's typed text. Only an accepted value replaces it.
+  - Lock on a field without an approved value says to save or accept a value first. It changed nothing and said nothing before.
+  - Mark as finished in the interrupted write recovery dialog asks first, with No as the default. One click ended the backup restore path before.
+  - The new `tests/unit/test_row_action_failures.py` covers the failed save, the refused and the successful accept, and Lock. `tests/unit/test_ui_recovery_dialog.py` answers the new prompt and adds a declined prompt test.
+  - The version advances from 0.76.1 to 0.76.3 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ## [0.76.1] (2026-11-17)
 
