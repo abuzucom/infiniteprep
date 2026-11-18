@@ -27,6 +27,8 @@ V23_ENCRYPTED_FLAGS: Final[bytes] = b"\x00\x40"
 UTF16_ENCODING: Final[bytes] = b"\x01"
 ENCRYPTED_FRAME_ID: Final[str] = "GEOB"
 ENTRY_WITHOUT_SEPARATOR: Final[str] = "DJNOTESWITHOUTVALUE"
+# A FLAC metadata block header ends with a 3-byte big-endian body length.
+FLAC_BLOCK_LENGTH_BYTES: Final[int] = 3
 
 
 def replace_leading_id3_tag(path: Path, tag: bytes) -> Path:
@@ -113,7 +115,7 @@ def test_preview_status_names_the_data_loss(tmp_path: Path) -> None:
 
 def _swap_flac_comment(data: bytes, old: bytes, new: bytes) -> bytes:
     """Replace the comment block body old with new and fix the 3-byte block length."""
-    start = data.index(old)
-    header_length = start - 3
-    assert int.from_bytes(data[header_length:start], "big") == len(old)
-    return data[:header_length] + len(new).to_bytes(3, "big") + new + data[start + len(old) :]
+    length_start = data.index(len(old).to_bytes(FLAC_BLOCK_LENGTH_BYTES, "big") + old)
+    body_end = length_start + FLAC_BLOCK_LENGTH_BYTES + len(old)
+    new_length = len(new).to_bytes(FLAC_BLOCK_LENGTH_BYTES, "big")
+    return data[:length_start] + new_length + new + data[body_end:]

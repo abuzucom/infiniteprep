@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.78.3] (2026-11-18)
+## [0.78.4] (2026-11-18)
 
 ### Added
 
@@ -40,6 +40,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The write preview names tag data that a rewrite cannot keep.
+  - The ID3 parser skips encrypted and truncated frames. The FLAC parser skips Vorbis entries without `=`. Each writer rebuilds the tag from the parsed frames. A write lost that data without notice before.
+  - The new `tag_data_warnings` field of `FileWritePlan` lists each item. The Safety Status cell shows `READY WITH DATA LOSS` and names them. The write stays allowed.
+  - A compressed ID3v2.2 tag yields no frames at all. The preview now blocks that write, because it would remove the whole tag.
+  - The new `tests/unit/test_dropped_tag_data_preview.py` covers each case.
+- The library, its backups, and the settings stay readable by their owner only.
+  - The new `private_files.py` creates missing app folders with mode 0700 and library files with mode 0600. An existing library loses its group and other bits on open. SQLite copies that mode to the WAL and SHM files. The migration backup and the staged restore copy start owner only. Existing folders keep their mode. Windows ignores these bits.
+  - The settings write syncs the temporary file before the rename and the folder after it on POSIX. A power loss after the rename could leave an empty settings file before.
+  - The fpcalc installer extracts to a random hidden name and renames it into place. An interrupted install left a partial binary under the real name before.
+  - The two `uuid5` proposal ID builders state the non-security SHA-1 use that Rule 7 requires.
+  - The new `tests/unit/test_private_storage_files.py` covers each change.
+  - The settings dialog still loads the stored API keys into its masked fields. The fix there changes assertions in `tests/unit/test_settings_tabs.py`. The repository owner left it out of this change.
+  - The version advances from 0.78.3 to 0.78.4 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - Writes, recovery, transcodes, and playlist exports no longer replace or delete a file they did not write.
   - A rename moves the file with one atomic call that fails on an existing name: `renameat2` with `RENAME_NOREPLACE` on Linux, `renamex_np` with `RENAME_EXCL` on macOS, and `MoveFileEx` without replace on Windows. A file that appeared after the existence check stayed exposed to a POSIX rename, which replaces it without a word. A system or file system without such a call refuses the rename and keeps the old name. A hard link followed by an unlink is no safe substitute, because another program can replace the new name between the two calls.
   - A rollback and an interrupted write restore never delete the file at the planned name. A refused rename, or a crash before the rename, used to delete the file that already held the name. An unfinished write records no hash of its output, so nothing proves that a file at the planned name came from it. The restore puts the original back, keeps the file at the planned name, and saves a verified copy of that file in the backup folder.
