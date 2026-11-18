@@ -61,6 +61,7 @@ from infiniteprep.adapters.metadata_io.id3v2 import (
     v23_date_text,
 )
 from infiniteprep.adapters.metadata_io.mp4_reader import read_mp4
+from infiniteprep.adapters.metadata_io.no_clobber_move import move_to_new_path
 from infiniteprep.adapters.metadata_io.ogg_reader import read_ogg
 from infiniteprep.domain.enums import (
     WRITE_SUPPORTED_FORMATS,
@@ -1118,12 +1119,13 @@ class MetadataTagAdapter:
         """Perform atomic rename if enabled, refusing to overwrite any existing file."""
         if not write_plan.rename_enabled or write_plan.destination_path == source_path:
             return source_path
-        if write_plan.destination_path.exists():
+        try:
+            move_to_new_path(source_path, write_plan.destination_path)
+        except FileExistsError as exc:
             raise FileExistsError(
                 f"Refusing to overwrite existing file {write_plan.destination_path}; "
                 "adjust rename template."
-            )
-        source_path.rename(write_plan.destination_path)
+            ) from exc
         return write_plan.destination_path
 
     def _write_tags_by_format(self, file_path: Path, tags_to_write: dict[str, str]) -> None:

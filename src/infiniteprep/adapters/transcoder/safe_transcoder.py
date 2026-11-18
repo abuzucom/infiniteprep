@@ -22,6 +22,7 @@ from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     operation_backup_path,
     portable_backup_name,
 )
+from infiniteprep.adapters.metadata_io.no_clobber_move import move_to_new_path
 from infiniteprep.adapters.transcoder.block_resampler import iter_resampled_blocks
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, OperationStatus
@@ -198,7 +199,11 @@ class SafeTranscoderAdapter:
             write_resampled_audio(src_path, temp_out, target_sr, target_subtype, sf_fmt)
             self._apply_effective_tags_to_output(asset, temp_out)
             post_hash = compute_sha256(temp_out)
-            temp_out.replace(out_path)
+            if out_path == src_path:
+                temp_out.replace(out_path)
+            else:
+                # The name check ran before the encode. A file can appear there meanwhile.
+                move_to_new_path(temp_out, out_path)
         except BaseException:
             temp_out.unlink(missing_ok=True)
             if rec is not None:
@@ -318,6 +323,12 @@ class SafeTranscoderAdapter:
         out_path = (dest_folder / f"{src_path.stem}{SIBLING_OUTPUT_TAG}{target_ext}").resolve()
         if not out_path.is_relative_to(dest_folder):
             raise ValueError("Resolved output path escapes destination folder boundary.")
+        if out_path.exists():
+            # Checked before the encode, so a doomed transcode fails at once.
+            raise FileExistsError(
+                f"Output file '{out_path.name}' already exists; refusing to overwrite. Move or "
+                "rename it and retry."
+            )
         return out_path
 
     def _backup_and_journal_in_place(

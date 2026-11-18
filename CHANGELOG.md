@@ -5,6 +5,20 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.76.2] (2026-11-18)
+
+### Fixed
+
+- Writes, recovery, transcodes, and playlist exports no longer replace or delete a file they did not write.
+  - A rename reserves the new name with an exclusive create before the move. A file that appeared after the existence check stayed exposed to a POSIX rename, which replaces it without a word.
+  - A rollback or an interrupted write restore removes the file at the planned name only when the rename ran. A refused rename, or a crash before the rename, used to delete the file that already held the name.
+  - Mark as Finished points the record at the source when the rename never ran. It picked the file at the planned name before.
+  - A transcode refuses an output name that already holds a file. Sibling export replaced an earlier export or any file with the `_XDJ` name. The finished output moves into place with the same exclusive reservation.
+  - A playlist export writes a new file beside the playlist and swaps it in. A failed write truncated the previous playlist before.
+  - The `#EXTINF` text replaces every control character, NEL, U+2028, and U+2029 with a space. A parser that splits on Unicode line boundaries read extra lines before.
+  - The new `adapters/metadata_io/no_clobber_move.py` holds the shared move. The new `tests/unit/test_write_and_export_no_clobber.py` covers each change.
+  - The version advances from 0.76.1 to 0.76.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+
 ## [0.76.1] (2026-11-17)
 
 ### Added
