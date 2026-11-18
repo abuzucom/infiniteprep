@@ -33,6 +33,8 @@ MAX_MOUNT_PATH_LEN: Final[int] = 4096
 FIRST_PRINTABLE_CODE_POINT: Final[int] = 0x20
 DEL_CODE_POINT: Final[int] = 0x7F
 PARENT_DIR_PART: Final[str] = ".."
+# Path components that add no folder: an empty part between separators and ".".
+CURRENT_DIR_PARTS: Final[frozenset[str]] = frozenset({"", "."})
 # Windows opens a device for these names in any folder, with or without an extension.
 WINDOWS_RESERVED_DEVICE_NAMES: Final[frozenset[str]] = frozenset(
     ["CON", "PRN", "AUX", "NUL"]
@@ -188,7 +190,11 @@ def is_safe_relative_path(text: str) -> bool:
     """Return True when text names a file path below its root on POSIX and on Windows."""
     if _has_unsafe_path_text(text):
         return False
-    if any(_is_windows_special_name(part) for part in _path_parts(text)):
+    parts = _path_parts(text)
+    if any(_is_windows_special_name(part) for part in parts):
+        return False
+    # "." and "./" name the root itself, not a path below it.
+    if all(part in CURRENT_DIR_PARTS for part in parts):
         return False
     windows_path = PureWindowsPath(text)
     return not (text.startswith(("/", "\\")) or windows_path.drive or windows_path.root)
