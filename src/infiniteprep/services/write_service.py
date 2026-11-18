@@ -294,12 +294,25 @@ class WriteService:
         """Swap the backup into previous_path through a verified staging copy, then clean up."""
         prev_path = Path(record.previous_path)
         renamed = self._renamed_file(record, prev_path, Path(record.new_path))
+        self._preserve_renamed_file(record, renamed)
         restored_hash = self._replace_with_staged_copy(
             backup_path, prev_path, record.pre_write_hash
         )
         if renamed is not None:
             discard_if_same_file(*renamed)
         return restored_hash
+
+    def _preserve_renamed_file(
+        self, record: ChangeRecord, renamed: tuple[Path, FileIdentity] | None
+    ) -> None:
+        """Copy the renamed file into the backup directory before the restore removes it.
+
+        The identity check keeps a file that replaces the renamed one during the restore.
+        A replacement that arrived earlier carries the identity the check reads, so this
+        verified copy is what keeps that file from being lost.
+        """
+        if renamed is not None:
+            self._preserve_files_before_restore(record, renamed[0], renamed[0])
 
     @staticmethod
     def _renamed_file(
@@ -395,6 +408,8 @@ class WriteService:
                 self._refuse_restore_over_later_edits(record, prev_path, cur_path)
             self._preserve_files_before_restore(record, prev_path, cur_path)
         renamed = self._renamed_file(record, prev_path, cur_path)
+        if not guard_later_edits:
+            self._preserve_renamed_file(record, renamed)
         restored_hash = self._replace_with_staged_copy(
             backup_path, prev_path, record.pre_write_hash
         )
