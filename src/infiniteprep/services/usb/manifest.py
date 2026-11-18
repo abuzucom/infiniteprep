@@ -17,7 +17,9 @@ from typing import Final
 from infiniteprep.services.usb._shared import (
     MAX_USB_JSON_BYTES,
     close_win32_handle,
+    is_safe_relative_path,
     is_symlink_or_reparse_point,
+    load_json_text,
     normalize_iso_utc,
     open_win32_confined_read_fd,
     open_win32_locked_dir,
@@ -354,6 +356,16 @@ def _require_non_empty_str(raw: object, field_name: str) -> str:
     return text
 
 
+def _require_relative_path(raw: object, field_name: str) -> str:
+    """Validate that raw is a relative path that stays below the drive root."""
+    text = _require_str(raw, field_name)
+    if not is_safe_relative_path(text):
+        raise ValueError(
+            f"Manifest field '{field_name}' must be a relative path below the drive root."
+        )
+    return text
+
+
 def _require_non_negative_int(raw: object, field_name: str) -> int:
     """Validate that raw is a non-boolean non-negative integer."""
     if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
@@ -430,7 +442,9 @@ def _parse_omissions(raw: object) -> tuple[ManifestTrackOmission, ...]:
         if not isinstance(track_raw, Mapping):
             raise ValueError("Omission 'track' must be an object.")
         track_ref = ManifestTrackRef(
-            relative_path=_require_str(track_raw.get("relative_path"), "track.relative_path"),
+            relative_path=_require_relative_path(
+                track_raw.get("relative_path"), "track.relative_path"
+            ),
             title=_require_str(track_raw.get("title"), "track.title"),
             artist=_require_str(track_raw.get("artist"), "track.artist"),
         )
@@ -529,7 +543,7 @@ def _read_manifest_file(mount_root: Path, file_name: str) -> UsbExportManifest |
         content = _read_confined_json_text(meta_dir, file_name, dir_fd=meta_fd)
     if content is None:
         return None
-    raw = json.loads(content)
+    raw = load_json_text(content, f"USB manifest {file_name}")
     if not isinstance(raw, Mapping):
         raise ValueError(f"Manifest file {file_name} must hold a JSON object.")
     return _manifest_from_dict(raw)
