@@ -24,6 +24,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
+from infiniteprep.services.usb.models import SpaceInfo
+
 DEFAULT_COMMAND_TIMEOUT_SECONDS: Final[float] = 15.0
 MAX_METADATA_STR_LEN: Final[int] = 512
 MAX_TEMP_ATTEMPTS: Final[int] = 16
@@ -113,6 +115,19 @@ def clean_int(val: Any, default: int = 0) -> int:
     # JSON and plist both accept an infinite number, and int() of it overflows.
     except (ValueError, TypeError, OverflowError):
         return default
+
+
+def deduplicate_space_entries(
+    space_entries: list[tuple[str, SpaceInfo]],
+) -> tuple[tuple[str, SpaceInfo], ...]:
+    """Keep the first space entry of each mount point, in the original order.
+
+    The Linux, macOS, and Windows inspectors each held a copy of this loop.
+    """
+    unique: dict[str, SpaceInfo] = {}
+    for mount, space in space_entries:
+        unique.setdefault(mount, space)
+    return tuple(unique.items())
 
 
 def sanitize_mount_point(val: Any) -> str | None:

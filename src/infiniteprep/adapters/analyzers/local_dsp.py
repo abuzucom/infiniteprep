@@ -28,6 +28,41 @@ MAX_DSP_MONO_FRAMES: Final[int] = 30 * 60 * 48_000
 DSP_BLOCK_FRAMES: Final[int] = 65_536
 ENVELOPE_BINS: Final[int] = 64
 
+# Rip quality checks. A mean sample beyond the DC limit marks an offset. Samples at or above
+# the clip level count as clipped, and the warning needs at least the minimum count, so a few
+# legitimate peaks pass. Silence is measured in tenth-of-a-second windows. A window below the
+# RMS level counts as silent, and an edge silence of 2 seconds or more raises the warning.
+DC_OFFSET_LIMIT: Final[float] = 0.015
+CLIP_SAMPLE_LEVEL: Final[float] = 0.998
+MIN_CLIPPED_SAMPLES: Final[int] = 12
+SILENCE_WINDOWS_PER_SECOND: Final[int] = 10
+MIN_SILENCE_WINDOWS: Final[int] = 4
+SILENCE_RMS_LEVEL: Final[float] = 0.0018
+MAX_EDGE_SILENCE_SEC: Final[float] = 2.0
+
+# Tempo. The onset envelope uses 200 frames per second, a 5 ms resolution. The default range
+# covers house, techno, and drum and bass without doubling or halving.
+ONSET_FRAMES_PER_SECOND: Final[int] = 200
+SECONDS_PER_MINUTE: Final[float] = 60.0
+DEFAULT_MIN_BPM: Final[float] = 80.0
+DEFAULT_MAX_BPM: Final[float] = 175.0
+# An envelope with less energy than this is silence and carries no tempo.
+MIN_ENVELOPE_ENERGY: Final[float] = 1e-12
+
+# Key. The chroma reads the first 30 seconds within the 55 Hz to 2 kHz band, where the
+# harmonic content sits. A chroma spread below the minimum carries no pitch.
+MIN_KEY_SAMPLES: Final[int] = 4096
+KEY_WINDOW_SEC: Final[int] = 30
+CHROMA_MIN_HZ: Final[float] = 55.0
+CHROMA_MAX_HZ: Final[float] = 2000.0
+MIN_CHROMA_SPREAD: Final[float] = 1e-9
+# Equal temperament reference: MIDI note 69 is A4 at 440 Hz.
+A4_MIDI_NOTE: Final[float] = 69.0
+A4_FREQUENCY_HZ: Final[float] = 440.0
+SEMITONES_PER_OCTAVE: Final[int] = 12
+# Correlation lies in [-1, 1]. The starting best score sits below that range.
+CORRELATION_FLOOR: Final[float] = -2.0
+
 PITCH_CLASSES_ORDERED: Final[tuple[PitchClass, ...]] = (
     PitchClass.C,
     PitchClass.C_SHARP,
@@ -80,31 +115,31 @@ def compute_rip_quality_warnings(mono: np.ndarray, sample_rate: int) -> list[str
         return warnings
 
     dc_val = float(np.mean(mono))
-    if abs(dc_val) > 0.015:
+    if abs(dc_val) > DC_OFFSET_LIMIT:
         warnings.append(
             f"Rip Quality Warning: DC offset detected ({dc_val:+.3f}); "
             "apply high-pass / DC-removal filter."
         )
 
-    clipped_count = int(np.sum(np.abs(mono) >= 0.998))
-    if clipped_count >= 12:
+    clipped_count = int(np.sum(np.abs(mono) >= CLIP_SAMPLE_LEVEL))
+    if clipped_count >= MIN_CLIPPED_SAMPLES:
         warnings.append(
             f"Rip Quality Warning: Digital clipping detected ({clipped_count} clipped samples); "
             "check recording gain."
         )
 
-    win = max(1, sample_rate // 10)
+    win = max(1, sample_rate // SILENCE_WINDOWS_PER_SECOND)
     num_blocks = mono.size // win
-    if num_blocks >= 4:
+    if num_blocks >= MIN_SILENCE_WINDOWS:
         blocks = mono[: num_blocks * win].reshape(num_blocks, win)
         block_ac_rms = np.sqrt(
             np.mean((blocks - np.mean(blocks, axis=1, keepdims=True)) ** 2, axis=1)
         )
-        active_blocks = np.flatnonzero(block_ac_rms > 0.0018)
+        active_blocks = np.flatnonzero(block_ac_rms > SILENCE_RMS_LEVEL)
         if active_blocks.size > 0:
             lead_sec = float(active_blocks[0] * win) / float(sample_rate)
             trail_sec = float((num_blocks - 1 - active_blocks[-1]) * win) / float(sample_rate)
-            if lead_sec >= 2.0 or trail_sec >= 2.0:
+            if lead_sec >= MAX_EDGE_SILENCE_SEC or trail_sec >= MAX_EDGE_SILENCE_SEC:
                 warnings.append(
                     f"Rip Quality Warning: Excessive silence detected "
                     f"(leading={lead_sec:.1f}s, trailing={trail_sec:.1f}s); consider trimming."
@@ -113,21 +148,24 @@ def compute_rip_quality_warnings(mono: np.ndarray, sample_rate: int) -> list[str
 
 
 def estimate_bpm_from_onset_envelope(
-    mono: np.ndarray, sample_rate: int, min_bpm: float = 80.0, max_bpm: float = 175.0
+    mono: np.ndarray,
+    sample_rate: int,
+    min_bpm: float = DEFAULT_MIN_BPM,
+    max_bpm: float = DEFAULT_MAX_BPM,
 ) -> float | None:
     """Estimate tempo in BPM using smoothed energy envelope autocorrelation."""
     if mono.size < sample_rate or sample_rate <= 0:
         return None
-    hop = max(1, sample_rate // 200)
+    hop = max(1, sample_rate // ONSET_FRAMES_PER_SECOND)
     env_rate = float(sample_rate) / float(hop)
     frames = mono[: (mono.size // hop) * hop].reshape(-1, hop)
     rms = np.sqrt(np.mean(frames * frames, axis=1))
     env = rms - float(np.mean(rms))
     norm = float(np.sum(env * env))
-    if norm <= 1e-12:
+    if norm <= MIN_ENVELOPE_ENERGY:
         return None
-    min_lag = max(1, round((60.0 / max_bpm) * env_rate))
-    max_lag = min(env.size - 1, round((60.0 / min_bpm) * env_rate))
+    min_lag = max(1, round((SECONDS_PER_MINUTE / max_bpm) * env_rate))
+    max_lag = min(env.size - 1, round((SECONDS_PER_MINUTE / min_bpm) * env_rate))
     if max_lag <= min_lag:
         return None
     # Only the lags of the tempo range matter. A full autocorrelation costs the square of
@@ -135,24 +173,25 @@ def estimate_bpm_from_onset_envelope(
     autocorr = [
         float(np.dot(env[: env.size - lag], env[lag:])) for lag in range(min_lag, max_lag + 1)
     ]
+    # min_lag is at least 1, so best_lag is always positive.
     best_lag = min_lag + int(np.argmax(autocorr))
-    return round((60.0 * env_rate) / float(best_lag), 1) if best_lag > 0 else None
+    return round((SECONDS_PER_MINUTE * env_rate) / float(best_lag), 1)
 
 
 def estimate_key_from_chroma(
     mono: np.ndarray, sample_rate: int
 ) -> tuple[PitchClass | None, KeyMode | None, float]:
     """Estimate canonical (PitchClass, KeyMode, strength) via Krumhansl-Kessler chroma profiles."""
-    if mono.size < 4096 or sample_rate <= 0:
+    if mono.size < MIN_KEY_SAMPLES or sample_rate <= 0:
         return None, None, 0.0
-    max_samples = min(mono.size, sample_rate * 30)
+    max_samples = min(mono.size, sample_rate * KEY_WINDOW_SEC)
     segment = mono[:max_samples] - float(np.mean(mono[:max_samples]))
     spectrum = np.abs(np.fft.rfft(segment * np.hanning(segment.size)))
     freqs = np.fft.rfftfreq(segment.size, d=1.0 / float(sample_rate))
 
     chroma = _accumulate_chroma_bins(spectrum, freqs)
     chroma_std = float(np.std(chroma))
-    if chroma_std <= 1e-9:
+    if chroma_std <= MIN_CHROMA_SPREAD:
         # Silence and flat noise carry no pitch. A key here would be invented.
         return None, None, 0.0
     chroma_norm = (chroma - float(np.mean(chroma))) / chroma_std
@@ -161,15 +200,17 @@ def estimate_key_from_chroma(
 
 def _accumulate_chroma_bins(spectrum: np.ndarray, freqs: np.ndarray) -> np.ndarray:
     """Fold FFT magnitude bins in [55 Hz, 2000 Hz] into 12 semitone pitch classes."""
-    chroma = np.zeros(12, dtype=np.float64)
-    mask = (freqs >= 55.0) & (freqs <= 2000.0)
+    chroma = np.zeros(SEMITONES_PER_OCTAVE, dtype=np.float64)
+    mask = (freqs >= CHROMA_MIN_HZ) & (freqs <= CHROMA_MAX_HZ)
     valid_freqs = freqs[mask]
     valid_mag = spectrum[mask]
     if valid_freqs.size == 0:
         return chroma
-    midi_notes = np.round(69.0 + 12.0 * np.log2(valid_freqs / 440.0)).astype(int)
-    pitch_classes = np.mod(midi_notes, 12)
-    for pc_idx in range(12):
+    midi_notes = np.round(
+        A4_MIDI_NOTE + SEMITONES_PER_OCTAVE * np.log2(valid_freqs / A4_FREQUENCY_HZ)
+    ).astype(int)
+    pitch_classes = np.mod(midi_notes, SEMITONES_PER_OCTAVE)
+    for pc_idx in range(SEMITONES_PER_OCTAVE):
         chroma[pc_idx] = float(np.sum(valid_mag[pitch_classes == pc_idx]))
     return chroma
 
@@ -183,13 +224,13 @@ def _match_key_profiles(
     min_p = np.array(MINOR_PROFILE, dtype=np.float64)
     min_p = (min_p - float(np.mean(min_p))) / float(np.std(min_p))
 
-    best_score = -2.0
+    best_score = CORRELATION_FLOOR
     best_tonic = PitchClass.A
     best_mode = KeyMode.MINOR
     for shift, tonic in enumerate(PITCH_CLASSES_ORDERED):
         rotated = np.roll(chroma_norm, -shift)
-        maj_corr = float(np.dot(rotated, maj) / 12.0)
-        min_corr = float(np.dot(rotated, min_p) / 12.0)
+        maj_corr = float(np.dot(rotated, maj) / SEMITONES_PER_OCTAVE)
+        min_corr = float(np.dot(rotated, min_p) / SEMITONES_PER_OCTAVE)
         if maj_corr > best_score:
             best_score, best_tonic, best_mode = maj_corr, tonic, KeyMode.MAJOR
         if min_corr > best_score:

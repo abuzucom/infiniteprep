@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_OLLAMA_MODEL: Final[str] = "qwen2.5:3b"
 RECOMMENDED_MODELS: Final[tuple[str, ...]] = ("qwen2.5:3b", "qwen2.5:7b", "llama3.2:3b")
 MAX_LLM_RESPONSE_BYTES: Final[int] = 262_144
+# A small local model answers one arbitration prompt within seconds. The timeout stops a
+# stalled server from holding the identification job.
+LLM_REQUEST_TIMEOUT_SEC: Final[int] = 20
 # The rationale is model text shown to a person. A short explanation fits well inside this.
 MAX_RATIONALE_CHARS: Final[int] = 500
 DEFAULT_RATIONALE: Final[str] = "Validated LLM arbitration."
@@ -172,7 +175,7 @@ class OllamaOpenAIReasoningAdapter:
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
         # validate_endpoint_url checked this URL only. A redirect raises instead of moving the
         # request, and its Bearer key, to a host the check never saw.
-        with http_openers.open_without_redirects(req, timeout=20) as resp:
+        with http_openers.open_without_redirects(req, timeout=LLM_REQUEST_TIMEOUT_SEC) as resp:
             raw_bytes = resp.read(MAX_LLM_RESPONSE_BYTES + 1)
             if len(raw_bytes) > MAX_LLM_RESPONSE_BYTES:
                 raise ValueError("LLM HTTP response exceeded maximum byte size limit.")

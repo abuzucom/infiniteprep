@@ -23,6 +23,7 @@ from infiniteprep.services.usb._shared import (
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     clean_int,
     clean_str,
+    deduplicate_space_entries,
 )
 from infiniteprep.services.usb.models import (
     CommandExecutionError,
@@ -35,11 +36,11 @@ from infiniteprep.services.usb.models import (
 
 # The interpreter path is derived from SystemRoot so a relocated system root
 # still resolves, and pinned so a hostile PATH entry cannot substitute the
-# interpreter (review findings M18/M10, PR #196).
+# interpreter.
 _SYSTEM_ROOT: Final[str] = os.environ.get("SYSTEMROOT") or "C:\\Windows"
 POWERSHELL_EXE: Final[str] = _SYSTEM_ROOT + r"\System32\WindowsPowerShell\v1.0\powershell.exe"
 # Bounded output keeps a malfunctioning storage stack from exhausting memory
-# during parsing (foucault MEDIUM, PR #196).
+# during parsing.
 MAX_COMMAND_OUTPUT_BYTES: Final[int] = 8 * 1024 * 1024
 MAX_ERROR_TEXT_LEN: Final[int] = 4096
 # Windows PowerShell 5.1 writes redirected output in the OEM code page. The runner decodes
@@ -416,15 +417,4 @@ class WindowsDriveInspector:
             spaces,
         )
 
-    @staticmethod
-    def _deduplicate_space_entries(
-        space_entries: list[tuple[str, SpaceInfo]],
-    ) -> tuple[tuple[str, SpaceInfo], ...]:
-        """Deduplicate space entries by mount point while preserving order."""
-        seen_mounts: set[str] = set()
-        unique: list[tuple[str, SpaceInfo]] = []
-        for mount, space in space_entries:
-            if mount not in seen_mounts:
-                seen_mounts.add(mount)
-                unique.append((mount, space))
-        return tuple(unique)
+    _deduplicate_space_entries = staticmethod(deduplicate_space_entries)

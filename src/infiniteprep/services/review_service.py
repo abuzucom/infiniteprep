@@ -208,7 +208,8 @@ class ReviewService:
         proposals = self.repo.list_field_proposals(file_id)
         if not approved_map and not proposals:
             return
-        if not approved_map and proposals:
+        if not approved_map:
+            # The return above leaves proposals present whenever no field is approved.
             self.repo.update_file_status(file_id, review_status=ReviewStatus.PROPOSED)
             return
         has_core = CORE_IDENTITY_FIELDS.issubset(approved_map.keys())

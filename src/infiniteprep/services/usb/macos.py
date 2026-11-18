@@ -28,6 +28,7 @@ from infiniteprep.services.usb._shared import (
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     clean_int,
     clean_str,
+    deduplicate_space_entries,
     sanitize_mount_point,
 )
 from infiniteprep.services.usb.models import (
@@ -295,7 +296,7 @@ class MacOSDriveInspector:
         self._command_runner = command_runner or self._bounded_runner
 
     def _bounded_runner(self, cmd: list[str]) -> subprocess.CompletedProcess[str]:
-        """Run a fixed command array, discarding stdout above the byte cap."""
+        """Run a fixed command array. Stdout above the byte cap raises InspectionParseError."""
         return bounded_command_runner(cmd, self._timeout_seconds)
 
     def inspect_all(self) -> tuple[DriveInspection, ...]:
@@ -382,11 +383,11 @@ class MacOSDriveInspector:
 
     @staticmethod
     def _parse_plist_dict(stdout: str, source: str) -> dict[str, Any]:
-        """Parse plist bytes into a mapping under the module byte cap.
+        """Parse plist text into a mapping under the module byte cap.
 
-        The cap guards injected command runners; the built-in bounded runner
-        already enforces it during capture. Encoding failures raise
-        InspectionParseError instead of leaking UnicodeEncodeError.
+        The cap applies to the UTF-8 encoding of the text. It guards injected command
+        runners. The built-in bounded runner already enforces it during capture.
+        Encoding failures raise InspectionParseError instead of UnicodeEncodeError.
         """
         try:
             encoded = stdout.encode("utf-8")
@@ -618,16 +619,4 @@ class MacOSDriveInspector:
             available_bytes=available_bytes,
         )
 
-    @staticmethod
-    def _deduplicate_space_entries(
-        space_entries: list[tuple[str, SpaceInfo]],
-    ) -> tuple[tuple[str, SpaceInfo], ...]:
-        """Deduplicate space entries by mount point while preserving order."""
-        seen_mounts: set[str] = set()
-        unique: list[tuple[str, SpaceInfo]] = []
-        for mount, space in space_entries:
-            if mount in seen_mounts:
-                continue
-            seen_mounts.add(mount)
-            unique.append((mount, space))
-        return tuple(unique)
+    _deduplicate_space_entries = staticmethod(deduplicate_space_entries)

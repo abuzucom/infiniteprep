@@ -27,6 +27,9 @@ ACOUSTID_API_URL: Final[str] = "https://api.acoustid.org/v2/lookup"
 CACHE_TTL_SEC: Final[int] = 86400
 MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
 ACOUSTID_REQUEST_TIMEOUT_SEC: Final[float] = 15.0
+# fpcalc reads at most the first two minutes of audio and finishes in a few seconds. The
+# timeout stops a hung decoder.
+FPCALC_TIMEOUT_SEC: Final[int] = 30
 # fpcalc fails with a missing binary or unreadable file (OSError), a nonzero exit or
 # a timeout (SubprocessError), or output that is not the expected JSON (ValueError).
 FPCALC_ERRORS: Final[tuple[type[Exception], ...]] = (
@@ -119,7 +122,7 @@ class ChromaprintAcoustIDAdapter:
             [str(fpcalc_bin), "-json", str(audio_reference)],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=FPCALC_TIMEOUT_SEC,
             check=True,
             shell=False,
         )
