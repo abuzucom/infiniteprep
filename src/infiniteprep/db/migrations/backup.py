@@ -243,7 +243,7 @@ def read_backup_record(db_path: Path) -> tuple[int, dict[str, int] | None] | Non
 
 
 def read_backup_version(db_path: Path) -> int | None:
-    """Return the source version the sidecar records, or None when no usable record exists."""
+    """Return the source version the backup's record table holds, or None without a record."""
     record = read_backup_record(db_path)
     return None if record is None else record[0]
 

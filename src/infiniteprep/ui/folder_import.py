@@ -41,11 +41,32 @@ CANCELLING_TEXT: Final[str] = "Cancelling after the current file. Nothing will b
 STUCK_FILE_TIMEOUT_MS: Final[int] = 120_000
 STUCK_EXIT_CODE: Final[int] = 1
 STUCK_TITLE: Final[str] = "Import Not Responding"
-STUCK_TEXT: Final[str] = (
-    "One file has taken more than 2 minutes and the import is not responding. "
-    "Quit Now ends InfinitePrep at once and keeps nothing from this import. "
-    "Keep Waiting lets the import continue."
-)
+MS_PER_SECOND: Final[int] = 1000
+SECONDS_PER_MINUTE: Final[int] = 60
+
+
+def _describe_timeout(timeout_ms: int) -> str:
+    """Return a timeout as whole minutes when it divides evenly, else as seconds."""
+    total_seconds = max(1, round(timeout_ms / MS_PER_SECOND))
+    minutes, seconds = divmod(total_seconds, SECONDS_PER_MINUTE)
+    if minutes and not seconds:
+        return f"{minutes} minute" if minutes == 1 else f"{minutes} minutes"
+    return f"{total_seconds} second" if total_seconds == 1 else f"{total_seconds} seconds"
+
+
+def stuck_import_text(timeout_ms: int) -> str:
+    """Return the stuck prompt text that names the timeout the watcher uses.
+
+    A fixed "2 minutes" stated the wrong duration whenever a caller passed another timeout.
+    """
+    return (
+        f"One file has taken more than {_describe_timeout(timeout_ms)} and the import is not "
+        "responding. Quit Now ends InfinitePrep at once and keeps nothing from this import. "
+        "Keep Waiting lets the import continue."
+    )
+
+
+STUCK_TEXT: Final[str] = stuck_import_text(STUCK_FILE_TIMEOUT_MS)
 
 
 def _report_sections(report: ImportBatchReport) -> list[tuple[str, list[str]]]:
@@ -205,7 +226,7 @@ class FolderImportController(QObject):
         self.last_error = ""
         self._stuck_watcher = StuckFileWatcher(
             parent,
-            StuckPrompt(STUCK_TITLE, STUCK_TEXT, stuck_timeout_ms),
+            StuckPrompt(STUCK_TITLE, stuck_import_text(stuck_timeout_ms), stuck_timeout_ms),
             self.is_running,
             exit_code=STUCK_EXIT_CODE,
             exit_process=exit_process,

@@ -211,7 +211,11 @@ def _find_setting_value_problem(name: str, value: object, default: object) -> st
 
 
 def _find_numeric_setting_problem(name: str, value: object) -> str | None:
-    """Return why a numeric setting value is out of range, or None when valid."""
+    """Return why a numeric setting value is out of range, or None when valid.
+
+    The caller has already matched the value type to the default type exactly, so an
+    int setting holds an int here and never a bool.
+    """
     if name == "tag_bpm_decimals" and value not in BPM_DECIMAL_PLACES:
         return "an unsupported BPM precision"
     if name in NONNEGATIVE_COUNT_SETTINGS and value < 0:
@@ -220,10 +224,9 @@ def _find_numeric_setting_problem(name: str, value: object) -> str | None:
         return "a reserve percentage outside 0 to 100"
     if name == "usb_reserve_bytes" and not 0 <= value <= MAX_USB_RESERVE_BYTES:
         return "a reserve size outside the supported range"
-    if name == "usb_recovery_expiry_days" and (
-        isinstance(value, bool)
-        or not isinstance(value, int)
-        or not MIN_USB_RECOVERY_EXPIRY_DAYS <= value <= MAX_USB_RECOVERY_EXPIRY_DAYS
+    if (
+        name == "usb_recovery_expiry_days"
+        and not MIN_USB_RECOVERY_EXPIRY_DAYS <= value <= MAX_USB_RECOVERY_EXPIRY_DAYS
     ):
         return (
             f"an expiry window outside {MIN_USB_RECOVERY_EXPIRY_DAYS} to "

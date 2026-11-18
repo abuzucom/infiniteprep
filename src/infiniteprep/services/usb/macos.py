@@ -295,7 +295,7 @@ class MacOSDriveInspector:
         self._command_runner = command_runner or self._bounded_runner
 
     def _bounded_runner(self, cmd: list[str]) -> subprocess.CompletedProcess[str]:
-        """Run a fixed command array, discarding stdout above the byte cap."""
+        """Run a fixed command array. Stdout above the byte cap raises InspectionParseError."""
         return bounded_command_runner(cmd, self._timeout_seconds)
 
     def inspect_all(self) -> tuple[DriveInspection, ...]:
@@ -382,11 +382,11 @@ class MacOSDriveInspector:
 
     @staticmethod
     def _parse_plist_dict(stdout: str, source: str) -> dict[str, Any]:
-        """Parse plist bytes into a mapping under the module byte cap.
+        """Parse plist text into a mapping under the module byte cap.
 
-        The cap guards injected command runners; the built-in bounded runner
-        already enforces it during capture. Encoding failures raise
-        InspectionParseError instead of leaking UnicodeEncodeError.
+        The cap applies to the UTF-8 encoding of the text. It guards injected command
+        runners. The built-in bounded runner already enforces it during capture.
+        Encoding failures raise InspectionParseError instead of UnicodeEncodeError.
         """
         try:
             encoded = stdout.encode("utf-8")
