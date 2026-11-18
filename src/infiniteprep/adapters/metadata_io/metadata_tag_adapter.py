@@ -45,6 +45,7 @@ from infiniteprep.adapters.metadata_io.id3_containers import (
     write_wav_tag,
 )
 from infiniteprep.adapters.metadata_io.id3v2 import (
+    COMPRESSED_V22_TAG_NOTE,
     LANGUAGE_FRAMES,
     Id3FormatError,
     Id3Frame,
@@ -183,6 +184,14 @@ class SourceChangedDuringWriteError(OSError):
     """Raised when another program changes the source before the written copy replaces it.
 
     No tags reach the source, so a rollback must not restore the backup over the new edit.
+    """
+
+
+class TagCheckChangedError(ValueError):
+    """Raised when the copy to write gives a different dropped tag data result than the preview.
+
+    The check runs before any tag reaches the copy. The source keeps its bytes. A rollback
+    then has nothing to restore.
     """
 
 
@@ -558,6 +567,54 @@ MAPPED_PARSERS: Final[dict[AudioFormat, Callable[[bytes], _ParsedAudio]]] = {
     AudioFormat.FLAC: _parse_flac,
     AudioFormat.M4A: _parse_m4a,
 }
+DROPPED_TAG_DATA_WARNING: Final[str] = (
+    "A write removes tag data the app cannot read: {names}. "
+    "Cancel and edit the file with another tag editor to keep that data."
+)
+COMPRESSED_V22_TAG_ERROR: Final[str] = (
+    "The file has a compressed ID3v2.2 tag the app cannot read; a write would remove the "
+    "whole tag. Convert the tag with another tag editor before writing."
+)
+UNREADABLE_TAG_ERROR: Final[str] = (
+    "The tag cannot be read ({reason}). A write could lose tag data. "
+    "Repair the tag with another tag editor before writing."
+)
+UNREADABLE_FILE_ERROR: Final[str] = (
+    "The file cannot be read for the tag check ({reason}). "
+    "Check the file permissions and refresh the preview."
+)
+
+
+def _id3_dropped(tag: Id3Tag | None) -> tuple[str, ...]:
+    """Return the frames an ID3 rewrite cannot carry over."""
+    return tag.dropped_frames if tag is not None else ()
+
+
+def _flac_dropped(data: bytes) -> tuple[str, ...]:
+    """Return the Vorbis comment entries a FLAC rewrite cannot carry over."""
+    comment = read_flac_comment(data)
+    return comment.dropped_entries if comment is not None else ()
+
+
+# Each writer rebuilds the tag from the parsed frames, so a frame the parser drops is lost.
+DROPPED_TAG_READERS: Final[dict[AudioFormat, Callable[[bytes], tuple[str, ...]]]] = {
+    AudioFormat.MP3: lambda data: _id3_dropped(read_mp3_tag(data)),
+    AudioFormat.WAV: lambda data: _id3_dropped(read_wav_tag(data)),
+    AudioFormat.AIFF: lambda data: _id3_dropped(read_aiff_tag(data)),
+    AudioFormat.FLAC: _flac_dropped,
+}
+
+
+def read_dropped_tag_data(file_path: Path, fmt: AudioFormat) -> tuple[str, ...]:
+    """Return the tag data a rewrite of file_path would lose. Unwritable formats return ()."""
+    reader = DROPPED_TAG_READERS.get(fmt)
+    if reader is None:
+        return ()
+    with (
+        file_path.open("rb") as handle,
+        mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as mapped,
+    ):
+        return reader(mapped)
 
 
 def _apply_id3_fields(tag: Id3Tag | None, tags_to_write: dict[str, str]) -> Id3Tag:
@@ -913,7 +970,7 @@ class MetadataTagAdapter:
             proposed_to_write = self.format_output_tags(proposed_to_write)
         except ValueError as exc:
             validation_errors.append(str(exc))
-        backup_destination_path = backup_dir / f"{file_asset.id}_{source_path.name}"
+        tag_data_warnings = self._check_dropped_tag_data(source_path, validation_errors)
 
         return FileWritePlan(
             file_id=file_asset.id,
@@ -924,10 +981,35 @@ class MetadataTagAdapter:
             existing_tags=existing_std,
             proposed_tags_to_write=proposed_to_write,
             preserved_custom_tags=preserved_custom,
-            backup_destination_path=backup_destination_path,
+            backup_destination_path=backup_dir / f"{file_asset.id}_{source_path.name}",
             collision_warnings=collision_warnings,
             validation_errors=validation_errors,
+            tag_data_warnings=tag_data_warnings,
         )
+
+    def _check_dropped_tag_data(self, source_path: Path, validation_errors: list[str]) -> list[str]:
+        """Return warnings for tag data a rewrite would lose.
+
+        A compressed ID3v2.2 tag loses every frame. A tag or file the check cannot read gives
+        no answer. Each case adds an error to validation_errors and blocks the write instead.
+        """
+        if not source_path.is_file():
+            return []
+        try:
+            dropped = read_dropped_tag_data(source_path, self.detect_format(source_path))
+        except ValueError as exc:
+            validation_errors.append(UNREADABLE_TAG_ERROR.format(reason=exc))
+            return []
+        except OSError as exc:
+            reason = exc.strerror or type(exc).__name__
+            validation_errors.append(UNREADABLE_FILE_ERROR.format(reason=reason))
+            return []
+        if COMPRESSED_V22_TAG_NOTE in dropped:
+            validation_errors.append(COMPRESSED_V22_TAG_ERROR)
+            return []
+        if not dropped:
+            return []
+        return [DROPPED_TAG_DATA_WARNING.format(names=", ".join(dropped))]
 
     def _validate_source_for_write(self, file_asset: FileAsset, source_path: Path) -> list[str]:
         """Validate write format support, file existence, and content hash match."""
@@ -1025,7 +1107,11 @@ class MetadataTagAdapter:
             )
         self._create_verified_backup(source_path, backup_path, current_hash)
         self._write_verified_copy(
-            source_path, write_plan.proposed_tags_to_write, operation_id, current_hash
+            source_path,
+            write_plan.proposed_tags_to_write,
+            operation_id,
+            current_hash,
+            expected_tag_warnings=write_plan.tag_data_warnings,
         )
         final_path = self._execute_optional_rename(source_path, write_plan)
         post_hash = compute_sha256(final_path)
@@ -1050,15 +1136,20 @@ class MetadataTagAdapter:
         tags_to_write: dict[str, str],
         operation_id: str,
         expected_hash: str,
+        expected_tag_warnings: list[str] | None = None,
     ) -> None:
         """Write tags to a sibling copy, verify it, then atomically swap it over the source.
 
         A crash at any point leaves the source with its original bytes. The copy name depends
         only on the operation id and the suffix, which detect_format reads.
+        expected_tag_warnings holds the dropped tag data warnings of the preview. The check
+        runs again on the copy. A different result stops the write. None skips the check.
         """
         staged = source_path.with_name(f".{operation_id}.staged{source_path.suffix}")
         try:
             shutil.copy2(source_path, staged)
+            if expected_tag_warnings is not None:
+                self._ensure_tag_check_unchanged(staged, expected_tag_warnings)
             baseline = self.read_metadata(staged)
             self._write_tags_by_format(staged, tags_to_write)
             self._verify_written_copy(baseline, staged, tags_to_write)
@@ -1066,6 +1157,16 @@ class MetadataTagAdapter:
             os.replace(staged, source_path)
         finally:
             self._discard_staged_copy(staged)
+
+    def _ensure_tag_check_unchanged(self, staged: Path, expected_warnings: list[str]) -> None:
+        """Raise TagCheckChangedError when the copy gives a different dropped tag data result."""
+        errors: list[str] = []
+        warnings = self._check_dropped_tag_data(staged, errors)
+        if errors or warnings != expected_warnings:
+            raise TagCheckChangedError(
+                "The tag data check on the file to write differs from the preview; no tags "
+                "were written. Refresh the preview and retry."
+            )
 
     @staticmethod
     def _ensure_source_unchanged(source_path: Path, expected_hash: str) -> None:

@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.78.3] (2026-11-18)
+## [0.78.4] (2026-11-18)
 
 ### Added
 
@@ -40,6 +40,26 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The write preview names tag data that a rewrite cannot keep.
+  - The ID3 parser skips encrypted and truncated frames. The FLAC parser skips Vorbis entries without `=`. Each writer rebuilds the tag from the parsed frames. A write lost that data without notice before.
+  - The new `tag_data_warnings` field of `FileWritePlan` lists each item. The Safety Status cell shows `READY WITH DATA LOSS` and names them. The write stays allowed.
+  - A compressed ID3v2.2 tag yields no frames at all. The preview now blocks that write, because it would remove the whole tag.
+  - A tag or file that the check cannot read blocks the write with a validation error that names the reason. The preview showed `READY` for such a file before.
+  - The write runs the check again on the copy it writes. A result that differs from the preview stops the write before any tag changes. The new `TagCheckChangedError` records the write as failed without a restore, as the payload and source-change errors do.
+  - The new `tests/unit/test_dropped_tag_data_preview.py`, `tests/unit/test_unreadable_tag_preview.py`, and `tests/unit/test_shared_folder_warning_and_apply_recheck.py` cover each case.
+- The library, its backups, and the settings stay readable by their owner only.
+  - The new `private_files.py` creates missing app folders with mode 0700 and library files with mode 0600. An existing library loses its group and other bits on open. SQLite copies that mode to the WAL and SHM files. The migration backup and the staged restore copy start owner only. Existing folders keep their mode. Windows ignores these bits.
+  - The mode change never follows a link. It checks the name with `lstat`, opens it with `O_NOFOLLOW`, confirms the same file, and changes the mode through that descriptor. The backup copy and the staged restore copy start with an exclusive create. A link planted at either name fails the copy.
+  - The backup copy and the staged restore copy now live in a new owner-only staging folder beside the library until the final rename. Each step reopens its file by name. Another account cannot swap a name inside that folder between the steps. The folder and its files go away after each run.
+  - The library refuses to open through a symbolic link at its name. SQLite followed such a link before.
+  - A library folder owned by another account, or with group or other write access, logs a warning that names the fix. The library still opens there. A portable Data folder on FAT or exFAT media shows such modes. The link check and the SQLite open use the name separately. Only a folder that other accounts cannot change closes that gap.
+  - The per-user data folder that startup creates gets mode 0700. It got the default mode before.
+  - The settings write syncs the temporary file before the rename and the folder after it on POSIX. A power loss after the rename could leave an empty settings file before.
+  - The fpcalc installer extracts to a random hidden name and renames it into place. An interrupted install left a partial binary under the real name before.
+  - The two `uuid5` proposal ID builders state the non-security SHA-1 use that Rule 7 requires.
+  - The new `tests/unit/test_private_storage_files.py`, `tests/unit/test_private_files_symlinks.py`, and `tests/unit/test_private_staging_and_library_links.py` cover each change.
+  - The settings dialog still loads the stored API keys into its masked fields. The fix there changes assertions in `tests/unit/test_settings_tabs.py`. The repository owner left it out of this change.
+  - The version advances from 0.78.3 to 0.78.4 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - Writes, recovery, transcodes, and playlist exports no longer replace or delete a file they did not write.
   - A rename moves the file with one atomic call that fails on an existing name: `renameat2` with `RENAME_NOREPLACE` on Linux, `renamex_np` with `RENAME_EXCL` on macOS, and `MoveFileEx` without replace on Windows. A file that appeared after the existence check stayed exposed to a POSIX rename, which replaces it without a word. A system or file system without such a call refuses the rename and keeps the old name. A hard link followed by an unlink is no safe substitute, because another program can replace the new name between the two calls.
   - A rollback and an interrupted write restore never delete the file at the planned name. A refused rename, or a crash before the rename, used to delete the file that already held the name. An unfinished write records no hash of its output, so nothing proves that a file at the planned name came from it. The restore puts the original back, keeps the file at the planned name, and saves a verified copy of that file in the backup folder.

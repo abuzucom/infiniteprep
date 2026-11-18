@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import io
@@ -12,6 +13,7 @@ import shutil
 import stat
 import tarfile
 import urllib.request
+import uuid
 import zipfile
 from collections.abc import Callable
 from pathlib import Path
@@ -199,10 +201,20 @@ class FpcalcBootstrapService:
         _verify_archive_digest(archive_bytes, expected_sha256)
         self.install_dir.mkdir(parents=True, exist_ok=True)
         target_bin = self.install_dir / self.binary_filename()
-        self._extract_binary_from_archive(archive_bytes, target_bin)
-        if not os.name.startswith("nt"):
-            current_mode = target_bin.stat().st_mode
-            target_bin.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP)
+        # The binary lands under a random name first. One rename then swaps it in, so an
+        # interrupted install never leaves a partial fpcalc under the real name.
+        staged_bin = target_bin.with_name(f".{target_bin.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            self._extract_binary_from_archive(archive_bytes, staged_bin)
+            if not os.name.startswith("nt"):
+                current_mode = staged_bin.stat().st_mode
+                staged_bin.chmod(current_mode | stat.S_IXUSR | stat.S_IXGRP)
+            os.replace(staged_bin, target_bin)
+        except BaseException:
+            # A failed removal must not replace the original error.
+            with contextlib.suppress(OSError):
+                staged_bin.unlink(missing_ok=True)
+            raise
         return target_bin
 
     def _extract_binary_from_archive(self, archive_bytes: bytes, target_bin: Path) -> None:

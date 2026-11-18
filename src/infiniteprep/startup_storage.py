@@ -15,6 +15,7 @@ from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.migrations.backup import newer_copy_path_for, restore_pre_migration_backup
 from infiniteprep.db.migrations.runner import NewerLibraryError
 from infiniteprep.db.repositories import Repository
+from infiniteprep.private_files import create_private_dirs
 from infiniteprep.storage_paths import (
     AppImageLaunch,
     ConfirmFallback,
@@ -127,7 +128,7 @@ def open_storage(
         )
         if locations is None:
             return QUIT_EXIT_CODE
-        locations.data_dir.mkdir(parents=True, exist_ok=True)
+        create_private_dirs(locations.data_dir)
         repository = _open_repository(locations.data_dir / DATABASE_FILE_NAME, confirm_restore)
         if repository is None:
             return QUIT_EXIT_CODE

@@ -11,7 +11,6 @@ import logging
 import os
 import shutil
 import sqlite3
-import uuid
 from collections.abc import Mapping
 from contextlib import closing
 from datetime import UTC, datetime
@@ -19,6 +18,7 @@ from pathlib import Path
 from typing import Final
 
 from infiniteprep.db.migrations import LATEST_VERSION, ROW_COUNT_QUERIES
+from infiniteprep.private_files import create_new_private_file, private_staging_dir
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +93,9 @@ def copy_database(source: sqlite3.Connection, target: Path) -> None:
 
     The copy switches to a rollback journal. A read-only open then needs no -wal or -shm file.
     """
+    # The copy holds the whole library. It starts as a new owner-only file. A name that
+    # already exists, a planted link included, fails the copy.
+    create_new_private_file(target)
     target_conn = sqlite3.connect(target)
     try:
         source.backup(target_conn)
@@ -182,18 +185,17 @@ def create_verified_backup(
     that holds the write lock. The lock still keeps other writers out during the copy.
     """
     backup = backup_path_for(db_path)
-    # A unique name per run keeps two instances from writing one temporary file.
-    temp = backup.with_name(f"{backup.name}.{uuid.uuid4().hex}{TEMP_SUFFIX}")
     counts = table_row_counts(source)
-    try:
+    # The copy, its record write, and its check reopen the file by name. The owner-only
+    # staging folder keeps another account from swapping that name between the steps. Each
+    # run gets its own folder. Two instances never share a temporary file.
+    with private_staging_dir(db_path.parent) as staging:
+        temp = staging / f"{backup.name}{TEMP_SUFFIX}"
         with closing(sqlite3.connect(db_path)) as reader:
             copy_database(reader, temp)
         _record_in_copy(temp, source_version, counts)
         verify_backup_file(temp, expected_version=source_version, expected_counts=counts)
         os.replace(temp, backup)
-    except (sqlite3.Error, OSError):
-        temp.unlink(missing_ok=True)
-        raise
     sidecar_path_for(db_path).unlink(missing_ok=True)
     return backup
 
@@ -338,17 +340,18 @@ def restore_pre_migration_backup(
     version, counts = verified_backup_record(db_path, known_version=known_version)
     kept = newer_copy_path_for(db_path, now or _utc_now())
     _check_kept_names_free(kept)
-    staged = db_path.with_name(db_path.name + RESTORE_TEMP_SUFFIX)
-    staged.unlink(missing_ok=True)
-    try:
+    # Earlier versions staged the copy beside the library. A crash there left this name.
+    db_path.with_name(db_path.name + RESTORE_TEMP_SUFFIX).unlink(missing_ok=True)
+    # The copy, the record drop, and the check reopen the staged file by name. The owner-only
+    # staging folder keeps another account from swapping that name between the steps.
+    with private_staging_dir(db_path.parent) as staging:
+        staged = staging / (db_path.name + RESTORE_TEMP_SUFFIX)
+        create_new_private_file(staged)
         shutil.copyfile(backup_path_for(db_path), staged)
         _drop_backup_record(staged)
         # The swap installs the staged file. A backup changed after its check fails here.
         verify_backup_file(staged, expected_version=version, expected_counts=counts)
         return _swap_in_staged_copy(db_path, kept, staged)
-    except (OSError, sqlite3.Error):
-        staged.unlink(missing_ok=True)
-        raise
 
 
 def _utc_now() -> datetime:
