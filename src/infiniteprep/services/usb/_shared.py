@@ -33,6 +33,14 @@ MAX_MOUNT_PATH_LEN: Final[int] = 4096
 FIRST_PRINTABLE_CODE_POINT: Final[int] = 0x20
 DEL_CODE_POINT: Final[int] = 0x7F
 PARENT_DIR_PART: Final[str] = ".."
+# Windows opens a device for these names in any folder, with or without an extension.
+WINDOWS_RESERVED_DEVICE_NAMES: Final[frozenset[str]] = frozenset(
+    ["CON", "PRN", "AUX", "NUL"]
+    + [f"COM{number}" for number in range(1, 10)]
+    + [f"LPT{number}" for number in range(1, 10)]
+)
+# A colon inside a Windows name selects a drive or an alternate data stream.
+WINDOWS_STREAM_SEPARATOR: Final[str] = ":"
 MAX_TEMP_ATTEMPTS: Final[int] = 16
 MAX_USB_JSON_BYTES: Final[int] = 16 * 1024 * 1024
 ANSI_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
@@ -143,7 +151,7 @@ def sanitize_mount_point(val: Any) -> str | None:
     """
     if not isinstance(val, str) or not val.startswith("/") or len(val) > MAX_MOUNT_PATH_LEN:
         return None
-    if PARENT_DIR_PART in val or not val.isprintable():
+    if PARENT_DIR_PART in val.split("/") or not val.isprintable():
         return None
     return val
 
@@ -155,16 +163,32 @@ def has_path_control_characters(text: str) -> bool:
     )
 
 
+def _path_parts(text: str) -> list[str]:
+    """Split text on both the POSIX and the Windows separator."""
+    return text.replace("\\", "/").split("/")
+
+
 def _has_unsafe_path_text(text: str) -> bool:
     """Return True for empty text, control characters, or a parent directory segment."""
     if not text or has_path_control_characters(text):
         return True
-    return PARENT_DIR_PART in text.replace("\\", "/").split("/")
+    return PARENT_DIR_PART in _path_parts(text)
+
+
+def _is_windows_special_name(part: str) -> bool:
+    """Return True for a device name or a name that holds a stream or drive colon."""
+    if WINDOWS_STREAM_SEPARATOR in part:
+        return True
+    # Windows ignores the extension and trailing spaces when it matches a device name.
+    stem = part.split(".", 1)[0].rstrip(" ").upper()
+    return stem in WINDOWS_RESERVED_DEVICE_NAMES
 
 
 def is_safe_relative_path(text: str) -> bool:
-    """Return True when text names a path below its root on POSIX and on Windows."""
+    """Return True when text names a file path below its root on POSIX and on Windows."""
     if _has_unsafe_path_text(text):
+        return False
+    if any(_is_windows_special_name(part) for part in _path_parts(text)):
         return False
     windows_path = PureWindowsPath(text)
     return not (text.startswith(("/", "\\")) or windows_path.drive or windows_path.root)
