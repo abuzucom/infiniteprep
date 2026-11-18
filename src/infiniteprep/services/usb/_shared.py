@@ -35,11 +35,18 @@ DEL_CODE_POINT: Final[int] = 0x7F
 PARENT_DIR_PART: Final[str] = ".."
 # Path components that add no folder: an empty part between separators and ".".
 CURRENT_DIR_PARTS: Final[frozenset[str]] = frozenset({"", "."})
+# Port numbers 0 to 9. Windows also reads the superscript digits one, two, and three.
+WINDOWS_PORT_SUFFIXES: Final[tuple[str, ...]] = (
+    *(str(number) for number in range(10)),
+    chr(0x00B9),
+    chr(0x00B2),
+    chr(0x00B3),
+)
 # Windows opens a device for these names in any folder, with or without an extension.
 WINDOWS_RESERVED_DEVICE_NAMES: Final[frozenset[str]] = frozenset(
-    ["CON", "PRN", "AUX", "NUL"]
-    + [f"COM{number}" for number in range(1, 10)]
-    + [f"LPT{number}" for number in range(1, 10)]
+    ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"]
+    + [f"COM{suffix}" for suffix in WINDOWS_PORT_SUFFIXES]
+    + [f"LPT{suffix}" for suffix in WINDOWS_PORT_SUFFIXES]
 )
 # A colon inside a Windows name selects a drive or an alternate data stream.
 WINDOWS_STREAM_SEPARATOR: Final[str] = ":"
