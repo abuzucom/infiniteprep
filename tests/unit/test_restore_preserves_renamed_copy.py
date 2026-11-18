@@ -60,14 +60,14 @@ def renamed_crash(
 
 
 def test_interrupted_restore_keeps_a_copy_of_the_renamed_file(renamed_crash: Any) -> None:
-    """The restore removes the renamed file only after a verified copy reaches the backups."""
+    """An unfinished write proves nothing about the renamed file, so it stays and is copied."""
     write_svc, operation_id, source, renamed, original_hash = renamed_crash
     renamed_bytes = renamed.read_bytes()
 
     write_svc.restore_interrupted(operation_id)
 
     assert compute_sha256(source) == original_hash
-    assert not renamed.exists()
+    assert renamed.read_bytes() == renamed_bytes
     assert renamed_bytes in backup_contents(write_svc.backup_dir)
 
 

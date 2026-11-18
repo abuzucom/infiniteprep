@@ -298,21 +298,33 @@ class WriteService:
         restored_hash = self._replace_with_staged_copy(
             backup_path, prev_path, record.pre_write_hash
         )
-        if renamed is not None:
-            discard_if_same_file(*renamed)
+        self._remove_written_rename(record, renamed)
         return restored_hash
 
     def _preserve_renamed_file(
         self, record: ChangeRecord, renamed: tuple[Path, FileIdentity] | None
     ) -> None:
-        """Copy the renamed file into the backup directory before the restore removes it.
-
-        The identity check keeps a file that replaces the renamed one during the restore.
-        A replacement that arrived earlier carries the identity the check reads, so this
-        verified copy is what keeps that file from being lost.
-        """
+        """Copy the renamed file into the backup directory before the restore runs."""
         if renamed is not None:
             self._preserve_files_before_restore(record, renamed[0], renamed[0])
+
+    @staticmethod
+    def _remove_written_rename(
+        record: ChangeRecord, renamed: tuple[Path, FileIdentity] | None
+    ) -> None:
+        """Remove the renamed file only when it still holds the bytes this write produced.
+
+        A finished write recorded the hash of its output. An unfinished write recorded none,
+        so nothing proves that the file at the new name came from this write. That file
+        then stays where it is, and the person removes it after checking it.
+        """
+        if renamed is None or record.operation_status == OperationStatus.IN_PROGRESS:
+            return
+        path, identity = renamed
+        if not record.post_write_hash or compute_sha256(path) != record.post_write_hash:
+            return
+        # The identity check skips a file another program put at the name during the restore.
+        discard_if_same_file(path, identity)
 
     @staticmethod
     def _renamed_file(
@@ -413,8 +425,7 @@ class WriteService:
         restored_hash = self._replace_with_staged_copy(
             backup_path, prev_path, record.pre_write_hash
         )
-        if renamed is not None:
-            discard_if_same_file(*renamed)
+        self._remove_written_rename(record, renamed)
 
         record.operation_status = final_status
         self.repo.upsert_change_record(record)
