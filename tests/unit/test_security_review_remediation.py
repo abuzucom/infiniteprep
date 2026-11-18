@@ -387,9 +387,9 @@ def _oversized_json(limit: int) -> bytes:
 
 
 def _patch_urlopen(monkeypatch: pytest.MonkeyPatch, module: Any, limit: int) -> _OversizedResponse:
-    """Route the module's urlopen to an oversized fake response."""
+    """Route the module's no-redirect opener to an oversized fake response."""
     response = _OversizedResponse(_oversized_json(limit))
-    monkeypatch.setattr(module.urllib.request, "urlopen", lambda *_a, **_k: response)
+    monkeypatch.setattr(module.http_openers, "open_without_redirects", lambda *_a, **_k: response)
     return response
 
 

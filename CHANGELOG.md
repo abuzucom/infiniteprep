@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.76.2] (2026-11-18)
+## [0.76.4] (2026-11-18)
 
 ### Fixed
 
@@ -13,7 +13,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The toolbar and Settings theme pickers show Dark Teal, Light Teal, Native, and Match System. They showed file names such as `dark_teal.xml` before. Settings still store the theme identifier, so existing settings files stay valid.
   - The Settings dialog leaves out the Playback tab, which held no setting and only said so.
   - The new `tests/unit/test_theme_labels.py` covers the labels, the stored identifier, and the hidden tab. With active human approval, five existing theme and settings test files now select themes by identifier instead of picker text, and the tab list no longer expects Playback.
-  - The version advances from 0.76.1 to 0.76.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.76.3 to 0.76.4 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- Field row actions and the write recovery prompt guard typed text and backups (accessibility audit).
+  - A Save or Accept that raises no longer leaves its row marked. The marker dropped that row's unsaved text on the next refresh before.
+  - A refused Accept keeps the row's typed text. Only an accepted value replaces it.
+  - Lock on a field without an approved value says to save or accept a value first. It changed nothing and said nothing before.
+  - Mark as finished in the interrupted write recovery dialog asks first, with No as the default. One click ended the backup restore path before.
+  - The new `tests/unit/test_row_action_failures.py` covers the failed save, the refused and the successful accept, and Lock. `tests/unit/test_ui_recovery_dialog.py` answers the new prompt and adds a declined prompt test.
+  - The version advances from 0.76.1 to 0.76.3 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ## [0.76.1] (2026-11-17)
 
@@ -100,6 +107,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `tests/unit/test_adapter_latent_defects.py` covers each change.
   - `test_discogs_never_caches_a_response_that_is_not_an_object` in `tests/unit/test_provider_and_llm_validation.py` checks for an empty result and a second request in place of a raised error. The repository owner approved this edit.
   - The version advances from 0.75.3 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- Requests that carry a credential no longer follow a redirect.
+  - The Discogs, MusicBrainz, and AcoustID adapters and the LLM reasoning adapter send through the new `adapters/http_openers.py` opener. That opener holds no redirect handler, so a redirect response raises an error. The three adapters pass it to the shared `adapters/http_json.py` fetch.
+  - urllib copied every header, the Discogs token and the LLM Bearer key included, to the redirect target. A redirect could also move a request from https to plain http. The AcoustID key rides in the query string and followed every redirect too.
+  - The LLM endpoint check covered the first URL only. A redirect now ends the request before it reaches a host the check never saw.
+  - The version advances from 0.76.0 to 0.76.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Status changes reach screen readers, and toolbar actions say what they did (accessibility audit).
   - A playback status, a spectrum analysis failure, a finished batch, and the write preview status each raise a screen reader announcement. A label update alone was silent before. The new `announce` helper in `ui/accessible_names.py` sends them.
   - Identify & Analyze, Bulk Approve, Preview & Apply Writes, Transcode, and Export say why they did nothing when no file is visible. Each ended without a word before.
