@@ -45,7 +45,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `tag_data_warnings` field of `FileWritePlan` lists each item. The Safety Status cell shows `READY WITH DATA LOSS` and names them. The write stays allowed.
   - A compressed ID3v2.2 tag yields no frames at all. The preview now blocks that write, because it would remove the whole tag.
   - A tag or file that the check cannot read blocks the write with a validation error that names the reason. The preview showed `READY` for such a file before.
-  - The write runs the check again on the copy it writes. A result that differs from the preview stops the write before any tag changes.
+  - The write runs the check again on the copy it writes. A result that differs from the preview stops the write before any tag changes. The new `TagCheckChangedError` records the write as failed without a restore, as the payload and source-change errors do.
   - The new `tests/unit/test_dropped_tag_data_preview.py`, `tests/unit/test_unreadable_tag_preview.py`, and `tests/unit/test_shared_folder_warning_and_apply_recheck.py` cover each case.
 - The library, its backups, and the settings stay readable by their owner only.
   - The new `private_files.py` creates missing app folders with mode 0700 and library files with mode 0600. An existing library loses its group and other bits on open. SQLite copies that mode to the WAL and SHM files. The migration backup and the staged restore copy start owner only. Existing folders keep their mode. Windows ignores these bits.

@@ -187,6 +187,14 @@ class SourceChangedDuringWriteError(OSError):
     """
 
 
+class TagCheckChangedError(ValueError):
+    """Raised when the copy to write gives a different dropped tag data result than the preview.
+
+    The check runs before any tag reaches the copy. The source keeps its bytes. A rollback
+    then has nothing to restore.
+    """
+
+
 def _require_plain_name(component: str) -> str:
     """Return component, or raise ValueError when it could name a different directory.
 
@@ -1151,11 +1159,11 @@ class MetadataTagAdapter:
             self._discard_staged_copy(staged)
 
     def _ensure_tag_check_unchanged(self, staged: Path, expected_warnings: list[str]) -> None:
-        """Raise ValueError when the copy to write gives a different dropped tag data result."""
+        """Raise TagCheckChangedError when the copy gives a different dropped tag data result."""
         errors: list[str] = []
         warnings = self._check_dropped_tag_data(staged, errors)
         if errors or warnings != expected_warnings:
-            raise ValueError(
+            raise TagCheckChangedError(
                 "The tag data check on the file to write differs from the preview; no tags "
                 "were written. Refresh the preview and retry."
             )

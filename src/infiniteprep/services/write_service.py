@@ -15,6 +15,7 @@ from infiniteprep.adapters.metadata_io.audio_payload import AudioPayloadVerifica
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
     SourceChangedDuringWriteError,
+    TagCheckChangedError,
     copy_to_new_verified_file,
     operation_backup_path,
     portable_backup_name,
@@ -31,6 +32,14 @@ from infiniteprep.domain.ports import FileWritePlan
 from infiniteprep.hashing import compute_sha256
 
 logger = logging.getLogger(__name__)
+
+# Each of these failures stops the write before the staged copy reaches the source. A restore
+# of the backup then could overwrite a newer file. The record goes to FAILED with no restore.
+UNTOUCHED_SOURCE_FAILURES: tuple[type[Exception], ...] = (
+    SourceChangedDuringWriteError,
+    AudioPayloadVerificationError,
+    TagCheckChangedError,
+)
 
 
 class PendingRecoveryError(RuntimeError):
@@ -266,7 +275,7 @@ class WriteService:
     def _roll_back_failed_write(self, pending: ChangeRecord, failure: Exception) -> None:
         """Record a failed write as FAILED or ROLLED_BACK, or keep it pending for recovery."""
         pending.error_message = f"{failure.__class__.__name__}: {failure}"
-        if isinstance(failure, (SourceChangedDuringWriteError, AudioPayloadVerificationError)):
+        if isinstance(failure, UNTOUCHED_SOURCE_FAILURES):
             # The staged write never reached the source. Restoring could overwrite a newer file.
             pending.operation_status = OperationStatus.FAILED
             self.repo.upsert_change_record(pending)
