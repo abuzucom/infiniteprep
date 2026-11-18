@@ -22,10 +22,14 @@ MIX_KEYWORDS: Final[tuple[str, ...]] = (
     "bootleg",
     "vip",
 )
-PAREN_PATTERN: Final[re.Pattern[str]] = re.compile(r"^([^\(\[\-]+?)\s*[\(\[]([^\)\]]+)[\)\]]$")
+# Each capture before a whitespace run ends on a non-space character. A lazy capture that can
+# also hold spaces splits one run many ways and backtracks quadratically on long runs.
+PAREN_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"^([^\(\[\-]*[^\(\[\-\s])\s*[\(\[]([^\)\]]+)[\)\]]$"
+)
 POSSESSIVE_REMIXER_PATTERN: Final[re.Pattern[str]] = re.compile(r"^([A-Za-z0-9 &\.]+?)'s\s+.+$")
 BY_REMIXER_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^([A-Za-z0-9 &\.]+?)\s+(?:remix|mix|dub|rework|edit)$", re.IGNORECASE
+    r"^([A-Za-z0-9 &.]*[A-Za-z0-9&.])\s+(?:remix|mix|dub|rework|edit)$", re.IGNORECASE
 )
 # A keyword counts only as a whole word. "Dublin" holds "dub" and names no mix.
 MIX_KEYWORD_PATTERN: Final[re.Pattern[str]] = re.compile(
