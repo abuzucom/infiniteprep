@@ -87,6 +87,8 @@ class FileWritePlan:
     backup_destination_path: Path
     collision_warnings: list[str] = field(default_factory=list)
     validation_errors: list[str] = field(default_factory=list)
+    # Tag data the codec cannot carry over. A write still runs and loses that data.
+    tag_data_warnings: list[str] = field(default_factory=list)
 
     @property
     def is_safe_to_apply(self) -> bool:

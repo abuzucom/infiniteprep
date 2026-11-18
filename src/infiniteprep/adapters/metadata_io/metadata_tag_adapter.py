@@ -45,6 +45,7 @@ from infiniteprep.adapters.metadata_io.id3_containers import (
     write_wav_tag,
 )
 from infiniteprep.adapters.metadata_io.id3v2 import (
+    COMPRESSED_V22_TAG_NOTE,
     LANGUAGE_FRAMES,
     Id3FormatError,
     Id3Frame,
@@ -558,6 +559,46 @@ MAPPED_PARSERS: Final[dict[AudioFormat, Callable[[bytes], _ParsedAudio]]] = {
     AudioFormat.FLAC: _parse_flac,
     AudioFormat.M4A: _parse_m4a,
 }
+DROPPED_TAG_DATA_WARNING: Final[str] = (
+    "A write removes tag data the app cannot read: {names}. "
+    "Cancel and edit the file with another tag editor to keep that data."
+)
+COMPRESSED_V22_TAG_ERROR: Final[str] = (
+    "The file has a compressed ID3v2.2 tag the app cannot read; a write would remove the "
+    "whole tag. Convert the tag with another tag editor before writing."
+)
+
+
+def _id3_dropped(tag: Id3Tag | None) -> tuple[str, ...]:
+    """Return the frames an ID3 rewrite cannot carry over."""
+    return tag.dropped_frames if tag is not None else ()
+
+
+def _flac_dropped(data: bytes) -> tuple[str, ...]:
+    """Return the Vorbis comment entries a FLAC rewrite cannot carry over."""
+    comment = read_flac_comment(data)
+    return comment.dropped_entries if comment is not None else ()
+
+
+# Each writer rebuilds the tag from the parsed frames, so a frame the parser drops is lost.
+DROPPED_TAG_READERS: Final[dict[AudioFormat, Callable[[bytes], tuple[str, ...]]]] = {
+    AudioFormat.MP3: lambda data: _id3_dropped(read_mp3_tag(data)),
+    AudioFormat.WAV: lambda data: _id3_dropped(read_wav_tag(data)),
+    AudioFormat.AIFF: lambda data: _id3_dropped(read_aiff_tag(data)),
+    AudioFormat.FLAC: _flac_dropped,
+}
+
+
+def read_dropped_tag_data(file_path: Path, fmt: AudioFormat) -> tuple[str, ...]:
+    """Return the tag data a rewrite of file_path would lose. Unwritable formats return ()."""
+    reader = DROPPED_TAG_READERS.get(fmt)
+    if reader is None:
+        return ()
+    with (
+        file_path.open("rb") as handle,
+        mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as mapped,
+    ):
+        return reader(mapped)
 
 
 def _apply_id3_fields(tag: Id3Tag | None, tags_to_write: dict[str, str]) -> Id3Tag:
@@ -913,7 +954,7 @@ class MetadataTagAdapter:
             proposed_to_write = self.format_output_tags(proposed_to_write)
         except ValueError as exc:
             validation_errors.append(str(exc))
-        backup_destination_path = backup_dir / f"{file_asset.id}_{source_path.name}"
+        tag_data_warnings = self._check_dropped_tag_data(source_path, validation_errors)
 
         return FileWritePlan(
             file_id=file_asset.id,
@@ -924,10 +965,32 @@ class MetadataTagAdapter:
             existing_tags=existing_std,
             proposed_tags_to_write=proposed_to_write,
             preserved_custom_tags=preserved_custom,
-            backup_destination_path=backup_destination_path,
+            backup_destination_path=backup_dir / f"{file_asset.id}_{source_path.name}",
             collision_warnings=collision_warnings,
             validation_errors=validation_errors,
+            tag_data_warnings=tag_data_warnings,
         )
+
+    def _check_dropped_tag_data(self, source_path: Path, validation_errors: list[str]) -> list[str]:
+        """Return warnings for tag data a rewrite would lose.
+
+        A compressed ID3v2.2 tag loses every frame, so its error goes into validation_errors
+        and blocks the write instead.
+        """
+        if not source_path.is_file():
+            return []
+        try:
+            dropped = read_dropped_tag_data(source_path, self.detect_format(source_path))
+        except (OSError, ValueError) as exc:
+            # The write parses the same tag and reports this failure with its own message.
+            logger.info("Skipped the dropped tag data check (%s).", type(exc).__name__)
+            return []
+        if COMPRESSED_V22_TAG_NOTE in dropped:
+            validation_errors.append(COMPRESSED_V22_TAG_ERROR)
+            return []
+        if not dropped:
+            return []
+        return [DROPPED_TAG_DATA_WARNING.format(names=", ".join(dropped))]
 
     def _validate_source_for_write(self, file_asset: FileAsset, source_path: Path) -> list[str]:
         """Validate write format support, file existence, and content hash match."""

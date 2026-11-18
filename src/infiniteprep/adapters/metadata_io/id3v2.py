@@ -35,6 +35,8 @@ MAX_TEXT_VALUES: Final[int] = 4096
 TAG_FLAG_UNSYNC: Final[int] = 0x80
 TAG_FLAG_EXTENDED: Final[int] = 0x40
 TAG_FLAG_FOOTER: Final[int] = 0x10
+# The dropped_frames entry for a v2.2 tag whose whole body the parser cannot read.
+COMPRESSED_V22_TAG_NOTE: Final[str] = "compressed ID3v2.2 tag"
 
 # Format flags of the second frame flag byte, by major version.
 V23_COMPRESSED, V23_ENCRYPTED, V23_GROUPED = 0x80, 0x40, 0x20
@@ -168,7 +170,7 @@ def parse_id3v2(data: bytes) -> Id3Tag | None:
         body = remove_unsynchronisation(body)
     if major == V22 and flags & TAG_FLAG_EXTENDED:
         # Bit 6 in v2.2 marks a compression scheme the standard never defined.
-        return Id3Tag(source_version=major, dropped_frames=("compressed ID3v2.2 tag",))
+        return Id3Tag(source_version=major, dropped_frames=(COMPRESSED_V22_TAG_NOTE,))
     start = _extended_header_length(body, major) if flags & TAG_FLAG_EXTENDED else 0
     # A v2.4 header flag marks every frame body as unsynchronised. Frame headers stay plain.
     forced_flags = V24_UNSYNC if major == V24 and flags & TAG_FLAG_UNSYNC else 0

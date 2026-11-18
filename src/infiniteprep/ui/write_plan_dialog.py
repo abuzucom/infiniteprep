@@ -32,6 +32,16 @@ NO_SAFE_PLANS_TEXT: Final[str] = (
 )
 
 
+def format_plan_status(plan: FileWritePlan) -> str:
+    """Return the Safety Status cell text, with any tag data loss after READY."""
+    if not plan.is_safe_to_apply:
+        issues = plan.validation_errors + plan.collision_warnings
+        return f"BLOCKED: {'; '.join(issues)}"
+    if plan.tag_data_warnings:
+        return f"READY WITH DATA LOSS: {'; '.join(plan.tag_data_warnings)}"
+    return "READY"
+
+
 class WritePlanDialog(QDialog):
     """Modal dialog displaying exact tag changes, rename preview, and backup paths."""
 
@@ -132,8 +142,7 @@ class WritePlanDialog(QDialog):
         """Render a single FileWritePlan row in the preview table."""
         tags_str = ", ".join(f"{k}={v}" for k, v in plan.proposed_tags_to_write.items()) or "None"
         preserved_str = ", ".join(plan.preserved_custom_tags.keys()) or "None"
-        issues = plan.validation_errors + plan.collision_warnings
-        status_str = "READY" if plan.is_safe_to_apply else f"BLOCKED: {'; '.join(issues)}"
+        status_str = format_plan_status(plan)
         cells = [
             plan.source_path.name,
             plan.destination_path.name,
