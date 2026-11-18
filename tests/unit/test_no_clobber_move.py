@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import ctypes
 import errno
-import os
 import sys
 from pathlib import Path
 
@@ -14,17 +14,9 @@ from infiniteprep.adapters.metadata_io.no_clobber_move import move_to_new_path
 
 SOURCE_BYTES = b"tagged audio"
 EXISTING_BYTES = b"another program saved this file"
-# The kernel no-replace rename on Linux and macOS, and the hard link path every POSIX
-# system offers. Windows always takes MoveFileEx, so both cases cover it the same way.
-MOVE_PATHS = ("native", "hard_link")
-
-
-@pytest.fixture(params=MOVE_PATHS)
-def move_path(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> str:
-    """Select the native rename or force the hard link fallback."""
-    if request.param == "hard_link":
-        monkeypatch.setattr(no_clobber_move, "native_no_replace_rename", lambda: None)
-    return str(request.param)
+# The C library returns this value from a failed rename call.
+FAILED_CALL_RESULT = -1
+POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="Windows moves with MoveFileEx.")
 
 
 def make_source(tmp_path: Path) -> Path:
@@ -34,7 +26,14 @@ def make_source(tmp_path: Path) -> Path:
     return source
 
 
-def test_move_to_a_free_name_moves_the_file(tmp_path: Path, move_path: str) -> None:
+def assert_source_kept(tmp_path: Path, source: Path, destination: Path) -> None:
+    """The source keeps its name and bytes, and nothing appears at the destination."""
+    assert source.read_bytes() == SOURCE_BYTES
+    assert not destination.exists()
+    assert [path.name for path in tmp_path.iterdir()] == ["track.wav"]
+
+
+def test_move_to_a_free_name_moves_the_file(tmp_path: Path) -> None:
     """The file arrives under the new name and leaves nothing else behind."""
     source = make_source(tmp_path)
     destination = tmp_path / "renamed.wav"
@@ -45,7 +44,7 @@ def test_move_to_a_free_name_moves_the_file(tmp_path: Path, move_path: str) -> N
     assert [path.name for path in tmp_path.iterdir()] == ["renamed.wav"]
 
 
-def test_move_onto_an_existing_file_keeps_both_files(tmp_path: Path, move_path: str) -> None:
+def test_move_onto_an_existing_file_keeps_both_files(tmp_path: Path) -> None:
     """The existing file stays unchanged, the source keeps its name, and no extra file appears."""
     source = make_source(tmp_path)
     destination = tmp_path / "renamed.wav"
@@ -59,22 +58,36 @@ def test_move_onto_an_existing_file_keeps_both_files(tmp_path: Path, move_path: 
     assert sorted(path.name for path in tmp_path.iterdir()) == ["renamed.wav", "track.wav"]
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Windows moves with MoveFileEx only.")
-def test_file_system_without_hard_links_keeps_the_source(
+@POSIX_ONLY
+def test_system_without_an_atomic_rename_keeps_the_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Without a safe move, the file keeps its old name and nothing replaces the target."""
+    """Without a no-replace rename call, the move is refused and the file keeps its name."""
     source = make_source(tmp_path)
     destination = tmp_path / "renamed.wav"
     monkeypatch.setattr(no_clobber_move, "native_no_replace_rename", lambda: None)
 
-    def refuse_link(*_args: object) -> None:
-        raise OSError(errno.EPERM, os.strerror(errno.EPERM))
+    with pytest.raises(OSError, match="no move that refuses an existing file"):
+        move_to_new_path(source, destination)
 
-    monkeypatch.setattr(no_clobber_move.os, "link", refuse_link)
+    assert_source_kept(tmp_path, source, destination)
+
+
+@POSIX_ONLY
+def test_file_system_that_rejects_the_atomic_rename_keeps_the_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A file system that answers EINVAL to the no-replace flag refuses the move."""
+    source = make_source(tmp_path)
+    destination = tmp_path / "renamed.wav"
+
+    def reject_flag(_source: bytes, _destination: bytes) -> int:
+        ctypes.set_errno(errno.EINVAL)
+        return FAILED_CALL_RESULT
+
+    monkeypatch.setattr(no_clobber_move, "native_no_replace_rename", lambda: reject_flag)
 
     with pytest.raises(OSError, match="no move that refuses an existing file"):
         move_to_new_path(source, destination)
 
-    assert source.read_bytes() == SOURCE_BYTES
-    assert not destination.exists()
+    assert_source_kept(tmp_path, source, destination)

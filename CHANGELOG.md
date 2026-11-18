@@ -34,13 +34,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - Writes, recovery, transcodes, and playlist exports no longer replace or delete a file they did not write.
-  - A rename moves the file with one atomic call that fails on an existing name: `renameat2` with `RENAME_NOREPLACE` on Linux, `renamex_np` with `RENAME_EXCL` on macOS, `MoveFileEx` without replace on Windows, and a hard link then unlink elsewhere. A file that appeared after the existence check stayed exposed to a POSIX rename, which replaces it without a word. A file system that offers none of these calls refuses the rename and keeps the old name.
+  - A rename moves the file with one atomic call that fails on an existing name: `renameat2` with `RENAME_NOREPLACE` on Linux, `renamex_np` with `RENAME_EXCL` on macOS, and `MoveFileEx` without replace on Windows. A file that appeared after the existence check stayed exposed to a POSIX rename, which replaces it without a word. A system or file system without such a call refuses the rename and keeps the old name. A hard link followed by an unlink is no safe substitute, because another program can replace the new name between the two calls.
   - A rollback or an interrupted write restore removes the file at the planned name only when the rename ran. A refused rename, or a crash before the rename, used to delete the file that already held the name.
   - Mark as Finished points the record at the source when the rename never ran. It picked the file at the planned name before.
   - A transcode refuses an output name that already holds a file. Sibling export replaced an earlier export or any file with the `_XDJ` name. The finished output moves into place with the same atomic move.
-  - A playlist export writes a new file beside the playlist and swaps it in. A failed write truncated the previous playlist before.
+  - A playlist export writes a new file with a short fixed name beside the playlist and swaps it in. A failed write truncated the previous playlist before.
   - The `#EXTINF` text replaces every control character, NEL, U+2028, and U+2029 with a space. A parser that splits on Unicode line boundaries read extra lines before.
-  - The new `adapters/metadata_io/no_clobber_move.py` holds the shared move. The new `tests/unit/test_write_and_export_no_clobber.py` and `tests/unit/test_no_clobber_move.py` cover each change.
+  - The new `adapters/metadata_io/no_clobber_move.py` holds the shared move. The new `tests/unit/test_write_and_export_no_clobber.py` and `tests/unit/test_no_clobber_move.py` cover each change. The repository owner approved the edit that dropped the hard link cases from `tests/unit/test_no_clobber_move.py`.
   - The version advances from 0.78.0 to 0.78.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - The Identify & Analyze All, Preview & Apply Writes, Change Journal & Restore, and Settings & Providers buttons show their ampersand again. Qt read the single ampersand as a hidden Alt marker before.
 - The version advances from 0.76.4 to 0.77.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.

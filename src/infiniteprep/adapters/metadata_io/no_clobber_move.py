@@ -21,10 +21,6 @@ MACOS_RENAME_EXCL: Final[int] = 0x00000004
 UNSUPPORTED_RENAME_ERRNOS: Final[frozenset[int]] = frozenset(
     {errno.EINVAL, errno.ENOSYS, errno.ENOTSUP, errno.EOPNOTSUPP}
 )
-# A file system without hard links, such as FAT, reports one of these codes from link.
-UNSUPPORTED_LINK_ERRNOS: Final[frozenset[int]] = frozenset(
-    {errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP, errno.EMLINK}
-)
 
 NoReplaceRename = Callable[[bytes, bytes], int]
 
@@ -34,6 +30,7 @@ def move_to_new_path(source: Path, destination: Path) -> None:
 
     Each platform path makes one atomic call that fails on an existing destination. No
     existence check and no placeholder precede that call, so no file can slip in between.
+    A system without such a call raises OSError, and the file keeps its old name.
     """
     try:
         _move_without_replacing(source, destination)
@@ -44,14 +41,22 @@ def move_to_new_path(source: Path, destination: Path) -> None:
 
 
 def _move_without_replacing(source: Path, destination: Path) -> None:
-    """Pick the atomic no-replace move this platform offers."""
+    """Run the atomic no-replace move this platform offers, or refuse the move.
+
+    A hard link followed by an unlink is no substitute. Another program can replace the
+    new name between the two calls, and the unlink then drops the only copy of the file.
+    """
     if sys.platform == "win32":
         # MoveFileEx without MOVEFILE_REPLACE_EXISTING refuses an existing destination.
         os.rename(source, destination)
         return
-    if _rename_without_replacing(source, destination):
-        return
-    _link_then_unlink(source, destination)
+    if not _rename_without_replacing(source, destination):
+        raise OSError(
+            errno.ENOTSUP,
+            "The system offers no move that refuses an existing file. The file keeps its "
+            "old name. Rename it by hand",
+            str(source),
+        )
 
 
 def _rename_without_replacing(source: Path, destination: Path) -> bool:
@@ -108,24 +113,3 @@ def _macos_renamex_np(libc: ctypes.CDLL) -> NoReplaceRename | None:
     renamex_np.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
     renamex_np.restype = ctypes.c_int
     return lambda source, destination: renamex_np(source, destination, MACOS_RENAME_EXCL)
-
-
-def _link_then_unlink(source: Path, destination: Path) -> None:
-    """Move through a hard link, which fails atomically on an existing destination."""
-    try:
-        os.link(source, destination)
-    except OSError as exc:
-        if exc.errno in UNSUPPORTED_LINK_ERRNOS:
-            raise OSError(
-                exc.errno,
-                "The file system offers no move that refuses an existing file. The file "
-                "keeps its old name. Rename it by hand",
-                str(source),
-            ) from exc
-        raise
-    try:
-        os.unlink(source)
-    except OSError:
-        # The link call created destination, so the extra name belongs to this move.
-        destination.unlink(missing_ok=True)
-        raise

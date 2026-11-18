@@ -89,7 +89,8 @@ def _write_without_following_links(destination: Path, content: str) -> None:
             "The playlist destination is a symbolic link; choose a regular file name",
             str(destination),
         )
-    staged = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.tmp")
+    # A fixed-length name stays within the file name limit for any playlist name.
+    staged = destination.with_name(f".playlist-{uuid.uuid4().hex}.tmp")
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | NO_FOLLOW_FLAG | BINARY_FLAG
     descriptor = os.open(staged, flags, PLAYLIST_FILE_MODE)
     try:
