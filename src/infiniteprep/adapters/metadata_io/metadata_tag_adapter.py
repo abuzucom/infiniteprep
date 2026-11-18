@@ -1099,7 +1099,11 @@ class MetadataTagAdapter:
             )
         self._create_verified_backup(source_path, backup_path, current_hash)
         self._write_verified_copy(
-            source_path, write_plan.proposed_tags_to_write, operation_id, current_hash
+            source_path,
+            write_plan.proposed_tags_to_write,
+            operation_id,
+            current_hash,
+            expected_tag_warnings=write_plan.tag_data_warnings,
         )
         final_path = self._execute_optional_rename(source_path, write_plan)
         post_hash = compute_sha256(final_path)
@@ -1124,15 +1128,20 @@ class MetadataTagAdapter:
         tags_to_write: dict[str, str],
         operation_id: str,
         expected_hash: str,
+        expected_tag_warnings: list[str] | None = None,
     ) -> None:
         """Write tags to a sibling copy, verify it, then atomically swap it over the source.
 
         A crash at any point leaves the source with its original bytes. The copy name depends
         only on the operation id and the suffix, which detect_format reads.
+        expected_tag_warnings holds the dropped tag data warnings of the preview. The check
+        runs again on the copy. A different result stops the write. None skips the check.
         """
         staged = source_path.with_name(f".{operation_id}.staged{source_path.suffix}")
         try:
             shutil.copy2(source_path, staged)
+            if expected_tag_warnings is not None:
+                self._ensure_tag_check_unchanged(staged, expected_tag_warnings)
             baseline = self.read_metadata(staged)
             self._write_tags_by_format(staged, tags_to_write)
             self._verify_written_copy(baseline, staged, tags_to_write)
@@ -1140,6 +1149,16 @@ class MetadataTagAdapter:
             os.replace(staged, source_path)
         finally:
             self._discard_staged_copy(staged)
+
+    def _ensure_tag_check_unchanged(self, staged: Path, expected_warnings: list[str]) -> None:
+        """Raise ValueError when the copy to write gives a different dropped tag data result."""
+        errors: list[str] = []
+        warnings = self._check_dropped_tag_data(staged, errors)
+        if errors or warnings != expected_warnings:
+            raise ValueError(
+                "The tag data check on the file to write differs from the preview; no tags "
+                "were written. Refresh the preview and retry."
+            )
 
     @staticmethod
     def _ensure_source_unchanged(source_path: Path, expected_hash: str) -> None:

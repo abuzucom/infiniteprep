@@ -23,6 +23,8 @@ PRIVATE_DIR_MODE: Final[int] = 0o700
 PRIVATE_FILE_MODE: Final[int] = 0o600
 # Group and other permission bits. A private file has none of them.
 SHARED_ACCESS_BITS: Final[int] = 0o077
+# Group and other write bits. A folder with either lets another account rename its files.
+GROUP_OTHER_WRITE: Final[int] = 0o022
 IS_WINDOWS: Final[bool] = os.name == "nt"
 # O_NOFOLLOW makes the open fail on a link. O_NONBLOCK keeps a FIFO open from hanging.
 NO_FOLLOW_FLAG: Final[int] = getattr(os, "O_NOFOLLOW", 0)
@@ -49,6 +51,26 @@ def create_private_dirs(folder: Path) -> None:
         raise NotADirectoryError(
             errno.ENOTDIR, "Not a folder. Free the name and retry", str(folder)
         )
+
+
+def warn_if_folder_is_shared(folder: Path) -> bool:
+    """Log a warning when another account can change names in folder on POSIX.
+
+    A folder owned by another account, or with group or other write access, lets that account
+    swap a file name between two opens. A portable Data folder on FAT or exFAT media shows
+    such modes. The app still opens the library there. Returns whether the folder is shared.
+    """
+    if IS_WINDOWS:
+        return False
+    status = folder.stat()
+    if status.st_uid == os.getuid() and not stat.S_IMODE(status.st_mode) & GROUP_OTHER_WRITE:
+        return False
+    logger.warning(
+        "Other accounts can change files in the library folder %s. Run chmod 700 on it as its "
+        "owner, or move the library to a folder only this account can change.",
+        folder.name,
+    )
+    return True
 
 
 def refuse_symlink(path: Path) -> None:
