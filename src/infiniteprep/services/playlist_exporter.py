@@ -15,9 +15,9 @@ from infiniteprep.domain.models import FileAsset
 
 # A line break inside a path line would split one entry into several playlist lines. Other C0
 # control characters and DEL have no place in a file name and confuse player parsers.
-DEL_CODE_POINT: Final[int] = 0x7F
+DELETE_CODE_POINT: Final[int] = 0x7F
 UNSAFE_PATH_CHARACTERS: Final[frozenset[str]] = frozenset(
-    [chr(code) for code in range(ord(" "))] + [chr(DEL_CODE_POINT)]
+    [chr(code) for code in range(ord(" "))] + [chr(DELETE_CODE_POINT)]
 )
 # O_NOFOLLOW refuses a symlink at the destination. Windows lacks the flag, so it is 0 there.
 NO_FOLLOW_FLAG: Final[int] = getattr(os, "O_NOFOLLOW", 0)
@@ -162,17 +162,17 @@ class PlaylistExporter:
 
     def _extinf_line(self, asset: FileAsset) -> str:
         """Build the #EXTINF line from approved or tagged artist and title values."""
-        std = asset.original_tags.get("standard_tags", {})
+        standard_tags = asset.original_tags.get("standard_tags", {})
         approved = self.repo.get_approved_fields_map(asset.id)
         artist = _m3u8_escape(
             approved[FieldName.ARTIST.value].approved_value
             if FieldName.ARTIST.value in approved
-            else std.get("artist", "Unknown Artist")
+            else standard_tags.get("artist", "Unknown Artist")
         )
         title = _m3u8_escape(
             approved[FieldName.TITLE.value].approved_value
             if FieldName.TITLE.value in approved
-            else std.get("title", Path(asset.current_path).stem)
+            else standard_tags.get("title", Path(asset.current_path).stem)
         )
-        dur_int = round(asset.duration) if asset.duration is not None else -1
-        return f"#EXTINF:{dur_int},{artist} - {title}"
+        duration_seconds = round(asset.duration) if asset.duration is not None else -1
+        return f"#EXTINF:{duration_seconds},{artist} - {title}"

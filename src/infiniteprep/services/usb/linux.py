@@ -48,14 +48,14 @@ OCTAL_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"\\([0-7]{3})")
 
 def _decode_df_mount(raw: str) -> str:
     """Decode octal escape sequences (e.g. \\040 for space) in df mount paths."""
-    return OCTAL_ESCAPE_RE.sub(lambda m: chr(int(m.group(1), 8)), raw)
+    return OCTAL_ESCAPE_RE.sub(lambda match: chr(int(match.group(1), 8)), raw)
 
 
-def _sanitize_device_name(val: Any) -> str:
+def _sanitize_device_name(value: Any) -> str:
     """Validate and sanitize device name from untrusted output."""
-    raw = clean_str(val)
+    raw = clean_str(value)
     if not raw or ".." in raw or "/" in raw or not DEVICE_NAME_SAFE_RE.match(raw):
-        raise InspectionParseError(f"Invalid or unsafe block device name: {val!r}")
+        raise InspectionParseError(f"Invalid or unsafe block device name: {value!r}")
     return raw
 
 
@@ -74,18 +74,18 @@ def _sanitize_device_path(raw_path: Any, safe_name: str) -> str:
 
 def _extract_partition_number(part_dict: dict[str, Any], fallback_index: int) -> int:
     """Determine partition number from PARTN column, name suffix, or fallback index."""
-    partn_val = clean_str(part_dict.get("partn"))
-    if partn_val and partn_val.isdigit():
-        partn_int = int(partn_val)
-        if partn_int > 0:
-            return partn_int
+    partition_text = clean_str(part_dict.get("partn"))
+    if partition_text and partition_text.isdigit():
+        partition_number = int(partition_text)
+        if partition_number > 0:
+            return partition_number
 
-    name_str = clean_str(part_dict.get("name")) or ""
-    match = re.search(r"(\d+)$", name_str)
+    name_text = clean_str(part_dict.get("name")) or ""
+    match = re.search(r"(\d+)$", name_text)
     if match and match.group(1).isdigit():
-        num = int(match.group(1))
-        if num > 0:
-            return num
+        trailing_number = int(match.group(1))
+        if trailing_number > 0:
+            return trailing_number
 
     return fallback_index
 
@@ -105,10 +105,10 @@ class LinuxDriveInspector:
         lsblk_devices = self._run_and_parse_lsblk()
         df_space = self._run_and_parse_df()
         inspections: list[DriveInspection] = []
-        for dev in lsblk_devices:
-            dev_type = str(dev.get("type") or "").casefold()
-            if dev_type in ("disk", "loop", "rom", "dm"):
-                inspections.append(self._build_drive_inspection(dev, df_space))
+        for device in lsblk_devices:
+            device_type = str(device.get("type") or "").casefold()
+            if device_type in ("disk", "loop", "rom", "dm"):
+                inspections.append(self._build_drive_inspection(device, df_space))
         return tuple(inspections)
 
     def inspect_device(self, device_name_or_path: str) -> DriveInspection:
@@ -132,8 +132,8 @@ class LinuxDriveInspector:
             raise CommandExecutionError(f"lsblk execution failed: {exc}") from exc
 
         if completed.returncode != 0:
-            err = completed.stderr.strip() or f"exit code {completed.returncode}"
-            raise CommandExecutionError(f"lsblk failed with {err}")
+            error_text = completed.stderr.strip() or f"exit code {completed.returncode}"
+            raise CommandExecutionError(f"lsblk failed with {error_text}")
 
         try:
             data = json.loads(completed.stdout)
@@ -147,8 +147,8 @@ class LinuxDriveInspector:
         if not isinstance(devices, list):
             raise InspectionParseError("lsblk 'blockdevices' is not a list.")
 
-        for dev in devices:
-            if not isinstance(dev, dict):
+        for device in devices:
+            if not isinstance(device, dict):
                 raise InspectionParseError("lsblk device entry is not a mapping.")
 
         return devices
@@ -161,8 +161,8 @@ class LinuxDriveInspector:
             raise CommandExecutionError(f"df execution failed: {exc}") from exc
 
         if completed.returncode != 0:
-            err = completed.stderr.strip() or f"exit code {completed.returncode}"
-            raise CommandExecutionError(f"df failed with {err}")
+            error_text = completed.stderr.strip() or f"exit code {completed.returncode}"
+            raise CommandExecutionError(f"df failed with {error_text}")
 
         return self._parse_df_output(completed.stdout)
 
@@ -196,33 +196,33 @@ class LinuxDriveInspector:
         return space_map
 
     @staticmethod
-    def _build_drive_identity(dev: dict[str, Any]) -> DriveIdentity:
+    def _build_drive_identity(device: dict[str, Any]) -> DriveIdentity:
         """Construct sanitized DriveIdentity from a blockdevice dictionary."""
-        name = _sanitize_device_name(dev.get("name"))
-        path = _sanitize_device_path(dev.get("path"), name)
+        name = _sanitize_device_name(device.get("name"))
+        path = _sanitize_device_path(device.get("path"), name)
         return DriveIdentity(
             name=name,
             path=path,
-            size_bytes=clean_int(dev.get("size")),
-            model=clean_str(dev.get("model")),
-            vendor=clean_str(dev.get("vendor")),
-            serial=clean_str(dev.get("serial")),
-            is_removable=bool(dev.get("rm")),
-            is_read_only=bool(dev.get("ro")),
-            bus_type=clean_str(dev.get("tran")),
-            subsystem=clean_str(dev.get("subsystems")),
+            size_bytes=clean_int(device.get("size")),
+            model=clean_str(device.get("model")),
+            vendor=clean_str(device.get("vendor")),
+            serial=clean_str(device.get("serial")),
+            is_removable=bool(device.get("rm")),
+            is_read_only=bool(device.get("ro")),
+            bus_type=clean_str(device.get("tran")),
+            subsystem=clean_str(device.get("subsystems")),
         )
 
     def _collect_partitions(
         self,
-        dev: dict[str, Any],
+        device: dict[str, Any],
         parent_scheme: str | None,
         df_space: dict[str, SpaceInfo],
     ) -> tuple[list[PartitionInfo], list[tuple[str, SpaceInfo]]]:
         """Parse partitions from children or whole disk, validating types."""
         partitions: list[PartitionInfo] = []
         space_entries: list[tuple[str, SpaceInfo]] = []
-        children = dev.get("children")
+        children = device.get("children")
         if children is not None and not isinstance(children, list):
             raise InspectionParseError("lsblk 'children' must be a list or null.")
 
@@ -238,9 +238,9 @@ class LinuxDriveInspector:
                 )
                 partitions.append(part)
                 space_entries.extend(part_spaces)
-        elif clean_str(dev.get("fstype")) or self._extract_mountpoints(dev):
+        elif clean_str(device.get("fstype")) or self._extract_mountpoints(device):
             part, part_spaces = self._parse_partition(
-                dev,
+                device,
                 parent_scheme=parent_scheme,
                 fallback_index=1,
                 df_space=df_space,
@@ -254,14 +254,14 @@ class LinuxDriveInspector:
 
     def _build_drive_inspection(
         self,
-        dev: dict[str, Any],
+        device: dict[str, Any],
         df_space: dict[str, SpaceInfo],
     ) -> DriveInspection:
         """Construct a DriveInspection record from a blockdevice dictionary."""
-        identity = self._build_drive_identity(dev)
-        partition_scheme = clean_str(dev.get("pttype"))
+        identity = self._build_drive_identity(device)
+        partition_scheme = clean_str(device.get("pttype"))
         partitions, space_entries = self._collect_partitions(
-            dev,
+            device,
             parent_scheme=partition_scheme,
             df_space=df_space,
         )
@@ -311,13 +311,17 @@ class LinuxDriveInspector:
                 spaces.append((mount, df_space[mount]))
             elif part_dict.get("fssize") is not None and part_dict.get("fsavail") is not None:
                 total_b = clean_int(part_dict.get("fssize"))
-                avail_b = clean_int(part_dict.get("fsavail"))
-                used_val = part_dict.get("fsused")
-                used_b = clean_int(used_val) if used_val is not None else max(0, total_b - avail_b)
+                available_bytes = clean_int(part_dict.get("fsavail"))
+                used_bytes_value = part_dict.get("fsused")
+                used_b = (
+                    clean_int(used_bytes_value)
+                    if used_bytes_value is not None
+                    else max(0, total_b - available_bytes)
+                )
                 space_info = SpaceInfo(
                     total_bytes=total_b,
                     used_bytes=used_b,
-                    available_bytes=avail_b,
+                    available_bytes=available_bytes,
                 )
                 spaces.append((mount, space_info))
         return spaces
@@ -328,8 +332,8 @@ class LinuxDriveInspector:
         raw_mounts = device_entry.get("mountpoints")
         mounts: list[str] = []
         if isinstance(raw_mounts, list):
-            for m in raw_mounts:
-                clean = sanitize_mount_point(m)
+            for raw_mount in raw_mounts:
+                clean = sanitize_mount_point(raw_mount)
                 if clean:
                     mounts.append(clean)
         elif device_entry.get("mountpoint"):

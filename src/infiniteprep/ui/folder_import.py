@@ -72,7 +72,8 @@ STUCK_TEXT: Final[str] = stuck_import_text(STUCK_FILE_TIMEOUT_MS)
 def _report_sections(report: ImportBatchReport) -> list[tuple[str, list[str]]]:
     """Return each report category with one line per file."""
     duplicates = [
-        f"{asset.current_path} (same content as {', '.join(p.current_path for p in prior)})"
+        f"{asset.current_path} (same content as "
+        f"{', '.join(prior_asset.current_path for prior_asset in prior)})"
         for asset, prior in report.possible_duplicates
     ]
     return [

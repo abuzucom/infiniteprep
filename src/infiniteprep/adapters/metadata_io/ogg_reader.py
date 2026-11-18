@@ -60,27 +60,34 @@ def _read_page_header(data: bytes, offset: int) -> tuple[int, int, int, int, int
     header_type = data[offset + 5]
     granule = struct.unpack_from("<q", data, offset + 6)[0]
     serial = struct.unpack_from("<I", data, offset + 14)[0]
-    num_segments = data[offset + 26]
+    segment_count = data[offset + 26]
     return (
         header_type,
         granule,
         serial,
-        num_segments,
+        segment_count,
         offset + HEADER_SIZE,
     )
 
 
 def _parse_page(data: bytes, offset: int) -> tuple[int, int, int, list[int], bytes, int]:
     """Parse one Ogg page at offset into header info, lacing, body, and next offset."""
-    hdr = _read_page_header(data, offset)
-    seg_offset, num_segs = hdr[4], hdr[3]
-    if seg_offset + num_segs > len(data):
+    page_header = _read_page_header(data, offset)
+    segment_offset, segment_count = page_header[4], page_header[3]
+    if segment_offset + segment_count > len(data):
         raise OggFormatError("Truncated Ogg segment table.")
-    lacing = list(data[seg_offset : seg_offset + num_segs])
-    body_end = seg_offset + num_segs + sum(lacing)
+    lacing = list(data[segment_offset : segment_offset + segment_count])
+    body_end = segment_offset + segment_count + sum(lacing)
     if body_end > len(data):
         raise OggFormatError("Truncated Ogg page body.")
-    return hdr[0], hdr[1], hdr[2], lacing, data[seg_offset + num_segs : body_end], body_end
+    return (
+        page_header[0],
+        page_header[1],
+        page_header[2],
+        lacing,
+        data[segment_offset + segment_count : body_end],
+        body_end,
+    )
 
 
 def _extract_page_packets(
@@ -90,17 +97,17 @@ def _extract_page_packets(
     packets: list[bytes],
 ) -> None:
     """Consume lacing entries and body slices, appending completed packets."""
-    body_pos = 0
+    body_position = 0
     # A running total keeps the size check linear. A packet near the cap spans tens of
     # thousands of segments, and a fresh sum per segment costs the square of that count.
     pending_size = sum(len(chunk) for chunk in pending)
-    for seg_len in lacing:
-        pending.append(body[body_pos : body_pos + seg_len])
-        body_pos += seg_len
-        pending_size += seg_len
+    for segment_length in lacing:
+        pending.append(body[body_position : body_position + segment_length])
+        body_position += segment_length
+        pending_size += segment_length
         if pending_size > MAX_PACKET_SIZE:
             raise OggFormatError(f"Packet size exceeds {MAX_PACKET_SIZE} bytes.")
-        if seg_len < 255:
+        if segment_length < 255:
             packets.append(b"".join(pending))
             pending.clear()
             pending_size = 0
@@ -138,23 +145,23 @@ def _assemble_stream_headers(data: bytes) -> tuple[int, list[bytes]]:
     return target_serial, packets
 
 
-def _check_page_for_granule(data: bytes, pos: int, target_serial: int) -> int | None:
-    """Validate page header at pos and return granule if it belongs to target_serial."""
-    if pos + HEADER_SIZE > len(data):
+def _check_page_for_granule(data: bytes, position: int, target_serial: int) -> int | None:
+    """Validate page header at position and return granule if it belongs to target_serial."""
+    if position + HEADER_SIZE > len(data):
         return None
-    if data[pos + 4] != 0:
+    if data[position + 4] != 0:
         return None
-    serial = struct.unpack_from("<I", data, pos + 14)[0]
+    serial = struct.unpack_from("<I", data, position + 14)[0]
     if serial != target_serial:
         return None
-    num_segs = data[pos + 26]
-    seg_end = pos + HEADER_SIZE + num_segs
-    if seg_end > len(data):
+    segment_count = data[position + 26]
+    segment_end = position + HEADER_SIZE + segment_count
+    if segment_end > len(data):
         return None
-    body_size = sum(data[pos + HEADER_SIZE : seg_end])
-    if seg_end + body_size > len(data):
+    body_size = sum(data[position + HEADER_SIZE : segment_end])
+    if segment_end + body_size > len(data):
         return None
-    granule = struct.unpack_from("<q", data, pos + 6)[0]
+    granule = struct.unpack_from("<q", data, position + 6)[0]
     return granule if granule >= 0 else None
 
 
@@ -162,13 +169,13 @@ def _find_last_granule(data: bytes, target_serial: int) -> int:
     """Scan backwards from file end to locate the last page granule of the stream."""
     search_end = len(data)
     while search_end >= HEADER_SIZE:
-        pos = data.rfind(OGG_MAGIC, 0, search_end)
-        if pos == -1:
+        position = data.rfind(OGG_MAGIC, 0, search_end)
+        if position == -1:
             break
-        granule = _check_page_for_granule(data, pos, target_serial)
+        granule = _check_page_for_granule(data, position, target_serial)
         if granule is not None:
             return granule
-        search_end = pos
+        search_end = position
     raise OggFormatError("Could not find the last page of the logical stream.")
 
 

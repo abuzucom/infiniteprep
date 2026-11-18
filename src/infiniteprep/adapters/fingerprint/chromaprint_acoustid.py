@@ -131,8 +131,8 @@ class ChromaprintAcoustIDAdapter:
 
     def _lookup_acoustid_cached(self, duration: float, fingerprint: str) -> dict[str, Any]:
         """Query AcoustID with SQLite provider_cache backing."""
-        fp_hash = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
-        cache_key = f"acoustid:{int(duration)}:{fp_hash}"
+        fingerprint_hash = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
+        cache_key = f"acoustid:{int(duration)}:{fingerprint_hash}"
         cached = self.repo.get_cached_response(cache_key)
         if cached is not None:
             return cached
@@ -154,43 +154,49 @@ class ChromaprintAcoustIDAdapter:
     def _parse_acoustid_results(self, payload: dict[str, Any]) -> list[FingerprintMatchItem]:
         """Convert AcoustID JSON results into FingerprintMatchItem domain objects."""
         items: list[FingerprintMatchItem] = []
-        for res in provider_dicts(provider_dict(payload).get("results")):
+        for lookup_result in provider_dicts(provider_dict(payload).get("results")):
             # AcoustID scores lie in [0, 1]. A value outside that range reads as no confidence.
-            score = provider_number(res.get("score")) or 0.0
+            score = provider_number(lookup_result.get("score")) or 0.0
             score = score if score <= 1.0 else 0.0
-            acid_id = provider_text(res.get("id")) or ""
-            for rec in provider_dicts(res.get("recordings")):
-                items.append(self._build_match_item(acid_id, score, rec))
+            acid_id = provider_text(lookup_result.get("id")) or ""
+            for recording in provider_dicts(lookup_result.get("recordings")):
+                items.append(self._build_match_item(acid_id, score, recording))
         return items
 
     def _build_match_item(
-        self, acid_id: str, score: float, rec: dict[str, Any]
+        self, acid_id: str, score: float, recording_data: dict[str, Any]
     ) -> FingerprintMatchItem:
         """Build a single FingerprintMatchItem from an AcoustID recording dictionary."""
-        rec_id = provider_text(rec.get("id")) or ""
-        names = (provider_text(a.get("name")) for a in provider_dicts(rec.get("artists")))
+        recording_id = provider_text(recording_data.get("id")) or ""
+        names = (
+            provider_text(artist_entry.get("name"))
+            for artist_entry in provider_dicts(recording_data.get("artists"))
+        )
         artists = [name for name in names if name]
-        group_ids = (provider_text(rg.get("id")) for rg in provider_dicts(rec.get("releasegroups")))
-        rgs = [group_id for group_id in group_ids if group_id]
-        title = provider_text(rec.get("title"))
-        duration = provider_number(rec.get("duration"))
+        group_ids = (
+            provider_text(release_group.get("id"))
+            for release_group in provider_dicts(recording_data.get("releasegroups"))
+        )
+        release_group_ids = [group_id for group_id in group_ids if group_id]
+        title = provider_text(recording_data.get("title"))
+        duration = provider_number(recording_data.get("duration"))
         # The evidence holds only the checked fields. The whole recording object can carry
         # any nested shape and text up to the response cap, and the evidence is stored.
         recording = {
-            "id": rec_id,
+            "id": recording_id,
             "title": title,
             "duration": duration,
             "artists": artists,
-            "releasegroup_ids": rgs,
+            "releasegroup_ids": release_group_ids,
         }
         return FingerprintMatchItem(
             fingerprint_id=acid_id,
             confidence=score,
-            recording_ids=[rec_id] if rec_id else [],
+            recording_ids=[recording_id] if recording_id else [],
             artist=", ".join(artists) if artists else None,
             title=title,
             duration=duration,
-            release_group_ids=rgs,
+            release_group_ids=release_group_ids,
             raw_evidence={"acoustid_id": acid_id, "recording": recording},
         )
 

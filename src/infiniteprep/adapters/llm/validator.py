@@ -17,7 +17,7 @@ def normalize_candidate_value(value: object) -> str:
 
 def _quote(model_text: object) -> str:
     """Return a short printable excerpt of untrusted model text for an error message."""
-    text = "".join(ch for ch in str(model_text)[:MAX_QUOTED_MODEL_CHARS] if ch.isprintable())
+    text = "".join(char for char in str(model_text)[:MAX_QUOTED_MODEL_CHARS] if char.isprintable())
     return repr(text)
 
 
@@ -48,25 +48,25 @@ class ClosedWorldValidator:
         if not isinstance(llm_output, dict):
             return False, "LLM response is not a JSON object; discarding output."
         selected_id = llm_output.get("selected_candidate_id")
-        proposed_val = llm_output.get("proposed_value")
-        fields = (("selected_candidate_id", selected_id), ("proposed_value", proposed_val))
+        proposed_value = llm_output.get("proposed_value")
+        fields = (("selected_candidate_id", selected_id), ("proposed_value", proposed_value))
         for name, value in fields:
             error = _field_error(name, value)
             if error is not None:
                 return False, error
-        if selected_id is None and proposed_val is None:
+        if selected_id is None and proposed_value is None:
             return True, None
         if selected_id is not None:
-            return self._validate_selected(selected_id, proposed_val, allowed_candidates)
-        return self._validate_value_only(proposed_val, allowed_candidates)
+            return self._validate_selected(selected_id, proposed_value, allowed_candidates)
+        return self._validate_value_only(proposed_value, allowed_candidates)
 
     def _validate_selected(
         self,
         selected_id: str,
-        proposed_val: str | None,
+        proposed_value: str | None,
         allowed_candidates: list[dict[str, Any]],
     ) -> tuple[bool, str | None]:
-        """Check that selected_id names a candidate and proposed_val matches that candidate."""
+        """Check that selected_id names a candidate and proposed_value matches that candidate."""
         candidate = find_candidate(selected_id, allowed_candidates)
         if candidate is None:
             return (
@@ -74,32 +74,32 @@ class ClosedWorldValidator:
                 f"Hallucinated candidate ID {_quote(selected_id)} not in allowed_candidates; "
                 "discarded LLM output.",
             )
-        if proposed_val is None:
+        if proposed_value is None:
             return True, None
         expected = candidate.get("value")
         if expected is None or normalize_candidate_value(expected) != normalize_candidate_value(
-            proposed_val
+            proposed_value
         ):
             return (
                 False,
-                f"Value {_quote(proposed_val)} does not belong to candidate "
+                f"Value {_quote(proposed_value)} does not belong to candidate "
                 f"{_quote(selected_id)}; discarded LLM output.",
             )
         return True, None
 
     def _validate_value_only(
-        self, proposed_val: str, allowed_candidates: list[dict[str, Any]]
+        self, proposed_value: str, allowed_candidates: list[dict[str, Any]]
     ) -> tuple[bool, str | None]:
         """Check that a value proposed without an ID equals the value of some candidate."""
-        allowed_vals = {
-            normalize_candidate_value(c.get("value"))
-            for c in allowed_candidates
-            if c.get("value") is not None
+        allowed_values = {
+            normalize_candidate_value(candidate.get("value"))
+            for candidate in allowed_candidates
+            if candidate.get("value") is not None
         }
-        if normalize_candidate_value(proposed_val) not in allowed_vals:
+        if normalize_candidate_value(proposed_value) not in allowed_values:
             return (
                 False,
-                f"Hallucinated value {_quote(proposed_val)} not in allowed_candidates; "
+                f"Hallucinated value {_quote(proposed_value)} not in allowed_candidates; "
                 "discarded LLM output.",
             )
         return True, None

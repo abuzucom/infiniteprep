@@ -62,12 +62,12 @@ def _verify_entry_size(size_bytes: int) -> None:
 
 
 def _try_write_tar_member(
-    tf: tarfile.TarFile,
+    tar_archive: tarfile.TarFile,
     member: tarfile.TarInfo,
     target_bin: Path,
 ) -> bool:
     """Read a matching tarfile member within the binary cap and write it to target_bin."""
-    extracted = tf.extractfile(member)
+    extracted = tar_archive.extractfile(member)
     if extracted is None:
         return False
     # The bounded read enforces the cap on decompressed bytes. The declared
@@ -98,9 +98,9 @@ def _verify_archive_digest(archive_bytes: bytes, expected_sha256: str) -> None:
         )
 
 
-def _read_bounded_zip_entry(zf: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
+def _read_bounded_zip_entry(zip_archive: zipfile.ZipFile, info: zipfile.ZipInfo) -> bytes:
     """Read a ZIP entry and raise ValueError past MAX_FPCALC_BINARY_BYTES."""
-    with zf.open(info) as entry:
+    with zip_archive.open(info) as entry:
         data = entry.read(MAX_FPCALC_BINARY_BYTES + 1)
     _verify_entry_size(len(data))
     return data
@@ -230,12 +230,12 @@ class FpcalcBootstrapService:
     def _extract_binary_from_zip(self, archive_bytes: bytes, target_bin: Path) -> None:
         """Extract the fpcalc executable entry from a ZIP byte buffer."""
         exe_name = self.binary_filename()
-        with zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as zf:
-            for info in zf.infolist():
+        with zipfile.ZipFile(io.BytesIO(archive_bytes), "r") as zip_archive:
+            for info in zip_archive.infolist():
                 if not info.is_dir() and _is_matching_fpcalc_name(info.filename, exe_name):
                     # The bounded read enforces the cap on decompressed bytes.
                     # The declared header size stays untrusted.
-                    target_bin.write_bytes(_read_bounded_zip_entry(zf, info))
+                    target_bin.write_bytes(_read_bounded_zip_entry(zip_archive, info))
                     return
         raise FileNotFoundError(
             f"ZIP archive did not contain '{exe_name}'; verify official Chromaprint bundle."
@@ -244,12 +244,12 @@ class FpcalcBootstrapService:
     def _extract_binary_from_tar(self, archive_bytes: bytes, target_bin: Path) -> None:
         """Extract the fpcalc executable entry from a TAR (.tar.gz / .tar.bz2) byte buffer."""
         exe_name = self.binary_filename()
-        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:*") as tf:
-            for member in tf.getmembers():
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:*") as tar_archive:
+            for member in tar_archive.getmembers():
                 if (
                     member.isfile()
                     and _is_matching_fpcalc_name(member.name, exe_name)
-                    and _try_write_tar_member(tf, member, target_bin)
+                    and _try_write_tar_member(tar_archive, member, target_bin)
                 ):
                     return
         raise FileNotFoundError(
@@ -260,6 +260,6 @@ class FpcalcBootstrapService:
         """Download archive bytes over HTTPS."""
         if not url.startswith("https://"):
             raise ValueError(f"Bootstrap download URL must use https:// scheme: {url}")
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            return bytes(resp.read(MAX_FPCALC_BINARY_BYTES))
+        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return bytes(response.read(MAX_FPCALC_BINARY_BYTES))

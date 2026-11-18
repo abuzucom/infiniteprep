@@ -17,8 +17,8 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui import detail_panel as detail_panel_module
 from infiniteprep.ui.detail_panel import (
-    COL_ACTIONS,
-    COL_APPROVED_EDIT,
+    COLUMN_ACTIONS,
+    COLUMN_APPROVED_EDIT,
     DISPLAY_FIELDS,
     DetailPanel,
 )
@@ -50,14 +50,14 @@ def panel_and_file(qtbot: Any, tmp_path: Path) -> tuple[DetailPanel, str]:
 
 def artist_edit(panel: DetailPanel) -> QLineEdit:
     """Return the edit box of the artist row."""
-    widget = panel.fields_table.cellWidget(ARTIST_ROW, COL_APPROVED_EDIT)
+    widget = panel.fields_table.cellWidget(ARTIST_ROW, COLUMN_APPROVED_EDIT)
     assert isinstance(widget, QLineEdit)
     return widget
 
 
 def artist_button(panel: DetailPanel, text: str) -> QPushButton:
     """Return the artist row button with the given text."""
-    actions = panel.fields_table.cellWidget(ARTIST_ROW, COL_ACTIONS)
+    actions = panel.fields_table.cellWidget(ARTIST_ROW, COLUMN_ACTIONS)
     return next(button for button in actions.findChildren(QPushButton) if button.text() == text)
 
 
@@ -109,14 +109,14 @@ def test_a_successful_accept_replaces_the_typed_text_with_the_accepted_value(
     panel.repo.upsert_field_proposal(proposal)
     panel.load_file_asset(file_id)
     artist_edit(panel).setText(TYPED_ARTIST)
-    title_edit = panel.fields_table.cellWidget(TITLE_ROW, COL_APPROVED_EDIT)
+    title_edit = panel.fields_table.cellWidget(TITLE_ROW, COLUMN_APPROVED_EDIT)
     title_edit.setText(TYPED_TITLE)
 
     accepted = panel._accept_row_proposal(FieldName.ARTIST.value, proposal.id)
 
     assert accepted is True
     assert artist_edit(panel).text() == ACCEPTED_ARTIST
-    refreshed_title = panel.fields_table.cellWidget(TITLE_ROW, COL_APPROVED_EDIT)
+    refreshed_title = panel.fields_table.cellWidget(TITLE_ROW, COLUMN_APPROVED_EDIT)
     assert refreshed_title.text() == TYPED_TITLE
 
 

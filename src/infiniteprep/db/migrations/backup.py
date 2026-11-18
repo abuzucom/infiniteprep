@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 BACKUP_SUFFIX: Final[str] = ".pre-migration-backup"
 SIDECAR_SUFFIX: Final[str] = ".pre-migration-backup.json"
-TEMP_SUFFIX: Final[str] = ".tmp"
-RESTORE_TEMP_SUFFIX: Final[str] = ".restore.tmp"
+TEMPORARY_SUFFIX: Final[str] = ".tmp"
+RESTORE_TEMPORARY_SUFFIX: Final[str] = ".restore.tmp"
 NEWER_COPY_INFIX: Final[str] = ".newer-"
 NEWER_COPY_TIME_FORMAT: Final[str] = "%Y%m%dT%H%M%SZ"
 SIDE_FILE_SUFFIXES: Final[tuple[str, ...]] = ("-wal", "-shm")
@@ -190,12 +190,12 @@ def create_verified_backup(
     # staging folder keeps another account from swapping that name between the steps. Each
     # run gets its own folder. Two instances never share a temporary file.
     with private_staging_dir(db_path.parent) as staging:
-        temp = staging / f"{backup.name}{TEMP_SUFFIX}"
+        temporary_copy = staging / f"{backup.name}{TEMPORARY_SUFFIX}"
         with closing(sqlite3.connect(db_path)) as reader:
-            copy_database(reader, temp)
-        _record_in_copy(temp, source_version, counts)
-        verify_backup_file(temp, expected_version=source_version, expected_counts=counts)
-        os.replace(temp, backup)
+            copy_database(reader, temporary_copy)
+        _record_in_copy(temporary_copy, source_version, counts)
+        verify_backup_file(temporary_copy, expected_version=source_version, expected_counts=counts)
+        os.replace(temporary_copy, backup)
     sidecar_path_for(db_path).unlink(missing_ok=True)
     return backup
 
@@ -341,11 +341,11 @@ def restore_pre_migration_backup(
     kept = newer_copy_path_for(db_path, now or _utc_now())
     _check_kept_names_free(kept)
     # Earlier versions staged the copy beside the library. A crash there left this name.
-    db_path.with_name(db_path.name + RESTORE_TEMP_SUFFIX).unlink(missing_ok=True)
+    db_path.with_name(db_path.name + RESTORE_TEMPORARY_SUFFIX).unlink(missing_ok=True)
     # The copy, the record drop, and the check reopen the staged file by name. The owner-only
     # staging folder keeps another account from swapping that name between the steps.
     with private_staging_dir(db_path.parent) as staging:
-        staged = staging / (db_path.name + RESTORE_TEMP_SUFFIX)
+        staged = staging / (db_path.name + RESTORE_TEMPORARY_SUFFIX)
         create_new_private_file(staged)
         shutil.copyfile(backup_path_for(db_path), staged)
         _drop_backup_record(staged)

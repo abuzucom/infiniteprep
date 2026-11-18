@@ -244,81 +244,90 @@ class ImportService:
         report: ImportBatchReport,
     ) -> None:
         """Inspect and persist a single file without modifying it on disk."""
-        path_str = str(file_path)
-        if self.repo.get_file_by_path(path_str) is not None:
-            report.previously_imported_paths.append(path_str)
+        path_text = str(file_path)
+        if self.repo.get_file_by_path(path_text) is not None:
+            report.previously_imported_paths.append(path_text)
             return
 
         file_size = file_path.stat().st_size
         if file_size > MAX_IMPORT_FILE_BYTES:
-            report.unsupported_files.append(path_str)
+            report.unsupported_files.append(path_text)
             return
 
-        fmt = self.tag_adapter.detect_format(file_path)
-        if fmt == AudioFormat.UNSUPPORTED:
-            report.unsupported_files.append(path_str)
+        audio_format = self.tag_adapter.detect_format(file_path)
+        if audio_format == AudioFormat.UNSUPPORTED:
+            report.unsupported_files.append(path_text)
             return
 
         content_hash = compute_sha256(file_path)
         prior_same_hash = self.repo.find_files_by_hash(content_hash)
-        tech_meta = self.tag_adapter.read_metadata(file_path)
-        has_damage = any("Damaged" in w or "Unrecognized" in w for w in tech_meta.warnings)
+        technical_metadata = self.tag_adapter.read_metadata(file_path)
+        has_damage = any(
+            "Damaged" in warning or "Unrecognized" in warning
+            for warning in technical_metadata.warnings
+        )
         source_group = self._ensure_folder_source_group(file_path.parent, source_type)
 
         is_multitrack = (
-            tech_meta.duration is not None
-            and tech_meta.duration >= MULTITRACK_DURATION_THRESHOLD_SEC
+            technical_metadata.duration is not None
+            and technical_metadata.duration >= MULTITRACK_DURATION_THRESHOLD_SEC
         )
         asset = FileAsset(
             id=str(uuid.uuid4()),
-            current_path=path_str,
-            original_path=path_str,
+            current_path=path_text,
+            original_path=path_text,
             file_size=file_size,
             content_hash=content_hash,
-            format=fmt,
-            duration=tech_meta.duration,
-            original_tags=self._build_original_tags_payload(tech_meta),
+            format=audio_format,
+            duration=technical_metadata.duration,
+            original_tags=self._build_original_tags_payload(technical_metadata),
             import_batch_id=batch_id,
             source_group_id=source_group.id,
             suspected_multitrack=is_multitrack,
             task_status=TaskStatus.IDLE,
             review_status=ReviewStatus.ERROR if has_damage else ReviewStatus.UNPROCESSED,
-            error_message="; ".join(tech_meta.warnings) if has_damage else None,
+            error_message="; ".join(technical_metadata.warnings) if has_damage else None,
         )
         self.repo.upsert_file_asset(asset)
         if has_damage:
-            report.damaged_files.append((path_str, asset.error_message or "Damaged audio file"))
+            report.damaged_files.append((path_text, asset.error_message or "Damaged audio file"))
         else:
             report.imported_files.append(asset)
         if prior_same_hash:
             report.possible_duplicates.append((asset, prior_same_hash))
 
-    def _build_original_tags_payload(self, tech_meta: TechnicalAndTagMetadata) -> dict[str, Any]:
+    def _build_original_tags_payload(
+        self, technical_metadata: TechnicalAndTagMetadata
+    ) -> dict[str, Any]:
         """Construct the structured original_tags JSON payload from technical metadata."""
-        xdj_warnings = [w for w in tech_meta.warnings if w.startswith("XDJ-RX3 Warning")]
+        xdj_warnings = [
+            warning
+            for warning in technical_metadata.warnings
+            if warning.startswith("XDJ-RX3 Warning")
+        ]
         return {
-            "standard_tags": tech_meta.standard_tags,
-            "raw_custom_tags": tech_meta.raw_custom_tags,
+            "standard_tags": technical_metadata.standard_tags,
+            "raw_custom_tags": technical_metadata.raw_custom_tags,
             "technical": {
-                "sample_rate": tech_meta.sample_rate,
-                "channels": tech_meta.channels,
-                "bitrate": tech_meta.bitrate,
-                "warnings": tech_meta.warnings,
+                "sample_rate": technical_metadata.sample_rate,
+                "channels": technical_metadata.channels,
+                "bitrate": technical_metadata.bitrate,
+                "warnings": technical_metadata.warnings,
                 "xdj_rx3_warnings": xdj_warnings,
             },
         }
 
     def _ensure_folder_source_group(self, folder: Path, source_type: SourceType) -> SourceGroup:
         """Fetch or create a folder-hypothesis SourceGroup for a parent folder."""
-        parent_str = str(folder)
-        existing = self.repo.get_source_group_by_folder(parent_str)
+        parent_text = str(folder)
+        existing = self.repo.get_source_group_by_folder(parent_text)
         if existing is not None:
             return existing
         group = SourceGroup(
             id=str(uuid.uuid4()),
-            user_label=folder.name or parent_str,
+            user_label=folder.name or parent_text,
             grouping_basis=GroupingBasis.FOLDER_HYPOTHESIS,
-            original_folder=parent_str,
+            original_folder=parent_text,
             source_type=source_type,
             notes="Automatically grouped by shared parent folder upon import (hypothesis).",
         )

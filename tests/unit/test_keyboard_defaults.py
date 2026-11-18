@@ -16,7 +16,7 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
 from infiniteprep.ui import main_window as main_window_module
-from infiniteprep.ui.detail_panel import COL_ACTIONS, COL_APPROVED_EDIT, DetailPanel
+from infiniteprep.ui.detail_panel import COLUMN_ACTIONS, COLUMN_APPROVED_EDIT, DetailPanel
 from infiniteprep.ui.main_window import MainWindow
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 from tests.fixtures.audio_factory import create_wav_fixture
@@ -95,8 +95,8 @@ def test_tab_from_field_edit_reaches_row_action_button(qtbot: Any, tmp_path: Pat
     panel = DetailPanel(repository, ReviewService(repository))
     show_focused(qtbot, panel)
     panel.load_file_asset(file_ids[0])
-    edit_box = panel.fields_table.cellWidget(0, COL_APPROVED_EDIT)
-    action_cell = panel.fields_table.cellWidget(0, COL_ACTIONS)
+    edit_box = panel.fields_table.cellWidget(0, COLUMN_APPROVED_EDIT)
+    action_cell = panel.fields_table.cellWidget(0, COLUMN_ACTIONS)
     edit_box.setFocus()
     qtbot.waitUntil(edit_box.hasFocus)
 

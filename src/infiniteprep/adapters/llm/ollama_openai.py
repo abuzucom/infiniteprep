@@ -38,7 +38,7 @@ def bounded_rationale(value: object) -> str:
     if not isinstance(value, str):
         return DEFAULT_RATIONALE
     head = value[: MAX_RATIONALE_CHARS * CLEAN_SCAN_FACTOR]
-    cleaned = "".join(ch if ch.isprintable() else " " for ch in head).strip()
+    cleaned = "".join(char if char.isprintable() else " " for char in head).strip()
     return cleaned[:MAX_RATIONALE_CHARS] or DEFAULT_RATIONALE
 
 
@@ -101,8 +101,8 @@ class OllamaOpenAIReasoningAdapter:
             ],
         }
         try:
-            raw_resp = self.http_post_json(f"{self.base_url}/chat/completions", body)
-            parsed = self._extract_json_message(raw_resp)
+            raw_response = self.http_post_json(f"{self.base_url}/chat/completions", body)
+            parsed = self._extract_json_message(raw_response)
         except Exception as exc:
             # The exception text can quote the response body, so only the class name leaves.
             logger.warning("LLM arbitration request failed: %s", exc.__class__.__name__)
@@ -115,12 +115,12 @@ class OllamaOpenAIReasoningAdapter:
                 ),
             }
 
-        is_valid, err_msg = self.validator.validate_response(parsed, allowed)
+        is_valid, error_message = self.validator.validate_response(parsed, allowed)
         if not is_valid:
             return {
                 "selected_candidate_id": None,
                 "proposed_value": None,
-                "rationale": err_msg or "Discarded hallucinated LLM output.",
+                "rationale": error_message or "Discarded hallucinated LLM output.",
             }
         return self._validated_result(parsed, allowed)
 
@@ -140,10 +140,10 @@ class OllamaOpenAIReasoningAdapter:
         elif candidate is None and proposed is not None:
             proposed = next(
                 (
-                    c.get("value")
-                    for c in allowed
-                    if c.get("value") is not None
-                    and normalize_candidate_value(c.get("value"))
+                    allowed_candidate.get("value")
+                    for allowed_candidate in allowed
+                    if allowed_candidate.get("value") is not None
+                    and normalize_candidate_value(allowed_candidate.get("value"))
                     == normalize_candidate_value(proposed)
                 ),
                 None,
@@ -154,29 +154,31 @@ class OllamaOpenAIReasoningAdapter:
             "rationale": bounded_rationale(parsed.get("rationale")),
         }
 
-    def _extract_json_message(self, raw_resp: dict[str, Any]) -> dict[str, Any]:
+    def _extract_json_message(self, raw_response: dict[str, Any]) -> dict[str, Any]:
         """Extract and parse the JSON content string from OpenAI-compatible choices."""
-        choices = raw_resp.get("choices") or [{}]
-        msg = choices[0].get("message") or {}
-        content = str(msg.get("content", "{}"))
+        choices = raw_response.get("choices") or [{}]
+        message = choices[0].get("message") or {}
+        content = str(message.get("content", "{}"))
         if len(content) > MAX_LLM_RESPONSE_BYTES:
             raise ValueError("LLM response content exceeded maximum permitted size.")
         return dict(json.loads(content))
 
     def _default_http_post_json(self, url: str, body: dict[str, Any]) -> dict[str, Any]:
         """Send HTTP(S) POST request to validated Ollama or OpenAI endpoint."""
-        ok, reason = validate_endpoint_url(url, resolve_dns=True)
-        if not ok:
+        is_valid_url, reason = validate_endpoint_url(url, resolve_dns=True)
+        if not is_valid_url:
             raise ValueError(reason or "Blocked endpoint URL.")
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
         data = json.dumps(body).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        request = urllib.request.Request(url, data=data, headers=headers, method="POST")
         # validate_endpoint_url checked this URL only. A redirect raises instead of moving the
         # request, and its Bearer key, to a host the check never saw.
-        with http_openers.open_without_redirects(req, timeout=LLM_REQUEST_TIMEOUT_SEC) as resp:
-            raw_bytes = resp.read(MAX_LLM_RESPONSE_BYTES + 1)
+        with http_openers.open_without_redirects(
+            request, timeout=LLM_REQUEST_TIMEOUT_SEC
+        ) as response:
+            raw_bytes = response.read(MAX_LLM_RESPONSE_BYTES + 1)
             if len(raw_bytes) > MAX_LLM_RESPONSE_BYTES:
                 raise ValueError("LLM HTTP response exceeded maximum byte size limit.")
             return dict(json.loads(raw_bytes.decode("utf-8")))

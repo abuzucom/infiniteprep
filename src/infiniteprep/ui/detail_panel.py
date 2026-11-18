@@ -52,8 +52,8 @@ FIELDS_TABLE_STRETCH: Final[int] = 3
 OTHER_TAGS_STRETCH: Final[int] = 1
 CANDIDATE_BOX_STRETCH: Final[int] = 1
 OTHER_TAGS_COLUMN_COUNT: Final[int] = 2
-COL_OTHER_KEY: Final[int] = 0
-COL_OTHER_VALUE: Final[int] = 1
+COLUMN_OTHER_KEY: Final[int] = 0
+COLUMN_OTHER_VALUE: Final[int] = 1
 PLAY_SELECTED_LABEL: Final[str] = "Play Selected"
 NO_SELECTION_TEXT: Final[str] = "Select a track to inspect metadata and proposals."
 REPLACE_TRACK_TITLE: Final[str] = "Replace the playing track?"
@@ -77,12 +77,12 @@ LIST_VALUE_SEPARATOR: Final[str] = "; "
 # The paragraph keeps line breaks and spaces as the tag holds them.
 TOOLTIP_PARAGRAPH_OPEN: Final[str] = "<p style='white-space:pre-wrap'>"
 TOOLTIP_PARAGRAPH_CLOSE: Final[str] = "</p>"
-COL_FIELD_NAME: Final[int] = 0
-COL_EXISTING_TAG: Final[int] = 1
-COL_TOP_PROPOSAL: Final[int] = 2
-COL_PROPOSAL_SOURCE: Final[int] = 3
-COL_APPROVED_EDIT: Final[int] = 4
-COL_ACTIONS: Final[int] = 5
+COLUMN_FIELD_NAME: Final[int] = 0
+COLUMN_EXISTING_TAG: Final[int] = 1
+COLUMN_TOP_PROPOSAL: Final[int] = 2
+COLUMN_PROPOSAL_SOURCE: Final[int] = 3
+COLUMN_APPROVED_EDIT: Final[int] = 4
+COLUMN_ACTIONS: Final[int] = 5
 ACTION_ROW_MARGIN_PX: Final[int] = 2
 # Row widget roles. A row widget carries the object name "<field>:<role>", so focus
 # finds the same control again after the table rebuilds.
@@ -322,11 +322,11 @@ class DetailPanel(QWidget):
         other_layout.addWidget(self.other_tags_table)
         root.addWidget(other_box, stretch=OTHER_TAGS_STRETCH)
 
-        cand_box = QGroupBox("Candidate Releases & Analysis Evidence", self)
-        cand_layout = QVBoxLayout(cand_box)
+        candidate_box = QGroupBox("Candidate Releases & Analysis Evidence", self)
+        candidate_layout = QVBoxLayout(candidate_box)
         self.candidates_list.setAccessibleName("Candidate releases and analysis evidence")
-        cand_layout.addWidget(self.candidates_list)
-        root.addWidget(cand_box, stretch=CANDIDATE_BOX_STRETCH)
+        candidate_layout.addWidget(self.candidates_list)
+        root.addWidget(candidate_box, stretch=CANDIDATE_BOX_STRETCH)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Stop analysis work when this panel is closed independently.
@@ -619,12 +619,12 @@ class DetailPanel(QWidget):
         raw_custom_tags = asset.original_tags.get("raw_custom_tags") or {}
         rows = other_tag_rows(raw_custom_tags)
         self.other_tags_table.setRowCount(len(rows))
-        for row_idx, (key, full_text) in enumerate(rows):
+        for row_index, (key, full_text) in enumerate(rows):
             key_item = QTableWidgetItem(key)
             value_item = QTableWidgetItem(truncate_for_cell(full_text))
             value_item.setToolTip(plain_text_tooltip(full_text))
-            self.other_tags_table.setItem(row_idx, COL_OTHER_KEY, key_item)
-            self.other_tags_table.setItem(row_idx, COL_OTHER_VALUE, value_item)
+            self.other_tags_table.setItem(row_index, COLUMN_OTHER_KEY, key_item)
+            self.other_tags_table.setItem(row_index, COLUMN_OTHER_VALUE, value_item)
 
     def _apply_warning_color(self) -> None:
         """Color the warnings with the amber that reaches 4.5:1 on the label background.
@@ -646,10 +646,10 @@ class DetailPanel(QWidget):
 
     def _populate_warnings(self, asset: FileAsset) -> None:
         """Render XDJ-RX3 hardware warnings, pitch drift alerts, and rip diagnostics."""
-        tech = asset.original_tags.get("technical", {})
-        warnings: list[str] = list(tech.get("warnings", []))
-        for ana in self.repo.list_analysis_results(asset.id):
-            warnings.extend(ana.warnings)
+        technical_tags = asset.original_tags.get("technical", {})
+        warnings: list[str] = list(technical_tags.get("warnings", []))
+        for analysis in self.repo.list_analysis_results(asset.id):
+            warnings.extend(analysis.warnings)
         self.warnings_label.setText(" | ".join(warnings) if warnings else "No hardware warnings.")
 
     def _populate_fields_table(self, asset: FileAsset) -> None:
@@ -661,22 +661,22 @@ class DetailPanel(QWidget):
         """
         same_file = asset.id == self._fields_file_id
         kept = self._capture_row_state() if same_file else FieldRowState({}, None)
-        existing_std = asset.original_tags.get("standard_tags", {})
+        existing_standard_tags = asset.original_tags.get("standard_tags", {})
         approved_map = self.repo.get_approved_fields_map(asset.id)
         proposals = self.repo.list_field_proposals(asset.id)
         by_field: dict[str, list[FieldProposal]] = {}
-        for prop in proposals:
-            by_field.setdefault(prop.field_name, []).append(prop)
+        for proposal in proposals:
+            by_field.setdefault(proposal.field_name, []).append(proposal)
 
         self.fields_table.setRowCount(len(DISPLAY_FIELDS))
-        for row_idx, field_enum in enumerate(DISPLAY_FIELDS):
+        for row_index, field_enum in enumerate(DISPLAY_FIELDS):
             f_name = field_enum.value
             self._populate_single_field_row(
-                row_idx=row_idx,
+                row_index=row_index,
                 file_id=asset.id,
                 field_name=f_name,
-                existing_val=str(existing_std.get(f_name, "")),
-                field_props=by_field.get(f_name, []),
+                existing_value=str(existing_standard_tags.get(f_name, "")),
+                field_proposals=by_field.get(f_name, []),
                 approved=approved_map.get(f_name),
             )
         self._fields_file_id = asset.id
@@ -685,11 +685,11 @@ class DetailPanel(QWidget):
 
     def _row_controls(self) -> Iterator[QWidget]:
         """Yield the edit box and the buttons of every current field row."""
-        for row_idx in range(self.fields_table.rowCount()):
-            edit_box = self.fields_table.cellWidget(row_idx, COL_APPROVED_EDIT)
+        for row_index in range(self.fields_table.rowCount()):
+            edit_box = self.fields_table.cellWidget(row_index, COLUMN_APPROVED_EDIT)
             if edit_box is not None:
                 yield edit_box
-            actions = self.fields_table.cellWidget(row_idx, COL_ACTIONS)
+            actions = self.fields_table.cellWidget(row_index, COLUMN_ACTIONS)
             if actions is not None:
                 yield from actions.findChildren(QPushButton)
 
@@ -730,46 +730,52 @@ class DetailPanel(QWidget):
     def _populate_single_field_row(
         self,
         *,
-        row_idx: int,
+        row_index: int,
         file_id: str,
         field_name: str,
-        existing_val: str,
-        field_props: list[FieldProposal],
+        existing_value: str,
+        field_proposals: list[FieldProposal],
         approved: ApprovedField | None,
     ) -> None:
         """Render a single field row with inline edit and Accept/Lock controls."""
-        top_prop = field_props[0] if field_props else None
-        prop_val = self._format_display_val(field_name, top_prop.proposed_value) if top_prop else ""
-        src_text = self._format_proposal_source(top_prop) if top_prop else "-"
-        app_val = self._format_display_val(field_name, approved.approved_value if approved else "")
-
-        self.fields_table.setItem(row_idx, COL_FIELD_NAME, QTableWidgetItem(field_name))
-        self.fields_table.setItem(
-            row_idx,
-            COL_EXISTING_TAG,
-            QTableWidgetItem(self._format_display_val(field_name, existing_val)),
+        top_proposal = field_proposals[0] if field_proposals else None
+        proposal_value = (
+            self._format_display_val(field_name, top_proposal.proposed_value)
+            if top_proposal
+            else ""
         )
-        self.fields_table.setItem(row_idx, COL_TOP_PROPOSAL, QTableWidgetItem(prop_val))
-        self.fields_table.setItem(row_idx, COL_PROPOSAL_SOURCE, QTableWidgetItem(src_text))
+        source_text = self._format_proposal_source(top_proposal) if top_proposal else "-"
+        approved_value = self._format_display_val(
+            field_name, approved.approved_value if approved else ""
+        )
 
-        edit_box = QLineEdit(app_val, self.fields_table)
+        self.fields_table.setItem(row_index, COLUMN_FIELD_NAME, QTableWidgetItem(field_name))
+        self.fields_table.setItem(
+            row_index,
+            COLUMN_EXISTING_TAG,
+            QTableWidgetItem(self._format_display_val(field_name, existing_value)),
+        )
+        self.fields_table.setItem(row_index, COLUMN_TOP_PROPOSAL, QTableWidgetItem(proposal_value))
+        self.fields_table.setItem(row_index, COLUMN_PROPOSAL_SOURCE, QTableWidgetItem(source_text))
+
+        edit_box = QLineEdit(approved_value, self.fields_table)
         edit_box.setMaxLength(MAX_MANUAL_FIELD_LENGTH)
         edit_box.setObjectName(row_widget_name(field_name, ROLE_EDIT))
         edit_box.setProperty(ROW_FIELD_PROPERTY, field_name)
-        edit_box.setProperty(LOADED_TEXT_PROPERTY, app_val)
+        edit_box.setProperty(LOADED_TEXT_PROPERTY, approved_value)
         edit_box.setAccessibleName(f"Approved value for {field_label(field_name)}")
-        self.fields_table.setCellWidget(row_idx, COL_APPROVED_EDIT, edit_box)
+        self.fields_table.setCellWidget(row_index, COLUMN_APPROVED_EDIT, edit_box)
 
         action_widget = self._create_row_action_widget(
-            file_id, field_name, top_prop, approved, edit_box
+            file_id, field_name, top_proposal, approved, edit_box
         )
-        self.fields_table.setCellWidget(row_idx, COL_ACTIONS, action_widget)
+        self.fields_table.setCellWidget(row_index, COLUMN_ACTIONS, action_widget)
 
     def _create_row_action_widget(
         self,
         file_id: str,
         field_name: str,
-        top_prop: FieldProposal | None,
+        top_proposal: FieldProposal | None,
         approved: ApprovedField | None,
         edit_box: QLineEdit,
     ) -> QWidget:
@@ -783,26 +789,28 @@ class DetailPanel(QWidget):
             ACTION_ROW_MARGIN_PX,
         )
 
-        if top_prop is not None:
-            acc_btn = self._add_row_button(layout, field_name, ROLE_ACCEPT, "Accept")
-            acc_btn.setAccessibleName(f"Accept proposal for {field_label(field_name)}")
-            acc_btn.clicked.connect(
-                lambda _c=False, fn=field_name, pid=top_prop.id: self._accept_row_proposal(fn, pid)
+        if top_proposal is not None:
+            accept_button = self._add_row_button(layout, field_name, ROLE_ACCEPT, "Accept")
+            accept_button.setAccessibleName(f"Accept proposal for {field_label(field_name)}")
+            accept_button.clicked.connect(
+                lambda _c=False, field_name=field_name, proposal_id=top_proposal.id: (
+                    self._accept_row_proposal(field_name, proposal_id)
+                )
             )
 
-        save_btn = self._add_row_button(layout, field_name, ROLE_SAVE, "Save")
-        save_btn.clicked.connect(
-            lambda _c=False, fid=file_id, fn=field_name, eb=edit_box: self._on_save_manual(
-                fid, fn, eb.text()
+        save_button = self._add_row_button(layout, field_name, ROLE_SAVE, "Save")
+        save_button.clicked.connect(
+            lambda _c=False, file_id=file_id, field_name=field_name, edit_box=edit_box: (
+                self._on_save_manual(file_id, field_name, edit_box.text())
             )
         )
 
         is_locked = bool(approved and approved.locked)
         lock_text = "Unlock" if is_locked else "Lock"
-        lock_btn = self._add_row_button(layout, field_name, ROLE_LOCK, lock_text)
-        lock_btn.clicked.connect(
-            lambda _c=False, fid=file_id, fn=field_name, lk=not is_locked: self._on_toggle_lock(
-                fid, fn, lk
+        lock_button = self._add_row_button(layout, field_name, ROLE_LOCK, lock_text)
+        lock_button.clicked.connect(
+            lambda _c=False, file_id=file_id, field_name=field_name, locked=not is_locked: (
+                self._on_toggle_lock(file_id, field_name, locked)
             )
         )
         return container
@@ -843,60 +851,67 @@ class DetailPanel(QWidget):
         if self.on_change_callback:
             self.on_change_callback()
 
-    def _format_display_val(self, field_name: str, raw_val: str) -> str:
+    def _format_display_val(self, field_name: str, raw_value: str) -> str:
         """Format canonical key according to active KeyDisplayNotation when displaying KEY."""
-        if field_name != FieldName.KEY.value or not raw_val:
-            return raw_val
-        parsed = parse_key_string(raw_val)
+        if field_name != FieldName.KEY.value or not raw_value:
+            return raw_value
+        parsed = parse_key_string(raw_value)
         if parsed is None:
-            return raw_val
+            return raw_value
         return format_canonical_key(parsed[0], parsed[1], self.key_notation)
 
-    def _format_proposal_source(self, prop: FieldProposal) -> str:
+    def _format_proposal_source(self, proposal: FieldProposal) -> str:
         """Format provider attribution, provider confidence, and application match score."""
-        p_conf = f"{prop.provider_confidence:.2f}" if prop.provider_confidence is not None else "-"
-        m_score = (
-            f"{prop.application_match_score:.2f}"
-            if prop.application_match_score is not None
+        confidence_text = (
+            f"{proposal.provider_confidence:.2f}"
+            if proposal.provider_confidence is not None
             else "-"
         )
-        return f"{prop.provider} (conf={p_conf}, match={m_score})"
+        m_score = (
+            f"{proposal.application_match_score:.2f}"
+            if proposal.application_match_score is not None
+            else "-"
+        )
+        return f"{proposal.provider} (conf={confidence_text}, match={m_score})"
 
     def _populate_candidates_list(self, file_id: str) -> None:
         """Populate candidate matches and analysis results in the bottom evidence list."""
         self.candidates_list.clear()
-        for cand in self.repo.list_candidate_matches(file_id):
-            rel = cand.release_details
+        for candidate in self.repo.list_candidate_matches(file_id):
+            release = candidate.release_details
             self.candidates_list.addItem(
-                f"[{cand.provider}] {cand.artist} - {cand.title} "
-                f"({cand.mix_name or 'Original'}) | Label: {rel.label or '-'} "
-                f"| Cat#: {rel.catalog_number or '-'} | Score: {cand.match_score or 0.0:.2f}"
+                f"[{candidate.provider}] {candidate.artist} - {candidate.title} "
+                f"({candidate.mix_name or 'Original'}) | Label: {release.label or '-'} "
+                f"| Cat#: {release.catalog_number or '-'} "
+                f"| Score: {candidate.match_score or 0.0:.2f}"
             )
-        for ana in self.repo.list_analysis_results(file_id):
-            key_str = "-"
-            if ana.key_tonic and ana.key_mode:
-                key_str = format_canonical_key(ana.key_tonic, ana.key_mode, self.key_notation)
+        for analysis in self.repo.list_analysis_results(file_id):
+            key_text = "-"
+            if analysis.key_tonic and analysis.key_mode:
+                key_text = format_canonical_key(
+                    analysis.key_tonic, analysis.key_mode, self.key_notation
+                )
             self.candidates_list.addItem(
-                f"[Analyzer: {ana.analyzer_name}] BPM: {ana.bpm or '-'} | Key: {key_str}"
+                f"[Analyzer: {analysis.analyzer_name}] BPM: {analysis.bpm or '-'} | Key: {key_text}"
             )
 
     def accept_first_proposal_for_field(self, field_name: str) -> bool:
         """Programmatically accept the top proposal for field_name on the current file."""
         if self.current_file_id is None:
             return False
-        props = self.repo.list_field_proposals(self.current_file_id, field_name)
-        if not props:
+        proposals = self.repo.list_field_proposals(self.current_file_id, field_name)
+        if not proposals:
             return False
-        return self._on_accept_proposal(props[0].id)
+        return self._on_accept_proposal(proposals[0].id)
 
     def _on_accept_proposal(self, proposal_id: str) -> bool:
         """Accept a proposal and refresh UI state."""
-        ok = self.review_service.accept_proposal(proposal_id)
+        accepted = self.review_service.accept_proposal(proposal_id)
         if self.current_file_id:
             self.select_file_asset(self.current_file_id)
         if self.on_change_callback:
             self.on_change_callback()
-        return ok
+        return accepted
 
     def _on_save_manual(self, file_id: str, field_name: str, value: str) -> None:
         """Save a manual field edit with lock=True and refresh UI state.

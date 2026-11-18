@@ -85,9 +85,9 @@ def parse_dj_title_and_mix(raw_title: str) -> tuple[str, str | None, str | None]
 
 def _infer_remixer_from_mix_name(mix_name: str) -> str | None:
     """Extract remixer name from 'Sharam's ... Mix' or 'Danny Tenaglia Dub'."""
-    poss = POSSESSIVE_REMIXER_PATTERN.match(mix_name)
-    if poss:
-        owner = poss.group(PAREN_BASE_GROUP).strip()
+    possessive_match = POSSESSIVE_REMIXER_PATTERN.match(mix_name)
+    if possessive_match:
+        owner = possessive_match.group(PAREN_BASE_GROUP).strip()
         return None if owner.lower() in CONTRACTION_STEMS else owner
     by_match = BY_REMIXER_PATTERN.match(mix_name)
     if by_match:
@@ -103,11 +103,16 @@ def _is_mix_descriptor_phrase(phrase: str) -> bool:
     return all(word in MIX_DESCRIPTOR_WORDS or word.isdigit() for word in words)
 
 
-def duration_similarity(file_dur: float | None, cand_dur: float | None) -> float:
+def duration_similarity(file_duration: float | None, candidate_duration: float | None) -> float:
     """Score duration agreement in [0.0, 1.0], penalizing large discrepancies."""
-    if file_dur is None or cand_dur is None or file_dur <= 0.0 or cand_dur <= 0.0:
+    if (
+        file_duration is None
+        or candidate_duration is None
+        or file_duration <= 0.0
+        or candidate_duration <= 0.0
+    ):
         return DEFAULT_MISSING_DURATION_SCORE
-    diff = abs(file_dur - cand_dur)
+    diff = abs(file_duration - candidate_duration)
     if diff <= DURATION_EXACT_THRESHOLD_SEC:
         return 1.0
     if diff >= DURATION_LARGE_DIFF_THRESHOLD_SEC:
@@ -123,31 +128,33 @@ class MatchingEngine:
 
     def compute_application_match_score(self, asset: FileAsset, candidate: CandidateMatch) -> float:
         """Compute composite application_match_score in [0.0, 1.0] separately from provider."""
-        std = asset.original_tags.get("standard_tags", {})
-        cur_artist = std.get("artist")
-        cur_title = std.get("title")
+        standard_tags = asset.original_tags.get("standard_tags", {})
+        current_artist = standard_tags.get("artist")
+        current_title = standard_tags.get("title")
 
-        art_sim = (
-            string_similarity(cur_artist, candidate.artist)
-            if cur_artist
+        artist_score = (
+            string_similarity(current_artist, candidate.artist)
+            if current_artist
             else DEFAULT_MISSING_FIELD_SIMILARITY
         )
-        base_cur, _, _ = parse_dj_title_and_mix(cur_title or "")
-        base_cand, _, _ = parse_dj_title_and_mix(candidate.title or "")
-        tit_sim = (
-            string_similarity(base_cur, base_cand) if base_cur else DEFAULT_MISSING_FIELD_SIMILARITY
+        base_current_title, _, _ = parse_dj_title_and_mix(current_title or "")
+        base_candidate_title, _, _ = parse_dj_title_and_mix(candidate.title or "")
+        title_score = (
+            string_similarity(base_current_title, base_candidate_title)
+            if base_current_title
+            else DEFAULT_MISSING_FIELD_SIMILARITY
         )
-        dur_sim = duration_similarity(asset.duration, candidate.duration)
-        prov_score = (
+        duration_score = duration_similarity(asset.duration, candidate.duration)
+        provider_score = (
             candidate.match_score
             if candidate.match_score > 0.0
             else DEFAULT_MISSING_FIELD_SIMILARITY
         )
 
         weighted = (
-            (WEIGHT_PROVIDER * prov_score)
-            + (WEIGHT_ARTIST * art_sim)
-            + (WEIGHT_TITLE * tit_sim)
-            + (WEIGHT_DURATION * dur_sim)
+            (WEIGHT_PROVIDER * provider_score)
+            + (WEIGHT_ARTIST * artist_score)
+            + (WEIGHT_TITLE * title_score)
+            + (WEIGHT_DURATION * duration_score)
         )
         return round(max(0.0, min(1.0, weighted)), SIMILARITY_PRECISION_DIGITS)

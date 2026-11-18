@@ -14,7 +14,7 @@ from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
-from infiniteprep.ui.detail_panel import COL_APPROVED_EDIT, DISPLAY_FIELDS, DetailPanel
+from infiniteprep.ui.detail_panel import COLUMN_APPROVED_EDIT, DISPLAY_FIELDS, DetailPanel
 from tests.fixtures.audio_factory import create_wav_fixture
 
 ARTIST_ROW: int = DISPLAY_FIELDS.index(FieldName.ARTIST)
@@ -27,7 +27,7 @@ class AcceptFailedError(RuntimeError):
 
 def artist_text(panel: DetailPanel) -> str:
     """Return the text in the artist row edit box."""
-    widget = panel.fields_table.cellWidget(ARTIST_ROW, COL_APPROVED_EDIT)
+    widget = panel.fields_table.cellWidget(ARTIST_ROW, COLUMN_APPROVED_EDIT)
     assert isinstance(widget, QLineEdit)
     return widget.text()
 
@@ -43,7 +43,7 @@ def test_a_raised_accept_keeps_typed_text_through_the_next_refresh(
     qtbot.addWidget(panel)
     file_id = report.imported_files[0].id
     panel.load_file_asset(file_id)
-    edit = panel.fields_table.cellWidget(ARTIST_ROW, COL_APPROVED_EDIT)
+    edit = panel.fields_table.cellWidget(ARTIST_ROW, COLUMN_APPROVED_EDIT)
     edit.setText(TYPED_ARTIST)
 
     def fail_accept(_proposal_id: str) -> bool:

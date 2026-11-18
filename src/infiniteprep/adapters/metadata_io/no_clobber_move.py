@@ -22,7 +22,7 @@ LINUX_RENAME_NOREPLACE: Final[int] = 1
 # renameat2 resolves a relative path against the working directory with this descriptor.
 LINUX_AT_FDCWD: Final[int] = -100
 # renamex_np flag that makes macOS refuse an existing destination.
-MACOS_RENAME_EXCL: Final[int] = 0x00000004
+MACOS_RENAME_EXCLUSIVE: Final[int] = 0x00000004
 # A kernel or file system without the no-replace rename reports one of these codes.
 UNSUPPORTED_RENAME_ERRNOS: Final[frozenset[int]] = frozenset(
     {errno.EINVAL, errno.ENOSYS, errno.ENOTSUP, errno.EOPNOTSUPP}
@@ -167,4 +167,4 @@ def _macos_renamex_np(libc: ctypes.CDLL) -> NoReplaceRename | None:
         return None
     renamex_np.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
     renamex_np.restype = ctypes.c_int
-    return lambda source, destination: renamex_np(source, destination, MACOS_RENAME_EXCL)
+    return lambda source, destination: renamex_np(source, destination, MACOS_RENAME_EXCLUSIVE)

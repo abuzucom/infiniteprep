@@ -103,10 +103,10 @@ class OllamaBootstrapService:
         valid, _reason = validate_endpoint_url(self.tags_url)
         if not valid:
             return []
-        req = urllib.request.Request(self.tags_url)
+        request = urllib.request.Request(self.tags_url)
         try:
-            with urllib.request.urlopen(req, timeout=OLLAMA_TAGS_TIMEOUT_SEC) as resp:
-                raw_bytes = resp.read(MAX_TAGS_RESPONSE_BYTES + 1)
+            with urllib.request.urlopen(request, timeout=OLLAMA_TAGS_TIMEOUT_SEC) as response:
+                raw_bytes = response.read(MAX_TAGS_RESPONSE_BYTES + 1)
         except OSError:
             return []
         if len(raw_bytes) > MAX_TAGS_RESPONSE_BYTES:
@@ -126,7 +126,7 @@ class OllamaBootstrapService:
             )
         sys_name = platform.system().lower()
         if sys_name.startswith("win"):
-            cmd = [
+            command = [
                 "winget",
                 "install",
                 "--id",
@@ -136,10 +136,10 @@ class OllamaBootstrapService:
                 "--accept-package-agreements",
             ]
         elif sys_name == "darwin":
-            cmd = ["brew", "install", "--cask", "ollama"]
+            command = ["brew", "install", "--cask", "ollama"]
         else:
             return "On Linux, install Ollama from https://ollama.com/download"
-        completed = self._exec_array(cmd)
+        completed = self._exec_array(command)
         return completed.stdout
 
     def pull_model(self, model_name: str, *, user_consented: bool) -> str:
@@ -156,12 +156,12 @@ class OllamaBootstrapService:
         completed = self._exec_array(["ollama", "pull", model_name])
         return completed.stdout
 
-    def _exec_array(self, cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    def _exec_array(self, command: list[str]) -> subprocess.CompletedProcess[str]:
         """Execute command array safely with shell=False."""
         if self.runner is not None:
-            return self.runner(cmd)
+            return self.runner(command)
         return subprocess.run(
-            cmd,
+            command,
             capture_output=True,
             text=True,
             timeout=INSTALL_COMMAND_TIMEOUT_SEC,

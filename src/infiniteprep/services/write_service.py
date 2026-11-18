@@ -136,9 +136,9 @@ class WriteService:
         record = self._get_interrupted(operation_id)
         # The chosen path becomes the asset's write target. Both stored paths must stay in the
         # library root.
-        prev_path, cur_path = self._resolve_and_verify_restore_paths(record)
-        renamed = self._renamed_file(record, prev_path, cur_path)
-        current = renamed[0] if renamed is not None else prev_path
+        previous_path, current_path = self._resolve_and_verify_restore_paths(record)
+        renamed = self._renamed_file(record, previous_path, current_path)
+        current = renamed[0] if renamed is not None else previous_path
         record.post_write_hash = compute_sha256(current)
         record.new_path = str(current)
         record.operation_status = OperationStatus.COMPLETED
@@ -161,10 +161,10 @@ class WriteService:
     def apply_batch(self, write_plans: list[FileWritePlan]) -> list[ChangeRecord]:
         """Apply all safe FileWritePlans, recording ChangeRecords and updating FileAssets."""
         self._ensure_no_pending_recovery()
-        batch_op_id = str(uuid.uuid4())
+        batch_operation_id = str(uuid.uuid4())
         records: list[ChangeRecord] = []
         for plan in write_plans:
-            record = self.apply_single_plan(plan, batch_operation_id=batch_op_id)
+            record = self.apply_single_plan(plan, batch_operation_id=batch_operation_id)
             records.append(record)
         return records
 
@@ -188,7 +188,7 @@ class WriteService:
         before any file changes.
         """
         self._ensure_no_pending_recovery()
-        batch_op_id = str(uuid.uuid4())
+        batch_operation_id = str(uuid.uuid4())
         result = WriteBatchResult()
         total = len(write_plans)
         for index, plan in enumerate(write_plans):
@@ -197,7 +197,7 @@ class WriteService:
                 return result
             if progress is not None:
                 progress(index + 1, total, str(plan.source_path))
-            succeeded = self._apply_plan_recording_failure(plan, batch_op_id, result)
+            succeeded = self._apply_plan_recording_failure(plan, batch_operation_id, result)
             if not succeeded and stop_on_failure:
                 result.stopped_early = True
                 return result
@@ -282,11 +282,11 @@ class WriteService:
             return
         try:
             pending.operation_status = self._restore_after_failure(pending)
-        except Exception as rollback_exc:
+        except Exception as rollback_error:
             # The file may be half-written. IN_PROGRESS keeps it in startup recovery and blocks
             # new writes. The caller still re-raises the original failure.
-            logger.error("Rollback of %s failed: %r", pending.operation_id, rollback_exc)
-            pending.error_message += f"; rollback failed ({rollback_exc})"
+            logger.error("Rollback of %s failed: %r", pending.operation_id, rollback_error)
+            pending.error_message += f"; rollback failed ({rollback_error})"
             pending.operation_status = OperationStatus.IN_PROGRESS
         self.repo.upsert_change_record(pending)
 
@@ -301,11 +301,11 @@ class WriteService:
 
     def _restore_into_place(self, backup_path: Path, record: ChangeRecord) -> str:
         """Swap the backup into previous_path through a verified staging copy, then clean up."""
-        prev_path = Path(record.previous_path)
-        renamed = self._renamed_file(record, prev_path, Path(record.new_path))
+        previous_path = Path(record.previous_path)
+        renamed = self._renamed_file(record, previous_path, Path(record.new_path))
         self._preserve_renamed_file(record, renamed)
         restored_hash = self._replace_with_staged_copy(
-            backup_path, prev_path, record.pre_write_hash
+            backup_path, previous_path, record.pre_write_hash
         )
         self._remove_written_rename(record, renamed)
         return restored_hash
@@ -337,21 +337,21 @@ class WriteService:
 
     @staticmethod
     def _renamed_file(
-        record: ChangeRecord, prev_path: Path, cur_path: Path
+        record: ChangeRecord, previous_path: Path, current_path: Path
     ) -> tuple[Path, FileIdentity] | None:
         """Return the file the write renamed with its identity, or None without a rename.
 
-        Call this before a restore recreates prev_path. The rename is the last step of a
+        Call this before a restore recreates previous_path. The rename is the last step of a
         write. For an unfinished write, a source that still exists means the rename never ran.
         A file at the planned name then belongs to another program and stays. The identity
         lets the cleanup skip a file that another program puts at that name later.
         """
-        if cur_path.resolve() == prev_path.resolve() or not cur_path.is_file():
+        if current_path.resolve() == previous_path.resolve() or not current_path.is_file():
             return None
-        if record.operation_status == OperationStatus.IN_PROGRESS and prev_path.exists():
+        if record.operation_status == OperationStatus.IN_PROGRESS and previous_path.exists():
             return None
         try:
-            return cur_path, file_identity(cur_path)
+            return current_path, file_identity(current_path)
         except FileNotFoundError:
             return None
 
@@ -381,9 +381,9 @@ class WriteService:
             asset.current_path = record.new_path
             asset.content_hash = record.post_write_hash or compute_sha256(Path(record.new_path))
             asset.review_status = ReviewStatus.WRITTEN
-            std = dict(asset.original_tags.get("standard_tags", {}))
-            std.update(plan.proposed_tags_to_write)
-            asset.original_tags["standard_tags"] = std
+            standard_tags = dict(asset.original_tags.get("standard_tags", {}))
+            standard_tags.update(plan.proposed_tags_to_write)
+            asset.original_tags["standard_tags"] = standard_tags
             self.repo.upsert_file_asset(asset)
 
     def restore_operation(
@@ -421,18 +421,18 @@ class WriteService:
     ) -> ChangeRecord:
         """Swap the verified backup in for the record, then store final_status and the asset."""
         backup_path = self._verify_backup_file(record, record.operation_id)
-        prev_path, cur_path = self._resolve_and_verify_restore_paths(
+        previous_path, current_path = self._resolve_and_verify_restore_paths(
             record, allowed_library_root=allowed_library_root
         )
         if guard_later_edits:
             if not allow_modified:
-                self._refuse_restore_over_later_edits(record, prev_path, cur_path)
-            self._preserve_files_before_restore(record, prev_path, cur_path)
-        renamed = self._renamed_file(record, prev_path, cur_path)
+                self._refuse_restore_over_later_edits(record, previous_path, current_path)
+            self._preserve_files_before_restore(record, previous_path, current_path)
+        renamed = self._renamed_file(record, previous_path, current_path)
         if not guard_later_edits:
             self._preserve_renamed_file(record, renamed)
         restored_hash = self._replace_with_staged_copy(
-            backup_path, prev_path, record.pre_write_hash
+            backup_path, previous_path, record.pre_write_hash
         )
         self._remove_written_rename(record, renamed)
 
@@ -441,7 +441,7 @@ class WriteService:
 
         asset = self.repo.get_file_by_id(record.file_id)
         if asset is not None:
-            asset.current_path = str(prev_path)
+            asset.current_path = str(previous_path)
             asset.content_hash = restored_hash
             asset.review_status = ReviewStatus.APPROVED
             asset.original_tags["standard_tags"] = dict(record.previous_tags)
@@ -466,18 +466,18 @@ class WriteService:
 
     @staticmethod
     def _refuse_restore_over_later_edits(
-        record: ChangeRecord, prev_path: Path, cur_path: Path
+        record: ChangeRecord, previous_path: Path, current_path: Path
     ) -> None:
         """Raise RestoreConflictError when a restore would overwrite edits made after the write."""
         changed: list[str] = []
         if (
-            cur_path.exists()
+            current_path.exists()
             and record.post_write_hash
-            and compute_sha256(cur_path) != record.post_write_hash
+            and compute_sha256(current_path) != record.post_write_hash
         ):
-            changed.append(f"'{cur_path.name}' changed after this write")
-        if cur_path != prev_path and prev_path.exists():
-            changed.append(f"a new file now exists at '{prev_path.name}'")
+            changed.append(f"'{current_path.name}' changed after this write")
+        if current_path != previous_path and previous_path.exists():
+            changed.append(f"a new file now exists at '{previous_path.name}'")
         if changed:
             raise RestoreConflictError(
                 f"Restore would overwrite later edits: {'; '.join(changed)}. Confirm to restore "
@@ -485,10 +485,10 @@ class WriteService:
             )
 
     def _preserve_files_before_restore(
-        self, record: ChangeRecord, prev_path: Path, cur_path: Path
+        self, record: ChangeRecord, previous_path: Path, current_path: Path
     ) -> None:
         """Copy each file the restore replaces or removes into the backup directory, verified."""
-        for path in dict.fromkeys((cur_path, prev_path)):
+        for path in dict.fromkeys((current_path, previous_path)):
             if not path.is_file():
                 continue
             destination = operation_backup_path(
@@ -508,24 +508,26 @@ class WriteService:
         allowed_library_root: Path | None = None,
     ) -> tuple[Path, Path]:
         """Resolve previous_path and new_path and verify both stay within library root."""
-        raw_prev = Path(record.previous_path)
-        raw_cur = Path(record.new_path)
-        if ".." in raw_prev.parts or ".." in raw_cur.parts:
+        raw_previous = Path(record.previous_path)
+        raw_current = Path(record.new_path)
+        if ".." in raw_previous.parts or ".." in raw_current.parts:
             raise ValueError("Path traversal '..' is not permitted in ChangeRecord restore paths.")
-        prev_path = raw_prev.resolve()
-        cur_path = raw_cur.resolve()
+        previous_path = raw_previous.resolve()
+        current_path = raw_current.resolve()
         asset = self.repo.get_file_by_id(record.file_id)
         default_root = (
-            Path(asset.original_path).resolve().parent if asset is not None else prev_path.parent
+            Path(asset.original_path).resolve().parent
+            if asset is not None
+            else previous_path.parent
         )
         effective_root = (
             allowed_library_root or self.allowed_library_root or default_root
         ).resolve()
-        if not prev_path.is_relative_to(effective_root) or not cur_path.is_relative_to(
+        if not previous_path.is_relative_to(effective_root) or not current_path.is_relative_to(
             effective_root
         ):
             raise ValueError(
-                f"Restore paths '{prev_path}' / '{cur_path}' escape allowed library root "
+                f"Restore paths '{previous_path}' / '{current_path}' escape allowed library root "
                 f"'{effective_root}'."
             )
-        return prev_path, cur_path
+        return previous_path, current_path

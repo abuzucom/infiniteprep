@@ -155,72 +155,77 @@ class MusicBrainzAdapter:
     ) -> list[CandidateMatch]:
         """Convert MusicBrainz recording dicts into CandidateMatch domain entities."""
         results: list[CandidateMatch] = []
-        for rec in recordings:
-            results.extend(self._candidates_from_recording(rec, file_id))
+        for recording in recordings:
+            results.extend(self._candidates_from_recording(recording, file_id))
         return results
 
-    def _candidates_from_recording(self, rec: dict[str, Any], file_id: str) -> list[CandidateMatch]:
+    def _candidates_from_recording(
+        self, recording: dict[str, Any], file_id: str
+    ) -> list[CandidateMatch]:
         """Extract CandidateMatch objects from a single MusicBrainz recording entry."""
-        rec_id = provider_text(rec.get("id")) or "unknown"
-        title = provider_text(rec.get("title")) or ""
-        artists = [provider_text(a.get("name")) for a in provider_dicts(rec.get("artist-credit"))]
-        artist_str = ", ".join(a for a in artists if a) or None
-        dur_ms = provider_number(rec.get("length"))
-        duration = dur_ms / MS_PER_SECOND if dur_ms else None
-        releases = provider_dicts(rec.get("releases"))
+        recording_id = provider_text(recording.get("id")) or "unknown"
+        title = provider_text(recording.get("title")) or ""
+        artists = [
+            provider_text(artist_credit.get("name"))
+            for artist_credit in provider_dicts(recording.get("artist-credit"))
+        ]
+        artist_text = ", ".join(artist_name for artist_name in artists if artist_name) or None
+        duration_ms = provider_number(recording.get("length"))
+        duration = duration_ms / MS_PER_SECOND if duration_ms else None
+        releases = provider_dicts(recording.get("releases"))
         if not releases:
             return [
                 CandidateMatch(
-                    id=build_candidate_id("mb-rec", file_id, rec_id),
+                    id=build_candidate_id("mb-rec", file_id, recording_id),
                     file_id=file_id,
                     provider=self.provider_name,
-                    provider_entity_id=rec_id,
+                    provider_entity_id=recording_id,
                     entity_type=EntityType.RECORDING,
-                    artist=artist_str,
+                    artist=artist_text,
                     title=title,
                     duration=duration,
-                    match_evidence={"recording_id": rec_id},
+                    match_evidence={"recording_id": recording_id},
                     match_score=MB_RECORDING_MATCH_SCORE,
                 )
             ]
         return [
             self._build_release_candidate(
-                rec_id=rec_id,
-                artist_str=artist_str,
+                recording_id=recording_id,
+                artist_text=artist_text,
                 title=title,
                 duration=duration,
-                rel=rel,
+                release=release,
                 file_id=file_id,
             )
-            for rel in releases
+            for release in releases
         ]
 
     def _build_release_candidate(
         self,
         *,
-        rec_id: str,
-        artist_str: str | None,
+        recording_id: str,
+        artist_text: str | None,
         title: str,
         duration: float | None,
-        rel: dict[str, Any],
+        release: dict[str, Any],
         file_id: str,
     ) -> CandidateMatch:
         """Build a Release CandidateMatch from a MusicBrainz release sub-object."""
-        rel_id = provider_text(rel.get("id")) or rec_id
-        media = (provider_dicts(rel.get("media")) or [{}])[0]
+        release_id = provider_text(release.get("id")) or recording_id
+        media = (provider_dicts(release.get("media")) or [{}])[0]
         tracks = provider_dicts(media.get("track"))
-        track_num = provider_text(tracks[0].get("number")) if tracks else None
+        track_number = provider_text(tracks[0].get("number")) if tracks else None
         return CandidateMatch(
-            id=build_candidate_id("mb-rel", file_id, rec_id, rel_id),
+            id=build_candidate_id("mb-rel", file_id, recording_id, release_id),
             file_id=file_id,
             provider=self.provider_name,
-            provider_entity_id=rel_id,
+            provider_entity_id=release_id,
             entity_type=EntityType.RELEASE,
-            artist=artist_str,
+            artist=artist_text,
             title=title,
             duration=duration,
-            release_details=self._release_details(rel, track_num),
-            match_evidence={"recording_id": rec_id, "release_id": rel_id},
+            release_details=self._release_details(release, track_number),
+            match_evidence={"recording_id": recording_id, "release_id": release_id},
             match_score=MB_RELEASE_MATCH_SCORE,
         )
 
@@ -231,38 +236,38 @@ class MusicBrainzAdapter:
 
         A release lookup names no single track, so the candidate holds no track number.
         """
-        rel_id = provider_text(release.get("id")) or ""
+        release_id = provider_text(release.get("id")) or ""
         credits = provider_dicts(release.get("artist-credit"))
-        artists = [provider_text(a.get("name")) for a in credits]
+        artists = [provider_text(artist_credit.get("name")) for artist_credit in credits]
         return CandidateMatch(
-            id=build_candidate_id("mb-rel", file_id, rel_id),
+            id=build_candidate_id("mb-rel", file_id, release_id),
             file_id=file_id,
             provider=self.provider_name,
-            provider_entity_id=rel_id,
+            provider_entity_id=release_id,
             entity_type=EntityType.RELEASE,
-            artist=", ".join(a for a in artists if a) or None,
+            artist=", ".join(artist_name for artist_name in artists if artist_name) or None,
             title=provider_text(release.get("title")) or "",
             duration=None,
             release_details=self._release_details(release, None),
-            match_evidence={"release_id": rel_id},
+            match_evidence={"release_id": release_id},
             match_score=MB_RELEASE_MATCH_SCORE,
         )
 
-    def _release_details(self, rel: dict[str, Any], track_num: str | None) -> ReleaseDetails:
+    def _release_details(self, release: dict[str, Any], track_number: str | None) -> ReleaseDetails:
         """Return the release details of one MusicBrainz release object.
 
         Every field passes the provider field checks. A wrong type reads as an absent value.
         """
-        lbl_info = (provider_dicts(rel.get("label-info")) or [{}])[0]
-        media = (provider_dicts(rel.get("media")) or [{}])[0]
+        label_info = (provider_dicts(release.get("label-info")) or [{}])[0]
+        media = (provider_dicts(release.get("media")) or [{}])[0]
         return ReleaseDetails(
-            release_title=provider_text(rel.get("title")),
-            label=provider_text(provider_dict(lbl_info.get("label")).get("name")),
-            catalog_number=provider_text(lbl_info.get("catalog-number")),
-            country=provider_text(rel.get("country")),
-            year=extract_release_year(provider_text(rel.get("date"))),
-            track_number=track_num,
-            vinyl_position=track_num,
+            release_title=provider_text(release.get("title")),
+            label=provider_text(provider_dict(label_info.get("label")).get("name")),
+            catalog_number=provider_text(label_info.get("catalog-number")),
+            country=provider_text(release.get("country")),
+            year=extract_release_year(provider_text(release.get("date"))),
+            track_number=track_number,
+            vinyl_position=track_number,
             format_description=provider_text(media.get("format")),
         )
 

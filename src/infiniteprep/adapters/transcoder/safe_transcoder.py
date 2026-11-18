@@ -150,35 +150,35 @@ class SafeTranscoderAdapter:
         asset = self.repo.get_file_by_id(file_id)
         if asset is None:
             raise ValueError(f"FileAsset {file_id} not found in database.")
-        src_path = Path(asset.current_path).resolve()
-        if not src_path.exists():
-            raise FileNotFoundError(f"Source audio file missing at {src_path}.")
-        self._verify_audio_bounds(src_path)
-        info = sf.info(str(src_path))
+        source_path = Path(asset.current_path).resolve()
+        if not source_path.exists():
+            raise FileNotFoundError(f"Source audio file missing at {source_path}.")
+        self._verify_audio_bounds(source_path)
+        info = sf.info(str(source_path))
         target = self._resolve_target_params(asset, int(info.samplerate), preset)
         self._refuse_untaggable_output(asset, info, target)
-        target_sr, target_subtype, target_ext, sf_fmt = target
+        target_sample_rate, target_subtype, target_extension, soundfile_format = target
 
         out_path = self._determine_output_path(
-            src_path, target_ext, mode, export_dir, allowed_export_root
+            source_path, target_extension, mode, export_dir, allowed_export_root
         )
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         record_id = self._execute_transcode_write(
             asset=asset,
-            src_path=src_path,
+            source_path=source_path,
             out_path=out_path,
-            target_sr=target_sr,
+            target_sample_rate=target_sample_rate,
             target_subtype=target_subtype,
-            sf_fmt=sf_fmt,
+            soundfile_format=soundfile_format,
             mode=mode,
         )
 
         return TranscodeResult(
             file_id=asset.id,
-            source_path=src_path,
+            source_path=source_path,
             output_path=out_path,
-            target_sample_rate=target_sr,
+            target_sample_rate=target_sample_rate,
             target_subtype=target_subtype,
             change_record_id=record_id,
         )
@@ -187,42 +187,46 @@ class SafeTranscoderAdapter:
         self,
         *,
         asset: FileAsset,
-        src_path: Path,
+        source_path: Path,
         out_path: Path,
-        target_sr: int,
+        target_sample_rate: int,
         target_subtype: str,
-        sf_fmt: str,
+        soundfile_format: str,
         mode: TranscodeMode,
     ) -> str | None:
         """Write resampled audio via a temp file, verify hash, and update journal if in-place."""
-        temp_out = out_path.with_name(f".{out_path.stem}.tmp_{uuid.uuid4().hex}{out_path.suffix}")
-        rec: ChangeRecord | None = None
+        temporary_output = out_path.with_name(
+            f".{out_path.stem}.tmp_{uuid.uuid4().hex}{out_path.suffix}"
+        )
+        record: ChangeRecord | None = None
         if mode == TranscodeMode.IN_PLACE_BACKED_UP:
-            rec = self._backup_and_journal_in_place(asset, src_path, out_path)
+            record = self._backup_and_journal_in_place(asset, source_path, out_path)
         try:
-            write_resampled_audio(src_path, temp_out, target_sr, target_subtype, sf_fmt)
-            self._apply_effective_tags_to_output(asset, temp_out)
-            post_hash = compute_sha256(temp_out)
-            if out_path == src_path:
-                temp_out.replace(out_path)
+            write_resampled_audio(
+                source_path, temporary_output, target_sample_rate, target_subtype, soundfile_format
+            )
+            self._apply_effective_tags_to_output(asset, temporary_output)
+            post_hash = compute_sha256(temporary_output)
+            if out_path == source_path:
+                temporary_output.replace(out_path)
             else:
                 # The name check ran before the encode. A file can appear there meanwhile.
-                move_to_new_path(temp_out, out_path)
+                move_to_new_path(temporary_output, out_path)
         except BaseException:
-            temp_out.unlink(missing_ok=True)
-            if rec is not None:
-                rec.operation_status = OperationStatus.FAILED
-                self.repo.upsert_change_record(rec)
+            temporary_output.unlink(missing_ok=True)
+            if record is not None:
+                record.operation_status = OperationStatus.FAILED
+                self.repo.upsert_change_record(record)
             raise
 
-        if rec is not None:
-            if src_path != out_path and src_path.exists():
-                src_path.unlink()
-            rec.post_write_hash = post_hash
-            rec.operation_status = OperationStatus.COMPLETED
-            self.repo.upsert_change_record(rec)
+        if record is not None:
+            if source_path != out_path and source_path.exists():
+                source_path.unlink()
+            record.post_write_hash = post_hash
+            record.operation_status = OperationStatus.COMPLETED
+            self.repo.upsert_change_record(record)
             self._point_asset_at_output(asset, out_path, post_hash)
-            return rec.operation_id
+            return record.operation_id
         return None
 
     def _point_asset_at_output(self, asset: FileAsset, out_path: Path, post_hash: str) -> None:
@@ -237,22 +241,22 @@ class SafeTranscoderAdapter:
         asset.format = self.tag_adapter.detect_format(out_path)
         self.repo.upsert_file_asset(asset)
 
-    def _verify_audio_bounds(self, src_path: Path) -> None:
+    def _verify_audio_bounds(self, source_path: Path) -> None:
         """Reject audio files exceeding size or duration safety caps before PCM decode."""
-        size_bytes = src_path.stat().st_size
+        size_bytes = source_path.stat().st_size
         if size_bytes > MAX_TRANSCODE_FILE_BYTES:
             raise ValueError(
-                f"Audio file '{src_path.name}' ({size_bytes} bytes) exceeds maximum "
+                f"Audio file '{source_path.name}' ({size_bytes} bytes) exceeds maximum "
                 f"transcode limit ({MAX_TRANSCODE_FILE_BYTES} bytes)."
             )
-        info = sf.info(str(src_path))
+        info = sf.info(str(source_path))
         if float(info.duration) > MAX_TRANSCODE_DURATION_SEC:
             raise ValueError(
-                f"Audio file '{src_path.name}' duration ({info.duration:.1f}s) exceeds "
+                f"Audio file '{source_path.name}' duration ({info.duration:.1f}s) exceeds "
                 f"maximum transcode limit ({MAX_TRANSCODE_DURATION_SEC:.0f}s)."
             )
         self._verify_decoded_size(
-            src_path.name, int(info.channels), int(info.samplerate), int(info.frames)
+            source_path.name, int(info.channels), int(info.samplerate), int(info.frames)
         )
 
     def _verify_decoded_size(self, name: str, channels: int, sample_rate: int, frames: int) -> None:
@@ -275,7 +279,7 @@ class SafeTranscoderAdapter:
             )
 
     def _resolve_target_params(
-        self, asset: FileAsset, src_sr: int, preset: TranscodePreset
+        self, asset: FileAsset, source_sample_rate: int, preset: TranscodePreset
     ) -> tuple[int, str, str, str]:
         """Determine (target_sample_rate, subtype, extension, sf_format) for preset."""
         if preset == TranscodePreset.FORCE_WAV_44K_16B:
@@ -283,49 +287,52 @@ class SafeTranscoderAdapter:
         if preset == TranscodePreset.FORCE_WAV_48K_24B:
             return SAMPLE_RATE_48K, "PCM_24", ".wav", "WAV"
 
-        target_sr = (
-            (SAMPLE_RATE_44K1 if (src_sr % SAMPLE_RATE_44K1 == 0) else SAMPLE_RATE_48K)
-            if src_sr > SAMPLE_RATE_48K
-            else src_sr
+        target_sample_rate = (
+            (SAMPLE_RATE_44K1 if (source_sample_rate % SAMPLE_RATE_44K1 == 0) else SAMPLE_RATE_48K)
+            if source_sample_rate > SAMPLE_RATE_48K
+            else source_sample_rate
         )
 
         if asset.format == AudioFormat.FLAC:
-            return target_sr, "PCM_24", ".flac", "FLAC"
+            return target_sample_rate, "PCM_24", ".flac", "FLAC"
         if asset.format == AudioFormat.AIFF:
-            return target_sr, "PCM_24", ".aiff", "AIFF"
-        return target_sr, "PCM_24", ".wav", "WAV"
+            return target_sample_rate, "PCM_24", ".aiff", "AIFF"
+        return target_sample_rate, "PCM_24", ".wav", "WAV"
 
     def _determine_output_path(
         self,
-        src_path: Path,
-        target_ext: str,
+        source_path: Path,
+        target_extension: str,
         mode: TranscodeMode,
         export_dir: Path | None,
         allowed_export_root: Path | None = None,
     ) -> Path:
         """Validate and canonicalize destination file path for SIBLING_EXPORT or IN_PLACE."""
         if mode == TranscodeMode.IN_PLACE_BACKED_UP:
-            candidate = src_path.with_suffix(target_ext).resolve()
-            if candidate != src_path and candidate.exists():
+            candidate = source_path.with_suffix(target_extension).resolve()
+            if candidate != source_path and candidate.exists():
                 raise FileExistsError(
                     f"Target output file '{candidate.name}' already exists; refusing to overwrite."
                 )
             return candidate
         if export_dir is None:
-            dest_folder = src_path.parent.resolve()
-            root_boundary = dest_folder
+            destination_folder = source_path.parent.resolve()
+            root_boundary = destination_folder
         else:
             if ".." in export_dir.parts:
                 raise ValueError("Path traversal '..' is not permitted in export_dir.")
-            dest_folder = export_dir.resolve()
-            effective_root = allowed_export_root or self.allowed_export_root or dest_folder
+            destination_folder = export_dir.resolve()
+            effective_root = allowed_export_root or self.allowed_export_root or destination_folder
             root_boundary = effective_root.resolve()
-            if not dest_folder.is_relative_to(root_boundary):
+            if not destination_folder.is_relative_to(root_boundary):
                 raise ValueError(
-                    f"Export directory '{dest_folder}' escapes allowed root '{root_boundary}'."
+                    f"Export directory '{destination_folder}' escapes allowed root "
+                    f"'{root_boundary}'."
                 )
-        out_path = (dest_folder / f"{src_path.stem}{SIBLING_OUTPUT_TAG}{target_ext}").resolve()
-        if not out_path.is_relative_to(dest_folder):
+        out_path = (
+            destination_folder / f"{source_path.stem}{SIBLING_OUTPUT_TAG}{target_extension}"
+        ).resolve()
+        if not out_path.is_relative_to(destination_folder):
             raise ValueError("Resolved output path escapes destination folder boundary.")
         if out_path.exists():
             # Checked before the encode, so a doomed transcode fails at once.
@@ -336,24 +343,24 @@ class SafeTranscoderAdapter:
         return out_path
 
     def _backup_and_journal_in_place(
-        self, asset: FileAsset, src_path: Path, out_path: Path
+        self, asset: FileAsset, source_path: Path, out_path: Path
     ) -> ChangeRecord:
         """Create a SHA-256 verified backup and IN_PROGRESS ChangeRecord before replacement."""
         self.backup_dir.mkdir(parents=True, exist_ok=True)
-        op_id = str(uuid.uuid4())
+        operation_id = str(uuid.uuid4())
         backup_path = operation_backup_path(
             self.backup_dir,
             asset.id,
-            op_id,
-            portable_backup_name(src_path.name),
+            operation_id,
+            portable_backup_name(source_path.name),
             kind="transcode",
         )
-        pre_hash = compute_sha256(src_path)
-        copy_to_new_verified_file(src_path, backup_path, pre_hash)
-        rec = ChangeRecord(
-            operation_id=op_id,
+        pre_hash = compute_sha256(source_path)
+        copy_to_new_verified_file(source_path, backup_path, pre_hash)
+        record = ChangeRecord(
+            operation_id=operation_id,
             file_id=asset.id,
-            previous_path=str(src_path),
+            previous_path=str(source_path),
             new_path=str(out_path),
             previous_tags=asset.original_tags.get("standard_tags", {}),
             written_tags={},
@@ -362,14 +369,14 @@ class SafeTranscoderAdapter:
             timestamp=self._now_iso(),
             pre_write_hash=pre_hash,
         )
-        self.repo.upsert_change_record(rec)
-        return rec
+        self.repo.upsert_change_record(record)
+        return record
 
     def _effective_tags(self, asset: FileAsset) -> dict[str, str]:
         """Return the original standard tags merged with the user-approved fields."""
-        std = dict(asset.original_tags.get("standard_tags", {}))
+        standard_tags = dict(asset.original_tags.get("standard_tags", {}))
         approved = approved_values_to_write(self.repo.get_approved_fields_map(asset.id))
-        return {**std, **approved}
+        return {**standard_tags, **approved}
 
     def _refuse_untaggable_output(
         self, asset: FileAsset, info: Any, target: tuple[int, str, str, str]
@@ -380,17 +387,17 @@ class SafeTranscoderAdapter:
         A long WAV or AIFF output passes that size, so the transcode would fail only after
         the full decode, resample, and encode. FLAC output stays compressed.
         """
-        target_sr, target_subtype, _target_ext, sf_fmt = target
+        target_sample_rate, target_subtype, _target_extension, soundfile_format = target
         bytes_per_sample = PCM_SAMPLE_BYTES.get(target_subtype)
-        if sf_fmt == "FLAC" or bytes_per_sample is None or int(info.samplerate) <= 0:
+        if soundfile_format == "FLAC" or bytes_per_sample is None or int(info.samplerate) <= 0:
             return
-        output_frames = math.ceil(int(info.frames) * target_sr / int(info.samplerate))
+        output_frames = math.ceil(int(info.frames) * target_sample_rate / int(info.samplerate))
         sample_bytes = output_frames * int(info.channels) * bytes_per_sample
         estimated_bytes = sample_bytes + OUTPUT_CONTAINER_OVERHEAD_BYTES
         if estimated_bytes <= MAX_WAV_REWRITE_BYTES or not self._effective_tags(asset):
             return
         raise ValueError(
-            f"The {sf_fmt} output of '{Path(asset.current_path).name}' would hold about "
+            f"The {soundfile_format} output of '{Path(asset.current_path).name}' would hold about "
             f"{estimated_bytes} bytes, past the {MAX_WAV_REWRITE_BYTES}-byte tag write limit. "
             "Pick a FLAC output or split the file, then retry."
         )

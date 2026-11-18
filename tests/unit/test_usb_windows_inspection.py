@@ -23,7 +23,7 @@ from infiniteprep.services.usb.windows import (
     DISK_COMMAND,
     DISK_COMMAND_TEXT,
     MAX_COMMAND_OUTPUT_BYTES,
-    MAX_ERROR_TEXT_LEN,
+    MAX_ERROR_TEXT_LENGTH,
     PARTITION_COMMAND,
     PARTITION_COMMAND_TEXT,
     VOLUME_COMMAND,
@@ -459,12 +459,12 @@ class TestUsbWindowsInspection(unittest.TestCase):
         """A huge stderr reply yields a bounded error message."""
 
         def loud_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-            return subprocess.CompletedProcess(cmd, 1, "", "E" * (MAX_ERROR_TEXT_LEN * 4))
+            return subprocess.CompletedProcess(cmd, 1, "", "E" * (MAX_ERROR_TEXT_LENGTH * 4))
 
         noisy = WindowsDriveInspector(command_runner=loud_runner)
         with self.assertRaises(CommandExecutionError) as ctx:
             noisy.inspect_all()
-        self.assertLessEqual(len(str(ctx.exception)), MAX_ERROR_TEXT_LEN)
+        self.assertLessEqual(len(str(ctx.exception)), MAX_ERROR_TEXT_LENGTH)
 
     def test_malformed_json_raises_parse_error(self) -> None:
         """Malformed JSON from any command raises InspectionParseError."""

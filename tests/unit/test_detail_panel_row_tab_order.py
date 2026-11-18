@@ -13,7 +13,7 @@ from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
-from infiniteprep.ui.detail_panel import COL_ACTIONS, COL_APPROVED_EDIT, DetailPanel
+from infiniteprep.ui.detail_panel import COLUMN_ACTIONS, COLUMN_APPROVED_EDIT, DetailPanel
 from tests.fixtures.audio_factory import create_wav_fixture
 
 # A file without proposals shows no Accept button, so the row holds these two.
@@ -32,8 +32,8 @@ def test_tab_visits_every_row_button_in_order(qtbot: Any, tmp_path: Path) -> Non
     panel.activateWindow()
     qtbot.waitUntil(panel.isActiveWindow)
     panel.load_file_asset(report.imported_files[0].id)
-    edit_box = panel.fields_table.cellWidget(0, COL_APPROVED_EDIT)
-    action_cell = panel.fields_table.cellWidget(0, COL_ACTIONS)
+    edit_box = panel.fields_table.cellWidget(0, COLUMN_APPROVED_EDIT)
+    action_cell = panel.fields_table.cellWidget(0, COLUMN_ACTIONS)
     edit_box.setFocus()
     qtbot.waitUntil(edit_box.hasFocus)
 

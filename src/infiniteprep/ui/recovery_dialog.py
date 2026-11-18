@@ -27,8 +27,8 @@ RECOVERY_DIALOG_TITLE: Final[str] = "Recover Interrupted Writes"
 RECOVERY_DIALOG_WIDTH: Final[int] = 900
 RECOVERY_DIALOG_HEIGHT: Final[int] = 360
 RECOVERY_COLUMNS: Final[tuple[str, ...]] = ("Started", "File", "Backup", "Restore", "Keep")
-COL_RESTORE: Final[int] = 3
-COL_KEEP: Final[int] = 4
+COLUMN_RESTORE: Final[int] = 3
+COLUMN_KEEP: Final[int] = 4
 RECOVERY_INTRO: Final[str] = (
     "These writes stopped before they finished. Each file may be half-written. Restore the "
     "original from its verified backup, or keep the file as it is now. New writes stay "
@@ -80,28 +80,30 @@ class RecoveryDialog(QDialog):
         """Reload the interrupted writes, and close the dialog once none remain."""
         self.records = self.write_service.list_interrupted_operations()
         self.table.setRowCount(len(self.records))
-        for row_idx, record in enumerate(self.records):
-            self._populate_row(row_idx, record)
+        for row_index, record in enumerate(self.records):
+            self._populate_row(row_index, record)
         if not self.records:
             self.accept()
 
-    def _populate_row(self, row_idx: int, record: ChangeRecord) -> None:
+    def _populate_row(self, row_index: int, record: ChangeRecord) -> None:
         """Render one interrupted write with its Restore and Keep buttons."""
         cells = (
             format_local_timestamp(record.timestamp),
             Path(record.previous_path).name,
             record.backup_reference,
         )
-        for col_idx, text in enumerate(cells):
-            self.table.setItem(row_idx, col_idx, QTableWidgetItem(text))
-        restore_btn = QPushButton("Restore from backup", self.table)
-        restore_btn.clicked.connect(lambda _c=False, op_id=record.operation_id: self.restore(op_id))
-        keep_btn = QPushButton("Mark as finished", self.table)
-        keep_btn.clicked.connect(
-            lambda _c=False, op_id=record.operation_id: self.mark_finished(op_id)
+        for column_index, text in enumerate(cells):
+            self.table.setItem(row_index, column_index, QTableWidgetItem(text))
+        restore_button = QPushButton("Restore from backup", self.table)
+        restore_button.clicked.connect(
+            lambda _c=False, operation_id=record.operation_id: self.restore(operation_id)
         )
-        self.table.setCellWidget(row_idx, COL_RESTORE, restore_btn)
-        self.table.setCellWidget(row_idx, COL_KEEP, keep_btn)
+        keep_button = QPushButton("Mark as finished", self.table)
+        keep_button.clicked.connect(
+            lambda _c=False, operation_id=record.operation_id: self.mark_finished(operation_id)
+        )
+        self.table.setCellWidget(row_index, COLUMN_RESTORE, restore_button)
+        self.table.setCellWidget(row_index, COLUMN_KEEP, keep_button)
 
     def restore(self, operation_id: str) -> None:
         """Restore one interrupted write, or report why the backup could not be used."""
@@ -123,7 +125,14 @@ class RecoveryDialog(QDialog):
         Keeping a half-written file ends the backup restore path for that write, so it
         waits for a Yes. No is the default.
         """
-        record = next((rec for rec in self.records if rec.operation_id == operation_id), None)
+        record = next(
+            (
+                candidate_record
+                for candidate_record in self.records
+                if candidate_record.operation_id == operation_id
+            ),
+            None,
+        )
         name = Path(record.previous_path).name if record is not None else operation_id
         if not ask_plain_question(
             self, RECOVERY_DIALOG_TITLE, MARK_FINISHED_QUESTION.format(file=name)

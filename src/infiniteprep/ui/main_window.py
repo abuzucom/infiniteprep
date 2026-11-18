@@ -571,7 +571,11 @@ class MainWindow(QMainWindow):
         """Reload all FileAssets from Repository and populate the filtered table."""
         all_files = self.repo.list_files()
         snapshot = load_library_snapshot(self.repo)
-        filtered = [f for f in all_files if self._matches_status_filter(f, snapshot)]
+        filtered = [
+            file_asset
+            for file_asset in all_files
+            if self._matches_status_filter(file_asset, snapshot)
+        ]
         rows = [self._build_library_row(asset, snapshot) for asset in filtered]
         query = self.search_input.text().strip().casefold()
         if query:
@@ -593,8 +597,8 @@ class MainWindow(QMainWindow):
         try:
             self.file_table.blockSignals(True)
             self.file_table.setRowCount(len(ordered))
-            for row_idx, row in enumerate(ordered):
-                self._populate_table_row(row_idx, row)
+            for row_index, row in enumerate(ordered):
+                self._populate_table_row(row_index, row)
             self.file_table.blockSignals(False)
             self._restore_selected_file()
         finally:
@@ -691,8 +695,8 @@ class MainWindow(QMainWindow):
             return
         if self._selected_file_id not in self.visible_file_ids:
             return
-        row_idx = self.visible_file_ids.index(self._selected_file_id)
-        self.file_table.selectRow(row_idx)
+        row_index = self.visible_file_ids.index(self._selected_file_id)
+        self.file_table.selectRow(row_index)
 
     @staticmethod
     def _asset_warnings(asset: FileAsset, snapshot: LibrarySnapshot) -> list[str]:
@@ -709,23 +713,23 @@ class MainWindow(QMainWindow):
         status_value = STATUS_FILTER_VALUES.get(status_choice)
         return status_value is None or str(asset.review_status) == status_value
 
-    def _populate_table_row(self, row_idx: int, row: LibraryRow) -> None:
+    def _populate_table_row(self, row_index: int, row: LibraryRow) -> None:
         """Render one library row and store its file ID on the first cell."""
-        for col_idx, text in enumerate(row.cells):
+        for column_index, text in enumerate(row.cells):
             item = QTableWidgetItem(text)
-            if col_idx == 0:
+            if column_index == 0:
                 item.setData(Qt.ItemDataRole.UserRole, row.file_id)
-            self.file_table.setItem(row_idx, col_idx, item)
+            self.file_table.setItem(row_index, column_index, item)
 
     def _build_library_row(self, asset: FileAsset, snapshot: LibrarySnapshot) -> LibraryRow:
         """Build the table row for one asset with the values the sort needs."""
-        std = asset.original_tags.get("standard_tags", {})
+        standard_tags = asset.original_tags.get("standard_tags", {})
         approved = snapshot.approved.get(asset.id, {})
         top_by_field = snapshot.top_proposals.get(asset.id, {})
-        raw_key = self._effective_val(std, approved, top_by_field, FieldName.KEY.value)
-        raw_bpm = self._effective_val(std, approved, top_by_field, FieldName.BPM.value)
+        raw_key = self._effective_val(standard_tags, approved, top_by_field, FieldName.KEY.value)
+        raw_bpm = self._effective_val(standard_tags, approved, top_by_field, FieldName.BPM.value)
         warnings = self._asset_warnings(asset, snapshot)
-        cells = self._build_table_row_cells(asset, std, approved, top_by_field, warnings)
+        cells = self._build_table_row_cells(asset, standard_tags, approved, top_by_field, warnings)
         return LibraryRow(
             file_id=asset.id,
             cells=tuple(cells),
@@ -739,25 +743,29 @@ class MainWindow(QMainWindow):
     def _build_table_row_cells(
         self,
         asset: FileAsset,
-        std: dict[str, str],
+        standard_tags: dict[str, str],
         approved: dict,
         top_by_field: dict[str, str],
         warnings: list[str],
     ) -> list[str]:
         """Compute string cells for a single FileAsset row in the batch review table."""
-        lbl_str = self._effective_val(std, approved, top_by_field, FieldName.LABEL.value)
-        cat_str = self._effective_val(std, approved, top_by_field, FieldName.CATALOG_NUMBER.value)
-        raw_key = self._effective_val(std, approved, top_by_field, FieldName.KEY.value)
+        label_text = self._effective_val(
+            standard_tags, approved, top_by_field, FieldName.LABEL.value
+        )
+        catalog_number_text = self._effective_val(
+            standard_tags, approved, top_by_field, FieldName.CATALOG_NUMBER.value
+        )
+        raw_key = self._effective_val(standard_tags, approved, top_by_field, FieldName.KEY.value)
 
         return [
             Path(asset.current_path).name,
             str(asset.format).upper(),
             format_duration(asset.duration) if asset.duration is not None else "-",
-            self._summary_pair(std, approved, top_by_field, FieldName.ARTIST.value),
-            self._summary_pair(std, approved, top_by_field, FieldName.TITLE.value),
-            self._effective_val(std, approved, top_by_field, FieldName.MIX_NAME.value),
-            f"{lbl_str} [{cat_str}]" if cat_str else lbl_str,
-            self._effective_val(std, approved, top_by_field, FieldName.BPM.value),
+            self._summary_pair(standard_tags, approved, top_by_field, FieldName.ARTIST.value),
+            self._summary_pair(standard_tags, approved, top_by_field, FieldName.TITLE.value),
+            self._effective_val(standard_tags, approved, top_by_field, FieldName.MIX_NAME.value),
+            f"{label_text} [{catalog_number_text}]" if catalog_number_text else label_text,
+            self._effective_val(standard_tags, approved, top_by_field, FieldName.BPM.value),
             self._format_key_cell(raw_key),
             format_status_cell(str(asset.review_status)),
             "; ".join(warnings) if warnings else "OK",
@@ -765,31 +773,31 @@ class MainWindow(QMainWindow):
 
     def _summary_pair(
         self,
-        std: dict[str, str],
+        standard_tags: dict[str, str],
         approved: dict,
         top_by_field: dict[str, str],
         field_name: str,
     ) -> str:
         """Format 'Current -> Approved/Proposed' summary string for table cells."""
-        cur = std.get(field_name, "-")
+        current_value = standard_tags.get(field_name, "-")
         target = (
             approved[field_name].approved_value
             if field_name in approved
             else top_by_field.get(field_name, "")
         )
-        if target and target != cur:
-            return f"{cur} -> {target}"
-        return target or cur
+        if target and target != current_value:
+            return f"{current_value} -> {target}"
+        return target or current_value
 
     def _effective_val(
         self,
-        std: dict[str, str],
+        standard_tags: dict[str, str],
         approved: dict,
         top_by_field: dict[str, str],
         field_name: str,
     ) -> str:
         """Return approved value, top proposal, or existing standard tag."""
-        return resolve_effective_value(std, approved, top_by_field, field_name)
+        return resolve_effective_value(standard_tags, approved, top_by_field, field_name)
 
     def _format_key_cell(self, raw_key: str) -> str:
         """Format musical key according to active KeyDisplayNotation."""
@@ -810,8 +818,8 @@ class MainWindow(QMainWindow):
             if not self._refreshing_table:
                 self._clear_selection()
             return
-        row_idx = selected_rows[0].row()
-        item = self.file_table.item(row_idx, FILE_ID_COLUMN)
+        row_index = selected_rows[0].row()
+        item = self.file_table.item(row_index, FILE_ID_COLUMN)
         if item is None:
             return
         file_id = item.data(Qt.ItemDataRole.UserRole)
@@ -906,10 +914,10 @@ class MainWindow(QMainWindow):
         result = switch_application_theme(app, text, self._applied_theme)
         self._applied_theme = result.theme
         self._set_picker_theme(result.theme)
-        settings_mgr = SettingsManager()
-        settings = settings_mgr.load()
+        settings_manager = SettingsManager()
+        settings = settings_manager.load()
         settings.theme = result.theme
-        settings_mgr.save(settings)
+        settings_manager.save(settings)
 
     def _set_picker_theme(self, theme: str) -> None:
         """Point the picker at the given theme without firing the change signal."""

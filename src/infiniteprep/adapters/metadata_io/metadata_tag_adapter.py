@@ -279,11 +279,11 @@ def sanitize_filename_component(value: str) -> str:
 
 
 def evaluate_xdj_rx3_warnings(
-    fmt: AudioFormat, sample_rate: int | None, bits_per_sample: int | None
+    audio_format: AudioFormat, sample_rate: int | None, bits_per_sample: int | None
 ) -> list[str]:
     """Return non-blocking Pioneer XDJ-RX3 hardware compatibility warnings."""
     warnings: list[str] = []
-    if fmt == AudioFormat.OGG:
+    if audio_format == AudioFormat.OGG:
         warnings.append(
             "XDJ-RX3 Warning: OGG Vorbis is not supported by Pioneer XDJ-RX3 hardware; "
             "convert to WAV or FLAC before USB export."
@@ -332,9 +332,9 @@ def build_riff_list_info_chunk(
     """
     payloads: dict[bytes, bytes] = dict(existing_subchunks or {})
     for field_name, fourcc in RIFF_INFO_TAG_MAP.items():
-        raw_val = tags_to_write.get(field_name, "").strip()
-        if raw_val:
-            payloads[fourcc] = raw_val.encode("utf-8", errors="replace") + b"\x00"
+        raw_value = tags_to_write.get(field_name, "").strip()
+        if raw_value:
+            payloads[fourcc] = raw_value.encode("utf-8", errors="replace") + b"\x00"
     if not payloads:
         return b""
     subchunks = [_riff_chunk_bytes(fourcc, payload) for fourcc, payload in payloads.items()]
@@ -351,18 +351,18 @@ def _riff_chunk_spans(
     """
     spans: list[tuple[bytes, int, int, int]] = []
     offset = start
-    total_len = len(data)
-    while offset + RIFF_CHUNK_HEADER_SIZE <= total_len:
+    total_length = len(data)
+    while offset + RIFF_CHUNK_HEADER_SIZE <= total_length:
         chunk_id = data[offset : offset + RIFF_FOURCC_SIZE]
         size_field = data[offset + RIFF_FOURCC_SIZE : offset + RIFF_CHUNK_HEADER_SIZE]
         payload_start = offset + RIFF_CHUNK_HEADER_SIZE
         payload_end = payload_start + struct.unpack("<I", size_field)[0]
-        if payload_end > total_len:
+        if payload_end > total_length:
             if stop_at_damage:
                 return spans
             raise ValueError("Malformed WAV file: RIFF subchunk size exceeds file bounds.")
         pad_size = (payload_end - payload_start) % RIFF_CHUNK_ALIGNMENT
-        chunk_end = min(total_len, payload_end + pad_size)
+        chunk_end = min(total_length, payload_end + pad_size)
         spans.append((chunk_id, payload_start, payload_end, chunk_end))
         offset = chunk_end
     return spans
@@ -468,14 +468,14 @@ class _ParsedAudio:
     raw_custom_tags: dict[str, Any]
 
 
-def _parse_audio_file(file_path: Path, fmt: AudioFormat) -> _ParsedAudio:
+def _parse_audio_file(file_path: Path, audio_format: AudioFormat) -> _ParsedAudio:
     """Read properties and tags with the in-house codecs, mapping the file read-only.
 
     The map keeps large WAV and AIFF files on disk. Only headers and tag bytes are read.
     """
-    if fmt == AudioFormat.OGG:
+    if audio_format == AudioFormat.OGG:
         return _parse_ogg(file_path)
-    parser = MAPPED_PARSERS[fmt]
+    parser = MAPPED_PARSERS[audio_format]
     with (
         file_path.open("rb") as handle,
         mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as mapped,
@@ -605,9 +605,9 @@ DROPPED_TAG_READERS: Final[dict[AudioFormat, Callable[[bytes], tuple[str, ...]]]
 }
 
 
-def read_dropped_tag_data(file_path: Path, fmt: AudioFormat) -> tuple[str, ...]:
+def read_dropped_tag_data(file_path: Path, audio_format: AudioFormat) -> tuple[str, ...]:
     """Return the tag data a rewrite of file_path would lose. Unwritable formats return ()."""
-    reader = DROPPED_TAG_READERS.get(fmt)
+    reader = DROPPED_TAG_READERS.get(audio_format)
     if reader is None:
         return ()
     with (
@@ -653,7 +653,7 @@ def _classify_id3_tag(tag: Id3Tag | None) -> tuple[dict[str, str], dict[str, Any
     raw: dict[str, Any] = {}
     if tag is None:
         return standard, raw
-    txxx_reverse = {desc.upper(): field.value for field, desc in ID3_TXXX_MAP.items()}
+    txxx_reverse = {description.upper(): field.value for field, description in ID3_TXXX_MAP.items()}
     for frame in tag.frames:
         try:
             _classify_id3_frame(frame, txxx_reverse, standard, raw)
@@ -836,23 +836,23 @@ class MetadataTagAdapter:
 
     def read_metadata(self, file_path: Path) -> TechnicalAndTagMetadata:
         """Read technical audio properties and existing tags without modifying the file."""
-        fmt = self.detect_format(file_path)
-        if fmt == AudioFormat.UNSUPPORTED:
-            msg = f"Unsupported file extension: {file_path.suffix}; use a supported format."
+        audio_format = self.detect_format(file_path)
+        if audio_format == AudioFormat.UNSUPPORTED:
+            message = f"Unsupported file extension: {file_path.suffix}; use a supported format."
             return TechnicalAndTagMetadata(
                 format=AudioFormat.UNSUPPORTED,
                 duration=None,
                 sample_rate=None,
                 channels=None,
                 bitrate=None,
-                warnings=[msg],
+                warnings=[message],
             )
 
         try:
-            parsed = _parse_audio_file(file_path, fmt)
+            parsed = _parse_audio_file(file_path, audio_format)
         except READ_ERRORS as exc:
             return TechnicalAndTagMetadata(
-                format=fmt,
+                format=audio_format,
                 duration=None,
                 sample_rate=None,
                 channels=None,
@@ -863,20 +863,22 @@ class MetadataTagAdapter:
                 ],
             )
 
-        props = parsed.properties
+        properties = parsed.properties
         raw_custom_tags = bound_raw_tag_values(parsed.raw_custom_tags)
-        if props.bits_per_sample is not None:
-            raw_custom_tags["_bits_per_sample"] = props.bits_per_sample
-        warnings = evaluate_xdj_rx3_warnings(fmt, props.sample_rate, props.bits_per_sample)
+        if properties.bits_per_sample is not None:
+            raw_custom_tags["_bits_per_sample"] = properties.bits_per_sample
+        warnings = evaluate_xdj_rx3_warnings(
+            audio_format, properties.sample_rate, properties.bits_per_sample
+        )
         key = parsed.standard_tags.get(FieldName.KEY)
         if key and parse_key_string(key) is None:
             warnings.append("Key tag could not be parsed. The original text remains available.")
         return TechnicalAndTagMetadata(
-            format=fmt,
-            duration=props.duration,
-            sample_rate=props.sample_rate,
-            channels=props.channels,
-            bitrate=props.bitrate,
+            format=audio_format,
+            duration=properties.duration,
+            sample_rate=properties.sample_rate,
+            channels=properties.channels,
+            bitrate=properties.bitrate,
             standard_tags=parsed.standard_tags,
             raw_custom_tags=raw_custom_tags,
             warnings=warnings,
@@ -889,14 +891,14 @@ class MetadataTagAdapter:
         template: str = "{artist} - {title}",
     ) -> str:
         """Render a safe filename from template and effective fields, preserving extension."""
-        ext = source_path.suffix
+        extension = source_path.suffix
         tokens = self._build_filename_tokens(source_path, effective_fields)
         rendered = self._substitute_template_tokens(template, tokens)
 
         rendered = EMPTY_PARENS_RE.sub("", rendered)
         rendered = EMPTY_BRACKETS_RE.sub("", rendered)
         rendered = sanitize_filename_component(rendered)
-        return f"{rendered or source_path.stem}{ext}"
+        return f"{rendered or source_path.stem}{extension}"
 
     @staticmethod
     def _substitute_template_tokens(template: str, tokens: dict[str, str]) -> str:
@@ -958,11 +960,11 @@ class MetadataTagAdapter:
         """Build a preflighted FileWritePlan without modifying any file on disk."""
         source_path = Path(file_asset.current_path)
         validation_errors = self._validate_source_for_write(file_asset, source_path)
-        existing_std = dict(file_asset.original_tags.get("standard_tags", {}))
+        existing_standard_tags = dict(file_asset.original_tags.get("standard_tags", {}))
         preserved_custom = dict(file_asset.original_tags.get("raw_custom_tags", {}))
 
         proposed_to_write = approved_values_to_write(approved_fields)
-        effective_tags = {**existing_std, **proposed_to_write}
+        effective_tags = {**existing_standard_tags, **proposed_to_write}
         destination_path, collision_warnings = self._resolve_destination_path(
             source_path, effective_tags, rename_template, enable_rename
         )
@@ -978,7 +980,7 @@ class MetadataTagAdapter:
             destination_path=destination_path,
             rename_enabled=enable_rename and (destination_path != source_path),
             expected_content_hash=file_asset.content_hash,
-            existing_tags=existing_std,
+            existing_tags=existing_standard_tags,
             proposed_tags_to_write=proposed_to_write,
             preserved_custom_tags=preserved_custom,
             backup_destination_path=backup_dir / f"{file_asset.id}_{source_path.name}",
@@ -1046,8 +1048,8 @@ class MetadataTagAdapter:
                 "Copy the file to a single-link location before writing."
             )
         # Windows has no getuid. NTFS ownership does not change when a copy replaces a file.
-        get_uid = getattr(os, "getuid", None)
-        if get_uid is not None and stat_result.st_uid != get_uid():
+        get_user_id = getattr(os, "getuid", None)
+        if get_user_id is not None and stat_result.st_uid != get_user_id():
             errors.append(
                 "File is owned by another user; writing would change its owner. "
                 "Ask the owner to write it, or take ownership first."
@@ -1241,18 +1243,20 @@ class MetadataTagAdapter:
                 f"'{file_path.name}' is {size} bytes, past the {MAX_WAV_REWRITE_BYTES}-byte tag "
                 "write limit; no tags were written. Split or re-encode the file, then retry."
             )
-        fmt = self.detect_format(file_path)
+        audio_format = self.detect_format(file_path)
         writer = {
             AudioFormat.MP3: self._write_mp3_tags,
             AudioFormat.WAV: self._write_wav_tags,
             AudioFormat.AIFF: self._write_aiff_tags,
             AudioFormat.FLAC: self._write_flac_tags,
-        }.get(fmt)
+        }.get(audio_format)
         if writer is None:
-            raise ValueError(f"Unsupported write format {fmt}; use MP3, FLAC, WAV, or AIFF.")
-        before = compute_audio_payload_digest(file_path, fmt)
+            raise ValueError(
+                f"Unsupported write format {audio_format}; use MP3, FLAC, WAV, or AIFF."
+            )
+        before = compute_audio_payload_digest(file_path, audio_format)
         writer(file_path, tags_to_write)
-        after = compute_audio_payload_digest(file_path, fmt)
+        after = compute_audio_payload_digest(file_path, audio_format)
         if before != after:
             raise AudioPayloadVerificationError(
                 "The audio payload changed during the tag write. "

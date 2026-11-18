@@ -74,9 +74,9 @@ def _collect_file_fake_lossless_warnings(repo: Repository, file_id: str) -> list
     asset = repo.get_file_by_id(file_id)
     name = Path(asset.current_path).name if asset is not None else file_id
     notices: list[str] = []
-    for ana in repo.list_analysis_results(file_id):
-        if ana.analyzer_name == "fake_lossless":
-            notices.extend(f"{name}: {warning}" for warning in ana.warnings)
+    for analysis in repo.list_analysis_results(file_id):
+        if analysis.analyzer_name == "fake_lossless":
+            notices.extend(f"{name}: {warning}" for warning in analysis.warnings)
     return notices
 
 

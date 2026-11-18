@@ -54,7 +54,7 @@ ES_FIXED_FIELDS: Final[int] = UINT16_SIZE + 1
 ES_DEPENDENCY_FLAG, ES_URL_FLAG, ES_OCR_FLAG = 0x80, 0x40, 0x20
 DESCRIPTOR_MORE_BIT: Final[int] = 0x80
 MAX_DESCRIPTOR_LENGTH_BYTES: Final[int] = 4
-DECODER_AVG_BITRATE_OFFSET: Final[int] = 9
+DECODER_AVERAGE_BITRATE_OFFSET: Final[int] = 9
 BITS_PER_BYTE: Final[int] = 8
 # stsz holds version and flags, then a fixed sample size and a sample count.
 STSZ_HEADER_SIZE: Final[int] = 2 * UINT32_SIZE
@@ -274,9 +274,9 @@ def _esds_avg_bitrate(body: bytes) -> int:
     offset += 1 + body[offset] if flags & ES_URL_FLAG and offset < len(body) else 0
     offset += UINT16_SIZE if flags & ES_OCR_FLAG else 0
     config = _descriptor_body(body, offset, DECODER_CONFIG_TAG)
-    if config is None or config + DECODER_AVG_BITRATE_OFFSET + UINT32_SIZE > len(body):
+    if config is None or config + DECODER_AVERAGE_BITRATE_OFFSET + UINT32_SIZE > len(body):
         return 0
-    start = config + DECODER_AVG_BITRATE_OFFSET
+    start = config + DECODER_AVERAGE_BITRATE_OFFSET
     return int(struct.unpack(">I", body[start : start + UINT32_SIZE])[0])
 
 

@@ -106,9 +106,9 @@ class DriveInspection:
     @property
     def has_exfat_partition(self) -> bool:
         """Return True if any partition on this drive has an exFAT filesystem."""
-        return any(p.is_exfat for p in self.partitions)
+        return any(partition.is_exfat for partition in self.partitions)
 
     @property
     def has_fat32_partition(self) -> bool:
         """Return True if any partition on this drive has a FAT32 filesystem."""
-        return any(p.is_fat32 for p in self.partitions)
+        return any(partition.is_fat32 for partition in self.partitions)

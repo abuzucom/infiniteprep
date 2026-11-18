@@ -238,36 +238,36 @@ def _build_frame(
         if upgraded is None:
             return None
         return Id3Frame(upgraded, _upgrade_v22_picture(raw) if frame_id == "PIC" else raw)
-    status, fmt = flags >> 8, flags & 0xFF
+    status, format_flags = flags >> 8, flags & 0xFF
     decode_body = _decode_v24_body if major == V24 else _decode_v23_body
-    body = decode_body(fmt, raw, budget)
+    body = decode_body(format_flags, raw, budget)
     if body is None:
         return None
     return Id3Frame(frame_id, body, _status_as_v23(status, major))
 
 
-def _decode_v23_body(fmt: int, raw: bytes, budget: _InflateBudget) -> bytes | None:
+def _decode_v23_body(format_flags: int, raw: bytes, budget: _InflateBudget) -> bytes | None:
     """Undo v2.3 grouping and compression. Encrypted frames are not kept."""
-    if fmt & V23_ENCRYPTED:
+    if format_flags & V23_ENCRYPTED:
         return None
     body = raw
-    if fmt & V23_COMPRESSED:
+    if format_flags & V23_COMPRESSED:
         body = body[COMPRESSED_SIZE_BYTES:]
-    if fmt & V23_GROUPED:
+    if format_flags & V23_GROUPED:
         body = body[1:]
-    return _inflate(body, budget) if fmt & V23_COMPRESSED else body
+    return _inflate(body, budget) if format_flags & V23_COMPRESSED else body
 
 
-def _decode_v24_body(fmt: int, raw: bytes, budget: _InflateBudget) -> bytes | None:
+def _decode_v24_body(format_flags: int, raw: bytes, budget: _InflateBudget) -> bytes | None:
     """Undo v2.4 grouping, length indicator, unsynchronisation, and compression."""
-    if fmt & V24_ENCRYPTED:
+    if format_flags & V24_ENCRYPTED:
         return None
-    body = raw[1:] if fmt & V24_GROUPED else raw
-    if fmt & V24_LENGTH_INDICATOR:
+    body = raw[1:] if format_flags & V24_GROUPED else raw
+    if format_flags & V24_LENGTH_INDICATOR:
         body = body[COMPRESSED_SIZE_BYTES:]
-    if fmt & V24_UNSYNC:
+    if format_flags & V24_UNSYNC:
         body = remove_unsynchronisation(body)
-    return _inflate(body, budget) if fmt & V24_COMPRESSED else body
+    return _inflate(body, budget) if format_flags & V24_COMPRESSED else body
 
 
 def _inflate(body: bytes, budget: _InflateBudget) -> bytes | None:
@@ -480,7 +480,7 @@ def replace_txxx(tag: Id3Tag, description: str, value: str) -> Id3Tag:
 
 def remove_frames(tag: Id3Tag, frame_id: str) -> Id3Tag:
     """Return tag without any frame of frame_id."""
-    return replace(tag, frames=tuple(f for f in tag.frames if f.frame_id != frame_id))
+    return replace(tag, frames=tuple(frame for frame in tag.frames if frame.frame_id != frame_id))
 
 
 def render_id3v23(tag: Id3Tag, padding: int = DEFAULT_PADDING_BYTES) -> bytes:
