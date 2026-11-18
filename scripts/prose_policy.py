@@ -54,8 +54,11 @@ COLON_CLAUSE_PATTERN = re.compile(
     r"[a-z]+(?:s|ed))\b",
     re.IGNORECASE,
 )
+# A separate whitespace run after the last segment overlaps the segment class and backtracks
+# quadratically. The lookbehind needs one whitespace character inside the segment. The
+# newline branch covers a conjunction on the next line.
 INLINE_ENUMERATION_PATTERN = re.compile(
-    r":[^\n.!?,]*(?:,[^\n.!?,]*){2,}\s+(?:and|or)\b[^\n.!?]*[.!?]",
+    r":[^\n.!?,]*(?:,[^\n.!?,]*){2,}(?:(?<=\s)|\n\s*)(?:and|or)\b[^\n.!?]*[.!?]",
     re.IGNORECASE,
 )
 RHETORICAL_PATTERNS = (
@@ -135,8 +138,10 @@ GENERIC_CLAIM_PATTERN = re.compile(
     r"\b(?:robust|scalable|flexible)\s+(?:solution|approach|design)\b",
     re.IGNORECASE,
 )
+# Two whitespace runs that include newlines backtrack cubically over blank lines. Each run
+# stays on one line. The marker splits the runs, so each line start has one parse.
 TUTORIAL_PATTERN = re.compile(
-    r"^\s*(?:#|//)?\s*(?:First|Next|Finally),",
+    r"^[^\S\n]*(?:(?:#|//)[^\S\n]*)?(?:First|Next|Finally),",
     re.IGNORECASE | re.MULTILINE,
 )
 

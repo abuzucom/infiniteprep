@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.79.1] (2026-11-18)
+## [0.79.2] (2026-11-18)
 
 ### Added
 
@@ -54,6 +54,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The library opens through its real folder. `resolve_library_path` resolves every link above the library once, at open. SQLite, the side files, the backup, and the restore then use that path. A link above the library that changes later no longer moves them. A link at the library file name itself still fails the open.
   - The shared folder warning covers every folder that the path lookup reads. That set includes each folder that holds a link on the way and the folders of each link target. Above the library, a folder owned by this account or root counts as safe when other accounts cannot write it or when the sticky bit protects its entries, as on `/tmp`. Any other folder logs a warning that names it. The library still opens there. macOS `/var` and `/tmp` links and linked data folders keep working.
   - The new `tests/unit/test_portable_staging_and_parent_links.py` covers each change.
+  - The version advances from 0.79.1 to 0.79.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- Four regular expressions no longer backtrack quadratically or cubically on long whitespace runs.
+  - `PAREN_PATTERN` and `BY_REMIXER_PATTERN` in `services/matching_engine.py` parse titles and mix names from audio tags. Each capture before a whitespace run now ends on a non-space character. A 60,000-space title took minutes and now takes milliseconds. The captures stay the same for trimmed text.
+  - `TUTORIAL_PATTERN` in `scripts/prose_policy.py` kept whitespace runs across lines. 2,000 blank lines took over 40 seconds. Each run now stays on one line. The finding now names the keyword line instead of the first blank line above it.
+  - `INLINE_ENUMERATION_PATTERN` in `scripts/prose_policy.py` split one whitespace run two ways. A lookbehind now takes the place of the separate run. The matches stay the same.
+  - The new `tests/test_prose_policy_backtracking.py` and `tests/unit/test_matching_engine_backtracking.py` run each pattern on a long whitespace run under a 10 second bound. The tests also compare each new pattern with the previous pattern on every short token sequence.
   - The version advances from 0.79.0 to 0.79.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - The write preview names tag data that a rewrite cannot keep.
   - The ID3 parser skips encrypted and truncated frames. The FLAC parser skips Vorbis entries without `=`. Each writer rebuilds the tag from the parsed frames. A write lost that data without notice before.
