@@ -526,6 +526,80 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
+      # Each bundle job reports the unpacked size of its bundle, the size of
+      # every package, and the largest folders in the bundle (D354). A bundle
+      # past the limit for its operating system fails the job. The limit is the
+      # measured size on main plus 50 percent, and the limits file holds that
+      # measured size.
+      - name: Report bundle and package sizes (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          report="$RUNNER_TEMP/size-report"
+          status=0
+          python packaging/bundle_size.py check \
+            --os windows \
+            --bundle dist/InfinitePrep \
+            --package "portable-zip=dist/InfinitePrep-$version-windows-x64-portable.zip" \
+            --package "setup-exe=dist/InfinitePrep-$version-windows-x64-setup.exe" \
+            --report-dir "$report" || status=$?
+          if [ -f "$report/bundle-size-windows.md" ]; then
+            cat "$report/bundle-size-windows.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
+
+      - name: Report bundle and package sizes (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          report="$RUNNER_TEMP/size-report"
+          status=0
+          python packaging/bundle_size.py check \
+            --os macos \
+            --bundle dist/InfinitePrep.app \
+            --folders-root dist/InfinitePrep.app/Contents \
+            --package "dmg=dist/InfinitePrep-$version-macos-arm64.dmg" \
+            --report-dir "$report" || status=$?
+          if [ -f "$report/bundle-size-macos.md" ]; then
+            cat "$report/bundle-size-macos.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
+
+      - name: Report bundle and package sizes (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          report="$RUNNER_TEMP/size-report"
+          status=0
+          python packaging/bundle_size.py check \
+            --os linux \
+            --bundle dist/InfinitePrep \
+            --package "tarball=dist/InfinitePrep-$version-linux-x86_64.tar.gz" \
+            --package "portable-tarball=dist/InfinitePrep-$version-linux-x86_64-portable.tar.gz" \
+            --package "appimage=dist/InfinitePrep-$version-linux-x86_64.AppImage" \
+            --report-dir "$report" || status=$?
+          if [ -f "$report/bundle-size-linux.md" ]; then
+            cat "$report/bundle-size-linux.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$status"
+
+      # The report uploads even when the size check fails, so that the sizes
+      # that caused the failure stay available.
+      - name: Upload bundle size report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: InfinitePrep-bundle-size-${{ matrix.os }}
+          path: ${{ runner.temp }}/size-report
+          retention-days: 3
+          if-no-files-found: error
+
   # Only this job writes to the repository (D315). It gathers the six packages
   # from this run, attests each package and SHA256SUMS.txt (D325), saves the
   # Sigstore bundles as release assets (D328), writes SHA256SUMS.txt, and fills

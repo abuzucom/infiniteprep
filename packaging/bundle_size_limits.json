@@ -1,0 +1,15 @@
+{
+  "note": "Each record holds the measured unpacked size of the bundle on main in bytes. The limit is that size plus 50 percent. A record of null means the size was not measured yet.",
+  "linux": {
+    "measured_bytes": 363129630,
+    "measured_at": "2026-11-17"
+  },
+  "macos": {
+    "measured_bytes": 168151858,
+    "measured_at": "2026-11-17"
+  },
+  "windows": {
+    "measured_bytes": 248709436,
+    "measured_at": "2026-11-17"
+  }
+}
