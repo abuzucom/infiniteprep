@@ -4,13 +4,23 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
 import numpy as np
 import soundfile as sf
-from PySide6.QtCore import QSignalBlocker, Qt, QUrl
-from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPaintEvent
+from PySide6.QtCore import QSignalBlocker, Qt, QUrl, Signal
+from PySide6.QtGui import (
+    QColor,
+    QDragEnterEvent,
+    QDragLeaveEvent,
+    QDragMoveEvent,
+    QDropEvent,
+    QMouseEvent,
+    QPainter,
+    QPaintEvent,
+)
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
     QComboBox,
@@ -87,6 +97,15 @@ SECONDS_PER_MINUTE: Final[float] = 60.0
 SLIDER_SINGLE_STEP_MS: Final[int] = 1000
 SLIDER_PAGE_STEP_MS: Final[int] = 10_000
 POSITION_SLIDER_NAME: Final[str] = "Playback position"
+# The drag payload carries the file ID of a library row. A path would break when
+# the file moves, and the ID is what the player and the panel both address.
+FILE_ID_MIME_TYPE: Final[str] = "application/x-infiniteprep-file-id"
+DROP_HIGHLIGHT_COLOR: Final[str] = "#f59e0b"
+# The border sits one pixel inside the widget edge and stays two pixels wide.
+DROP_HIGHLIGHT_INSET_PX: Final[int] = 1
+DROP_HIGHLIGHT_BORDER_PX: Final[int] = 2
+LOADED_TRACK_LABEL_PREFIX: Final[str] = "Loaded: "
+LOADED_TRACK_NONE_TEXT: Final[str] = "Loaded: none"
 BACKEND_UNAVAILABLE_TEXT: Final[str] = (
     "Audio playback is unavailable on this system. Check the audio device and the Qt "
     "multimedia backend, then restart the app."
@@ -211,6 +230,8 @@ def extract_waveform_envelope(
 class WaveformOverviewBar(QWidget):
     """Interactive waveform bar displaying amplitude peaks and playhead position."""
 
+    file_id_dropped = Signal(str)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         """Initialize WaveformOverviewBar."""
         super().__init__(parent)
@@ -225,8 +246,17 @@ class WaveformOverviewBar(QWidget):
         self.spectrum: object | None = None
         self._dragging = False
         self._drag_window = (0.0, 0.0)
+        self._drop_highlight = False
         self.on_seek_ratio = None
         self.setMouseTracking(True)
+        # Only a library row drag reaches the waveform. A file from the file
+        # manager carries no file ID, so the drop stays ignored.
+        self.setAcceptDrops(True)
+
+    @property
+    def drop_highlight(self) -> bool:
+        """Report whether the waveform is marked as a drop target."""
+        return self._drop_highlight
 
     def set_envelope(self, envelope: list[float]) -> None:
         """Update the waveform envelope values and trigger a repaint."""
@@ -314,6 +344,56 @@ class WaveformOverviewBar(QWidget):
         """Finish a zoom scrub gesture."""
         self._dragging = False
 
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        """Accept a library row drag and mark the waveform as a drop target."""
+        if not event.mimeData().hasFormat(FILE_ID_MIME_TYPE):
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self._set_drop_highlight(True)
+
+    def dragMoveEvent(self, event: QDragMoveEvent) -> None:
+        """Keep the drop target marked while the drag stays over the waveform."""
+        if not event.mimeData().hasFormat(FILE_ID_MIME_TYPE):
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self._set_drop_highlight(True)
+
+    def dragLeaveEvent(self, _event: QDragLeaveEvent) -> None:
+        """Clear the drop mark when the drag leaves the waveform."""
+        self._set_drop_highlight(False)
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        """Report the dropped file ID and clear the drop mark."""
+        self._set_drop_highlight(False)
+        mime_data = event.mimeData()
+        if not mime_data.hasFormat(FILE_ID_MIME_TYPE):
+            event.ignore()
+            return
+        file_id = bytes(mime_data.data(FILE_ID_MIME_TYPE)).decode("utf-8", errors="replace")
+        event.acceptProposedAction()
+        self.file_id_dropped.emit(file_id)
+
+    def _set_drop_highlight(self, active: bool) -> None:
+        """Show or clear the drop mark on the waveform."""
+        if self._drop_highlight == active:
+            return
+        self._drop_highlight = active
+        self.update()
+
+    def _paint_drop_highlight(self, painter: QPainter) -> None:
+        """Draw the border that marks the waveform as a drop target."""
+        painter.setPen(QColor(DROP_HIGHLIGHT_COLOR))
+        painter.drawRect(
+            self.rect().adjusted(
+                DROP_HIGHLIGHT_INSET_PX,
+                DROP_HIGHLIGHT_INSET_PX,
+                -DROP_HIGHLIGHT_BORDER_PX,
+                -DROP_HIGHLIGHT_BORDER_PX,
+            )
+        )
+
     def paintEvent(self, event: QPaintEvent) -> None:
         """Render waveform vertical bars and the current playhead indicator."""
         painter = QPainter(self)
@@ -326,6 +406,8 @@ class WaveformOverviewBar(QWidget):
                 self._paint_zoom_overview(painter, rect.width(), rect.height())
             else:
                 self._paint_zoom(painter, rect.width(), rect.height())
+            if self._drop_highlight:
+                self._paint_drop_highlight(painter)
             painter.end()
             return
         count = max(1, len(self.envelope))
@@ -349,6 +431,8 @@ class WaveformOverviewBar(QWidget):
             )
         play_x = int(self.playhead_ratio * rect.width())
         painter.fillRect(play_x, 0, PLAYHEAD_WIDTH_PX, rect.height(), QColor(PLAYHEAD_COLOR))
+        if self._drop_highlight:
+            self._paint_drop_highlight(painter)
         painter.end()
 
     def _paint_zoom(self, painter: QPainter, width: int, height: int) -> None:
@@ -496,6 +580,10 @@ class AudioPreviewWidget(QWidget):
         self.settings_manager = settings_manager or SettingsManager()
         # SettingsManager.load returns only supported zoom durations.
         self.waveform_zoom_seconds = self.settings_manager.load().waveform_zoom_seconds
+        # The owner of the widget holds the selection and the library rows. It
+        # decides what a play request and a dropped track mean for the player.
+        self.on_play_selection_requested: Callable[[], bool] | None = None
+        self.on_file_dropped: Callable[[str], None] | None = None
 
         self.player: QMediaPlayer | None = None
         self.audio_output: QAudioOutput | None = None
@@ -504,8 +592,17 @@ class AudioPreviewWidget(QWidget):
             self.audio_output = QAudioOutput(self)
             self.player.setAudioOutput(self.audio_output)
 
+        self._build_controls()
+        self._build_layout()
+        self._connect_signals()
+        if self.player is not None and not self.player.isAvailable():
+            self.show_status(BACKEND_UNAVAILABLE_TEXT)
+
+    def _build_controls(self) -> None:
+        """Create the waveform, the transport controls, and the status labels."""
         self.waveform_bar = WaveformOverviewBar(self)
         self.waveform_bar.on_seek_ratio = self._seek_by_ratio
+        self.waveform_bar.file_id_dropped.connect(self._handle_file_id_dropped)
         self.view_combo = QComboBox(self)
         self.view_combo.addItems((OVERVIEW_MODE, ZOOM_MODE))
         self.zoom_combo = QComboBox(self)
@@ -525,14 +622,13 @@ class AudioPreviewWidget(QWidget):
         self.analysis_status_label.setTextFormat(Qt.TextFormat.PlainText)
         self.analysis_status_label.setWordWrap(True)
         self.time_label = QLabel("00:00.0 / 00:00.0", self)
+        # The label names the track the player holds. The detail panel can show a
+        # different file, so the label keeps the mismatch visible.
+        self.loaded_track_label = QLabel(LOADED_TRACK_NONE_TEXT, self)
+        self.loaded_track_label.setTextFormat(Qt.TextFormat.PlainText)
         self.play_btn = QPushButton("Play", self)
         self.stop_btn = QPushButton("Stop", self)
         self.cue_buttons: dict[str, QPushButton] = {}
-
-        self._build_layout()
-        self._connect_signals()
-        if self.player is not None and not self.player.isAvailable():
-            self.show_status(BACKEND_UNAVAILABLE_TEXT)
 
     def _build_layout(self) -> None:
         """Construct the widget layout with waveform bar, transport, and cue buttons."""
@@ -557,6 +653,7 @@ class AudioPreviewWidget(QWidget):
         controls = QHBoxLayout()
         controls.addWidget(self.play_btn)
         controls.addWidget(self.stop_btn)
+        controls.addWidget(self.loaded_track_label)
         for label in ("Intro", "25%", "50% Drop", "75%", "Outro"):
             btn = QPushButton(label, self)
             btn.clicked.connect(lambda _checked=False, cue=label: self.jump_to_cue(cue))
@@ -587,7 +684,7 @@ class AudioPreviewWidget(QWidget):
 
     def _connect_signals(self) -> None:
         """Connect QMediaPlayer, slider, and button signals."""
-        self.play_btn.clicked.connect(self.toggle_play_pause)
+        self.play_btn.clicked.connect(self._on_play_button_clicked)
         self.stop_btn.clicked.connect(self.stop_playback)
         self.position_slider.valueChanged.connect(self._on_slider_value_changed)
         self.view_combo.currentTextChanged.connect(self._on_view_changed)
@@ -632,6 +729,7 @@ class AudioPreviewWidget(QWidget):
         """Load a track without decoding its overview on the UI thread."""
         self.current_file_path = file_path
         self.current_position_sec = 0.0
+        self.loaded_track_label.setText(f"{LOADED_TRACK_LABEL_PREFIX}{file_path.name}")
         probed = self._probe_duration(file_path)
         self.duration_sec = probed if probed > 0.0 else float(fallback_duration_sec or 0.0)
         self.cue_positions = compute_cue_jump_positions(self.duration_sec)
@@ -695,6 +793,31 @@ class AudioPreviewWidget(QWidget):
         except (OSError, ValueError, RuntimeError) as exc:
             logger.warning("Duration probe failed for %s: %s", file_path, exc)
             return 0.0
+
+    @property
+    def is_playing(self) -> bool:
+        """Report whether the player holds a running track."""
+        if self.player is None:
+            return self.play_btn.text() == "Pause"
+        return self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+
+    def start_playback(self) -> None:
+        """Start the loaded track and keep the button label in step."""
+        if self.player is not None:
+            self.player.play()
+        self.play_btn.setText("Pause")
+
+    def _handle_file_id_dropped(self, file_id: str) -> None:
+        """Pass a dropped library file to the owner of the widget."""
+        if self.on_file_dropped is None:
+            return
+        self.on_file_dropped(file_id)
+
+    def _on_play_button_clicked(self) -> None:
+        """Load the selection when the owner of the widget asks for it."""
+        if self.on_play_selection_requested is not None and self.on_play_selection_requested():
+            return
+        self.toggle_play_pause()
 
     def toggle_play_pause(self) -> None:
         """Toggle between playing and paused states."""
