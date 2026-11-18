@@ -77,8 +77,11 @@ def _relative_path_line(path_line: str, playlist_dir: Path) -> str:
 def _write_without_following_links(destination: Path, content: str) -> None:
     """Write UTF-8 text to a new file beside destination, then swap it into place.
 
-    A failed or interrupted write leaves the previous playlist whole. A symlink at the
-    destination is refused, so its target is never written.
+    A failed or interrupted write leaves the previous playlist whole. The export replaces
+    the playlist the person chose, and the save dialog confirms that overwrite. A symlink
+    found at the destination when the export starts raises OSError. The final swap
+    replaces the directory entry itself. It never writes through a link to the link
+    target, even when a link appears at the destination during the export.
     """
     if destination.is_symlink():
         raise OSError(
