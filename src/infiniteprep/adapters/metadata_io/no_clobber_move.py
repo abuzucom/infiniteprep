@@ -5,11 +5,15 @@ from __future__ import annotations
 import ctypes
 import errno
 import functools
+import logging
 import os
 import sys
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final
+
+logger = logging.getLogger(__name__)
 
 # renameat2 flag that makes the Linux kernel refuse an existing destination.
 LINUX_RENAME_NOREPLACE: Final[int] = 1
@@ -23,6 +27,45 @@ UNSUPPORTED_RENAME_ERRNOS: Final[frozenset[int]] = frozenset(
 )
 
 NoReplaceRename = Callable[[bytes, bytes], int]
+# Device number and inode number of one file.
+FileIdentity = tuple[int, int]
+DISCARD_NAME_PREFIX: Final[str] = ".infiniteprep-discard-"
+
+
+def file_identity(path: Path) -> FileIdentity:
+    """Return the device and inode numbers of path without following a link."""
+    info = os.lstat(path)
+    return info.st_dev, info.st_ino
+
+
+def discard_if_same_file(path: Path, identity: FileIdentity) -> bool:
+    """Delete path only while it still is the file with identity, and keep any other file.
+
+    A check followed by an unlink of the name can delete a file another program put there
+    in between. The file first moves to a private name with the no-replace move. The
+    identity check runs on that private name. A different file moves back to path.
+    """
+    private = path.with_name(f"{DISCARD_NAME_PREFIX}{uuid.uuid4().hex}")
+    try:
+        move_to_new_path(path, private)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        logger.warning("Kept %s, which could not move aside (%s).", path.name, type(exc).__name__)
+        return False
+    if file_identity(private) == identity:
+        private.unlink()
+        return True
+    try:
+        move_to_new_path(private, path)
+    except OSError as exc:
+        logger.warning(
+            "Kept another program's file at %s (%s). Rename it back to %s by hand.",
+            private.name,
+            type(exc).__name__,
+            path.name,
+        )
+    return False
 
 
 def move_to_new_path(source: Path, destination: Path) -> None:

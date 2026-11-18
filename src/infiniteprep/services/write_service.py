@@ -19,6 +19,11 @@ from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     operation_backup_path,
     portable_backup_name,
 )
+from infiniteprep.adapters.metadata_io.no_clobber_move import (
+    FileIdentity,
+    discard_if_same_file,
+    file_identity,
+)
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import OperationStatus, ReviewStatus
 from infiniteprep.domain.models import ChangeRecord, utc_now_iso
@@ -123,7 +128,8 @@ class WriteService:
         # The chosen path becomes the asset's write target. Both stored paths must stay in the
         # library root.
         prev_path, cur_path = self._resolve_and_verify_restore_paths(record)
-        current = self._renamed_file(record, prev_path, cur_path) or prev_path
+        renamed = self._renamed_file(record, prev_path, cur_path)
+        current = renamed[0] if renamed is not None else prev_path
         record.post_write_hash = compute_sha256(current)
         record.new_path = str(current)
         record.operation_status = OperationStatus.COMPLETED
@@ -292,22 +298,28 @@ class WriteService:
             backup_path, prev_path, record.pre_write_hash
         )
         if renamed is not None:
-            renamed.unlink()
+            discard_if_same_file(*renamed)
         return restored_hash
 
     @staticmethod
-    def _renamed_file(record: ChangeRecord, prev_path: Path, cur_path: Path) -> Path | None:
-        """Return the file the write renamed, or None when no rename took place.
+    def _renamed_file(
+        record: ChangeRecord, prev_path: Path, cur_path: Path
+    ) -> tuple[Path, FileIdentity] | None:
+        """Return the file the write renamed with its identity, or None without a rename.
 
         Call this before a restore recreates prev_path. The rename is the last step of a
         write. For an unfinished write, a source that still exists means the rename never ran.
-        A file at the planned name then belongs to another program and stays.
+        A file at the planned name then belongs to another program and stays. The identity
+        lets the cleanup skip a file that another program puts at that name later.
         """
         if cur_path.resolve() == prev_path.resolve() or not cur_path.is_file():
             return None
         if record.operation_status == OperationStatus.IN_PROGRESS and prev_path.exists():
             return None
-        return cur_path
+        try:
+            return cur_path, file_identity(cur_path)
+        except FileNotFoundError:
+            return None
 
     def _replace_with_staged_copy(
         self, source: Path, target: Path, expected_hash: str | None
@@ -387,7 +399,7 @@ class WriteService:
             backup_path, prev_path, record.pre_write_hash
         )
         if renamed is not None:
-            renamed.unlink()
+            discard_if_same_file(*renamed)
 
         record.operation_status = final_status
         self.repo.upsert_change_record(record)
