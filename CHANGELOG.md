@@ -5,6 +5,22 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.77.0] (2026-11-18)
+
+### Changed
+
+- The build backend pins `setuptools==84.2.1` and `wheel==0.48.0` (issue 288). Each build resolved the newest versions before. The repository owner approved the `wheel` version.
+- Hygiene from the wholesale quality review (issue 288).
+  - Conditions that earlier guards make constant are gone from the BPM estimate, the pitch drift check, the review status refresh, and the expiry days check.
+  - The DSP thresholds, the Discogs match scores, the fpcalc, Ollama install, and LLM request timeouts, and the default provider cache lifetime carry names. Each value stays the same.
+  - `deduplicate_space_entries` in `services/usb/_shared.py` replaces three copies in the Linux, macOS, and Windows inspectors.
+  - Comments and docstrings match the code in the macOS runner and plist parser, the Windows interpreter notes, the backup version reader, the transcoder class, and the pitch drift range.
+  - The import stuck prompt names the timeout the watcher uses. It stated 2 minutes for every timeout before. The new `stuck_import_text` builds the text.
+  - The empty player clock uses the clock format of a loaded track.
+  - `split_time_seconds` divides minutes by the new `MINUTES_PER_HOUR`.
+  - Issue 322 tracks the USB confinement helpers and the RIFF chunk walkers. Their merge changes error behavior on sensitive paths.
+  - The version advances from 0.76.1 to 0.77.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+
 ## [0.76.1] (2026-11-17)
 
 ### Added
