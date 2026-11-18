@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.75.5] (2026-11-18)
+## [0.76.2] (2026-11-18)
 
 ### Fixed
 
@@ -13,9 +13,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The toolbar and Settings theme pickers show Dark Teal, Light Teal, Native, and Match System. They showed file names such as `dark_teal.xml` before. Settings still store the theme identifier, so existing settings files stay valid.
   - The Settings dialog leaves out the Playback tab, which held no setting and only said so.
   - The new `tests/unit/test_theme_labels.py` covers the labels, the stored identifier, and the hidden tab. With active human approval, five existing theme and settings test files now select themes by identifier instead of picker text, and the tab list no longer expects Playback.
-  - The version advances to 0.75.5 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.76.1 to 0.76.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
-## [0.75.3] (2026-11-17)
+## [0.76.1] (2026-11-17)
 
 ### Added
 
@@ -27,6 +27,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The other tags, write preview, journal, and recovery tables pass Tab to the next control. Tab walked every cell before.
 - The new `tests/unit/test_accessible_names_and_keyboard_sort.py` covers the names, the read-only tables, and the keyboard sort.
   - The version advances from 0.74.1 to 0.75.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- The library selection no longer stops playback (issue 249, D407).
+  - A row click updates the detail panel only. The player keeps its track, its position, and its play state until an explicit load.
+  - A `Play Selected` button in the detail panel header loads and plays the selected file.
+  - `Ctrl+Enter` on the library table loads and plays the selected file.
+  - A `Play` item in the library row context menu loads and plays the row under the pointer. A right-click outside a row opens no menu.
+  - A double-click on a library row loads and plays that row.
+  - The player `Play` button loads the selection when the selection differs from the loaded track.
+  - A library row dragged onto the waveform loads that track paused at the start. A drop while a track plays asks first. `Cancel` keeps the playing track and its position.
+  - The player shows a `Loaded:` line with the file name it holds. A mismatch with the detail panel stays visible.
+  - The new `tests/unit/test_selection_keeps_playback.py` covers the selection, the four play paths, and the drop paths.
+  - The version advances from 0.75.3 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 - The new `tests/unit/test_destructive_action_guards.py` checks the guards in front of destructive UI actions (accessibility audit).
   - The version advances from 0.72.4 to 0.72.5 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
@@ -38,6 +49,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `tests/unit/test_write_preview_enter_refresh.py` checks that Enter rebuilds the preview once with the typed template.
   - The new `tests/unit/test_detail_panel_row_tab_order.py` checks that Tab visits Save, then Lock, in one field row.
   - The version advances from 0.72.1 to 0.72.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+
+- The bundle job reports the size of the built bundle, the size of every package, and the largest folders in the bundle (D354, issue 181).
+  - The new `packaging/bundle_size.py` measures the unpacked bundle, reads the limit, and writes a Markdown report and a JSON report.
+  - The new `packaging/bundle_size_limits.json` holds the measured size of each operating system on `main`. The limit is that size plus 50 percent.
+  - The measured sizes are 248709436 bytes on Windows, 168151858 bytes on macOS, and 363129630 bytes on Linux. The limits are 373064154 bytes, 252227787 bytes, and 544694445 bytes.
+  - A bundle past the limit fails the job. A record of null means the size was not measured yet. The check then reports the sizes and passes.
+  - Every operating system needs a record in the limits file, and every record needs a byte count. A missing record or a record without a byte count is an error, so a lost record cannot disable a limit.
+  - The new `tests/test_bundle_size.py` checks the measurement, the limit, the command, and the workflow wiring.
+  - The README documents the size report and the limits file.
+  - The version advances from 0.76.0 to 0.76.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ### Changed
 
@@ -66,6 +87,19 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Latent defects in the online adapters and key removal (issue 288).
+  - A network failure, a timeout, or a malformed response from MusicBrainz, Discogs, iTunes Search, or AcoustID fails that lookup only. The identification job continues with the other providers. AcoustID returns the failure as a warning. A failed lookup stays out of the cache. A response that is not a JSON object counts as malformed and returns no candidate. It raised out of the adapter before. The iTunes Search adapter runs the same check before its cache write.
+  - Candidate ids from MusicBrainz, Discogs, and iTunes Search hold the file id. The same release found for two files collided on one candidate id before. Each id part is percent-encoded and joined with `:`, so no two part tuples share an id.
+  - Each Discogs track keeps its own candidate row. A Discogs year of 0 reads as no year. A track without a position takes its list position. An entry without a position keys its candidate with `#` and its list number, so a heading before track `1` keeps its own row.
+  - A MusicBrainz release lookup returns a release candidate. It returned nothing after the request before. An unsupported entity type fails before any request. A missing track number reads as no track number.
+  - The fpcalc step catches process, file, and parse errors only. A defect in the runner now surfaces.
+  - The Beatport and ACRCloud stubs report unavailable with the reason. They reported available while every lookup returned nothing.
+  - `OllamaBootstrapService` gains an optional `base_url` keyword. The model list follows the configured server. A server address that fails the endpoint rules lists no models.
+  - `forget_all_credentials` attempts every key after a failed delete. It stopped at the first failure before.
+  - The new module `infiniteprep.adapters.http_json` holds the bounded HTTPS JSON fetch, the request limiter, and `cached_lookup`. The MusicBrainz, Discogs, and iTunes Search adapters run their cache check, fetch, JSON object check, and cache write through `cached_lookup`. `RequestLimiter` stays importable from the iTunes adapter.
+  - The new `tests/unit/test_adapter_latent_defects.py` covers each change.
+  - `test_discogs_never_caches_a_response_that_is_not_an_object` in `tests/unit/test_provider_and_llm_validation.py` checks for an empty result and a second request in place of a raised error. The repository owner approved this edit.
+  - The version advances from 0.75.3 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Status changes reach screen readers, and toolbar actions say what they did (accessibility audit).
   - A playback status, a spectrum analysis failure, a finished batch, and the write preview status each raise a screen reader announcement. A label update alone was silent before. The new `announce` helper in `ui/accessible_names.py` sends them.
   - Identify & Analyze, Bulk Approve, Preview & Apply Writes, Transcode, and Export say why they did nothing when no file is visible. Each ended without a word before.
@@ -97,7 +131,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The LLM output check requires the selected ID and the proposed value to belong to one candidate. A value with no candidate value to match counts as invented. A non-string field or a field above 1000 characters fails.
   - A validated LLM answer returns the stored ID and value of its candidate. The rationale stays printable and stops at 500 characters. A failed request names only the exception class.
   - The version advances from 0.74.0 to 0.74.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
-
 - Wrong results and failed operations from the wholesale quality review (issue 288).
   - An unreadable subfolder no longer stops an import. A folder and a file inside it import the file once.
   - Silent or flat audio yields no key. The analyzer proposed A minor before.

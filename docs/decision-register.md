@@ -186,7 +186,7 @@ D(N+92).
 | D243 | No playback prompt. Import runs while playback continues. |
 | D244 | A hung file read gets a 2-minute limit with Quit Now or Keep Waiting. D390 to D392 extend it to queued batches. |
 | D245 | Other tags hides keys with a leading underscore. |
-| D246 | The detail panel reloads audio only when the file ID changes. |
+| D246 | The detail panel reloads audio only when the file ID changes. Replaced by D407. |
 
 ## D247 to D324: release packages (2026-11-07, 2026-11-08)
 
@@ -410,6 +410,15 @@ adapters after the sample runs on the research branch.
 | D404 | iTunes Search supplies a coarse genre and release-date fallback. iTunes artwork stays out under Apple's promotional-use terms (issue 222). |
 | D405 | Deezer leaves the roadmap. BPM stays local analysis only (issue 222). |
 | D406 | SOURCE-R ends without a tag-based ISRC test. The research branch stays unmerged under D227 (issue 222). |
+
+## D407: playback holds across a selection change (2026-11-17)
+
+Issue 249 asked the owner for three choices. The owner answered on 2026-11-17.
+This replaces D246.
+
+| ID | Decision |
+| --- | --- |
+| D407 | A library selection never touches the player. The player keeps its track, its position, and its play state until an explicit load. Four paths load and play the selected file. A `Play Selected` button in the detail panel header. `Ctrl+Enter` on the library table. A `Play` item in the library row context menu, which selects the row under the pointer first. A double-click on a library row. The player `Play` button loads the selection when the selection differs from the loaded track. A library row dragged onto the waveform loads that track paused at the start. A drop while a track plays asks first, and the warning names the playing track and the dropped track. `Cancel` keeps the playing track and its position. The player shows a `Loaded:` line with the file name it holds. The waveform shows the loaded track only. |
 
 ## Open questions
 
