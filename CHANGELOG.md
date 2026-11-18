@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.78.0] (2026-11-18)
+## [0.78.1] (2026-11-18)
 
 ### Added
 
@@ -33,6 +33,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- USB manifest and recovery journal parsing refuses unsafe paths and reports every bad file as a `ValueError`.
+  - A manifest omission track path, a journal track path, and a journal backup path must be relative paths below their root. A `..` segment, an absolute or drive path, a UNC path, or a control character fails the read.
+  - A journal mount point must be an absolute POSIX or Windows path without a `..` segment or a control character. The recovery dialog shows that text.
+  - A probed mount path keeps its exact text or yields no mount point. The probe cleanup dropped invisible characters, stripped spaces, and cut the path at 512 characters before. The cleaned text could name another folder.
+  - A manifest or journal nested past the recursion limit fails as malformed. The JSON parser raised `RecursionError` before, which the marker check did not catch.
+  - A timestamp that leaves the datetime range on conversion to UTC fails with `ValueError`. `OverflowError` escaped before.
+  - The new `tests/unit/test_usb_manifest_parsing_hardening.py` covers each change.
+  - The version advances from 0.78.0 to 0.78.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - The Identify & Analyze All, Preview & Apply Writes, Change Journal & Restore, and Settings & Providers buttons show their ampersand again. Qt read the single ampersand as a hidden Alt marker before.
 - The version advances from 0.76.4 to 0.77.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - The theme pickers and the Settings dialog read clearly (accessibility audit).

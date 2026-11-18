@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
@@ -14,7 +13,10 @@ from typing import Final
 from infiniteprep import storage_paths
 from infiniteprep.services.usb._shared import (
     MAX_USB_JSON_BYTES,
+    is_safe_absolute_path,
+    is_safe_relative_path,
     is_symlink_or_reparse_point,
+    load_json_text,
     normalize_iso_utc,
     open_confined_directory_context,
     parse_utc_datetime,
@@ -160,6 +162,37 @@ def _require_journal_str_default(raw: Mapping[str, object], field_name: str, def
     return _require_journal_str(raw[field_name], field_name, allow_empty=True)
 
 
+def _require_journal_mount_point(raw: object, field_name: str) -> str:
+    """Validate that raw is an absolute mount path without traversal or control characters.
+
+    The recovery dialog shows this text and matching compares it with probed mount paths.
+    """
+    text = _require_journal_str(raw, field_name)
+    if not is_safe_absolute_path(text):
+        raise ValueError(
+            f"USB recovery journal field '{field_name}' must be an absolute mount path."
+        )
+    return text
+
+
+def _relative_path_tuple(raw: object, field_name: str) -> tuple[str, ...]:
+    """Deserialize a JSON array of relative paths that stay below their root."""
+    paths = _str_tuple(raw, field_name)
+    if not all(is_safe_relative_path(path) for path in paths):
+        raise ValueError(
+            f"Journal entry '{field_name}' must hold relative paths below the drive root."
+        )
+    return paths
+
+
+def _optional_backup_path(raw: Mapping[str, object]) -> str:
+    """Return the backup path, empty for no backup, or raise for a path outside its root."""
+    text = _require_journal_str_default(raw, "backup_path", "")
+    if text and not is_safe_relative_path(text):
+        raise ValueError("Journal entry 'backup_path' must be a relative path below its root.")
+    return text
+
+
 def _drive_from_dict(raw: object) -> DriveIdentity:
     """Deserialize DriveIdentity from journal JSON."""
     if not isinstance(raw, Mapping):
@@ -202,7 +235,7 @@ def _entry_from_dict(raw: object) -> UsbJournalEntry:
     raw_started = _require_journal_str(raw.get("started_at_utc"), "started_at_utc")
     started_at = normalize_iso_utc(raw_started, "started_at_utc")
     volume_uuid = _require_journal_str(raw.get("volume_uuid"), "volume_uuid", allow_empty=True)
-    mount_point = _require_journal_str(raw.get("mount_point"), "mount_point")
+    mount_point = _require_journal_mount_point(raw.get("mount_point"), "mount_point")
     scope = ExportScope(_require_journal_str(raw.get("scope"), "scope"))
     action = _require_journal_str_default(raw, "last_recovery_action", "")
     if action not in _ALLOWED_RECOVERY_ACTIONS:
@@ -215,8 +248,8 @@ def _entry_from_dict(raw: object) -> UsbJournalEntry:
         mount_point=mount_point,
         scope=scope,
         playlist_names=_str_tuple(raw.get("playlist_names"), "playlist_names"),
-        track_paths=_str_tuple(raw.get("track_paths"), "track_paths"),
-        backup_path=_require_journal_str_default(raw, "backup_path", ""),
+        track_paths=_relative_path_tuple(raw.get("track_paths"), "track_paths"),
+        backup_path=_optional_backup_path(raw),
         warned_expiry=_require_journal_bool(raw, "warned_expiry", False),
         last_recovery_action=action,
     )
@@ -239,7 +272,7 @@ def _cleanup_record_from_dict(raw: object) -> UsbCleanupRecord:
             _require_journal_str(raw.get("started_at_utc"), "cleanup.started_at_utc"),
             "cleanup.started_at_utc",
         ),
-        mount_point=_require_journal_str(raw.get("mount_point"), "cleanup.mount_point"),
+        mount_point=_require_journal_mount_point(raw.get("mount_point"), "cleanup.mount_point"),
         deleted_at_utc=normalize_iso_utc(
             _require_journal_str(raw.get("deleted_at_utc"), "cleanup.deleted_at_utc"),
             "cleanup.deleted_at_utc",
@@ -447,7 +480,7 @@ class UsbRecoveryJournalStore:
             )
         if content is None:
             return [], []
-        return self._parse_journal_payload(json.loads(content))
+        return self._parse_journal_payload(load_json_text(content, "USB recovery journal"))
 
     def _parse_journal_payload(
         self, raw: object

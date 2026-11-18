@@ -21,13 +21,18 @@ import sys
 import tempfile
 from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Final
 
 from infiniteprep.services.usb.models import SpaceInfo
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS: Final[float] = 15.0
 MAX_METADATA_STR_LEN: Final[int] = 512
+# PATH_MAX on Linux. No mounted volume has a longer path.
+MAX_MOUNT_PATH_LEN: Final[int] = 4096
+FIRST_PRINTABLE_CODE_POINT: Final[int] = 0x20
+DEL_CODE_POINT: Final[int] = 0x7F
+PARENT_DIR_PART: Final[str] = ".."
 MAX_TEMP_ATTEMPTS: Final[int] = 16
 MAX_USB_JSON_BYTES: Final[int] = 16 * 1024 * 1024
 ANSI_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
@@ -131,11 +136,57 @@ def deduplicate_space_entries(
 
 
 def sanitize_mount_point(val: Any) -> str | None:
-    """Sanitize untrusted mountpoint path, preventing traversal and control characters."""
-    cleaned = clean_str(val)
-    if not cleaned or ".." in cleaned or not cleaned.startswith("/"):
+    """Return an untrusted POSIX mount path unchanged when it is safe, or None.
+
+    A cleaned copy of an unsafe path can name another folder or another volume. The probe
+    output therefore keeps its exact text or yields no mount point at all.
+    """
+    if not isinstance(val, str) or not val.startswith("/") or len(val) > MAX_MOUNT_PATH_LEN:
         return None
-    return cleaned
+    if PARENT_DIR_PART in val or not val.isprintable():
+        return None
+    return val
+
+
+def has_path_control_characters(text: str) -> bool:
+    """Return True when text holds a C0 control character or DEL."""
+    return any(
+        ord(char) < FIRST_PRINTABLE_CODE_POINT or ord(char) == DEL_CODE_POINT for char in text
+    )
+
+
+def _has_unsafe_path_text(text: str) -> bool:
+    """Return True for empty text, control characters, or a parent directory segment."""
+    if not text or has_path_control_characters(text):
+        return True
+    return PARENT_DIR_PART in text.replace("\\", "/").split("/")
+
+
+def is_safe_relative_path(text: str) -> bool:
+    """Return True when text names a path below its root on POSIX and on Windows."""
+    if _has_unsafe_path_text(text):
+        return False
+    windows_path = PureWindowsPath(text)
+    return not (text.startswith(("/", "\\")) or windows_path.drive or windows_path.root)
+
+
+def is_safe_absolute_path(text: str) -> bool:
+    """Return True when text is an absolute POSIX or Windows path without traversal."""
+    if _has_unsafe_path_text(text):
+        return False
+    return PurePosixPath(text).is_absolute() or PureWindowsPath(text).is_absolute()
+
+
+def load_json_text(text: str, label: str) -> object:
+    """Parse JSON text and report nesting past the recursion limit as malformed.
+
+    The callers catch ValueError for a bad file. A deeply nested file raises
+    RecursionError in the parser instead.
+    """
+    try:
+        return json.loads(text)
+    except RecursionError as exc:
+        raise ValueError(f"{label} is malformed: its JSON nesting is too deep.") from exc
 
 
 def is_symlink_or_reparse_point(path: Path) -> bool:
@@ -401,7 +452,11 @@ def parse_utc_datetime(raw_text: str, field_name: str = "timestamp") -> datetime
     parsed = datetime.fromisoformat(raw_text)
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError(f"Timestamp '{field_name}' must include a timezone offset.")
-    return parsed.astimezone(UTC)
+    try:
+        return parsed.astimezone(UTC)
+    except OverflowError as exc:
+        # A valid offset can move a date at year 1 or 9999 past the datetime range.
+        raise ValueError(f"Timestamp '{field_name}' falls outside the supported range.") from exc
 
 
 def normalize_iso_utc(raw_text: str, field_name: str = "timestamp") -> str:
