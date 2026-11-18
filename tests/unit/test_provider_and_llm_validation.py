@@ -221,9 +221,11 @@ def test_discogs_search_survives_malformed_fields() -> None:
 
 
 def test_discogs_never_caches_a_response_that_is_not_an_object() -> None:
-    """A JSON array response raises before the cache write, so a retry asks again."""
+    """A JSON array response fails the lookup before the cache write, so a retry asks again."""
+    requested: list[str] = []
 
-    def array_response(_url: str, _params: dict[str, str]) -> Any:
+    def array_response(url: str, _params: dict[str, str]) -> Any:
+        requested.append(url)
         return ["unexpected"]
 
     adapter = DiscogsAdapter(
@@ -232,9 +234,11 @@ def test_discogs_never_caches_a_response_that_is_not_an_object() -> None:
         http_get_json=array_response,
         min_interval_sec=0.0,
     )
+    query = MetadataSearchQuery(artist="Deep Dish")
 
-    with pytest.raises(ValueError, match="not a JSON object"):
-        adapter.search(MetadataSearchQuery(artist="Deep Dish"))
+    assert adapter.search(query) == []
+    assert adapter.search(query) == []
+    assert len(requested) == 2
 
 
 def test_musicbrainz_caps_long_text_and_ignores_a_text_length() -> None:

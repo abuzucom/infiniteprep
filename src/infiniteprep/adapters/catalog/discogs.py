@@ -5,21 +5,23 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import time
-import urllib.parse
-import urllib.request
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, Final
 
 from infiniteprep.adapters import http_openers
+from infiniteprep.adapters.http_json import (
+    RequestLimiter,
+    build_candidate_id,
+    cached_lookup,
+    fetch_json,
+)
 from infiniteprep.adapters.provider_fields import (
     first_provider_text,
     provider_dict,
     provider_dicts,
     provider_text,
     provider_texts,
-    require_payload_dict,
 )
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
@@ -36,6 +38,18 @@ MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
 # characters out of that path. IDs start at 1 and carry no leading zero.
 # Sixteen digits exceed every issued release ID.
 SAFE_RELEASE_ID_RE: Final[re.Pattern[str]] = re.compile(r"[1-9][0-9]{0,15}")
+DISCOGS_REQUEST_TIMEOUT_SEC: Final[float] = 15.0
+
+
+def normalize_release_year(raw_year: object) -> str | None:
+    """Return the release year as text, or None when Discogs reports no year.
+
+    Discogs reports an unknown year as 0 or as an empty value.
+    """
+    year_text = str(raw_year).strip() if raw_year is not None else ""
+    if not year_text or year_text == "0":
+        return None
+    return year_text
 
 
 def _release_details(payload: dict[str, Any]) -> ReleaseDetails:
@@ -49,8 +63,27 @@ def _release_details(payload: dict[str, Any]) -> ReleaseDetails:
         label=provider_text(labels[0].get("name")),
         catalog_number=provider_text(labels[0].get("catno")),
         country=provider_text(payload.get("country")),
-        year=provider_text(payload.get("year")),
+        year=normalize_release_year(provider_text(payload.get("year"))),
     )
+
+
+def _track_keys(tracks: list[dict[str, Any]]) -> list[str]:
+    """Return one distinct key per tracklist entry, in tracklist order.
+
+    A heading or an index track carries an empty position and often precedes a track
+    at position "1". The key of an entry without a position holds a "#" and its list
+    number. A key already in the set of every earlier key, explicit or generated,
+    gains the list number again until it is new, so no two entries share a key.
+    """
+    keys: list[str] = []
+    seen: set[str] = set()
+    for idx, trk in enumerate(tracks):
+        key = provider_text(trk.get("position")) or f"#{idx + 1}"
+        while key in seen:
+            key = f"{key}#{idx + 1}"
+        seen.add(key)
+        keys.append(key)
+    return keys
 
 
 class DiscogsAdapter:
@@ -70,7 +103,7 @@ class DiscogsAdapter:
         self.user_token = user_token
         self.http_get_json = http_get_json or self._default_http_get_json
         self.min_interval_sec = min_interval_sec
-        self._last_request_ts: float = 0.0
+        self._limiter = RequestLimiter(min_interval_sec)
 
     def is_available(self) -> tuple[bool, str | None]:
         """Return True if a Discogs personal access token is configured."""
@@ -98,18 +131,9 @@ class DiscogsAdapter:
         key_raw = json.dumps(params, sort_keys=True)
         cache_hash = hashlib.sha256(key_raw.encode("utf-8")).hexdigest()[:24]
         cache_key = f"discogs:search:{cache_hash}"
-        payload = self.repo.get_cached_response(cache_key)
+        payload = self._cached_get(cache_key, f"{DISCOGS_BASE_URL}/database/search", params)
         if payload is None:
-            self._respect_rate_limit()
-            payload = require_payload_dict(
-                self.http_get_json(f"{DISCOGS_BASE_URL}/database/search", params), "Discogs"
-            )
-            self.repo.set_cached_response(
-                cache_key=cache_key,
-                provider=self.provider_name,
-                response_data=payload,
-                ttl_seconds=DISCOGS_TTL_SEC,
-            )
+            return []
         results = provider_dicts(provider_dict(payload).get("results"))
         return self._parse_search_results(results, query, file_id)
 
@@ -126,29 +150,30 @@ class DiscogsAdapter:
                 f"Invalid Discogs release id {entity_id!r}. "
                 "Use 1 to 16 digits without a leading zero."
             )
-        cache_key = f"discogs:release:{entity_id}"
-        payload = self.repo.get_cached_response(cache_key)
+        payload = self._cached_get(
+            f"discogs:release:{entity_id}", f"{DISCOGS_BASE_URL}/releases/{entity_id}", {}
+        )
         if payload is None:
-            self._respect_rate_limit()
-            payload = require_payload_dict(
-                self.http_get_json(f"{DISCOGS_BASE_URL}/releases/{entity_id}", {}), "Discogs"
-            )
-            self.repo.set_cached_response(
-                cache_key=cache_key,
-                provider=self.provider_name,
-                response_data=payload,
-                ttl_seconds=DISCOGS_TTL_SEC,
-            )
+            return []
         return self._parse_release_payload(provider_dict(payload), file_id)
+
+    def _cached_get(
+        self, cache_key: str, url: str, params: dict[str, str]
+    ) -> dict[str, Any] | None:
+        """Return the cached or fetched payload, or None after a failed lookup."""
+        return cached_lookup(
+            self.repo,
+            cache_key=cache_key,
+            provider=self.provider_name,
+            label="Discogs",
+            ttl_seconds=DISCOGS_TTL_SEC,
+            fetch=lambda: self.http_get_json(url, params),
+            before_request=self._respect_rate_limit,
+        )
 
     def _respect_rate_limit(self) -> None:
         """Throttle requests to respect Discogs 60 req/min rate limit."""
-        if self.min_interval_sec <= 0.0:
-            return
-        elapsed = time.monotonic() - self._last_request_ts
-        if elapsed < self.min_interval_sec:
-            time.sleep(self.min_interval_sec - elapsed)
-        self._last_request_ts = time.monotonic()
+        self._limiter.wait()
 
     def _parse_search_results(
         self,
@@ -178,7 +203,7 @@ class DiscogsAdapter:
         )
         formats = provider_texts(item.get("format"))
         return CandidateMatch(
-            id=f"discogs-rel-{rel_id}",
+            id=build_candidate_id("discogs-rel", file_id, rel_id),
             file_id=file_id,
             provider=self.provider_name,
             provider_entity_id=rel_id,
@@ -190,7 +215,7 @@ class DiscogsAdapter:
                 label=first_provider_text(item.get("label")),
                 catalog_number=provider_text(item.get("catno")),
                 country=provider_text(item.get("country")),
-                year=provider_text(item.get("year")),
+                year=normalize_release_year(provider_text(item.get("year"))),
                 genre=first_provider_text(item.get("style"))
                 or first_provider_text(item.get("genre")),
                 format_description=", ".join(formats) or None,
@@ -206,14 +231,17 @@ class DiscogsAdapter:
         rel_artist = ", ".join(a for a in artists if a) or None
         release = _release_details(payload)
         results: list[CandidateMatch] = []
-        for idx, trk in enumerate(provider_dicts(payload.get("tracklist"))):
+        tracks = provider_dicts(payload.get("tracklist"))
+        for idx, (trk, track_key) in enumerate(zip(tracks, _track_keys(tracks), strict=True)):
             pos = provider_text(trk.get("position")) or f"{idx + 1}"
             results.append(
                 CandidateMatch(
-                    id=f"discogs-trk-{rel_id}-{pos}",
+                    id=build_candidate_id("discogs-trk", file_id, rel_id, track_key),
                     file_id=file_id,
                     provider=self.provider_name,
-                    provider_entity_id=rel_id,
+                    # The stored candidate key holds the entity id. One id per track
+                    # keeps every track of the release as its own candidate row.
+                    provider_entity_id=f"{rel_id}:{track_key}",
                     entity_type=EntityType.RELEASE,
                     artist=rel_artist,
                     title=provider_text(trk.get("title")) or "",
@@ -226,18 +254,18 @@ class DiscogsAdapter:
 
     def _default_http_get_json(self, url: str, params: dict[str, str]) -> dict[str, Any]:
         """Perform HTTPS GET request to Discogs API with token authentication."""
-        if not url.startswith("https://"):
-            raise ValueError(f"Discogs URL must use https:// scheme: {url}")
-        encoded = urllib.parse.urlencode(params)
-        full_url = f"{url}?{encoded}" if encoded else url
         headers = {
             "User-Agent": DISCOGS_USER_AGENT,
             "Authorization": f"Discogs token={self.user_token}",
         }
-        req = urllib.request.Request(full_url, headers=headers)
-        # The Authorization header carries the token. A redirect raises instead of forwarding it.
-        with http_openers.open_without_redirects(req, timeout=15) as resp:
-            raw_bytes = resp.read(MAX_API_RESPONSE_BYTES + 1)
-        if len(raw_bytes) > MAX_API_RESPONSE_BYTES:
-            raise ValueError("Discogs HTTP response exceeded maximum byte size limit.")
-        return dict(json.loads(raw_bytes.decode("utf-8")))
+        return fetch_json(
+            url,
+            params,
+            headers,
+            provider="Discogs",
+            timeout=DISCOGS_REQUEST_TIMEOUT_SEC,
+            max_bytes=MAX_API_RESPONSE_BYTES,
+            # The Authorization header carries the token. A redirect raises instead of
+            # forwarding it to a host this URL does not name.
+            open_url=http_openers.open_without_redirects,
+        )

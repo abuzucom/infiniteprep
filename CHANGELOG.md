@@ -67,8 +67,21 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Latent defects in the online adapters and key removal (issue 288).
+  - A network failure, a timeout, or a malformed response from MusicBrainz, Discogs, iTunes Search, or AcoustID fails that lookup only. The identification job continues with the other providers. AcoustID returns the failure as a warning. A failed lookup stays out of the cache. A response that is not a JSON object counts as malformed and returns no candidate. It raised out of the adapter before. The iTunes Search adapter runs the same check before its cache write.
+  - Candidate ids from MusicBrainz, Discogs, and iTunes Search hold the file id. The same release found for two files collided on one candidate id before. Each id part is percent-encoded and joined with `:`, so no two part tuples share an id.
+  - Each Discogs track keeps its own candidate row. A Discogs year of 0 reads as no year. A track without a position takes its list position. An entry without a position keys its candidate with `#` and its list number, so a heading before track `1` keeps its own row.
+  - A MusicBrainz release lookup returns a release candidate. It returned nothing after the request before. An unsupported entity type fails before any request. A missing track number reads as no track number.
+  - The fpcalc step catches process, file, and parse errors only. A defect in the runner now surfaces.
+  - The Beatport and ACRCloud stubs report unavailable with the reason. They reported available while every lookup returned nothing.
+  - `OllamaBootstrapService` gains an optional `base_url` keyword. The model list follows the configured server. A server address that fails the endpoint rules lists no models.
+  - `forget_all_credentials` attempts every key after a failed delete. It stopped at the first failure before.
+  - The new module `infiniteprep.adapters.http_json` holds the bounded HTTPS JSON fetch, the request limiter, and `cached_lookup`. The MusicBrainz, Discogs, and iTunes Search adapters run their cache check, fetch, JSON object check, and cache write through `cached_lookup`. `RequestLimiter` stays importable from the iTunes adapter.
+  - The new `tests/unit/test_adapter_latent_defects.py` covers each change.
+  - `test_discogs_never_caches_a_response_that_is_not_an_object` in `tests/unit/test_provider_and_llm_validation.py` checks for an empty result and a second request in place of a raised error. The repository owner approved this edit.
+  - The version advances from 0.75.3 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Requests that carry a credential no longer follow a redirect.
-  - The Discogs, MusicBrainz, and AcoustID adapters and the LLM reasoning adapter send through the new `adapters/http_openers.py` opener. That opener holds no redirect handler, so a redirect response raises an error.
+  - The Discogs, MusicBrainz, and AcoustID adapters and the LLM reasoning adapter send through the new `adapters/http_openers.py` opener. That opener holds no redirect handler, so a redirect response raises an error. The three adapters pass it to the shared `adapters/http_json.py` fetch.
   - urllib copied every header, the Discogs token and the LLM Bearer key included, to the redirect target. A redirect could also move a request from https to plain http. The AcoustID key rides in the query string and followed every redirect too.
   - The LLM endpoint check covered the first URL only. A redirect now ends the request before it reaches a host the check never saw.
   - The version advances from 0.76.0 to 0.76.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
@@ -103,7 +116,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The LLM output check requires the selected ID and the proposed value to belong to one candidate. A value with no candidate value to match counts as invented. A non-string field or a field above 1000 characters fails.
   - A validated LLM answer returns the stored ID and value of its candidate. The rationale stays printable and stops at 500 characters. A failed request names only the exception class.
   - The version advances from 0.74.0 to 0.74.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
-
 - Wrong results and failed operations from the wholesale quality review (issue 288).
   - An unreadable subfolder no longer stops an import. A folder and a file inside it import the file once.
   - Silent or flat audio yields no key. The analyzer proposed A minor before.

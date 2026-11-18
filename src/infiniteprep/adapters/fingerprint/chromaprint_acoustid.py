@@ -5,14 +5,13 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-import urllib.parse
-import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
 
 from infiniteprep.adapters import http_openers
 from infiniteprep.adapters.fingerprint.fpcalc_bootstrap import FpcalcBootstrapService
+from infiniteprep.adapters.http_json import LOOKUP_ERRORS, fetch_json, log_lookup_failure
 from infiniteprep.adapters.provider_fields import (
     provider_dict,
     provider_dicts,
@@ -27,6 +26,14 @@ from infiniteprep.user_agent import USER_AGENT
 ACOUSTID_API_URL: Final[str] = "https://api.acoustid.org/v2/lookup"
 CACHE_TTL_SEC: Final[int] = 86400
 MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
+ACOUSTID_REQUEST_TIMEOUT_SEC: Final[float] = 15.0
+# fpcalc fails with a missing binary or unreadable file (OSError), a nonzero exit or
+# a timeout (SubprocessError), or output that is not the expected JSON (ValueError).
+FPCALC_ERRORS: Final[tuple[type[Exception], ...]] = (
+    OSError,
+    ValueError,
+    subprocess.SubprocessError,
+)
 
 
 class ChromaprintAcoustIDAdapter:
@@ -72,7 +79,7 @@ class ChromaprintAcoustIDAdapter:
             )
         try:
             duration, fingerprint = self._run_fpcalc(audio_reference)
-        except Exception as exc:
+        except FPCALC_ERRORS as exc:
             return FingerprintResult(
                 provider=self.provider_name,
                 raw_fingerprint=None,
@@ -81,7 +88,17 @@ class ChromaprintAcoustIDAdapter:
                 warnings=[f"fpcalc execution failed ({exc}); check audio file or fpcalc binary."],
             )
 
-        payload = self._lookup_acoustid_cached(duration, fingerprint)
+        try:
+            payload = self._lookup_acoustid_cached(duration, fingerprint)
+        except LOOKUP_ERRORS as error:
+            # A failed lookup fails this file only. The job continues.
+            return FingerprintResult(
+                provider=self.provider_name,
+                raw_fingerprint=fingerprint,
+                duration=duration,
+                matches=[],
+                warnings=[log_lookup_failure("AcoustID", error)],
+            )
         matches = self._parse_acoustid_results(payload)
         return FingerprintResult(
             provider=self.provider_name,
@@ -176,16 +193,14 @@ class ChromaprintAcoustIDAdapter:
 
     def _default_http_get_json(self, url: str, params: dict[str, str]) -> dict[str, Any]:
         """Perform HTTPS GET request to AcoustID API."""
-        if not url.startswith("https://"):
-            raise ValueError(f"AcoustID URL must use https:// scheme: {url}")
-        encoded = urllib.parse.urlencode(params)
-        req = urllib.request.Request(
-            f"{url}?{encoded}",
-            headers={"User-Agent": USER_AGENT},
+        return fetch_json(
+            url,
+            params,
+            {"User-Agent": USER_AGENT},
+            provider="AcoustID",
+            timeout=ACOUSTID_REQUEST_TIMEOUT_SEC,
+            max_bytes=MAX_API_RESPONSE_BYTES,
+            # The query string carries the API key. A redirect raises instead of
+            # forwarding it to a host this URL does not name.
+            open_url=http_openers.open_without_redirects,
         )
-        # The query string carries the API key. A redirect raises instead of forwarding it.
-        with http_openers.open_without_redirects(req, timeout=15) as resp:
-            raw_bytes = resp.read(MAX_API_RESPONSE_BYTES + 1)
-        if len(raw_bytes) > MAX_API_RESPONSE_BYTES:
-            raise ValueError("AcoustID HTTP response exceeded maximum byte size limit.")
-        return dict(json.loads(raw_bytes.decode("utf-8")))
