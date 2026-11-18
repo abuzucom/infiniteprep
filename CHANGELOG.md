@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.79.2] (2026-11-18)
+## [0.79.3] (2026-11-18)
 
 ### Added
 
@@ -48,6 +48,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The staging cleanup never deletes through a link swapped in after its link check.
+  - The cleanup checked the staging name for a link and then listed the folder by name. A link swapped in between could lead the unlink loop into another folder. The AI security review found this race.
+  - On POSIX the cleanup opens the staging folder once with `O_DIRECTORY` and `O_NOFOLLOW`. The listing and each unlink go through that descriptor. A link swapped in before the open fails it and keeps its target whole. A swap after the open leaves the descriptor on the real folder. Windows has no `dir_fd` and keeps the name based cleanup.
+  - The new `tests/unit/test_staging_cleanup_race.py` covers the swapped link, a normal cleanup, and the `ELOOP` stop on a link cycle in the library path.
+  - The version advances from 0.79.2 to 0.79.3 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - A portable library on FAT or exFAT media gets its pre-migration backup again. Links above the library no longer redirect it.
   - FAT and exFAT media ignore folder modes. The backup and restore staging folder therefore could not become owner-only there. Migration backup and restore failed with `PermissionError` since 0.78.4. A staging folder with shared modes or another reported owner now logs a warning. The copy goes on. A link in place of the staging folder still fails the copy.
   - The staging cleanup removes only a link under the staging name. It followed such a link into its target before.
