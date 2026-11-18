@@ -307,6 +307,8 @@ class ReconciliationService:
     ) -> FieldProposal:
         """Construct a FieldProposal preserving both provider_confidence and app_score."""
         digest = f"{file_id}:{field_name}:{cand.provider}:{cand.provider_entity_id}:{value}"
+        # uuid5 hashes with SHA-1. The ID only deduplicates proposal rows. No security check
+        # relies on it. Stored rows depend on the same IDs.
         prop_id = str(uuid.uuid5(uuid.NAMESPACE_OID, digest))
         return FieldProposal(
             id=prop_id,
@@ -330,6 +332,7 @@ class ReconciliationService:
         new analysis row then gets its own ID and never collides with the stored row.
         """
         digest = f"{file_id}:{field_name}:{ana.analyzer_name}:{ana.id}:{value}"
+        # uuid5 hashes with SHA-1. This deduplication ID carries no security role.
         return str(uuid.uuid5(uuid.NAMESPACE_OID, digest))
 
     def _proposals_from_analysis(self, file_id: str, ana: AnalysisResult) -> list[FieldProposal]:
