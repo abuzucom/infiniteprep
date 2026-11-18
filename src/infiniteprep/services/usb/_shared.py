@@ -21,13 +21,37 @@ import sys
 import tempfile
 from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Final
 
 from infiniteprep.services.usb.models import SpaceInfo
 
 DEFAULT_COMMAND_TIMEOUT_SECONDS: Final[float] = 15.0
 MAX_METADATA_STR_LEN: Final[int] = 512
+# PATH_MAX on Linux. No mounted volume has a longer path.
+MAX_MOUNT_PATH_LEN: Final[int] = 4096
+FIRST_PRINTABLE_CODE_POINT: Final[int] = 0x20
+DEL_CODE_POINT: Final[int] = 0x7F
+PARENT_DIR_PART: Final[str] = ".."
+# Path components that add no folder: an empty part between separators and ".".
+CURRENT_DIR_PARTS: Final[frozenset[str]] = frozenset({"", "."})
+# Windows drops these characters from the end of every path part.
+WINDOWS_TRIMMED_CHARACTERS: Final[str] = ". "
+# Port numbers 0 to 9. Windows also reads the superscript digits one, two, and three.
+WINDOWS_PORT_SUFFIXES: Final[tuple[str, ...]] = (
+    *(str(number) for number in range(10)),
+    chr(0x00B9),
+    chr(0x00B2),
+    chr(0x00B3),
+)
+# Windows opens a device for these names in any folder, with or without an extension.
+WINDOWS_RESERVED_DEVICE_NAMES: Final[frozenset[str]] = frozenset(
+    ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"]
+    + [f"COM{suffix}" for suffix in WINDOWS_PORT_SUFFIXES]
+    + [f"LPT{suffix}" for suffix in WINDOWS_PORT_SUFFIXES]
+)
+# A colon inside a Windows name selects a drive or an alternate data stream.
+WINDOWS_STREAM_SEPARATOR: Final[str] = ":"
 MAX_TEMP_ATTEMPTS: Final[int] = 16
 MAX_USB_JSON_BYTES: Final[int] = 16 * 1024 * 1024
 ANSI_ESCAPE_RE: Final[re.Pattern[str]] = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
@@ -131,11 +155,86 @@ def deduplicate_space_entries(
 
 
 def sanitize_mount_point(val: Any) -> str | None:
-    """Sanitize untrusted mountpoint path, preventing traversal and control characters."""
-    cleaned = clean_str(val)
-    if not cleaned or ".." in cleaned or not cleaned.startswith("/"):
+    """Return an untrusted POSIX mount path unchanged when it is safe, or None.
+
+    A cleaned copy of an unsafe path can name another folder or another volume. The probe
+    output therefore keeps its exact text or yields no mount point at all.
+    """
+    if not isinstance(val, str) or not val.startswith("/") or len(val) > MAX_MOUNT_PATH_LEN:
         return None
-    return cleaned
+    if PARENT_DIR_PART in val.split("/") or not val.isprintable():
+        return None
+    return val
+
+
+def has_path_control_characters(text: str) -> bool:
+    """Return True when text holds a C0 control character or DEL."""
+    return any(
+        ord(char) < FIRST_PRINTABLE_CODE_POINT or ord(char) == DEL_CODE_POINT for char in text
+    )
+
+
+def _path_parts(text: str) -> list[str]:
+    """Split text on both the POSIX and the Windows separator."""
+    return text.replace("\\", "/").split("/")
+
+
+def _is_dot_space_part(part: str) -> bool:
+    """Return True for a part made only of dots and spaces, other than "." itself.
+
+    Windows strips trailing dots and spaces from a path part, so ".. " and "..." can open
+    the parent folder. "." stays allowed, since it names the folder the path is in.
+    """
+    return part not in CURRENT_DIR_PARTS and not part.rstrip(WINDOWS_TRIMMED_CHARACTERS)
+
+
+def _has_unsafe_path_text(text: str) -> bool:
+    """Return True for empty text, control characters, or a parent directory segment."""
+    if not text or has_path_control_characters(text):
+        return True
+    return any(_is_dot_space_part(part) for part in _path_parts(text))
+
+
+def _is_windows_special_name(part: str) -> bool:
+    """Return True for a device name or a name that holds a stream or drive colon."""
+    if WINDOWS_STREAM_SEPARATOR in part:
+        return True
+    # Windows ignores the extension and trailing spaces when it matches a device name.
+    stem = part.split(".", 1)[0].rstrip(" ").upper()
+    return stem in WINDOWS_RESERVED_DEVICE_NAMES
+
+
+def is_safe_relative_path(text: str) -> bool:
+    """Return True when text names a file path below its root on POSIX and on Windows."""
+    if _has_unsafe_path_text(text):
+        return False
+    parts = _path_parts(text)
+    if any(_is_windows_special_name(part) for part in parts):
+        return False
+    # "." and "./" name the root itself, not a path below it.
+    if all(part in CURRENT_DIR_PARTS for part in parts):
+        return False
+    windows_path = PureWindowsPath(text)
+    return not (text.startswith(("/", "\\")) or windows_path.drive or windows_path.root)
+
+
+def is_safe_absolute_path(text: str) -> bool:
+    """Return True when text is an absolute POSIX or Windows path without traversal."""
+    if _has_unsafe_path_text(text):
+        return False
+    return PurePosixPath(text).is_absolute() or PureWindowsPath(text).is_absolute()
+
+
+def load_json_text(text: str, label: str) -> object:
+    """Parse JSON text and report nesting past the recursion limit as malformed.
+
+    The callers catch ValueError for a bad file. A deeply nested file raises
+    RecursionError in the parser instead.
+    """
+    try:
+        return json.loads(text)
+    except RecursionError as exc:
+        raise ValueError(f"{label} is malformed: its JSON nesting is too deep.") from exc
 
 
 def is_symlink_or_reparse_point(path: Path) -> bool:
@@ -401,7 +500,11 @@ def parse_utc_datetime(raw_text: str, field_name: str = "timestamp") -> datetime
     parsed = datetime.fromisoformat(raw_text)
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError(f"Timestamp '{field_name}' must include a timezone offset.")
-    return parsed.astimezone(UTC)
+    try:
+        return parsed.astimezone(UTC)
+    except OverflowError as exc:
+        # A valid offset can move a date at year 1 or 9999 past the datetime range.
+        raise ValueError(f"Timestamp '{field_name}' falls outside the supported range.") from exc
 
 
 def normalize_iso_utc(raw_text: str, field_name: str = "timestamp") -> str:
