@@ -27,6 +27,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The import stuck prompt names the timeout the watcher uses. It stated 2 minutes for every timeout before. The new `stuck_import_text` builds the text.
   - The empty player clock uses the clock format of a loaded track.
   - `split_time_seconds` divides minutes by the new `MINUTES_PER_HOUR`.
+  - The new `tests/unit/test_phase5_hygiene.py` covers the stuck prompt wording, the space entry dedupe, and the hour split.
   - Issue 322 tracks the USB confinement helpers and the RIFF chunk walkers. Their merge changes error behavior on sensitive paths.
   - The version advances from 0.77.0 to 0.78.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
