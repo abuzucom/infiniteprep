@@ -196,9 +196,11 @@ def other_tag_rows(raw_custom_tags: Mapping[str, object]) -> list[tuple[str, str
 class DetailPanel(QWidget):
     """Side-by-side inspector for current tags, proposals, approved values, and audio preview."""
 
-    # The file the field rows show, and the field whose row action runs. The class
-    # defaults keep __init__ inside its length budget.
+    # The file the field rows show. The class defaults keep __init__ inside its budget.
     _fields_file_id: str | None = None
+    # The one row whose unsaved text the next rebuild replaces with the stored value.
+    # A successful Save or Accept sets it. Every other row keeps its unsaved text. Unset,
+    # the rebuild keeps unsaved text in every row, including a row whose Accept failed.
     _acted_field: str | None = None
 
     def __init__(

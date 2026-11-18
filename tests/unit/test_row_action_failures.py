@@ -12,6 +12,7 @@ from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAd
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName
+from infiniteprep.domain.models import FieldProposal
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui import detail_panel as detail_panel_module
@@ -24,7 +25,10 @@ from infiniteprep.ui.detail_panel import (
 from tests.fixtures.audio_factory import create_wav_fixture
 
 ARTIST_ROW: int = DISPLAY_FIELDS.index(FieldName.ARTIST)
+TITLE_ROW: int = DISPLAY_FIELDS.index(FieldName.TITLE)
 TYPED_ARTIST: str = "Typed artist"
+TYPED_TITLE: str = "Typed title"
+ACCEPTED_ARTIST: str = "Accepted Artist"
 
 
 class SaveFailedError(RuntimeError):
@@ -87,6 +91,33 @@ def test_a_refused_accept_keeps_the_typed_text(
 
     assert accepted is False
     assert artist_edit(panel).text() == TYPED_ARTIST
+
+
+def test_a_successful_accept_replaces_the_typed_text_with_the_accepted_value(
+    panel_and_file: tuple[DetailPanel, str],
+) -> None:
+    """An accepted proposal replaces the row's typed text. Other rows keep theirs."""
+    panel, file_id = panel_and_file
+    proposal = FieldProposal(
+        id="accepted-artist-proposal",
+        file_id=file_id,
+        field_name=FieldName.ARTIST.value,
+        proposed_value=ACCEPTED_ARTIST,
+        provider="test-catalog",
+        provider_entity_id="artist-1",
+    )
+    panel.repo.upsert_field_proposal(proposal)
+    panel.load_file_asset(file_id)
+    artist_edit(panel).setText(TYPED_ARTIST)
+    title_edit = panel.fields_table.cellWidget(TITLE_ROW, COL_APPROVED_EDIT)
+    title_edit.setText(TYPED_TITLE)
+
+    accepted = panel._accept_row_proposal(FieldName.ARTIST.value, proposal.id)
+
+    assert accepted is True
+    assert artist_edit(panel).text() == ACCEPTED_ARTIST
+    refreshed_title = panel.fields_table.cellWidget(TITLE_ROW, COL_APPROVED_EDIT)
+    assert refreshed_title.text() == TYPED_TITLE
 
 
 def test_lock_without_an_approved_value_explains_itself(
