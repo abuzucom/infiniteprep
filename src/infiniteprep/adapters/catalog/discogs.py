@@ -39,6 +39,10 @@ MAX_API_RESPONSE_BYTES: Final[int] = 5_242_880  # 5 MiB cap per API response
 # Sixteen digits exceed every issued release ID.
 SAFE_RELEASE_ID_RE: Final[re.Pattern[str]] = re.compile(r"[1-9][0-9]{0,15}")
 DISCOGS_REQUEST_TIMEOUT_SEC: Final[float] = 15.0
+# A track candidate names the exact position on the release, so it scores just above a
+# release found by search.
+DISCOGS_SEARCH_MATCH_SCORE: Final[float] = 0.90
+DISCOGS_TRACK_MATCH_SCORE: Final[float] = 0.91
 
 
 def normalize_release_year(raw_year: object) -> str | None:
@@ -221,7 +225,7 @@ class DiscogsAdapter:
                 format_description=", ".join(formats) or None,
             ),
             match_evidence={"discogs_id": rel_id, "raw_title": raw_title},
-            match_score=0.90,
+            match_score=DISCOGS_SEARCH_MATCH_SCORE,
         )
 
     def _parse_release_payload(self, payload: dict[str, Any], file_id: str) -> list[CandidateMatch]:
@@ -247,7 +251,7 @@ class DiscogsAdapter:
                     title=provider_text(trk.get("title")) or "",
                     release_details=replace(release, track_number=pos, vinyl_position=pos),
                     match_evidence={"discogs_id": rel_id, "position": pos},
-                    match_score=0.91,
+                    match_score=DISCOGS_TRACK_MATCH_SCORE,
                 )
             )
         return results

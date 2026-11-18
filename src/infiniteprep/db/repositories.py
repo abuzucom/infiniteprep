@@ -9,7 +9,7 @@ import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Final
 
 from infiniteprep.db.collections import CollectionRepository
 from infiniteprep.db.connection import DatabaseManager
@@ -39,6 +39,9 @@ from infiniteprep.domain.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# A provider response stays valid for one day unless the caller names another lifetime.
+DEFAULT_CACHE_TTL_SEC: Final[int] = 86400
 
 
 def _format_utc_instant(moment: datetime) -> str:
@@ -844,7 +847,7 @@ class Repository:
         provider: str,
         response_data: dict[str, Any],
         expires_at_iso: str | None = None,
-        ttl_seconds: int = 86400,
+        ttl_seconds: int = DEFAULT_CACHE_TTL_SEC,
     ) -> None:
         """Persist a provider HTTP response in SQLite cache with TTL expiration.
 

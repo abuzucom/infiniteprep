@@ -24,6 +24,8 @@ OLLAMA_TAGS_TIMEOUT_SEC: Final[float] = 3.0
 # A model list of a few hundred entries stays far below 1 MiB. Any local process can
 # answer on the tags port, so the read stops one byte past the cap.
 MAX_TAGS_RESPONSE_BYTES: Final[int] = 1_048_576
+# An installer or a model pull downloads gigabytes. Five minutes bounds a stalled download.
+INSTALL_COMMAND_TIMEOUT_SEC: Final[int] = 300
 
 
 def build_tags_url(base_url: str) -> str:
@@ -162,7 +164,7 @@ class OllamaBootstrapService:
             cmd,
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=INSTALL_COMMAND_TIMEOUT_SEC,
             check=True,
             shell=False,
         )

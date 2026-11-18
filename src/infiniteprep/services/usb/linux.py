@@ -17,6 +17,7 @@ from typing import Any, Final
 from infiniteprep.services.usb._shared import (
     clean_int,
     clean_str,
+    deduplicate_space_entries,
     default_command_runner,
     sanitize_mount_point,
 )
@@ -249,18 +250,7 @@ class LinuxDriveInspector:
 
         return partitions, space_entries
 
-    @staticmethod
-    def _deduplicate_space_entries(
-        space_entries: list[tuple[str, SpaceInfo]],
-    ) -> tuple[tuple[str, SpaceInfo], ...]:
-        """Deduplicate space entries by mount point while preserving order."""
-        seen_mounts: set[str] = set()
-        unique: list[tuple[str, SpaceInfo]] = []
-        for mount, space in space_entries:
-            if mount not in seen_mounts:
-                seen_mounts.add(mount)
-                unique.append((mount, space))
-        return tuple(unique)
+    _deduplicate_space_entries = staticmethod(deduplicate_space_entries)
 
     def _build_drive_inspection(
         self,

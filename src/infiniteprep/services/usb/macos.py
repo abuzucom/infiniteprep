@@ -28,6 +28,7 @@ from infiniteprep.services.usb._shared import (
     DEFAULT_COMMAND_TIMEOUT_SECONDS,
     clean_int,
     clean_str,
+    deduplicate_space_entries,
     sanitize_mount_point,
 )
 from infiniteprep.services.usb.models import (
@@ -618,16 +619,4 @@ class MacOSDriveInspector:
             available_bytes=available_bytes,
         )
 
-    @staticmethod
-    def _deduplicate_space_entries(
-        space_entries: list[tuple[str, SpaceInfo]],
-    ) -> tuple[tuple[str, SpaceInfo], ...]:
-        """Deduplicate space entries by mount point while preserving order."""
-        seen_mounts: set[str] = set()
-        unique: list[tuple[str, SpaceInfo]] = []
-        for mount, space in space_entries:
-            if mount in seen_mounts:
-                continue
-            seen_mounts.add(mount)
-            unique.append((mount, space))
-        return tuple(unique)
+    _deduplicate_space_entries = staticmethod(deduplicate_space_entries)
