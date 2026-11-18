@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.78.2] (2026-11-18)
+## [0.78.3] (2026-11-18)
 
 ### Added
 
@@ -18,6 +18,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Every workflow job that runs on a runner states a timeout, apart from three pinned workflows.
+  - The jobs in `agents-compliance.yml`, `deploy-pages.yml`, `gate-integrity.yml`, `os-tests.yml`, and `sync-check.yml` had none. A hung step held a runner for the six hour default.
+  - The Windows gate tests stop after 30 minutes and the macOS gate tests after 20. A normal Windows run takes about 8 minutes. The other jobs stop after 10 or 15 minutes.
+  - `security-review-pr.yml` and `quality-review-pr.yml` pin the reusable review workflows, and the owner approves each edit to them. `scripts/check_compliance_tree.py` accepts only an exact key set for the privileged job in `immutable-conflict-check.yml`, so a timeout there fails that check. These three stay unchanged.
+  - The new `tests/test_workflow_timeouts.py` requires a whole-minute timeout below the default on every other runner job.
+  - The hash-pinned lockfile, the pinned build backend, and the uninstaller folder guard from the same review were already on `main`.
+  - The version advances from 0.78.2 to 0.78.3 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - The build backend pins `setuptools==84.2.1` and `wheel==0.48.0` (issue 288). Each build resolved the newest versions before. The repository owner approved the `wheel` version.
 - Hygiene from the wholesale quality review (issue 288).
   - Conditions that earlier guards make constant are gone from the BPM estimate, the pitch drift check, the review status refresh, and the expiry days check.

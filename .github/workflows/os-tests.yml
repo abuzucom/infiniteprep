@@ -55,6 +55,8 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}
     runs-on: windows-latest
+    # A normal run takes about 8 minutes. The limit leaves room for a slow runner.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -81,6 +83,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.light != 'true' }}
     runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
