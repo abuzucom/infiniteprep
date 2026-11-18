@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 from infiniteprep import storage_paths
 from infiniteprep.domain.enums import KeyDisplayNotation
 from infiniteprep.domain.tag_output import BPM_DECIMAL_PLACES, TagOutputFormat
+from infiniteprep.private_files import create_private_dirs
 
 logger = logging.getLogger(__name__)
 DEFAULT_FAKE_LOSSLESS_METHOD: Final[str] = "signal_analysis"
@@ -249,6 +250,27 @@ def _validated_setting_value(name: str, value: object, default: object) -> objec
     return default
 
 
+def _sync_directory(directory: Path) -> None:
+    """Flush the folder entry that the settings rename changed, on POSIX.
+
+    Windows cannot open a folder with os.open. NTFS journals the rename itself. A failed
+    flush leaves the new settings in place, so it only logs.
+    """
+    if os.name == "nt":
+        return
+    try:
+        descriptor = os.open(directory, os.O_RDONLY)
+    except OSError as error:
+        logger.warning("Could not open the settings folder to flush it: %s", error.strerror)
+        return
+    try:
+        os.fsync(descriptor)
+    except OSError as error:
+        logger.warning("Could not flush the settings folder: %s", error.strerror)
+    finally:
+        os.close(descriptor)
+
+
 class SettingsManager:
     """Loads and saves non-secret AppSettings to a JSON file."""
 
@@ -306,8 +328,9 @@ class SettingsManager:
         new file, never a partial write. A failed write keeps the old file.
         """
         directory = self.settings_path.parent
-        directory.mkdir(parents=True, exist_ok=True)
+        create_private_dirs(directory)
         payload = json.dumps(asdict(settings), indent=2, ensure_ascii=True)
+        # mkstemp creates the file with mode 0600.
         descriptor, temporary_name = tempfile.mkstemp(
             dir=directory, prefix=f"{self.settings_path.name}.", suffix=".tmp", text=True
         )
@@ -315,6 +338,9 @@ class SettingsManager:
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 handle.write(payload)
+                # A power loss after the rename must not leave an empty settings file.
+                handle.flush()
+                os.fsync(handle.fileno())
             os.replace(temporary_path, self.settings_path)
         except BaseException:
             # Every failure, including an interrupt, removes the temporary file.
@@ -322,6 +348,7 @@ class SettingsManager:
             with contextlib.suppress(OSError):
                 temporary_path.unlink(missing_ok=True)
             raise
+        _sync_directory(directory)
 
     def update(self, **changes: object) -> AppSettings:
         """Merge selected fields into the latest settings and persist them.

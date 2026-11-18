@@ -10,6 +10,7 @@ from types import TracebackType
 
 from infiniteprep.db.migrations.m0001_initial import read_schema_sql
 from infiniteprep.db.migrations.runner import migrate_database
+from infiniteprep.private_files import create_private_dirs, ensure_private_file
 
 # Seconds a connection waits for another connection's write lock before it fails.
 BUSY_TIMEOUT_SECONDS = 30.0
@@ -32,7 +33,9 @@ class DatabaseManager:
         # garbage collection while an old connection still holds that shared-cache database.
         self._memory_name = f"infiniteprep_{uuid.uuid4().hex}"
         if not self._is_memory:
-            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            create_private_dirs(self.db_path.parent)
+            # SQLite gives the -wal and -shm files the mode of the library file.
+            ensure_private_file(self.db_path)
         self.initialize()
 
     def connect(self) -> sqlite3.Connection:

@@ -27,6 +27,8 @@ from typing import Final
 
 import platformdirs
 
+from infiniteprep.private_files import create_private_dirs
+
 logger = logging.getLogger(__name__)
 
 APP_NAME: Final[str] = "InfinitePrep"
@@ -135,7 +137,7 @@ def _is_writable_folder(folder: Path) -> bool:
     file already in the folder.
     """
     try:
-        folder.mkdir(parents=True, exist_ok=True)
+        create_private_dirs(folder)
         with tempfile.NamedTemporaryFile(dir=folder, prefix=WRITE_PROBE_PREFIX):
             pass
     except OSError as error:
@@ -169,7 +171,7 @@ def _write_fallback_folders(folders: set[str]) -> None:
     if not folders:
         path.unlink(missing_ok=True)
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
+    create_private_dirs(path.parent)
     path.write_text(json.dumps(sorted(folders), indent=2), encoding="utf-8")
 
 
