@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Final
 
 from infiniteprep.db.migrations import LATEST_VERSION, ROW_COUNT_QUERIES
-from infiniteprep.private_files import ensure_private_file
+from infiniteprep.private_files import create_new_private_file
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +94,9 @@ def copy_database(source: sqlite3.Connection, target: Path) -> None:
 
     The copy switches to a rollback journal. A read-only open then needs no -wal or -shm file.
     """
-    # The copy holds the whole library, so it gets the same owner-only mode.
-    ensure_private_file(target)
+    # The copy holds the whole library. It starts as a new owner-only file. A name that
+    # already exists, a planted link included, fails the copy.
+    create_new_private_file(target)
     target_conn = sqlite3.connect(target)
     try:
         source.backup(target_conn)
@@ -344,8 +345,9 @@ def restore_pre_migration_backup(
     staged = db_path.with_name(db_path.name + RESTORE_TEMP_SUFFIX)
     staged.unlink(missing_ok=True)
     try:
-        # copyfile writes into the existing private file and keeps its mode.
-        ensure_private_file(staged)
+        # The exclusive create refuses any name that reappeared after the unlink, a planted
+        # link included. copyfile then writes into that owner-only file and keeps its mode.
+        create_new_private_file(staged)
         shutil.copyfile(backup_path_for(db_path), staged)
         _drop_backup_record(staged)
         # The swap installs the staged file. A backup changed after its check fails here.
