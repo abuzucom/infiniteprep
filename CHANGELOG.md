@@ -19,7 +19,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - The Identify & Analyze All, Preview & Apply Writes, Change Journal & Restore, and Settings & Providers buttons show their ampersand again. Qt read the single ampersand as a hidden Alt marker before.
-- The version advances from 0.76.1 to 0.77.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.76.3 to 0.77.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- Field row actions and the write recovery prompt guard typed text and backups (accessibility audit).
+  - A Save or Accept that raises no longer leaves its row marked. The marker dropped that row's unsaved text on the next refresh before.
+  - A refused Accept keeps the row's typed text. Only an accepted value replaces it.
+  - Lock on a field without an approved value says to save or accept a value first. It changed nothing and said nothing before.
+  - Mark as finished in the interrupted write recovery dialog asks first, with No as the default. One click ended the backup restore path before.
+  - The new `tests/unit/test_row_action_failures.py` covers the failed save, the refused and the successful accept, and Lock. `tests/unit/test_ui_recovery_dialog.py` answers the new prompt and adds a declined prompt test.
+  - The version advances from 0.76.1 to 0.76.3 in `pyproject.toml` and `src/infiniteprep/__init__.py`. The open theme names change takes 0.76.2.
 
 ## [0.76.1] (2026-11-17)
 

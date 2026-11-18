@@ -66,9 +66,13 @@ def test_restore_button_returns_the_original_and_closes_the_dialog(qtbot, interr
     assert dialog.table.rowCount() == 0
 
 
-def test_keep_button_marks_the_write_finished(qtbot, interrupted: Any) -> None:
-    """Clicking Mark as finished keeps the current file and completes the record."""
+def test_keep_button_marks_the_write_finished(
+    qtbot, interrupted: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Clicking Mark as finished and answering Yes keeps the file and completes the record."""
     repo, write_svc, source, _ = interrupted
+    # The real Yes/No box blocks on exec, so a recorder answers Yes.
+    monkeypatch.setattr(recovery_module, "ask_plain_question", lambda *_args: True)
     dialog = RecoveryDialog(write_svc)
     qtbot.addWidget(dialog)
     operation_id = dialog.records[0].operation_id
@@ -80,6 +84,31 @@ def test_keep_button_marks_the_write_finished(qtbot, interrupted: Any) -> None:
     assert stored is not None
     assert stored.operation_status == OperationStatus.COMPLETED
     assert write_svc.list_interrupted_operations() == []
+
+
+def test_declining_mark_as_finished_keeps_the_write_pending(
+    qtbot, interrupted: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No to the keep prompt leaves the interrupted write listed and unresolved."""
+    repo, write_svc, _source, _hash = interrupted
+    questions: list[str] = []
+    monkeypatch.setattr(
+        recovery_module,
+        "ask_plain_question",
+        lambda _parent, _title, text: questions.append(text) or False,
+    )
+    dialog = RecoveryDialog(write_svc)
+    qtbot.addWidget(dialog)
+    operation_id = dialog.records[0].operation_id
+
+    dialog.table.cellWidget(0, COL_KEEP).click()
+
+    assert len(questions) == 1
+    assert "track.wav" in questions[0]
+    stored = repo.get_change_record(operation_id)
+    assert stored is not None
+    assert stored.operation_status == OperationStatus.IN_PROGRESS
+    assert dialog.table.rowCount() == 1
 
 
 def test_a_failed_restore_warns_and_keeps_the_row(
