@@ -74,7 +74,9 @@ from infiniteprep.ui.table_sort import (
 from infiniteprep.ui.theme import (
     DEFAULT_DARK_THEME,
     NATIVE_THEME,
+    fill_theme_picker,
     get_theme_choices,
+    select_theme,
     switch_application_theme,
 )
 from infiniteprep.ui.time_format import split_time_seconds
@@ -399,12 +401,11 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
         toolbar.addWidget(QLabel(" Theme: ", self))
-        for theme_name in get_theme_choices():
-            self.theme_combo.addItem(theme_name)
+        fill_theme_picker(self.theme_combo, get_theme_choices())
         current_theme = getattr(SettingsManager().load(), "theme", DEFAULT_DARK_THEME)
         self._applied_theme = self._selectable_theme(current_theme)
-        self.theme_combo.setCurrentText(self._applied_theme)
-        self.theme_combo.currentTextChanged.connect(self._on_theme_changed)
+        select_theme(self.theme_combo, self._applied_theme)
+        self.theme_combo.currentIndexChanged.connect(self._on_theme_picked)
         name_combo_box(self.theme_combo, THEME_PICKER_NAME)
         toolbar.addWidget(self.theme_combo)
 
@@ -855,6 +856,12 @@ class MainWindow(QMainWindow):
         self.detail_panel.set_key_notation(self.current_key_notation)
         self.refresh_file_table()
 
+    def _on_theme_picked(self, index: int) -> None:
+        """Apply the theme whose label the picker shows. The item data holds its identifier."""
+        theme = self.theme_combo.itemData(index)
+        if isinstance(theme, str):
+            self._on_theme_changed(theme)
+
     def _on_theme_changed(self, text: str) -> None:
         """Apply the chosen theme and keep the picker on the theme in effect."""
         app = QApplication.instance()
@@ -869,7 +876,7 @@ class MainWindow(QMainWindow):
     def _set_picker_theme(self, theme: str) -> None:
         """Point the picker at the given theme without firing the change signal."""
         self.theme_combo.blockSignals(True)
-        self.theme_combo.setCurrentText(theme)
+        select_theme(self.theme_combo, theme)
         self.theme_combo.blockSignals(False)
 
     def _prompt_import_folder(self) -> None:

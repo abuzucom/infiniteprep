@@ -106,4 +106,4 @@ def test_theme_selectors_use_shared_default_for_legacy_settings(
         credentials.get_secret.return_value = None
         window = SettingsDialog(manager, credentials)
     qtbot.addWidget(window)
-    assert window.theme_combo.currentText() == DEFAULT_LIGHT_THEME
+    assert window.theme_combo.currentData() == DEFAULT_LIGHT_THEME
