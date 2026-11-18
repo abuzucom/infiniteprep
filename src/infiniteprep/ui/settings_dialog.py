@@ -86,7 +86,12 @@ class SettingsDialog(QDialog):
         self.tabs = QTabWidget(self)
         self.setting_tabs: list[SettingsTab] = self._create_tabs(cleanup_enabled)
         for tab in self.setting_tabs:
-            self.tabs.addTab(tab, tab.TITLE)
+            if tab.SHOWN:
+                self.tabs.addTab(tab, tab.TITLE)
+            else:
+                # The dialog still owns a hidden tab, so the tab never shows as a window.
+                tab.setParent(self)
+                tab.hide()
         self._expose_tab_widgets()
 
         self.save_btn = QPushButton("Save Settings", self)
