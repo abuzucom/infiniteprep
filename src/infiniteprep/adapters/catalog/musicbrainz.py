@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import re
-import urllib.request
 from collections.abc import Callable
 from typing import Any, Final
 
+from infiniteprep.adapters import http_openers
 from infiniteprep.adapters.http_json import (
     RequestLimiter,
     build_candidate_id,
@@ -275,5 +275,7 @@ class MusicBrainzAdapter:
             provider="MusicBrainz",
             timeout=MB_REQUEST_TIMEOUT_SEC,
             max_bytes=MAX_API_RESPONSE_BYTES,
-            open_url=urllib.request.urlopen,
+            # A redirect raises instead of carrying the request to a host this URL does
+            # not name.
+            open_url=http_openers.open_without_redirects,
         )

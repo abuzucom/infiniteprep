@@ -5,11 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import urllib.request
 from collections.abc import Callable
 from dataclasses import replace
 from typing import Any, Final
 
+from infiniteprep.adapters import http_openers
 from infiniteprep.adapters.http_json import (
     RequestLimiter,
     build_candidate_id,
@@ -265,5 +265,7 @@ class DiscogsAdapter:
             provider="Discogs",
             timeout=DISCOGS_REQUEST_TIMEOUT_SEC,
             max_bytes=MAX_API_RESPONSE_BYTES,
-            open_url=urllib.request.urlopen,
+            # The Authorization header carries the token. A redirect raises instead of
+            # forwarding it to a host this URL does not name.
+            open_url=http_openers.open_without_redirects,
         )
