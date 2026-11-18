@@ -415,7 +415,9 @@ def test_musicbrainz_array_response_returns_no_candidates(
     body: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        musicbrainz_module.urllib.request, "urlopen", lambda *_a, **_k: _Response(body)
+        musicbrainz_module.http_openers,
+        "open_without_redirects",
+        lambda *_a, **_k: _Response(body),
     )
     adapter = MusicBrainzAdapter(_repository(), min_interval_sec=0.0)
     assert adapter.search(QUERY, file_id=FIRST_FILE_ID) == []

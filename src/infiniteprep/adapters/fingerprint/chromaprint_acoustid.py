@@ -5,11 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
 
+from infiniteprep.adapters import http_openers
 from infiniteprep.adapters.fingerprint.fpcalc_bootstrap import FpcalcBootstrapService
 from infiniteprep.adapters.http_json import LOOKUP_ERRORS, fetch_json, log_lookup_failure
 from infiniteprep.adapters.provider_fields import (
@@ -200,5 +200,7 @@ class ChromaprintAcoustIDAdapter:
             provider="AcoustID",
             timeout=ACOUSTID_REQUEST_TIMEOUT_SEC,
             max_bytes=MAX_API_RESPONSE_BYTES,
-            open_url=urllib.request.urlopen,
+            # The query string carries the API key. A redirect raises instead of
+            # forwarding it to a host this URL does not name.
+            open_url=http_openers.open_without_redirects,
         )

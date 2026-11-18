@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from infiniteprep import __version__
+from infiniteprep.adapters import http_openers
 from infiniteprep.adapters.catalog.discogs import DiscogsAdapter
 from infiniteprep.adapters.catalog.musicbrainz import MusicBrainzAdapter
 from infiniteprep.adapters.fingerprint.chromaprint_acoustid import ChromaprintAcoustIDAdapter
@@ -49,6 +50,8 @@ def sent_requests(monkeypatch: pytest.MonkeyPatch) -> list[urllib.request.Reques
         return _StubResponse()
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    # The provider adapters send through the no-redirect opener, not urlopen.
+    monkeypatch.setattr(http_openers, "open_without_redirects", fake_urlopen)
     return recorded
 
 

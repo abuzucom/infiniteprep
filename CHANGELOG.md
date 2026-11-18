@@ -90,6 +90,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `tests/unit/test_adapter_latent_defects.py` covers each change.
   - `test_discogs_never_caches_a_response_that_is_not_an_object` in `tests/unit/test_provider_and_llm_validation.py` checks for an empty result and a second request in place of a raised error. The repository owner approved this edit.
   - The version advances from 0.75.3 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+- Requests that carry a credential no longer follow a redirect.
+  - The Discogs, MusicBrainz, and AcoustID adapters and the LLM reasoning adapter send through the new `adapters/http_openers.py` opener. That opener holds no redirect handler, so a redirect response raises an error. The three adapters pass it to the shared `adapters/http_json.py` fetch.
+  - urllib copied every header, the Discogs token and the LLM Bearer key included, to the redirect target. A redirect could also move a request from https to plain http. The AcoustID key rides in the query string and followed every redirect too.
+  - The LLM endpoint check covered the first URL only. A redirect now ends the request before it reaches a host the check never saw.
+  - The version advances from 0.76.0 to 0.76.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Status changes reach screen readers, and toolbar actions say what they did (accessibility audit).
   - A playback status, a spectrum analysis failure, a finished batch, and the write preview status each raise a screen reader announcement. A label update alone was silent before. The new `announce` helper in `ui/accessible_names.py` sends them.
   - Identify & Analyze, Bulk Approve, Preview & Apply Writes, Transcode, and Export say why they did nothing when no file is visible. Each ended without a word before.
