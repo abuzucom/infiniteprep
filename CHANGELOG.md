@@ -5,6 +5,22 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.77.0] (2026-11-18)
+
+### Added
+
+- The main window works from the keyboard (accessibility audit).
+  - Every toolbar button carries an Alt key: `Alt+I` Import Folder, `Alt+A` Identify & Analyze All, `Alt+B` Bulk Approve, `Alt+P` Preview & Apply Writes, `Alt+T` Transcode, `Alt+E` Export Playlist, `Alt+J` Change Journal & Restore, and `Alt+S` Settings & Providers.
+  - `Alt+K` focuses the key notation picker. `Alt+H` focuses the theme picker.
+  - `Ctrl+O` opens the folder import picker. `Ctrl+,` opens Settings & Providers.
+  - `Ctrl+P` and the media Play/Pause key press the player `Play` button. The button tooltip names the key. Space stays with the focused button or field.
+  - The new `tests/unit/test_keyboard_shortcuts.py` covers the labels, the Alt keys, the accessible names, and the shortcuts.
+
+### Fixed
+
+- The Identify & Analyze All, Preview & Apply Writes, Change Journal & Restore, and Settings & Providers buttons show their ampersand again. Qt read the single ampersand as a hidden Alt marker before.
+- The version advances from 0.76.1 to 0.77.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
 ## [0.76.1] (2026-11-17)
 
 ### Added

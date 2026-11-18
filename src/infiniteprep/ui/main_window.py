@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Final
 
 from PySide6.QtCore import QByteArray, QMimeData, QPoint, Qt, QTimer, Signal
-from PySide6.QtGui import QCloseEvent, QDrag, QKeyEvent, QMouseEvent
+from PySide6.QtGui import QCloseEvent, QDrag, QKeyEvent, QKeySequence, QMouseEvent, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -151,6 +151,23 @@ SORT_DIRECTION_NAME: Final[str] = "Sort direction"
 KEY_NOTATION_NAME: Final[str] = "Key notation"
 THEME_PICKER_NAME: Final[str] = "Theme"
 FILE_TABLE_NAME: Final[str] = "Library"
+# Toolbar labels in Qt mnemonic form. A single ampersand marks the Alt key and stays
+# hidden. A doubled ampersand shows one ampersand. Screen readers read the shown text.
+IMPORT_BUTTON_LABEL: Final[str] = "&Import Folder"
+ANALYZE_BUTTON_LABEL: Final[str] = "Identify && &Analyze All"
+BULK_APPROVE_BUTTON_LABEL: Final[str] = "&Bulk Approve Non-Conflicting"
+WRITE_BUTTON_LABEL: Final[str] = "&Preview && Apply Writes"
+TRANSCODE_BUTTON_LABEL: Final[str] = "&Transcode to XDJ"
+EXPORT_BUTTON_LABEL: Final[str] = "&Export Playlist (.m3u8)"
+JOURNAL_BUTTON_LABEL: Final[str] = "Change &Journal && Restore"
+SETTINGS_BUTTON_LABEL: Final[str] = "&Settings && Providers"
+KEY_NOTATION_LABEL: Final[str] = " &Key Notation: "
+THEME_LABEL: Final[str] = " T&heme: "
+SETTINGS_SHORTCUT: Final[str] = "Ctrl+,"
+# Space stays with the focused button or field, so Play/Pause takes Ctrl+P.
+PLAY_PAUSE_SHORTCUT: Final[str] = "Ctrl+P"
+MEDIA_PLAY_PAUSE_SHORTCUT: Final[str] = "Media Play/Pause"
+PLAY_BUTTON_TOOLTIP_TEMPLATE: Final[str] = "Play or pause the preview ({shortcut})"
 SPLITTER_TOP_HEIGHT: Final[int] = 380
 SPLITTER_BOTTOM_HEIGHT: Final[int] = 420
 PLAYLIST_SUFFIX: Final[str] = ".m3u8"
@@ -328,6 +345,7 @@ class MainWindow(QMainWindow):
             enable_audio_backend=enable_audio_backend,
         )
         self._setup_toolbar()
+        self._setup_shortcuts()
         self._setup_central_widget()
         self._setup_batch_queue()
         self._restore_table_layouts()
@@ -356,40 +374,25 @@ class MainWindow(QMainWindow):
         toolbar = QToolBar("Main Actions", self)
         self.addToolBar(toolbar)
 
-        import_btn = QPushButton("Import Folder", self)
-        import_btn.clicked.connect(self._prompt_import_folder)
-        toolbar.addWidget(import_btn)
-
-        analyze_btn = QPushButton("Identify & Analyze All", self)
-        analyze_btn.clicked.connect(self._trigger_analyze_all)
-        toolbar.addWidget(analyze_btn)
-
-        self.bulk_btn = QPushButton("Bulk Approve Non-Conflicting", self)
-        self.bulk_btn.clicked.connect(self._trigger_bulk_approve)
-        toolbar.addWidget(self.bulk_btn)
-
-        write_btn = QPushButton("Preview & Apply Writes", self)
-        write_btn.clicked.connect(self._trigger_open_write_dialog)
-        toolbar.addWidget(write_btn)
-
-        self.transcode_btn = QPushButton("Transcode to XDJ", self)
-        self.transcode_btn.clicked.connect(self._trigger_transcode_batch)
-        toolbar.addWidget(self.transcode_btn)
-
-        self.export_playlist_btn = QPushButton("Export Playlist (.m3u8)", self)
-        self.export_playlist_btn.clicked.connect(self._trigger_export_playlist)
-        toolbar.addWidget(self.export_playlist_btn)
-
-        self.journal_btn = QPushButton("Change Journal & Restore", self)
-        self.journal_btn.clicked.connect(self._trigger_open_journal)
-        toolbar.addWidget(self.journal_btn)
-
-        settings_btn = QPushButton("Settings & Providers", self)
-        settings_btn.clicked.connect(self._trigger_open_settings)
-        toolbar.addWidget(settings_btn)
+        self._add_toolbar_button(toolbar, IMPORT_BUTTON_LABEL, self._prompt_import_folder)
+        self._add_toolbar_button(toolbar, ANALYZE_BUTTON_LABEL, self._trigger_analyze_all)
+        self.bulk_btn = self._add_toolbar_button(
+            toolbar, BULK_APPROVE_BUTTON_LABEL, self._trigger_bulk_approve
+        )
+        self._add_toolbar_button(toolbar, WRITE_BUTTON_LABEL, self._trigger_open_write_dialog)
+        self.transcode_btn = self._add_toolbar_button(
+            toolbar, TRANSCODE_BUTTON_LABEL, self._trigger_transcode_batch
+        )
+        self.export_playlist_btn = self._add_toolbar_button(
+            toolbar, EXPORT_BUTTON_LABEL, self._trigger_export_playlist
+        )
+        self.journal_btn = self._add_toolbar_button(
+            toolbar, JOURNAL_BUTTON_LABEL, self._trigger_open_journal
+        )
+        self._add_toolbar_button(toolbar, SETTINGS_BUTTON_LABEL, self._trigger_open_settings)
 
         toolbar.addSeparator()
-        toolbar.addWidget(QLabel(" Key Notation: ", self))
+        self._add_picker_label(toolbar, KEY_NOTATION_LABEL, self.key_notation_combo)
         for notation in KeyDisplayNotation:
             self.key_notation_combo.addItem(notation.value)
         self.key_notation_combo.setCurrentText(self.current_key_notation.value)
@@ -398,7 +401,7 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.key_notation_combo)
 
         toolbar.addSeparator()
-        toolbar.addWidget(QLabel(" Theme: ", self))
+        self._add_picker_label(toolbar, THEME_LABEL, self.theme_combo)
         for theme_name in get_theme_choices():
             self.theme_combo.addItem(theme_name)
         current_theme = getattr(SettingsManager().load(), "theme", DEFAULT_DARK_THEME)
@@ -407,6 +410,40 @@ class MainWindow(QMainWindow):
         self.theme_combo.currentTextChanged.connect(self._on_theme_changed)
         name_combo_box(self.theme_combo, THEME_PICKER_NAME)
         toolbar.addWidget(self.theme_combo)
+
+    def _add_toolbar_button(
+        self, toolbar: QToolBar, label: str, handler: Callable[[], None]
+    ) -> QPushButton:
+        """Add one toolbar push button with a mnemonic label and return it."""
+        button = QPushButton(label, self)
+        button.clicked.connect(handler)
+        toolbar.addWidget(button)
+        return button
+
+    def _add_picker_label(self, toolbar: QToolBar, label: str, picker: QComboBox) -> None:
+        """Add a mnemonic label whose Alt key moves focus to the picker after it."""
+        picker_label = QLabel(label, self)
+        picker_label.setBuddy(picker)
+        toolbar.addWidget(picker_label)
+
+    def _setup_shortcuts(self) -> None:
+        """Bind window-wide keys for Import, Settings, and preview Play/Pause."""
+        context = Qt.ShortcutContext.WindowShortcut
+        self.import_shortcut = QShortcut(QKeySequence(QKeySequence.StandardKey.Open), self)
+        self.import_shortcut.setContext(context)
+        self.import_shortcut.activated.connect(self._prompt_import_folder)
+        self.settings_shortcut = QShortcut(QKeySequence(SETTINGS_SHORTCUT), self)
+        self.settings_shortcut.setContext(context)
+        self.settings_shortcut.activated.connect(self._trigger_open_settings)
+        # Both keys press the player button, so a new selection loads before it plays.
+        play_button = self.detail_panel.audio_player.play_btn
+        self.play_pause_shortcut = QShortcut(QKeySequence(PLAY_PAUSE_SHORTCUT), self)
+        self.media_play_pause_shortcut = QShortcut(QKeySequence(MEDIA_PLAY_PAUSE_SHORTCUT), self)
+        for shortcut in (self.play_pause_shortcut, self.media_play_pause_shortcut):
+            shortcut.setContext(context)
+            shortcut.activated.connect(play_button.click)
+        shown_key = self.play_pause_shortcut.key().toString(QKeySequence.SequenceFormat.NativeText)
+        play_button.setToolTip(PLAY_BUTTON_TOOLTIP_TEMPLATE.format(shortcut=shown_key))
 
     def _selectable_theme(self, theme: str) -> str:
         """Return the theme to show, falling back to a theme the picker offers."""
