@@ -29,6 +29,8 @@ OWNER_ONLY_FILE: Final[int] = 0o600
 WORLD_READABLE_FILE: Final[int] = 0o644
 OLD_BINARY: Final[bytes] = b"#!/bin/sh\necho old fpcalc\n"
 NEW_BINARY: Final[bytes] = b"#!/bin/sh\necho new fpcalc\n" * 64
+# The interrupted install writes the first half of the binary before it fails.
+HALF_PAYLOAD_DIVISOR: Final[int] = 2
 
 posix_only = pytest.mark.skipif(os.name == "nt", reason="Windows ignores POSIX mode bits.")
 
@@ -159,7 +161,7 @@ def test_interrupted_fpcalc_install_keeps_the_working_binary(
     real_write_bytes: Callable[[Path, bytes], int] = Path.write_bytes
 
     def write_half_then_fail(path: Path, data: bytes) -> int:
-        real_write_bytes(path, data[: len(data) // 2])
+        real_write_bytes(path, data[: len(data) // HALF_PAYLOAD_DIVISOR])
         raise OSError(errno.ENOSPC, "No space left on device")
 
     monkeypatch.setattr(Path, "write_bytes", write_half_then_fail)

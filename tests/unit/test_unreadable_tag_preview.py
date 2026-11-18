@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 from pathlib import Path
 
 import pytest
@@ -53,7 +54,7 @@ def test_unreadable_file_blocks_the_write(tmp_path: Path, monkeypatch: pytest.Mo
     source = create_mp3_fixture(tmp_path / "locked.mp3", tags={"title": "Old"})
 
     def fail_read(_data: bytes) -> tuple[str, ...]:
-        raise PermissionError(13, "Permission denied")
+        raise PermissionError(errno.EACCES, "Permission denied")
 
     monkeypatch.setitem(adapter_module.DROPPED_TAG_READERS, AudioFormat.MP3, fail_read)
 
