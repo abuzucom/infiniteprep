@@ -6,6 +6,10 @@ from pathlib import Path
 
 from infiniteprep.domain.ports import FingerprintResult
 
+ACRCLOUD_NOT_IMPLEMENTED = (
+    "The ACRCloud adapter sends no recognition request yet; ACRCloud results are unavailable."
+)
+
 
 class ACRCloudOptInAdapter:
     """Opt-in cloud audio recognition adapter; never runs unless explicitly enabled."""
@@ -25,7 +29,11 @@ class ACRCloudOptInAdapter:
         self.access_secret = access_secret
 
     def is_available(self) -> tuple[bool, str | None]:
-        """Return True only when user has explicitly opted in and supplied credentials."""
+        """Return False. The adapter sends no recognition request yet.
+
+        Opt-in and credentials made the stub report available while every lookup
+        returned no match and no warning, which read as a clean "no match".
+        """
         if not self.enabled_by_user:
             return (
                 False,
@@ -33,24 +41,16 @@ class ACRCloudOptInAdapter:
             )
         if not self.access_key or not self.access_secret:
             return False, "ACRCloud credentials are not configured in Settings."
-        return True, None
+        return False, ACRCLOUD_NOT_IMPLEMENTED
 
     def identify(self, audio_reference: Path, file_id: str | None = None) -> FingerprintResult:
-        """Return unavailable warning unless opt-in and credentials are configured."""
+        """Return no match with the reason the adapter is unavailable."""
         _ = (audio_reference, file_id)
-        ready, reason = self.is_available()
-        if not ready:
-            return FingerprintResult(
-                provider=self.provider_name,
-                raw_fingerprint=None,
-                duration=None,
-                matches=[],
-                warnings=[reason or "ACRCloud opt-in disabled."],
-            )
+        _ready, reason = self.is_available()
         return FingerprintResult(
             provider=self.provider_name,
             raw_fingerprint=None,
             duration=None,
             matches=[],
-            warnings=[],
+            warnings=[reason or ACRCLOUD_NOT_IMPLEMENTED],
         )

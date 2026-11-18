@@ -101,13 +101,20 @@ def forget_all_credentials(store: CredentialStore | None = None) -> int:
 
     The Windows uninstaller runs this when its saved-keys box is checked (D266). A key
     that was never saved is not an error. Returns 0, or FORGET_FAILED_EXIT_CODE when the
-    keyring rejects a delete.
+    keyring rejects a delete. A rejected delete does not stop the deletes of the other keys.
     """
     target = store or CredentialStore()
-    try:
-        for key_name in ENV_VAR_MAP:
-            target.delete_secret(key_name)
-    except CredentialStoreError:
-        logger.exception("Saved keys could not be removed from the OS keyring.")
+    failed_keys = [key_name for key_name in ENV_VAR_MAP if not _forget_one(target, key_name)]
+    if failed_keys:
         return FORGET_FAILED_EXIT_CODE
     return 0
+
+
+def _forget_one(target: CredentialStore, key_name: str) -> bool:
+    """Delete one saved key and return False when the keyring rejects the delete."""
+    try:
+        target.delete_secret(key_name)
+    except CredentialStoreError:
+        logger.exception("Saved key %s could not be removed from the OS keyring.", key_name)
+        return False
+    return True
