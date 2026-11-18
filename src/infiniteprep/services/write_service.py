@@ -19,6 +19,11 @@ from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     operation_backup_path,
     portable_backup_name,
 )
+from infiniteprep.adapters.metadata_io.no_clobber_move import (
+    FileIdentity,
+    discard_if_same_file,
+    file_identity,
+)
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import OperationStatus, ReviewStatus
 from infiniteprep.domain.models import ChangeRecord, utc_now_iso
@@ -123,7 +128,8 @@ class WriteService:
         # The chosen path becomes the asset's write target. Both stored paths must stay in the
         # library root.
         prev_path, cur_path = self._resolve_and_verify_restore_paths(record)
-        current = cur_path if cur_path.is_file() else prev_path
+        renamed = self._renamed_file(record, prev_path, cur_path)
+        current = renamed[0] if renamed is not None else prev_path
         record.post_write_hash = compute_sha256(current)
         record.new_path = str(current)
         record.operation_status = OperationStatus.COMPLETED
@@ -287,13 +293,58 @@ class WriteService:
     def _restore_into_place(self, backup_path: Path, record: ChangeRecord) -> str:
         """Swap the backup into previous_path through a verified staging copy, then clean up."""
         prev_path = Path(record.previous_path)
-        cur_path = Path(record.new_path)
+        renamed = self._renamed_file(record, prev_path, Path(record.new_path))
+        self._preserve_renamed_file(record, renamed)
         restored_hash = self._replace_with_staged_copy(
             backup_path, prev_path, record.pre_write_hash
         )
-        if cur_path.resolve() != prev_path.resolve() and cur_path.exists():
-            cur_path.unlink()
+        self._remove_written_rename(record, renamed)
         return restored_hash
+
+    def _preserve_renamed_file(
+        self, record: ChangeRecord, renamed: tuple[Path, FileIdentity] | None
+    ) -> None:
+        """Copy the renamed file into the backup directory before the restore runs."""
+        if renamed is not None:
+            self._preserve_files_before_restore(record, renamed[0], renamed[0])
+
+    @staticmethod
+    def _remove_written_rename(
+        record: ChangeRecord, renamed: tuple[Path, FileIdentity] | None
+    ) -> None:
+        """Remove the renamed file only when it still holds the bytes this write produced.
+
+        A finished write recorded the hash of its output. An unfinished write recorded none,
+        so nothing proves that the file at the new name came from this write. That file
+        then stays where it is, and the person removes it after checking it.
+        """
+        if renamed is None or record.operation_status == OperationStatus.IN_PROGRESS:
+            return
+        if not record.post_write_hash:
+            return
+        # Both checks run after the move to a private name, so a replacement or an in-place
+        # edit made by another program during the restore keeps the file.
+        discard_if_same_file(*renamed, expected_sha256=record.post_write_hash)
+
+    @staticmethod
+    def _renamed_file(
+        record: ChangeRecord, prev_path: Path, cur_path: Path
+    ) -> tuple[Path, FileIdentity] | None:
+        """Return the file the write renamed with its identity, or None without a rename.
+
+        Call this before a restore recreates prev_path. The rename is the last step of a
+        write. For an unfinished write, a source that still exists means the rename never ran.
+        A file at the planned name then belongs to another program and stays. The identity
+        lets the cleanup skip a file that another program puts at that name later.
+        """
+        if cur_path.resolve() == prev_path.resolve() or not cur_path.is_file():
+            return None
+        if record.operation_status == OperationStatus.IN_PROGRESS and prev_path.exists():
+            return None
+        try:
+            return cur_path, file_identity(cur_path)
+        except FileNotFoundError:
+            return None
 
     def _replace_with_staged_copy(
         self, source: Path, target: Path, expected_hash: str | None
@@ -368,11 +419,13 @@ class WriteService:
             if not allow_modified:
                 self._refuse_restore_over_later_edits(record, prev_path, cur_path)
             self._preserve_files_before_restore(record, prev_path, cur_path)
+        renamed = self._renamed_file(record, prev_path, cur_path)
+        if not guard_later_edits:
+            self._preserve_renamed_file(record, renamed)
         restored_hash = self._replace_with_staged_copy(
             backup_path, prev_path, record.pre_write_hash
         )
-        if cur_path != prev_path and cur_path.exists():
-            cur_path.unlink()
+        self._remove_written_rename(record, renamed)
 
         record.operation_status = final_status
         self.repo.upsert_change_record(record)

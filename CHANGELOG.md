@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.78.1] (2026-11-18)
+## [0.78.2] (2026-11-18)
 
 ### Added
 
@@ -33,6 +33,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Writes, recovery, transcodes, and playlist exports no longer replace or delete a file they did not write.
+  - A rename moves the file with one atomic call that fails on an existing name: `renameat2` with `RENAME_NOREPLACE` on Linux, `renamex_np` with `RENAME_EXCL` on macOS, and `MoveFileEx` without replace on Windows. A file that appeared after the existence check stayed exposed to a POSIX rename, which replaces it without a word. A system or file system without such a call refuses the rename and keeps the old name. A hard link followed by an unlink is no safe substitute, because another program can replace the new name between the two calls.
+  - A rollback and an interrupted write restore never delete the file at the planned name. A refused rename, or a crash before the rename, used to delete the file that already held the name. An unfinished write records no hash of its output, so nothing proves that a file at the planned name came from it. The restore puts the original back, keeps the file at the planned name, and saves a verified copy of that file in the backup folder.
+  - A restore of a finished write removes the renamed file only while it still holds the bytes the write produced. The cleanup moves the file to a private name with the same atomic move first. It then checks the device, the inode, and the SHA-256 there, and deletes the file only when all three still match. An in-place edit made before the move keeps the file. A file another program put at that name in between moves back and stays. The cleanup unlinked the name after a check before.
+  - Mark as Finished points the record at the source when the rename never ran. It picked the file at the planned name before.
+  - A transcode refuses an output name that already holds a file. Sibling export replaced an earlier export or any file with the `_XDJ` name. The finished output moves into place with the same atomic move.
+  - A playlist export writes a new file with a short fixed name beside the playlist and swaps it in. A failed write truncated the previous playlist before.
+  - The `#EXTINF` text replaces every control character, NEL, U+2028, and U+2029 with a space. A parser that splits on Unicode line boundaries read extra lines before.
+  - The new `adapters/metadata_io/no_clobber_move.py` holds the shared move. The new `tests/unit/test_write_and_export_no_clobber.py`, `tests/unit/test_no_clobber_move.py`, `tests/unit/test_restore_discard_race.py`, `tests/unit/test_restore_preserves_renamed_copy.py`, and `tests/unit/test_discard_content_check.py` cover each change. The repository owner approved the edit that dropped the hard link cases from `tests/unit/test_no_clobber_move.py`.
+  - The version advances from 0.78.1 to 0.78.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - USB manifest and recovery journal parsing refuses unsafe paths and reports every bad file as a `ValueError`.
   - A manifest omission track path, a journal track path, and a journal backup path must be relative paths below their root. A `..` segment, an absolute or drive path, a UNC path, or a control character fails the read. A Windows device name fails in any component, with or without an extension. The names are `CON`, `PRN`, `AUX`, `NUL`, `CONIN$`, `CONOUT$`, and `COM` or `LPT` with a port digit from 0 to 9 or a superscript one, two, or three. A colon inside a component fails, because Windows reads it as a data stream. A path made only of `.` components names the root itself and fails. A component made only of dots and spaces, other than `.`, fails, because Windows trims `.. ` and `...` to `..`.
   - A journal mount point must be an absolute POSIX or Windows path without a `..` segment or a control character. The recovery dialog shows that text.

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import errno
 import os
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
@@ -23,11 +25,27 @@ NO_FOLLOW_FLAG: Final[int] = getattr(os, "O_NOFOLLOW", 0)
 BINARY_FLAG: Final[int] = getattr(os, "O_BINARY", 0)
 # Owner read and write only. DJ software runs as the same user, and FAT media ignore the mode.
 PLAYLIST_FILE_MODE: Final[int] = 0o600
+# Parsers that split on every Unicode line boundary also break at NEL, U+2028, and U+2029.
+NEXT_LINE_CODE_POINT: Final[int] = 0x85
+LINE_SEPARATOR_CODE_POINT: Final[int] = 0x2028
+PARAGRAPH_SEPARATOR_CODE_POINT: Final[int] = 0x2029
+# The comma ends the duration field of #EXTINF.
+EXTINF_REPLACED_CHARACTERS: Final[frozenset[str]] = UNSAFE_PATH_CHARACTERS | frozenset(
+    [
+        chr(NEXT_LINE_CODE_POINT),
+        chr(LINE_SEPARATOR_CODE_POINT),
+        chr(PARAGRAPH_SEPARATOR_CODE_POINT),
+        ",",
+    ]
+)
+EXTINF_TRANSLATION: Final[dict[int, str]] = str.maketrans(
+    dict.fromkeys(EXTINF_REPLACED_CHARACTERS, " ")
+)
 
 
 def _m3u8_escape(value: str) -> str:
-    """Strip newlines, carriage returns, and commas from M3U8 #EXTINF text values."""
-    return value.replace("\n", " ").replace("\r", " ").replace(",", " ").strip()
+    """Replace line separators, control characters, and commas in #EXTINF text with spaces."""
+    return value.translate(EXTINF_TRANSLATION).strip()
 
 
 def has_unsafe_path_characters(value: str) -> bool:
@@ -57,15 +75,36 @@ def _relative_path_line(path_line: str, playlist_dir: Path) -> str:
 
 
 def _write_without_following_links(destination: Path, content: str) -> None:
-    """Write UTF-8 text, refusing a symlink at the destination where the OS supports it."""
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | NO_FOLLOW_FLAG | BINARY_FLAG
-    descriptor = os.open(destination, flags, PLAYLIST_FILE_MODE)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-        # The open mode applies only to a new file, so reset an overwritten playlist too.
-        # Windows has no fchmod and ignores these bits.
-        if hasattr(os, "fchmod"):
-            os.fchmod(handle.fileno(), PLAYLIST_FILE_MODE)
-        handle.write(content)
+    """Write UTF-8 text to a new file beside destination, then swap it into place.
+
+    A failed or interrupted write leaves the previous playlist whole. The export replaces
+    the playlist the person chose, and the save dialog confirms that overwrite. A symlink
+    found at the destination when the export starts raises OSError. The final swap
+    replaces the directory entry itself. It never writes through a link to the link
+    target, even when a link appears at the destination during the export.
+    """
+    if destination.is_symlink():
+        raise OSError(
+            errno.ELOOP,
+            "The playlist destination is a symbolic link; choose a regular file name",
+            str(destination),
+        )
+    # A fixed-length name stays within the file name limit for any playlist name.
+    staged = destination.with_name(f".playlist-{uuid.uuid4().hex}.tmp")
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | NO_FOLLOW_FLAG | BINARY_FLAG
+    descriptor = os.open(staged, flags, PLAYLIST_FILE_MODE)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            # The umask can strip bits from the open mode, so set the exact mode.
+            # Windows has no fchmod and ignores these bits.
+            if hasattr(os, "fchmod"):
+                os.fchmod(handle.fileno(), PLAYLIST_FILE_MODE)
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(staged, destination)
+    finally:
+        staged.unlink(missing_ok=True)
 
 
 @dataclass
