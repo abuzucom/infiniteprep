@@ -5,7 +5,16 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.77.0] (2026-11-18)
+## [0.78.0] (2026-11-18)
+
+### Added
+
+- The main window works from the keyboard (accessibility audit).
+  - Every toolbar button carries an Alt key: `Alt+I` Import Folder, `Alt+A` Identify & Analyze All, `Alt+B` Bulk Approve, `Alt+P` Preview & Apply Writes, `Alt+T` Transcode, `Alt+E` Export Playlist, `Alt+J` Change Journal & Restore, and `Alt+S` Settings & Providers.
+  - `Alt+K` focuses the key notation picker. `Alt+H` focuses the theme picker.
+  - `Ctrl+O` opens the folder import picker. `Ctrl+,` opens Settings & Providers.
+  - `Ctrl+P` and the media Play/Pause key press the player `Play` button. The button tooltip names the key. Space stays with the focused button or field.
+  - The new `tests/unit/test_keyboard_shortcuts.py` covers the labels, the Alt keys, the accessible names, and the shortcuts.
 
 ### Changed
 
@@ -19,7 +28,24 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The empty player clock uses the clock format of a loaded track.
   - `split_time_seconds` divides minutes by the new `MINUTES_PER_HOUR`.
   - Issue 322 tracks the USB confinement helpers and the RIFF chunk walkers. Their merge changes error behavior on sensitive paths.
-  - The version advances from 0.76.1 to 0.77.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+  - The version advances from 0.77.0 to 0.78.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
+### Fixed
+
+- The Identify & Analyze All, Preview & Apply Writes, Change Journal & Restore, and Settings & Providers buttons show their ampersand again. Qt read the single ampersand as a hidden Alt marker before.
+- The version advances from 0.76.4 to 0.77.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The theme pickers and the Settings dialog read clearly (accessibility audit).
+  - The toolbar and Settings theme pickers show Dark Teal, Light Teal, Native, and Match System. They showed file names such as `dark_teal.xml` before. Settings still store the theme identifier, so existing settings files stay valid.
+  - The Settings dialog leaves out the Playback tab, which held no setting and only said so.
+  - The new `tests/unit/test_theme_labels.py` covers the labels, the stored identifier, and the hidden tab. With active human approval, five existing theme and settings test files now select themes by identifier instead of picker text, and the tab list no longer expects Playback.
+  - The version advances from 0.76.3 to 0.76.4 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- Field row actions and the write recovery prompt guard typed text and backups (accessibility audit).
+  - A Save or Accept that raises no longer leaves its row marked. The marker dropped that row's unsaved text on the next refresh before.
+  - A refused Accept keeps the row's typed text. Only an accepted value replaces it.
+  - Lock on a field without an approved value says to save or accept a value first. It changed nothing and said nothing before.
+  - Mark as finished in the interrupted write recovery dialog asks first, with No as the default. One click ended the backup restore path before.
+  - The new `tests/unit/test_row_action_failures.py` covers the failed save, the refused and the successful accept, and Lock. `tests/unit/test_ui_recovery_dialog.py` answers the new prompt and adds a declined prompt test.
+  - The version advances from 0.76.1 to 0.76.3 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 
 ## [0.76.1] (2026-11-17)
 

@@ -102,11 +102,11 @@ def test_reload_settings_moves_the_theme_picker_to_the_stored_theme(
     if len(choices) < MIN_THEMES_FOR_SWITCH:
         pytest.skip("This build offers one theme only.")
     window, _repo, _ids = build_window(qtbot, tmp_path, ["a.wav"])
-    other_theme = next(theme for theme in choices if theme != window.theme_combo.currentText())
+    other_theme = next(theme for theme in choices if theme != window.theme_combo.currentData())
     stored = settings.load()
     stored.theme = other_theme
     settings.save(stored)
 
     window.reload_settings()
 
-    assert window.theme_combo.currentText() == other_theme
+    assert window.theme_combo.currentData() == other_theme

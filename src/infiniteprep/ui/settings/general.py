@@ -14,7 +14,7 @@ from infiniteprep.config.settings import (
 from infiniteprep.domain.enums import KeyDisplayNotation
 from infiniteprep.domain.tag_output import BPM_DECIMAL_PLACES
 from infiniteprep.ui.settings.base import FormSettingsTab
-from infiniteprep.ui.theme import get_theme_choices
+from infiniteprep.ui.theme import fill_theme_picker, get_theme_choices, select_theme
 
 UNSORTED_PLACEMENT_LABELS: Final[tuple[tuple[str, str], ...]] = (
     ("First", UNSORTED_PLACEMENT_FIRST),
@@ -43,11 +43,8 @@ class GeneralTab(FormSettingsTab):
         """
         super().__init__(parent)
         self.theme_combo = QComboBox(self)
-        choices = get_theme_choices()
-        for theme_name in choices:
-            self.theme_combo.addItem(theme_name)
-        if theme in choices:
-            self.theme_combo.setCurrentText(theme)
+        fill_theme_picker(self.theme_combo, get_theme_choices())
+        select_theme(self.theme_combo, theme)
         self.form.addRow("UI Theme:", self.theme_combo)
         self.unsorted_rows_placement_combo = QComboBox(self)
         for label, value in UNSORTED_PLACEMENT_LABELS:
@@ -85,12 +82,11 @@ class GeneralTab(FormSettingsTab):
 
     def set_theme(self, theme: str) -> None:
         """Point the theme picker at the given theme."""
-        if theme in get_theme_choices():
-            self.theme_combo.setCurrentText(theme)
+        select_theme(self.theme_combo, theme)
 
     def apply_to(self, settings: AppSettings) -> None:
         """Copy theme, sorting, and tag output preferences into settings."""
-        settings.theme = self.theme_combo.currentText()
+        settings.theme = str(self.theme_combo.currentData())
         settings.unsorted_rows_placement = str(self.unsorted_rows_placement_combo.currentData())
         settings.tag_key_notation = self.tag_key_notation_combo.currentData()
         settings.tag_key_leading_zero = self.tag_key_leading_zero_checkbox.isChecked()

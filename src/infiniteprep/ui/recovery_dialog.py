@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 
 from infiniteprep.domain.models import ChangeRecord
 from infiniteprep.services.write_service import WriteService
-from infiniteprep.ui.action_handlers import show_plain_message
+from infiniteprep.ui.action_handlers import ask_plain_question, show_plain_message
 from infiniteprep.ui.time_format import format_local_timestamp
 
 RECOVERY_DIALOG_TITLE: Final[str] = "Recover Interrupted Writes"
@@ -33,6 +33,10 @@ RECOVERY_INTRO: Final[str] = (
     "These writes stopped before they finished. Each file may be half-written. Restore the "
     "original from its verified backup, or keep the file as it is now. New writes stay "
     "blocked until every row is resolved."
+)
+MARK_FINISHED_QUESTION: Final[str] = (
+    "Keep {file} as it is now?\n\n"
+    "The file may be half-written. Its backup can no longer restore it after this."
 )
 
 
@@ -114,7 +118,17 @@ class RecoveryDialog(QDialog):
         self.refresh()
 
     def mark_finished(self, operation_id: str) -> None:
-        """Keep the current file for one interrupted write, or report why that failed."""
+        """Ask first, then keep the current file for one interrupted write.
+
+        Keeping a half-written file ends the backup restore path for that write, so it
+        waits for a Yes. No is the default.
+        """
+        record = next((rec for rec in self.records if rec.operation_id == operation_id), None)
+        name = Path(record.previous_path).name if record is not None else operation_id
+        if not ask_plain_question(
+            self, RECOVERY_DIALOG_TITLE, MARK_FINISHED_QUESTION.format(file=name)
+        ):
+            return
         try:
             self.write_service.mark_interrupted_finished(operation_id)
         except (OSError, ValueError) as exc:
