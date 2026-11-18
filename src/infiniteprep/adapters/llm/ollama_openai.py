@@ -8,6 +8,7 @@ import urllib.request
 from collections.abc import Callable
 from typing import Any, Final
 
+from infiniteprep.adapters import http_openers
 from infiniteprep.adapters.llm.validator import (
     ClosedWorldValidator,
     find_candidate,
@@ -169,7 +170,9 @@ class OllamaOpenAIReasoningAdapter:
             headers["Authorization"] = f"Bearer {self.api_key}"
         data = json.dumps(body).encode("utf-8")
         req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        # validate_endpoint_url checked this URL only. A redirect raises instead of moving the
+        # request, and its Bearer key, to a host the check never saw.
+        with http_openers.open_without_redirects(req, timeout=20) as resp:
             raw_bytes = resp.read(MAX_LLM_RESPONSE_BYTES + 1)
             if len(raw_bytes) > MAX_LLM_RESPONSE_BYTES:
                 raise ValueError("LLM HTTP response exceeded maximum byte size limit.")
