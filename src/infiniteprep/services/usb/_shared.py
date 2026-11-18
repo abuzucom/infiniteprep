@@ -35,6 +35,8 @@ DEL_CODE_POINT: Final[int] = 0x7F
 PARENT_DIR_PART: Final[str] = ".."
 # Path components that add no folder: an empty part between separators and ".".
 CURRENT_DIR_PARTS: Final[frozenset[str]] = frozenset({"", "."})
+# Windows drops these characters from the end of every path part.
+WINDOWS_TRIMMED_CHARACTERS: Final[str] = ". "
 # Port numbers 0 to 9. Windows also reads the superscript digits one, two, and three.
 WINDOWS_PORT_SUFFIXES: Final[tuple[str, ...]] = (
     *(str(number) for number in range(10)),
@@ -177,11 +179,20 @@ def _path_parts(text: str) -> list[str]:
     return text.replace("\\", "/").split("/")
 
 
+def _is_dot_space_part(part: str) -> bool:
+    """Return True for a part made only of dots and spaces, other than "." itself.
+
+    Windows strips trailing dots and spaces from a path part, so ".. " and "..." can open
+    the parent folder. "." stays allowed, since it names the folder the path is in.
+    """
+    return part not in CURRENT_DIR_PARTS and not part.rstrip(WINDOWS_TRIMMED_CHARACTERS)
+
+
 def _has_unsafe_path_text(text: str) -> bool:
     """Return True for empty text, control characters, or a parent directory segment."""
     if not text or has_path_control_characters(text):
         return True
-    return PARENT_DIR_PART in _path_parts(text)
+    return any(_is_dot_space_part(part) for part in _path_parts(text))
 
 
 def _is_windows_special_name(part: str) -> bool:
