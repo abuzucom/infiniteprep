@@ -179,9 +179,9 @@ def test_main_window_keeps_the_picker_on_the_theme_in_effect(
         patch("infiniteprep.ui.theme.is_theme_applicable", return_value=True),
         patch("infiniteprep.ui.theme._load_qt_material", return_value=engine),
     ):
-        window.theme_combo.setCurrentText(DEFAULT_DARK_THEME)
+        window.theme_combo.setCurrentIndex(window.theme_combo.findData(DEFAULT_DARK_THEME))
 
-    assert window.theme_combo.currentText() == DEFAULT_LIGHT_THEME
+    assert window.theme_combo.currentData() == DEFAULT_LIGHT_THEME
     manager.save.assert_called_once()
     assert manager.save.call_args.args[0].theme == DEFAULT_LIGHT_THEME
 
@@ -196,9 +196,9 @@ def test_main_window_stores_a_theme_that_applied(
 
     applied = ThemeApplication(applied=True, theme=DEFAULT_DARK_THEME)
     with patch("infiniteprep.ui.main_window.switch_application_theme", return_value=applied):
-        window.theme_combo.setCurrentText(DEFAULT_DARK_THEME)
+        window.theme_combo.setCurrentIndex(window.theme_combo.findData(DEFAULT_DARK_THEME))
 
-    assert window.theme_combo.currentText() == DEFAULT_DARK_THEME
+    assert window.theme_combo.currentData() == DEFAULT_DARK_THEME
     manager.save.assert_called_once()
     assert manager.save.call_args.args[0].theme == DEFAULT_DARK_THEME
 
@@ -210,7 +210,7 @@ def test_settings_dialog_keeps_the_stored_theme_when_it_cannot_apply(
     manager = SettingsManager(tmp_path / "settings.json")
     dialog = SettingsDialog(manager, CredentialStore(use_memory_backend=True))
     qtbot.addWidget(dialog)
-    dialog.theme_combo.setCurrentText(DEFAULT_LIGHT_THEME)
+    dialog.theme_combo.setCurrentIndex(dialog.theme_combo.findData(DEFAULT_LIGHT_THEME))
 
     engine = MagicMock()
     engine.apply_stylesheet.side_effect = [OSError("the icon sources are missing"), None]
@@ -222,4 +222,4 @@ def test_settings_dialog_keeps_the_stored_theme_when_it_cannot_apply(
         dialog.save_settings()
 
     assert manager.load().theme == DEFAULT_DARK_THEME
-    assert dialog.theme_combo.currentText() == DEFAULT_DARK_THEME
+    assert dialog.theme_combo.currentData() == DEFAULT_DARK_THEME

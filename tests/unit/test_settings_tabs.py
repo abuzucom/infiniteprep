@@ -18,7 +18,6 @@ from infiniteprep.ui.theme import DEFAULT_LIGHT_THEME
 
 EXPECTED_TAB_TITLES: Final[tuple[str, ...]] = (
     "General",
-    "Playback",
     "Analysis",
     "Transcode",
     "Identification",
@@ -52,7 +51,9 @@ WIDGETS_BY_TAB: Final[dict[str, tuple[str, ...]]] = {
     ),
     "Storage": ("usb_reserve_percent_spin", "usb_reserve_mib_spin", "cleanup_btn"),
 }
-PLACEHOLDER_TABS: Final[tuple[str, ...]] = ("Playback", "Updates")
+PLACEHOLDER_TABS: Final[tuple[str, ...]] = ("Updates",)
+# A tab module whose tab holds no setting and stays out of the dialog.
+HIDDEN_TAB_TITLES: Final[tuple[str, ...]] = ("Playback",)
 STORED_RESERVE_MIB: Final[int] = 64
 STORED_RESERVE_PERCENT: Final[float] = 12.5
 ACOUSTID_KEY: Final[str] = "acoustid-test-key"
@@ -92,13 +93,14 @@ def tab_page(dialog: SettingsDialog, title: str) -> QWidget:
 
 
 def test_dialog_shows_one_tab_per_area_in_order(qtbot: Any, tmp_path: Path) -> None:
-    """The dialog shows the seven areas as tabs in a fixed order."""
+    """The dialog shows each area with settings as a tab in a fixed order."""
     manager = SettingsManager(tmp_path / "settings.json")
     dialog = open_dialog(qtbot, manager, CredentialStore(use_memory_backend=True))
 
     titles = tuple(dialog.tabs.tabText(index) for index in range(dialog.tabs.count()))
 
     assert titles == EXPECTED_TAB_TITLES
+    assert not set(HIDDEN_TAB_TITLES) & set(titles)
 
 
 @pytest.mark.parametrize("module_name", TAB_MODULE_NAMES)
@@ -107,7 +109,7 @@ def test_each_area_lives_in_its_own_module(module_name: str) -> None:
     module = importlib.import_module(f"infiniteprep.ui.settings.{module_name}")
 
     assert issubclass(module.TAB_CLASS, QWidget)
-    assert module.TAB_CLASS.TITLE in EXPECTED_TAB_TITLES
+    assert module.TAB_CLASS.TITLE in EXPECTED_TAB_TITLES + HIDDEN_TAB_TITLES
 
 
 @pytest.mark.parametrize(("title", "attribute_names"), sorted(WIDGETS_BY_TAB.items()))
@@ -129,7 +131,7 @@ def test_every_existing_setting_sits_in_its_tab(
 
 @pytest.mark.parametrize("title", PLACEHOLDER_TABS)
 def test_areas_without_settings_show_a_note(qtbot: Any, tmp_path: Path, title: str) -> None:
-    """Playback and Updates each show a one-line note until a setting joins the tab."""
+    """Updates shows a one-line note until a setting joins the tab."""
     manager = SettingsManager(tmp_path / "settings.json")
     dialog = open_dialog(qtbot, manager, CredentialStore(use_memory_backend=True))
 
@@ -149,7 +151,7 @@ def test_stored_settings_load_into_the_tabs(qtbot: Any, tmp_path: Path) -> None:
 
     dialog = open_dialog(qtbot, manager, creds)
 
-    assert dialog.theme_combo.currentText() == stored.theme
+    assert dialog.theme_combo.currentData() == stored.theme
     assert dialog.stop_on_failure_checkbox.isChecked() is True
     assert dialog.transcode_mode_combo.currentText() == stored.transcode_mode
     assert dialog.transcode_preset_combo.currentText() == stored.transcode_preset
@@ -187,7 +189,7 @@ def test_edits_on_each_tab_save_and_reload(qtbot: Any, tmp_path: Path) -> None:
     expected = non_default_settings()
     dialog = open_dialog(qtbot, manager, creds)
 
-    dialog.theme_combo.setCurrentText(expected.theme)
+    dialog.theme_combo.setCurrentIndex(dialog.theme_combo.findData(expected.theme))
     dialog.stop_on_failure_checkbox.setChecked(True)
     dialog.transcode_mode_combo.setCurrentText(expected.transcode_mode)
     dialog.transcode_preset_combo.setCurrentText(expected.transcode_preset)

@@ -5,6 +5,16 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.75.5] (2026-11-18)
+
+### Fixed
+
+- The theme pickers and the Settings dialog read clearly (accessibility audit).
+  - The toolbar and Settings theme pickers show Dark Teal, Light Teal, Native, and Match System. They showed file names such as `dark_teal.xml` before. Settings still store the theme identifier, so existing settings files stay valid.
+  - The Settings dialog leaves out the Playback tab, which held no setting and only said so.
+  - The new `tests/unit/test_theme_labels.py` covers the labels, the stored identifier, and the hidden tab. With active human approval, five existing theme and settings test files now select themes by identifier instead of picker text, and the tab list no longer expects Playback.
+  - The version advances to 0.75.5 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
+
 ## [0.75.3] (2026-11-17)
 
 ### Added
