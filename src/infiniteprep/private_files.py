@@ -30,6 +30,8 @@ IS_WINDOWS: Final[bool] = os.name == "nt"
 # O_NOFOLLOW makes the open fail on a link. O_NONBLOCK keeps a FIFO open from hanging.
 NO_FOLLOW_FLAG: Final[int] = getattr(os, "O_NOFOLLOW", 0)
 NON_BLOCK_FLAG: Final[int] = getattr(os, "O_NONBLOCK", 0)
+# O_DIRECTORY makes the open fail on anything but a folder.
+DIRECTORY_FLAG: Final[int] = getattr(os, "O_DIRECTORY", 0)
 STAGING_DIR_PREFIX: Final[str] = ".infiniteprep-staging-"
 ROOT_UID: Final[int] = 0
 # Linux stops a lookup after 40 links with ELOOP. The manual walk uses the same bound.
@@ -209,18 +211,34 @@ def _require_owner_only_dir(folder: Path) -> None:
 def _remove_staging_dir(staging: Path) -> None:
     """Delete the files in staging and then staging itself. A failure only logs.
 
-    A link under the staging name loses only the link. Its target keeps every file.
+    A link under the staging name loses only the link. Its target keeps every file. On POSIX
+    the listing and each unlink go through one descriptor opened with O_NOFOLLOW. A link
+    swapped in after the check fails that open. A swap after the open leaves the descriptor
+    on the real folder. rmdir removes no link and no file outside.
     """
     try:
         if staging.is_symlink():
             staging.unlink()
             return
-        leftovers = list(staging.iterdir())
-        for path in leftovers:
-            path.unlink(missing_ok=True)
+        if os.unlink in os.supports_dir_fd:
+            _clear_through_descriptor(staging)
+        else:
+            # Windows has no dir_fd. A Windows link needs a privilege that a race lacks.
+            for path in list(staging.iterdir()):
+                path.unlink(missing_ok=True)
         staging.rmdir()
     except OSError as error:
         logger.warning("Could not remove the staging folder %s: %s", staging.name, error.strerror)
+
+
+def _clear_through_descriptor(staging: Path) -> None:
+    """Unlink every entry of staging through a no-follow folder descriptor."""
+    descriptor = os.open(staging, os.O_RDONLY | DIRECTORY_FLAG | NO_FOLLOW_FLAG)
+    try:
+        for name in os.listdir(descriptor):
+            os.unlink(name, dir_fd=descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def ensure_private_file(path: Path) -> None:
