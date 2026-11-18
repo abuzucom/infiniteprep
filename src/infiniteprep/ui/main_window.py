@@ -345,7 +345,6 @@ class MainWindow(QMainWindow):
             enable_audio_backend=enable_audio_backend,
         )
         self._setup_toolbar()
-        self._setup_shortcuts()
         self._setup_central_widget()
         self._setup_batch_queue()
         self._restore_table_layouts()
@@ -410,6 +409,8 @@ class MainWindow(QMainWindow):
         self.theme_combo.currentTextChanged.connect(self._on_theme_changed)
         name_combo_box(self.theme_combo, THEME_PICKER_NAME)
         toolbar.addWidget(self.theme_combo)
+        # The shortcuts sit beside the toolbar actions they mirror.
+        self._setup_shortcuts()
 
     def _add_toolbar_button(
         self, toolbar: QToolBar, label: str, handler: Callable[[], None]
