@@ -45,7 +45,7 @@ def detect_vinyl_pitch_drift(
     catalog_duration_sec: float | None,
     analyzed_bpm: float | None = None,
 ) -> str | None:
-    """Detect turntable pitch offset (2% to 8%) or 33.3 vs 45 RPM speed mismatch."""
+    """Detect turntable pitch offset (1.8% to 8.5%) or 33.3 vs 45 RPM speed mismatch."""
     if (
         file_duration_sec is None
         or catalog_duration_sec is None
@@ -57,7 +57,8 @@ def detect_vinyl_pitch_drift(
     pct_shift = (speed_ratio - 1.0) * PERCENT_MULTIPLIER
     if PITCH_DRIFT_MIN_PCT <= abs(pct_shift) <= PITCH_DRIFT_MAX_PCT:
         bpm_note = ""
-        if analyzed_bpm and speed_ratio > 0.0:
+        # Both durations passed the positive minimum above, so speed_ratio is positive.
+        if analyzed_bpm:
             zero_pitch_bpm = round(analyzed_bpm / speed_ratio, 1)
             bpm_note = f"; estimated 0% pitch BPM ~ {zero_pitch_bpm}"
         return (

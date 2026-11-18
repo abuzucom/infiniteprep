@@ -621,7 +621,8 @@ class AudioPreviewWidget(QWidget):
         self.analysis_status_label = QLabel("", self)
         self.analysis_status_label.setTextFormat(Qt.TextFormat.PlainText)
         self.analysis_status_label.setWordWrap(True)
-        self.time_label = QLabel("00:00.0 / 00:00.0", self)
+        # The empty label uses the clock format the player shows once a track loads.
+        self.time_label = QLabel(f"{format_clock(0.0)} / {format_clock(0.0)}", self)
         # The label names the track the player holds. The detail panel can show a
         # different file, so the label keeps the mismatch visible.
         self.loaded_track_label = QLabel(LOADED_TRACK_NONE_TEXT, self)

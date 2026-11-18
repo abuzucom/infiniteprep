@@ -111,7 +111,11 @@ class TranscodeResult:
 
 
 class SafeTranscoderAdapter:
-    """Converts >48kHz, 32-bit float, or OGG/M4A files into XDJ-RX3 compatible audio."""
+    """Converts >48kHz, 32-bit float, or OGG files into XDJ-RX3 compatible audio.
+
+    Input decodes through libsndfile, which has no M4A or AAC decoder, so an M4A
+    source fails at the decode step.
+    """
 
     def __init__(
         self,
