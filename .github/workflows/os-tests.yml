@@ -59,6 +59,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      # The probe runs before Set up Python on purpose. It resolves each
+      # configured launcher against the stock runner image. Set up Python puts
+      # its own interpreter first on PATH. That interpreter would mask a
+      # launcher that fails to resolve without it.
       - name: Probe configured hook launchers
         run: python scripts/check_hook_launchers.py
       # The ci test matrix runs on 3.12, so the gate suite runs on it here too.
@@ -88,6 +92,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      # The tests-windows comment explains why the probe precedes Set up Python.
       - name: Probe configured hook launchers
         run: python3 scripts/check_hook_launchers.py
       # The ci test matrix runs on 3.12, so the gate suite runs on it here too.
