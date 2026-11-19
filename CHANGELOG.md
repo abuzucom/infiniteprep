@@ -5,6 +5,17 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.80.0] (2026-11-19)
+
+### Changed
+
+- The `release` job in `build-packages.yml` runs in the `release` deployment environment.
+  - A pushed `v*` tag on a `main` commit no longer starts the write job alone. The owner approves each release run first.
+  - The job receives its `contents: write`, `id-token: write`, and `attestations: write` token only after that approval.
+  - The repository owner creates the `release` environment in the repository settings with the owner as a required reviewer.
+  - The new `tests/test_release_environment.py` pins `environment: release` on the release job and rejects an environment on any other job.
+  - The version advances from 0.79.3 to 0.80.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
 ## [0.79.3] (2026-11-18)
 
 ### Added

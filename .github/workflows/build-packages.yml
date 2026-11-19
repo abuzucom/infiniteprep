@@ -608,6 +608,9 @@ jobs:
     name: release
     needs: bundle
     if: github.event_name == 'push' && github.ref_type == 'tag'
+    # The owner configures the release environment with a required reviewer.
+    # The job receives its write token only after that approval.
+    environment: release
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     permissions:
