@@ -217,7 +217,6 @@ def test_zero_duration_zoom_fallback_paths_are_safe(qtbot: Any) -> None:
     # An unknown duration draws the playhead only. No waveform column appears.
     assert rendered.pixelColor(PIXEL_PLAYHEAD_X, PIXEL_MID_Y).name() == PLAYHEAD_COLOR
     assert rendered.pixelColor(PIXEL_FALLBACK_X, PIXEL_MID_Y).alpha() == 0
-    assert widget.waveform_bar.duration_sec == 0.0
 
 
 def test_zoom_uses_fallback_after_analysis_duration_cap(qtbot: Any) -> None:

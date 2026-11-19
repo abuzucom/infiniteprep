@@ -42,14 +42,16 @@ def runner_jobs() -> list[tuple[str, dict[str, Any]]]:
 class WorkflowTimeoutTest(unittest.TestCase):
     """A hung step ends at a stated limit instead of the six hour runner default."""
 
-    def test_every_runner_job_declares_a_timeout(self) -> None:
-        missing = [name for name, job in runner_jobs() if TIMEOUT_KEY not in job]
-        self.assertEqual(missing, [])
-
     def test_each_timeout_is_a_whole_minute_count_below_the_default(self) -> None:
+        """Every runner job states a positive whole-minute timeout below the default.
+
+        A missing key reads as None and fails the integer check. YAML true reads as
+        bool, an int subclass, so the check rejects bool first.
+        """
         for name, job in runner_jobs():
             with self.subTest(job=name):
                 timeout = job.get(TIMEOUT_KEY)
+                self.assertNotIsInstance(timeout, bool)
                 self.assertIsInstance(timeout, int)
                 self.assertGreater(timeout, 0)
                 self.assertLess(timeout, RUNNER_DEFAULT_TIMEOUT_MINUTES)

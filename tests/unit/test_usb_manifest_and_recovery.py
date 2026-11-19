@@ -374,7 +374,6 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
             candidate = TargetCandidate(name="sdb", inspection=inspection, error=None)
             match = store.match_reconnected_target(candidate)
 
-            self.assertIsNotNone(match)
             assert match is not None
             self.assertFalse(match.requires_confirmation)
             self.assertEqual(match.entry.export_id, entry.export_id)
@@ -410,9 +409,8 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
                 TargetCandidate(name="sdb", inspection=changed_drive, error=None)
             )
 
-            self.assertIsNotNone(match_mount)
-            self.assertIsNotNone(match_drive)
-            assert match_mount is not None and match_drive is not None
+            assert match_mount is not None
+            assert match_drive is not None
             self.assertTrue(match_mount.requires_confirmation)
             self.assertTrue(match_drive.requires_confirmation)
 
@@ -437,7 +435,6 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
                 TargetCandidate(name="sdb", inspection=candidate_inspection, error=None)
             )
 
-            self.assertIsNotNone(match)
             assert match is not None
             self.assertTrue(match.requires_confirmation)
             self.assertEqual(match.entry.export_id, entry.export_id)

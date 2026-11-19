@@ -127,7 +127,6 @@ def test_no_assignments_in_conditionals_or_empty_catch_blocks() -> None:
                         f"Assignment inside conditional in {file_path.name} line {node.lineno}"
                     )
             if isinstance(node, ast.ExceptHandler):
-                assert len(node.body) > 0, f"Empty except handler in {file_path.name}"
                 only_pass = len(node.body) == 1 and isinstance(node.body[0], ast.Pass)
                 assert not only_pass, (
                     f"Silent pass in except block in {file_path.name} line {node.lineno}"

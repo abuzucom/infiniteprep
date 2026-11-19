@@ -69,11 +69,14 @@ def test_stale_track_result_does_not_replace_selected_waveform(
         WAVEFORM_DURATION_SECONDS,
     )
     first_started = threading.Event()
+    first_returned = threading.Event()
 
     def analyze(path: Path, *, cancel_event: threading.Event) -> SpectrumWaveform:
+        """Hold the first track until it is cancelled, then return its stale result."""
         if path.name == "first.wav":
             first_started.set()
             cancel_event.wait(STALE_ANALYSIS_MAX_WAIT_SECONDS)
+            first_returned.set()
             return first_waveform
         return second_waveform
 
@@ -92,7 +95,11 @@ def test_stale_track_result_does_not_replace_selected_waveform(
         lambda: panel.audio_player.waveform_bar.spectrum is second_waveform,
         timeout=ANALYSIS_WAIT_TIMEOUT_MS,
     )
-    qtbot.waitUntil(lambda: len(completed) == 1, timeout=ANALYSIS_WAIT_TIMEOUT_MS)
+    # Drain the stale task and deliver its queued signals before the checks, so
+    # the stale result has really arrived and the filter has had its chance.
+    assert panel.waveform_pool.wait_for_done(ANALYSIS_WAIT_TIMEOUT_MS)
+    assert first_returned.is_set()
+    qtbot.wait(0)
     assert completed == [second_asset.id]
     assert panel.audio_player.waveform_bar.spectrum is second_waveform
     assert panel.current_file_id == second_asset.id

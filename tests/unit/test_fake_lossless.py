@@ -84,7 +84,6 @@ class FakeLosslessDetectionTests(unittest.TestCase):
             self.assertFalse(result.is_suspect)
             self.assertEqual(result.traces, ())
             self.assertEqual(result.confidence, 0.0)
-            self.assertIsNotNone(result.cutoff_hz)
             assert result.cutoff_hz is not None
             self.assertGreaterEqual(result.cutoff_hz, 19500.0)
             self.assertIsNone(result.format_warning())
@@ -103,7 +102,6 @@ class FakeLosslessDetectionTests(unittest.TestCase):
 
             self.assertFalse(result.is_suspect)
             self.assertEqual(result.traces, ())
-            self.assertIsNotNone(result.cutoff_hz)
             assert result.cutoff_hz is not None
             self.assertGreaterEqual(result.cutoff_hz, 19500.0)
 
@@ -121,12 +119,10 @@ class FakeLosslessDetectionTests(unittest.TestCase):
 
             self.assertTrue(result.is_suspect)
             self.assertIn(TRACE_SPECTRAL_CUTOFF, result.traces)
-            self.assertIsNotNone(result.cutoff_hz)
             assert result.cutoff_hz is not None
             self.assertLess(result.cutoff_hz, 17500.0)
             self.assertGreaterEqual(result.confidence, 0.5)
             warning = result.format_warning()
-            self.assertIsNotNone(warning)
             assert warning is not None
             self.assertIn("Suspected fake lossless", warning)
 
@@ -283,7 +279,6 @@ class FakeLosslessDetectionTests(unittest.TestCase):
                     method=FakeLosslessMethod.SIGNAL_ANALYSIS.value,
                 )
                 warning = result.format_warning()
-                self.assertIsNotNone(warning)
                 assert warning is not None
                 repo.upsert_analysis_result(
                     AnalysisResult(

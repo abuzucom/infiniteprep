@@ -32,7 +32,7 @@ from infiniteprep.ui.folder_import import (
     ImportReportDialog,
     format_import_report,
 )
-from infiniteprep.ui.main_window import MainWindow
+from infiniteprep.ui.main_window import CLOSE_CANCEL, CLOSE_STAY, MainWindow
 from tests.fixtures.audio_factory import create_wav_fixture
 
 TRACK_COUNT = 2
@@ -143,15 +143,25 @@ def test_import_leaves_the_loaded_track_in_place(
     assert player.current_file_path == playing
 
 
-@pytest.mark.parametrize("close_case", [("cancel", ImportOutcome.CANCELLED, 0)])
-def test_closing_during_import_waits_or_cancels(
+@pytest.mark.parametrize(
+    "close_case",
+    [
+        (CLOSE_CANCEL, ImportOutcome.CANCELLED, 0, False),
+        (CLOSE_STAY, ImportOutcome.COMMITTED, TRACK_COUNT, True),
+    ],
+)
+def test_closing_during_import_cancels_or_keeps_working(
     qtbot: Any,
     window_parts: Any,
     monkeypatch: pytest.MonkeyPatch,
-    close_case: tuple[str, ImportOutcome, int],
+    close_case: tuple[str, ImportOutcome, int, bool],
 ) -> None:
-    """Close asks to wait or cancel. Either way the window closes once the batch ends."""
-    choice, expected_outcome, expected_rows = close_case
+    """Close asks to cancel or keep working.
+
+    Cancel stops the batch and the window closes once it ends. Keep Working lets
+    the import commit and leaves the window open.
+    """
+    choice, expected_outcome, expected_rows, stays_open = close_case
     window, repository, gate, folder = window_parts
     monkeypatch.setattr(window, "ask_close_during_import", lambda: choice)
     window.show()
@@ -162,7 +172,7 @@ def test_closing_during_import_waits_or_cancels(
         assert window.isVisible()
         gate.set()
 
-    qtbot.waitUntil(lambda: not window.isVisible(), timeout=SIGNAL_TIMEOUT_MS)
+    qtbot.waitUntil(lambda: window.isVisible() is stays_open, timeout=SIGNAL_TIMEOUT_MS)
     assert done.args[0].outcome is expected_outcome
     assert len(repository.list_files()) == expected_rows
 

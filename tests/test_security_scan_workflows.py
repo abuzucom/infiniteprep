@@ -48,13 +48,15 @@ class SecurityScanWorkflowTest(unittest.TestCase):
                     self.assertRegex(str(step["uses"]), FULL_SHA_PIN, path.name)
 
     def test_each_scan_action_uses_its_approved_commit(self) -> None:
-        pinned: dict[str, str] = {}
+        # A set per action keeps an earlier conflicting pin visible.
+        pinned: dict[str, set[str]] = {}
         for path in (DEPENDENCY_REVIEW, SECURITY_DEVOPS):
             for step in collect_steps(load_workflow(path)):
                 action, _, commit = str(step.get("uses", "")).partition("@")
                 if action in APPROVED_PINS:
-                    pinned[action] = commit
-        self.assertEqual(pinned, APPROVED_PINS)
+                    pinned.setdefault(action, set()).add(commit)
+        expected = {action: {commit} for action, commit in APPROVED_PINS.items()}
+        self.assertEqual(pinned, expected)
 
     def test_checkout_steps_do_not_persist_credentials(self) -> None:
         for path in (DEPENDENCY_REVIEW, SECURITY_DEVOPS):

@@ -95,6 +95,8 @@ class TagCheckTest(unittest.TestCase):
         """The real version files name one version, so a tag for it would pass."""
         versions = RELEASE.read_versions(ROOT)
         self.assertEqual(len(set(versions.values())), 1, versions)
+        # Agreement on an empty string would mean every file lost its version.
+        self.assertTrue(next(iter(versions.values())), versions)
 
 
 class ChecksumTest(unittest.TestCase):

@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -68,8 +69,8 @@ def run_bash(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
     Forward-slash paths keep dirname working under Git Bash on Windows.
     """
-    assert BASH is not None
-    command = [BASH, script.as_posix(), *args]
+    # Only needs_bash tests call this helper, and that marker skips without bash.
+    command = [cast(str, BASH), script.as_posix(), *args]
     return subprocess.run(command, capture_output=True, text=True, check=False)
 
 
@@ -155,9 +156,9 @@ def test_copy_script_treats_a_dash_named_folder_as_a_path(tmp_path: Path) -> Non
     keep = work / "keep.txt"
     keep.write_text("must survive", encoding="utf-8")
     script = (repo / "scripts" / "dev" / "make_test_copies.sh").as_posix()
-    assert BASH is not None
+    # The needs_bash marker skips this test when bash is absent.
     result = subprocess.run(
-        [BASH, script, "-delete"], cwd=work, capture_output=True, text=True, check=False
+        [cast(str, BASH), script, "-delete"], cwd=work, capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert keep.read_text(encoding="utf-8") == "must survive"
@@ -186,7 +187,8 @@ def test_copy_script_rejects_a_count_outside_one_to_a_thousand(
 @pytest.mark.parametrize("script", ["update_and_check.ps1", "make_test_copies.ps1"])
 def test_powershell_scripts_parse_without_errors(script: str) -> None:
     """Each PowerShell script parses with no syntax errors."""
-    assert PWSH is not None
+    # The needs_pwsh marker skips this test when pwsh is absent.
+    pwsh_path = cast(str, PWSH)
     command = (
         "$errors = $null; "
         "[System.Management.Automation.Language.Parser]::ParseFile("
@@ -194,7 +196,7 @@ def test_powershell_scripts_parse_without_errors(script: str) -> None:
         "exit $errors.Count"
     )
     result = subprocess.run(
-        [PWSH, "-NoProfile", "-NonInteractive", "-Command", command],
+        [pwsh_path, "-NoProfile", "-NonInteractive", "-Command", command],
         capture_output=True,
         text=True,
         check=False,
