@@ -116,9 +116,8 @@ def test_failed_staging_copy_leaves_no_partial_file(
     """A copy that fails partway removes the partial staging file and moves nothing."""
     _add_side_files(library)
 
-    def copy_half_then_fail(source: str | Path, target: str | Path) -> None:
+    def copy_half_then_fail(_source: str | Path, target: str | Path) -> None:
         """Write part of the file, then fail as a full disk does."""
-        _ = source
         Path(target).write_bytes(b"partial")
         raise OSError("No space left on device")
 

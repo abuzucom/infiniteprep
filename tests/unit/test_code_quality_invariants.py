@@ -55,7 +55,7 @@ def find_inner_loop_breaks(node: ast.AST, loop_depth: int = 0) -> list[int]:
         if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             continue
         if isinstance(child, ast.Break) and loop_depth >= 2:
-            violations.append(getattr(child, "lineno", 0))
+            violations.append(child.lineno)
         next_loop_depth = (
             loop_depth + 1 if isinstance(child, (ast.For, ast.AsyncFor, ast.While)) else loop_depth
         )
@@ -91,7 +91,7 @@ def test_functions_respect_length_locals_nesting_and_docstrings() -> None:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             start_line = node.lineno
-            end_line = getattr(node, "end_lineno", start_line) or start_line
+            end_line = node.end_lineno
             length = end_line - start_line + 1
             assert length <= MAX_FUNCTION_LINES, (
                 f"Function {node.name} in {file_path.name} is {length} lines "
