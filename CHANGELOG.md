@@ -5,10 +5,17 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.80.0] (2026-11-19)
+## [0.80.1] (2026-11-19)
 
 ### Changed
 
+- A new test swaps the staging folder for a link after the cleanup opens its folder descriptor.
+  - The new `tests/unit/test_staging_cleanup_post_open_swap.py` makes the swap right before the listing. The moved staging folder loses its files. The link target keeps its file. The link stays.
+  - The AI quality review on pull request 330 found this gap in the test set.
+- The changelog prose passes the agent prose gate.
+  - `compliance / pr-checks` runs `scripts/check_agent_prose_gate.py` on each pull request that discloses an agent. The gate reads the whole `CHANGELOG.md`. It failed on 46 findings in older entries.
+  - Separate sentences replace comma-led tails. Nouns replace personal pronouns. Two inline lists become nested bullets. One past-habit phrase now names the old behavior with "before". Every entry keeps the same meaning.
+  - The version advances from 0.80.0 to 0.80.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - The `release` job in `build-packages.yml` runs in the `release` deployment environment.
   - A pushed `v*` tag on a `main` commit no longer starts the write job alone. The owner approves each release run first.
   - The job receives its `contents: write`, `id-token: write`, and `attestations: write` token only after that approval.
@@ -21,7 +28,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - The main window works from the keyboard (accessibility audit).
-  - Every toolbar button carries an Alt key: `Alt+I` Import Folder, `Alt+A` Identify & Analyze All, `Alt+B` Bulk Approve, `Alt+P` Preview & Apply Writes, `Alt+T` Transcode, `Alt+E` Export Playlist, `Alt+J` Change Journal & Restore, and `Alt+S` Settings & Providers.
+  - Every toolbar button carries an Alt key.
+    - `Alt+I` Import Folder
+    - `Alt+A` Identify & Analyze All
+    - `Alt+B` Bulk Approve
+    - `Alt+P` Preview & Apply Writes
+    - `Alt+T` Transcode
+    - `Alt+E` Export Playlist
+    - `Alt+J` Change Journal & Restore
+    - `Alt+S` Settings & Providers
   - `Alt+K` focuses the key notation picker. `Alt+H` focuses the theme picker.
   - `Ctrl+O` opens the folder import picker. `Ctrl+,` opens Settings & Providers.
   - `Ctrl+P` and the media Play/Pause key press the player `Play` button. The button tooltip names the key. Space stays with the focused button or field.
@@ -40,7 +55,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Every workflow job that runs on a runner states a timeout, apart from three pinned workflows.
   - The jobs in `agents-compliance.yml`, `deploy-pages.yml`, `gate-integrity.yml`, `os-tests.yml`, and `sync-check.yml` had none. A hung step held a runner for the six hour default.
   - The Windows gate tests stop after 30 minutes and the macOS gate tests after 20. A normal Windows run takes about 8 minutes. The other jobs stop after 10 or 15 minutes.
-  - `security-review-pr.yml` and `quality-review-pr.yml` pin the reusable review workflows, and the owner approves each edit to them. `scripts/check_compliance_tree.py` accepts only an exact key set for the privileged job in `immutable-conflict-check.yml`, so a timeout there fails that check. These three stay unchanged.
+  - `security-review-pr.yml` and `quality-review-pr.yml` pin the reusable review workflows. Each edit to those files needs owner approval. `scripts/check_compliance_tree.py` accepts only an exact key set for the privileged job in `immutable-conflict-check.yml`. A timeout there fails that check. These three stay unchanged.
   - The new `tests/test_workflow_timeouts.py` requires a whole-minute timeout below the default on every other runner job.
   - The hash-pinned lockfile, the pinned build backend, and the uninstaller folder guard from the same review were already on `main`.
   - The version advances from 0.78.2 to 0.78.3 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
@@ -54,7 +69,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The empty player clock uses the clock format of a loaded track.
   - `split_time_seconds` divides minutes by the new `MINUTES_PER_HOUR`.
   - The new `tests/unit/test_phase5_hygiene.py` covers the stuck prompt wording, the space entry dedupe, and the hour split.
-  - Issue 322 tracks the USB confinement helpers and the RIFF chunk walkers. Their merge changes error behavior on sensitive paths.
+  - Issue 322 tracks the USB confinement helpers and the RIFF chunk walkers. A merge of those helpers changes error behavior on sensitive paths.
   - The version advances from 0.77.0 to 0.78.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
@@ -67,7 +82,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A portable library on FAT or exFAT media gets its pre-migration backup again. Links above the library no longer redirect it.
   - FAT and exFAT media ignore folder modes. The backup and restore staging folder therefore could not become owner-only there. Migration backup and restore failed with `PermissionError` since 0.78.4. A staging folder with shared modes or another reported owner now logs a warning. The copy goes on. A link in place of the staging folder still fails the copy.
   - The staging cleanup removes only a link under the staging name. It followed such a link into its target before.
-  - The library opens through its real folder. `resolve_library_path` resolves every link above the library once, at open. SQLite, the side files, the backup, and the restore then use that path. A link above the library that changes later no longer moves them. A link at the library file name itself still fails the open.
+  - The library opens through its real folder. `resolve_library_path` resolves every link above the library once, at open. SQLite, the side files, the backup, and the restore then use that path. A link above the library that changes later no longer moves any of these files. A link at the library file name itself still fails the open.
   - The shared folder warning covers every folder that the path lookup reads. That set includes each folder that holds a link on the way and the folders of each link target. Above the library, a folder owned by this account or root counts as safe when other accounts cannot write it or when the sticky bit protects its entries, as on `/tmp`. Any other folder logs a warning that names it. The library still opens there. macOS `/var` and `/tmp` links and linked data folders keep working.
   - The new `tests/unit/test_portable_staging_and_parent_links.py` covers each change.
   - The version advances from 0.79.1 to 0.79.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
@@ -79,13 +94,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The version advances from 0.79.0 to 0.79.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - The write preview names tag data that a rewrite cannot keep.
   - The ID3 parser skips encrypted and truncated frames. The FLAC parser skips Vorbis entries without `=`. Each writer rebuilds the tag from the parsed frames. A write lost that data without notice before.
-  - The new `tag_data_warnings` field of `FileWritePlan` lists each item. The Safety Status cell shows `READY WITH DATA LOSS` and names them. The write stays allowed.
+  - The new `tag_data_warnings` field of `FileWritePlan` lists each item. The Safety Status cell shows `READY WITH DATA LOSS` and names each item. The write stays allowed.
   - A compressed ID3v2.2 tag yields no frames at all. The preview now blocks that write, because it would remove the whole tag.
   - A tag or file that the check cannot read blocks the write with a validation error that names the reason. The preview showed `READY` for such a file before.
   - The write runs the check again on the copy it writes. A result that differs from the preview stops the write before any tag changes. The new `TagCheckChangedError` records the write as failed without a restore, as the payload and source-change errors do.
   - The new `tests/unit/test_dropped_tag_data_preview.py`, `tests/unit/test_unreadable_tag_preview.py`, and `tests/unit/test_shared_folder_warning_and_apply_recheck.py` cover each case.
-- The library, its backups, and the settings stay readable by their owner only.
-  - The new `private_files.py` creates missing app folders with mode 0700 and library files with mode 0600. An existing library loses its group and other bits on open. SQLite copies that mode to the WAL and SHM files. The migration backup and the staged restore copy start owner only. Existing folders keep their mode. Windows ignores these bits.
+- The library, its backups, and the settings stay readable by the owner account only.
+  - The new `private_files.py` creates missing app folders with mode 0700 and library files with mode 0600. An existing library loses its group and other bits on open. SQLite copies that mode to the WAL and SHM files. The migration backup and the staged restore copy start owner only. An existing folder keeps its mode. Windows ignores these bits.
   - The mode change never follows a link. It checks the name with `lstat`, opens it with `O_NOFOLLOW`, confirms the same file, and changes the mode through that descriptor. The backup copy and the staged restore copy start with an exclusive create. A link planted at either name fails the copy.
   - The backup copy and the staged restore copy now live in a new owner-only staging folder beside the library until the final rename. Each step reopens its file by name. Another account cannot swap a name inside that folder between the steps. The folder and its files go away after each run.
   - The library refuses to open through a symbolic link at its name. SQLite followed such a link before.
@@ -97,9 +112,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `tests/unit/test_private_storage_files.py`, `tests/unit/test_private_files_symlinks.py`, and `tests/unit/test_private_staging_and_library_links.py` cover each change.
   - The settings dialog still loads the stored API keys into its masked fields. The fix there changes assertions in `tests/unit/test_settings_tabs.py`. The repository owner left it out of this change.
   - The version advances from 0.78.3 to 0.78.4 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
-- Writes, recovery, transcodes, and playlist exports no longer replace or delete a file they did not write.
-  - A rename moves the file with one atomic call that fails on an existing name: `renameat2` with `RENAME_NOREPLACE` on Linux, `renamex_np` with `RENAME_EXCL` on macOS, and `MoveFileEx` without replace on Windows. A file that appeared after the existence check stayed exposed to a POSIX rename, which replaces it without a word. A system or file system without such a call refuses the rename and keeps the old name. A hard link followed by an unlink is no safe substitute, because another program can replace the new name between the two calls.
-  - A rollback and an interrupted write restore never delete the file at the planned name. A refused rename, or a crash before the rename, used to delete the file that already held the name. An unfinished write records no hash of its output, so nothing proves that a file at the planned name came from it. The restore puts the original back, keeps the file at the planned name, and saves a verified copy of that file in the backup folder.
+- Writes, recovery, transcodes, and playlist exports no longer replace or delete a file that the app did not write.
+  - A rename moves the file with one atomic call that fails on an existing name.
+    - Linux uses `renameat2` with `RENAME_NOREPLACE`.
+    - macOS uses `renamex_np` with `RENAME_EXCL`.
+    - Windows uses `MoveFileEx` without replace.
+  - A file that appeared after the existence check stayed exposed to a POSIX rename. That rename replaces the file without a word. A system or file system without such a call refuses the rename and keeps the old name. A hard link followed by an unlink is no safe substitute, because another program can replace the new name between the two calls.
+  - A rollback and an interrupted write restore never delete the file at the planned name. A refused rename, or a crash before the rename, deleted the file that already held the name before. An unfinished write records no hash of its output. Nothing proves that a file at the planned name came from it. The restore puts the original back, keeps the file at the planned name, and saves a verified copy of that file in the backup folder.
   - A restore of a finished write removes the renamed file only while it still holds the bytes the write produced. The cleanup moves the file to a private name with the same atomic move first. It then checks the device, the inode, and the SHA-256 there, and deletes the file only when all three still match. An in-place edit made before the move keeps the file. A file another program put at that name in between moves back and stays. The cleanup unlinked the name after a check before.
   - Mark as Finished points the record at the source when the rename never ran. It picked the file at the planned name before.
   - A transcode refuses an output name that already holds a file. Sibling export replaced an earlier export or any file with the `_XDJ` name. The finished output moves into place with the same atomic move.
@@ -108,18 +127,18 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `adapters/metadata_io/no_clobber_move.py` holds the shared move. The new `tests/unit/test_write_and_export_no_clobber.py`, `tests/unit/test_no_clobber_move.py`, `tests/unit/test_restore_discard_race.py`, `tests/unit/test_restore_preserves_renamed_copy.py`, and `tests/unit/test_discard_content_check.py` cover each change. The repository owner approved the edit that dropped the hard link cases from `tests/unit/test_no_clobber_move.py`.
   - The version advances from 0.78.1 to 0.78.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - USB manifest and recovery journal parsing refuses unsafe paths and reports every bad file as a `ValueError`.
-  - A manifest omission track path, a journal track path, and a journal backup path must be relative paths below their root. A `..` segment, an absolute or drive path, a UNC path, or a control character fails the read. A Windows device name fails in any component, with or without an extension. The names are `CON`, `PRN`, `AUX`, `NUL`, `CONIN$`, `CONOUT$`, and `COM` or `LPT` with a port digit from 0 to 9 or a superscript one, two, or three. A colon inside a component fails, because Windows reads it as a data stream. A path made only of `.` components names the root itself and fails. A component made only of dots and spaces, other than `.`, fails, because Windows trims `.. ` and `...` to `..`.
+  - A manifest omission track path, a journal track path, and a journal backup path must each be a relative path below the matching root. A `..` segment, an absolute or drive path, a UNC path, or a control character fails the read. A Windows device name fails in any component, with or without an extension. The names are `CON`, `PRN`, `AUX`, `NUL`, `CONIN$`, `CONOUT$`, and `COM` or `LPT` with a port digit from 0 to 9 or a superscript one, two, or three. A colon inside a component fails, because Windows reads it as a data stream. A path made only of `.` components names the root itself and fails. A component made only of dots and spaces, other than `.`, fails, because Windows trims `.. ` and `...` to `..`.
   - A journal mount point must be an absolute POSIX or Windows path without a `..` segment or a control character. The recovery dialog shows that text.
   - A probed mount path keeps its exact text or yields no mount point. The probe cleanup dropped invisible characters, stripped spaces, and cut the path at 512 characters before. The cleaned text could name another folder. Only a `..` segment rejects a mount path. Two dots inside a name, as in `/media/USB..2024`, rejected the path before.
-  - A manifest or journal nested past the recursion limit fails as malformed. The JSON parser raised `RecursionError` before, which the marker check did not catch.
+  - A manifest or journal nested past the recursion limit fails as malformed. The JSON parser raised `RecursionError` before. The marker check did not catch that error.
   - A timestamp that leaves the datetime range on conversion to UTC fails with `ValueError`. `OverflowError` escaped before.
   - The new `tests/unit/test_usb_manifest_parsing_hardening.py`, `tests/unit/test_usb_path_component_rules.py`, `tests/unit/test_usb_relative_path_root.py`, `tests/unit/test_usb_windows_device_variants.py`, and `tests/unit/test_usb_windows_dot_space_parts.py` cover each change.
   - The version advances from 0.78.0 to 0.78.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
-- The Identify & Analyze All, Preview & Apply Writes, Change Journal & Restore, and Settings & Providers buttons show their ampersand again. Qt read the single ampersand as a hidden Alt marker before.
+- The Identify & Analyze All, Preview & Apply Writes, Change Journal & Restore, and Settings & Providers buttons show the ampersand again. Qt read the single ampersand as a hidden Alt marker before.
 - The version advances from 0.76.4 to 0.77.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - The theme pickers and the Settings dialog read clearly (accessibility audit).
-  - The toolbar and Settings theme pickers show Dark Teal, Light Teal, Native, and Match System. They showed file names such as `dark_teal.xml` before. Settings still store the theme identifier, so existing settings files stay valid.
-  - The Settings dialog leaves out the Playback tab, which held no setting and only said so.
+  - The toolbar and Settings theme pickers show Dark Teal, Light Teal, Native, and Match System. The pickers showed file names such as `dark_teal.xml` before. Settings still store the theme identifier. Existing settings files stay valid.
+  - The Settings dialog leaves out the Playback tab. That tab held no setting and only said so.
   - The new `tests/unit/test_theme_labels.py` covers the labels, the stored identifier, and the hidden tab. With active human approval, five existing theme and settings test files now select themes by identifier instead of picker text, and the tab list no longer expects Playback.
   - The version advances from 0.76.3 to 0.76.4 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - Field row actions and the write recovery prompt guard typed text and backups (accessibility audit).
@@ -135,7 +154,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - The library sorts from the keyboard (accessibility audit).
-  - A Sort by picker and an Ascending or Descending button sit next to the filters. The table header took no keyboard focus, so only a mouse could sort before.
+  - A Sort by picker and an Ascending or Descending button sit next to the filters. The table header took no keyboard focus. Only a mouse could sort before.
   - A header click and the sort controls stay in step.
 - Every control that Tab reaches in the main window and the write, journal, and recovery dialogs carries an accessible name. The filter field, the status filter, the key notation and theme pickers, the waveform view and zoom pickers, the rename template field, and every table and list announced no purpose before.
 - The library, field, write preview, journal, and recovery tables open no cell editor. An edit typed in a cell changed nothing and vanished on the next refresh.
@@ -170,7 +189,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `packaging/bundle_size_limits.json` holds the measured size of each operating system on `main`. The limit is that size plus 50 percent.
   - The measured sizes are 248709436 bytes on Windows, 168151858 bytes on macOS, and 363129630 bytes on Linux. The limits are 373064154 bytes, 252227787 bytes, and 544694445 bytes.
   - A bundle past the limit fails the job. A record of null means the size was not measured yet. The check then reports the sizes and passes.
-  - Every operating system needs a record in the limits file, and every record needs a byte count. A missing record or a record without a byte count is an error, so a lost record cannot disable a limit.
+  - Every operating system needs a record in the limits file, and every record needs a byte count. A missing record or a record without a byte count is an error. A lost record therefore cannot disable a limit.
   - The new `tests/test_bundle_size.py` checks the measurement, the limit, the command, and the workflow wiring.
   - The README documents the size report and the limits file.
   - The version advances from 0.76.0 to 0.76.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
@@ -183,13 +202,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `security-devops.yml` still runs on a push to `main`. Its scan keeps the code scanning baseline of `main` current.
   - `agents-md-compliance.yml` triggers on pull requests to `main` instead of pushes to `main`. The `static-checks` job now runs before merge.
   - The version advances from 0.72.5 to 0.72.6 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
-- `JobOrchestrator.process_files` takes `raise_on_failure` in place of `raise_on_unexpected` (issue 288). The flag raises for the expected job errors, so the old name misstated it. No caller in `src/` passed the old keyword.
+- `JobOrchestrator.process_files` takes `raise_on_failure` in place of `raise_on_unexpected` (issue 288). The flag raises for the expected job errors. The old name misstated the flag. No caller in `src/` passed the old keyword.
 - The library status filter lists every review status (issue 288). The filter lacked `ready_for_review`, `conflicting_candidates`, `no_match`, and four more statuses that the pipeline sets.
-- The library search reads the cells the table shows (issue 288). It read the stored tag structure before, so `tags` matched every file and an approved artist matched none.
+- The library search reads the cells the table shows (issue 288). The search read the stored tag structure before. `tags` then matched every file. An approved artist matched none.
 - The version advances from 0.72.7 to 0.73.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`. The keyword rename is an incompatible change of a public method.
 - Library work runs in a fixed number of queries and off the GUI thread (issue 288).
   - A library table refresh reads approved fields, proposals, and analysis results for every file in three queries. It ran about four queries per file before, on each search keystroke.
-  - A playlist sort reads its tracks in three queries inside its write transaction. It ran three queries per track before and held the write lock for all of them.
+  - A playlist sort reads its tracks in three queries inside its write transaction. It ran three queries per track before and held the write lock for every track.
   - The interrupted-write check reads only the in-progress journal records. It loaded the whole journal before each write.
   - A column resize saves the table layout once, 300 ms after the drag settles, and on window close. It rewrote the settings file on each pixel of a drag before.
   - Transcode to XDJ runs as a queued batch on a worker thread, with progress, cancel, and a stuck-file prompt. It froze the window for the whole batch before. The batch dock shows the result.
@@ -204,25 +223,25 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Latent defects in the online adapters and key removal (issue 288).
   - A network failure, a timeout, or a malformed response from MusicBrainz, Discogs, iTunes Search, or AcoustID fails that lookup only. The identification job continues with the other providers. AcoustID returns the failure as a warning. A failed lookup stays out of the cache. A response that is not a JSON object counts as malformed and returns no candidate. It raised out of the adapter before. The iTunes Search adapter runs the same check before its cache write.
-  - Candidate ids from MusicBrainz, Discogs, and iTunes Search hold the file id. The same release found for two files collided on one candidate id before. Each id part is percent-encoded and joined with `:`, so no two part tuples share an id.
-  - Each Discogs track keeps its own candidate row. A Discogs year of 0 reads as no year. A track without a position takes its list position. An entry without a position keys its candidate with `#` and its list number, so a heading before track `1` keeps its own row.
+  - Candidate ids from MusicBrainz, Discogs, and iTunes Search hold the file id. The same release found for two files collided on one candidate id before. Each id part is percent-encoded and joined with `:`. No two part tuples share an id.
+  - Each Discogs track keeps its own candidate row. A Discogs year of 0 reads as no year. A track without a position takes its list position. An entry without a position keys its candidate with `#` and its list number. A heading before track `1` therefore keeps its own row.
   - A MusicBrainz release lookup returns a release candidate. It returned nothing after the request before. An unsupported entity type fails before any request. A missing track number reads as no track number.
   - The fpcalc step catches process, file, and parse errors only. A defect in the runner now surfaces.
-  - The Beatport and ACRCloud stubs report unavailable with the reason. They reported available while every lookup returned nothing.
+  - The Beatport and ACRCloud stubs report unavailable with the reason. The stubs reported available while every lookup returned nothing.
   - `OllamaBootstrapService` gains an optional `base_url` keyword. The model list follows the configured server. A server address that fails the endpoint rules lists no models.
   - `forget_all_credentials` attempts every key after a failed delete. It stopped at the first failure before.
-  - The new module `infiniteprep.adapters.http_json` holds the bounded HTTPS JSON fetch, the request limiter, and `cached_lookup`. The MusicBrainz, Discogs, and iTunes Search adapters run their cache check, fetch, JSON object check, and cache write through `cached_lookup`. `RequestLimiter` stays importable from the iTunes adapter.
+  - The new module `infiniteprep.adapters.http_json` holds the bounded HTTPS JSON fetch, the request limiter, and `cached_lookup`. The MusicBrainz, Discogs, and iTunes Search adapters run the cache check, fetch, JSON object check, and cache write through `cached_lookup`. `RequestLimiter` stays importable from the iTunes adapter.
   - The new `tests/unit/test_adapter_latent_defects.py` covers each change.
   - `test_discogs_never_caches_a_response_that_is_not_an_object` in `tests/unit/test_provider_and_llm_validation.py` checks for an empty result and a second request in place of a raised error. The repository owner approved this edit.
   - The version advances from 0.75.3 to 0.76.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - Requests that carry a credential no longer follow a redirect.
-  - The Discogs, MusicBrainz, and AcoustID adapters and the LLM reasoning adapter send through the new `adapters/http_openers.py` opener. That opener holds no redirect handler, so a redirect response raises an error. The three adapters pass it to the shared `adapters/http_json.py` fetch.
+  - The Discogs, MusicBrainz, and AcoustID adapters and the LLM reasoning adapter send through the new `adapters/http_openers.py` opener. That opener holds no redirect handler. A redirect response raises an error. The three adapters pass it to the shared `adapters/http_json.py` fetch.
   - urllib copied every header, the Discogs token and the LLM Bearer key included, to the redirect target. A redirect could also move a request from https to plain http. The AcoustID key rides in the query string and followed every redirect too.
   - The LLM endpoint check covered the first URL only. A redirect now ends the request before it reaches a host the check never saw.
   - The version advances from 0.76.0 to 0.76.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
-- Status changes reach screen readers, and toolbar actions say what they did (accessibility audit).
-  - A playback status, a spectrum analysis failure, a finished batch, and the write preview status each raise a screen reader announcement. A label update alone was silent before. The new `announce` helper in `ui/accessible_names.py` sends them.
-  - Identify & Analyze, Bulk Approve, Preview & Apply Writes, Transcode, and Export say why they did nothing when no file is visible. Each ended without a word before.
+- Status changes reach screen readers. Toolbar actions report each result (accessibility audit).
+  - A playback status, a spectrum analysis failure, a finished batch, and the write preview status each raise a screen reader announcement. A label update alone was silent before. The new `announce` helper in `ui/accessible_names.py` sends each announcement.
+  - Identify & Analyze, Bulk Approve, Preview & Apply Writes, Transcode, and Export name the reason when no file is visible and nothing ran. Each ended without a word before.
   - Bulk Approve reports how many fields it approved.
   - The library status column shows labels such as "Ready to Write" instead of stored values such as `ready_to_write`. The detail header shows Yes or No for write support instead of True or False.
   - The new `tests/unit/test_status_feedback.py` covers the announcements, the empty library messages, the approved count, and the labels.
@@ -235,15 +254,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `ui/contrast.py` computes WCAG contrast. The new `tests/unit/test_contrast_and_spectrum_legend.py` checks every color pair and the legend.
   - The version advances from 0.75.1 to 0.75.2 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The field rows of the detail panel keep keyboard and screen reader users in place (accessibility audit).
-  - Each row's edit box and its Accept, Save, and Lock buttons name their field, such as "Save artist". Every row announced the same "Save" before.
+  - Each row's edit box and its Accept, Save, and Lock buttons name the row field, such as "Save artist". Every row announced the same "Save" before.
   - Accept, Save, and Lock keep focus on the same control of the same row. The rows rebuild after each action, and focus fell out of the table before.
   - Text typed in one row stays when another row's action runs. The rebuild wiped every unsaved row before. The acted row shows its new stored value.
   - The new `tests/unit/test_detail_panel_row_actions.py` covers the names, the focus, and the unsaved text.
   - The open list of each named picker carries the picker's name. A screen reader announced an unnamed list once a picker opened. The new `ui/accessible_names.py` names a picker and its list together.
   - The version advances from 0.75.0 to 0.75.1 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
-- Catalog, fingerprint, and LLM responses pass type and length checks before they reach a proposal.
+- Catalog, fingerprint, and LLM responses pass type and length checks before reaching a proposal.
   - The new `adapters/provider_fields.py` checks every field the Discogs, MusicBrainz, and AcoustID adapters read. Text stays printable and stops at 500 characters. A field of the wrong type reads as absent. A list keeps at most 100 items.
-  - A response that is not a JSON object raises before the cache write, so a malformed body never reaches the shared cache.
+  - A response that is not a JSON object raises before the cache write. A malformed body never reaches the shared cache.
   - An AcoustID score outside 0 to 1 reads as no confidence.
   - The Ollama model probe reads at most 1 MiB. It keeps a name only when the name passes the model reference grammar, and it lists each name once.
   - A provider number past the float range reads as absent.
@@ -260,7 +279,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A transcode refuses a WAV or AIFF output past the tag write limit before it decodes. It failed after the full encode before.
   - A USB Resume or Restore records the journal action before it removes the drive marker. A failed journal write can retry.
   - An infinite number in drive inspection output falls back to the default size. A USB JSON read closes its descriptor once.
-  - Win32 errors carry their Windows meaning. A sharing violation read as "Broken pipe" before.
+  - Each Win32 error carries its Windows meaning. A sharing violation read as "Broken pipe" before.
   - The macOS inspector reads stdout and stderr together. A child that filled stderr first stalled until the timeout.
   - The Windows inspector sets UTF-8 output. A non-ASCII volume label decoded as replacement characters.
   - The toolbar theme picker follows a theme the Settings dialog applied.
@@ -269,11 +288,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A library file that is not a database releases its handle. The evaluation run closes its database on an error.
   - New test modules `test_tag_write_round_trips.py`, `test_import_analysis_and_jobs.py`, `test_usb_recovery_and_runner_fixes.py`, and `test_library_filters_and_theme_sync.py` under `tests/unit/` cover these fixes.
 - The transcoder, the tag reader, and the Ogg reader no longer hold a whole file or a whole tag value in memory.
-  - The transcoder reads, resamples, and writes in blocks of about 262,000 frames. Each block reads enough frames on both sides to cover the resampling filter, so the output equals the whole-file resample. One block stays in memory at a time.
+  - The transcoder reads, resamples, and writes in blocks of about 262,000 frames. Each block reads enough frames on both sides to cover the resampling filter. The output equals the whole-file resample. One block stays in memory at a time.
   - A stream without a declared frame count gets a counting pass before the block transcode.
   - A raw custom tag value above 4096 characters shows as its first 200 characters, its length, and its SHA-256 digest. The summary reaches the library row and the Other Tags table only. A tag write reads the file itself.
-  - Catalog matching compares the first 512 characters of an artist or a title. The cut runs before the case fold, so no full copy of a long text forms.
-  - The MP4 reader caps a tag data payload at 16 MiB, the same cap the ID3, FLAC, and Ogg readers apply while they parse. A larger payload reads as its size and is never copied or decoded. An integer payload longer than 8 bytes reads as binary.
+  - Catalog matching compares the first 512 characters of an artist or a title. The cut runs before the case fold. No full copy of a long text forms.
+  - The MP4 reader caps a tag data payload at 16 MiB, the same cap the ID3, FLAC, and Ogg readers apply during a parse. A larger payload reads as its size and is never copied or decoded. An integer payload longer than 8 bytes reads as binary.
   - The Ogg reader maps the file and touches only the pages it parses. It read the whole file before.
   - A new test covers the analyzer rejection of a sample rate above 384 kHz.
   - The version advances from 0.72.6 to 0.72.7 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
@@ -320,9 +339,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Six new test modules under `tests/unit/` cover these fixes.
 - The version advances from 0.72.2 to 0.72.3 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The change journal and the recovery prompt show local time.
-  - Both tables showed the stored UTC text with microseconds and an offset. They now show the local date and time of this computer. Stored values stay unchanged.
+  - Both tables showed the stored UTC text with microseconds and an offset. Both tables now show the local date and time of this computer. Stored values stay unchanged.
   - A MusicBrainz release date yields a year only when it starts with four digits followed by the end or a hyphen. Any other shape yields no year.
-  - `WriteService`, `MetadataTagAdapter`, and `SafeTranscoderAdapter` accept an optional `now_iso` clock. Each default is `utc_now_iso`, so every journal timestamp carries the fixed-width UTC form.
+  - `WriteService`, `MetadataTagAdapter`, and `SafeTranscoderAdapter` accept an optional `now_iso` clock. Each default is `utc_now_iso`. Every journal timestamp therefore carries the fixed-width UTC form.
   - The version advances from 0.71.1 to 0.72.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - File names and decoder warnings show as literal text in the detail panel and the transcode dialogs.
   - The detail panel header and warnings labels used the default Qt text format. A file name with HTML tags rendered as markup. Both labels now use the plain text format.
@@ -407,12 +426,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - A wrong computer clock no longer removes USB recovery entries.
   - The expiry scan keeps an entry whose start time lies after the current time. It also keeps an entry older than its expiry limit plus 365 days.
-  - The launch scan shows a "USB Recovery Clock Check" notice that lists the kept entries. Settings > Storage still removes them by hand.
+  - The launch scan shows a "USB Recovery Clock Check" notice that lists the kept entries. Settings > Storage still removes those entries by hand.
   - `UsbExpiryScanResult` gains the optional `clock_suspect_entries` field. Three-argument construction keeps working.
   - The version advances from 0.68.1 to 0.69.0 in `pyproject.toml` and `src/infiniteprep/__init__.py`.
 - The library database no longer depends on the computer clock for record order.
   - A change journal record keeps the time of its first write. A later status update no longer replaces that time.
-  - The change journal and the pending job list follow insertion order. A backward clock step no longer reorders them.
+  - The change journal and the pending job list follow insertion order. A backward clock step no longer reorders either list.
   - Schema migration 3 adds the `updated_at` column to the change journal. The column holds the time of the latest write. Each existing row starts at its own timestamp. `ChangeRecord` gains the optional `updated_at` field.
   - `utc_now_iso` always emits microseconds. The fixed width keeps text comparison equal to time comparison.
   - `Repository.upsert_change_record` converts a caller timestamp with any UTC offset to that stored form. A value without an offset raises `ValueError`.
@@ -646,8 +665,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `scripts/check_gate_adoption.py`, `scripts/check_hook_coverage.py`, `scripts/run_tests.py`, `scripts/trusted_gh.py`, and `scripts/trusted_git.py` follow the template.
 - Six gate tests follow the template. Each edit received active-human sign-off.
 - `docs/template-drift.md` records template commit `88f58b5`.
-- The copied hooks, scripts, and tests name their numeric literals. The template made that change for the Euler M11 prescan. No behavior changes.
-- `ci.yml`, `security-devops.yml`, and `dependency-review.yml` read the change class. A docs-only or website-only change skips `test-matrix`, the Microsoft Security DevOps scan, and the dependency review. A failed classification runs all of them.
+- The copied hooks, scripts, and tests name each numeric literal. The template made that change for the Euler M11 prescan. No behavior changes.
+- `ci.yml`, `security-devops.yml`, and `dependency-review.yml` read the change class. A docs-only or website-only change skips `test-matrix`, the Microsoft Security DevOps scan, and the dependency review. A failed classification runs every one of those checks.
 - The `ci` workflow runs on pushes to `main` only. A pull request commit starts one `ci` run instead of two.
 - A newer pull request commit cancels the `ci` run of the older commit. Runs on `main` always complete.
 - The `Save package attestation bundles` step runs under `set -euo pipefail` and stops when the release for the tag is already published.
@@ -668,7 +687,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Pin the Windows inspector PowerShell interpreter to the SystemRoot-derived System32 path so a hostile PATH entry cannot substitute it and a relocated system root still resolves.
-- Drop the `-ExecutionPolicy` flag from the fixed Windows command. The `-Command` input is not gated by the execution policy, so the flag provided no protection.
+- Drop the `-ExecutionPolicy` flag from the fixed Windows command. The `-Command` input is not gated by the execution policy. The flag provided no protection.
 - Bound Windows inspector command output at 8 MiB in bytes before decoding or parsing and cap the final error message length.
 
 ## [0.51.4] (2026-11-09)
