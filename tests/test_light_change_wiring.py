@@ -11,8 +11,21 @@ import yaml
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = REPOSITORY_ROOT / ".github" / "workflows"
 CLASSIFY_COMMAND = 'python3 scripts/classify_changed_paths.py --base "$BASE_SHA" --head "$HEAD_SHA"'
-BASE_SHA_SOURCE = "${{ github.event.pull_request.base.sha || github.event.before }}"
-HEAD_SHA_SOURCE = "${{ github.event.pull_request.head.sha || github.sha }}"
+# A pull-request-only workflow always has the pull request revisions.
+PULL_REQUEST_REVISION_SOURCES = {
+    "BASE_SHA": "${{ github.event.pull_request.base.sha }}",
+    "HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+}
+# A workflow that also runs on a push compares the pushed commit with the previous one.
+PUSH_REVISION_SOURCES = {
+    "BASE_SHA": "${{ github.event.pull_request.base.sha || github.event.before }}",
+    "HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
+}
+REVISION_SOURCES_BY_WORKFLOW = {
+    "ci.yml": PULL_REQUEST_REVISION_SOURCES,
+    "security-devops.yml": PUSH_REVISION_SOURCES,
+    "dependency-review.yml": PULL_REQUEST_REVISION_SOURCES,
+}
 LIGHT_OUTPUT = "${{ steps.classify.outputs.light }}"
 NOT_CANCELLED = "!cancelled()"
 JOB_NOT_LIGHT = "needs.changes.outputs.light != 'true'"
@@ -59,10 +72,7 @@ class ClassifyStepTest(unittest.TestCase):
                 steps = load_jobs(workflow_name)[job_name]["steps"]
                 classify = steps[find_classify_index(steps)]
                 self.assertEqual(classify["run"], CLASSIFY_COMMAND)
-                self.assertEqual(
-                    classify["env"],
-                    {"BASE_SHA": BASE_SHA_SOURCE, "HEAD_SHA": HEAD_SHA_SOURCE},
-                )
+                self.assertEqual(classify["env"], REVISION_SOURCES_BY_WORKFLOW[workflow_name])
 
 
 class TestMatrixSkipTest(unittest.TestCase):

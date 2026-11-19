@@ -18,7 +18,13 @@ PRIMARY_BRANCH = "main"
 CODE_EVENT_TYPES = ["opened", "synchronize", "reopened", "ready_for_review"]
 EDITED_EVENT_TYPE = "edited"
 CLASSIFY_COMMAND = 'python3 scripts/classify_changed_paths.py --base "$BASE_SHA" --head "$HEAD_SHA"'
-REVISION_SOURCES = {
+# os-tests.yml runs on pull requests only, so the pull request revisions always exist.
+OS_TESTS_REVISION_SOURCES = {
+    "BASE_SHA": "${{ github.event.pull_request.base.sha }}",
+    "HEAD_SHA": "${{ github.event.pull_request.head.sha }}",
+}
+# sync-check.yml also runs on a push, which compares the pushed commit with the previous one.
+SYNC_REVISION_SOURCES = {
     "BASE_SHA": "${{ github.event.pull_request.base.sha || github.event.before }}",
     "HEAD_SHA": "${{ github.event.pull_request.head.sha || github.sha }}",
 }
@@ -27,9 +33,7 @@ NOT_CANCELLED = "!cancelled()"
 JOB_NOT_LIGHT = "needs.changes.outputs.light != 'true'"
 STEP_NOT_LIGHT = "steps.classify.outputs.light != 'true'"
 AGENT_LINT_ACTION = "0xmariowu/AgentLint@"
-PULL_REQUEST_ONLY = "${{ github.event_name == 'pull_request' }}"
-PULL_REQUEST_NUMBER = "github.event.pull_request.number"
-COMMIT_SHA = "github.sha"
+CONCURRENCY_GROUP = "${{ github.workflow }}-${{ github.event.pull_request.number }}"
 # os-tests.yml quotes its `on` key. sync-check.yml leaves it bare, and PyYAML
 # reads the bare key as the boolean True.
 OS_TESTS_TRIGGER_KEY = "on"
@@ -67,13 +71,10 @@ class OsTestsTriggerTest(unittest.TestCase):
         self.assertEqual(pull_request["types"], CODE_EVENT_TYPES)
 
     def test_newer_run_replaces_the_older_run(self) -> None:
-        """A newer pull request commit replaces the older run, and a main run completes."""
+        """A newer pull request commit replaces the older run of the same pull request."""
         concurrency = self.workflow["concurrency"]
-        self.assertEqual(concurrency["cancel-in-progress"], PULL_REQUEST_ONLY)
-        group = concurrency["group"]
-        self.assertIn(PULL_REQUEST_NUMBER, group)
-        self.assertIn(COMMIT_SHA, group)
-        self.assertLess(group.index(PULL_REQUEST_NUMBER), group.index(COMMIT_SHA))
+        self.assertIs(concurrency["cancel-in-progress"], True)
+        self.assertEqual(concurrency["group"], CONCURRENCY_GROUP)
 
     def test_token_is_read_only(self) -> None:
         """The workflow token reads repository contents and nothing else."""
@@ -95,7 +96,7 @@ class OsTestsJobTest(unittest.TestCase):
         self.assertEqual(job["steps"][0]["with"]["fetch-depth"], 0)
         classify = find_classify_step(job["steps"])
         self.assertEqual(classify["run"], CLASSIFY_COMMAND)
-        self.assertEqual(classify["env"], REVISION_SOURCES)
+        self.assertEqual(classify["env"], OS_TESTS_REVISION_SOURCES)
 
     def test_each_platform_job_runs_on_its_platform(self) -> None:
         """The Windows and macOS jobs keep their runner images."""
@@ -145,7 +146,7 @@ class SyncCheckSplitTest(unittest.TestCase):
         steps = self.jobs["check-sync"]["steps"]
         classify = find_classify_step(steps)
         self.assertEqual(classify["run"], CLASSIFY_COMMAND)
-        self.assertEqual(classify["env"], REVISION_SOURCES)
+        self.assertEqual(classify["env"], SYNC_REVISION_SOURCES)
         self.assertNotIn("continue-on-error", classify)
         agent_lint = next(
             step for step in steps if step.get("uses", "").startswith(AGENT_LINT_ACTION)

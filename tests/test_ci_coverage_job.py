@@ -160,10 +160,6 @@ class CoverageCommentJobTest(unittest.TestCase):
         self.assertIn("infiniteprep-coverage-run", self.job)
         self.assertIn("newestPosted > runId", self.job)
 
-    def test_the_job_runs_only_on_a_pull_request(self) -> None:
-        """The job stays out of the way on a push to main."""
-        self.assertIn("github.event_name == 'pull_request'", self.job)
-
     def test_the_job_skips_a_pull_request_from_a_fork(self) -> None:
         """A pull request from a fork receives a read-only token."""
         self.assertIn(
