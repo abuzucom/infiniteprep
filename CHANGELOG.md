@@ -5,10 +5,22 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.80.1] (2026-11-19)
+## [0.80.2] (2026-11-19)
 
 ### Changed
 
+- The ci test matrix skips the upstream test copies that other jobs already run.
+  - The new `tests/conftest.py` adds the opt-in pytest flag `--exclude-upstream`. A local `pytest` run without the flag collects every test.
+  - The new `tests/upstream_tests.py` reads the `tests/test_*.py` entries of the `pyproject.toml` `[tool.ruff] extend-exclude` list. That list names the `abuzucom/agents` copies and the review wiring test. A missing file, an entry outside `tests/`, or an empty result stops the run with a usage error.
+  - Both `test-matrix` pytest steps in `ci.yml` pass the flag. The `ci.yml` checks job, `os-tests.yml`, and the `sync-check.yml` hook coverage step still run the upstream tests on every operating system.
+  - `tests/test_prose_policy_backtracking.py` joins the upstream list. Ruff skips it like the other upstream copies.
+- The ci checks job runs the gate suite through the parallel shard runner `scripts/run_tests.py` instead of a serial `unittest discover`.
+- `os-tests.yml` runs on Python 3.12, the version of the ci test matrix, instead of the latest 3.x release.
+- `ci.yml` and `os-tests.yml` cache pip downloads. Each cache key names every requirements file the job installs. `--require-hashes` still verifies every cached wheel.
+- `ci.yml` keeps the pip bundled with the pinned `setup-python` release. The unpinned `pip install --upgrade pip` steps are gone.
+- `security-devops.yml` cancels the scan of a superseded pull request commit. A push to `main` always finishes its scan and its Security tab upload.
+- The new `tests/test_upstream_test_exclusion.py`, `tests/test_pip_cache_wiring.py`, and `tests/test_security_devops_concurrency.py` pin the loader, the flag wiring, the cache keys, the Python pin, and the concurrency group.
+- The version advances from 0.80.1 to 0.80.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - A new test swaps the staging folder for a link after the cleanup opens its folder descriptor.
   - The new `tests/unit/test_staging_cleanup_post_open_swap.py` makes the swap right before the listing. The moved staging folder loses its files. The link target keeps its file. The link stays.
   - The AI quality review on pull request 330 found this gap in the test set.

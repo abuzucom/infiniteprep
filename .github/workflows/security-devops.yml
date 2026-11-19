@@ -7,6 +7,12 @@ on:
   pull_request:
     branches: [main]
 
+# A newer pull request commit replaces the scan of the older commit. A push to
+# main always finishes, so the Security tab receives every main upload.
+concurrency:
+  group: security-devops-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 

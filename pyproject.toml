@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "infiniteprep"
-version = "0.80.1"
+version = "0.80.2"
 description = "Cross-platform DJ music metadata identification, analysis, review, and tag management application"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -148,6 +148,7 @@ extend-exclude = [
     "tests/test_primary_branch_read_only.py",
     "tests/test_prose_metadata.py",
     "tests/test_prose_policy.py",
+    "tests/test_prose_policy_backtracking.py",
     "tests/test_read_git_state_filters.py",
     "tests/test_read_git_state_submodule_filters.py",
     "tests/test_reinject_agents_policy.py",
