@@ -7,12 +7,15 @@ placeholders, never real local identifiers.
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import subprocess
 import unittest
 from typing import Final
+from unittest import mock
 
+from infiniteprep.services.usb import windows as windows_module
 from infiniteprep.services.usb.models import (
     CommandExecutionError,
     DriveInspection,
@@ -33,6 +36,8 @@ from infiniteprep.services.usb.windows import (
 )
 
 _BS: Final[str] = chr(92)
+RELOCATED_POWERSHELL_EXE: Final[str] = r"D:\WinRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+DEFAULT_POWERSHELL_EXE: Final[str] = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 _FAT32_GUID: Final[str] = "11111111-1111-1111-1111-111111111111"
 _EFI_GUID: Final[str] = "22222222-2222-2222-2222-222222222222"
 _RECOVERY_GUID: Final[str] = "33333333-3333-3333-3333-333333333333"
@@ -423,10 +428,24 @@ class TestUsbWindowsInspection(unittest.TestCase):
             [list(DISK_COMMAND), list(PARTITION_COMMAND), list(VOLUME_COMMAND)],
         )
 
+    def test_system_root_sets_the_interpreter_path(self) -> None:
+        """SYSTEMROOT relocates the interpreter, and its absence falls back to C:\\Windows."""
+        # The module reads SYSTEMROOT once at import, so each case reloads it.
+        # The cleanup reload restores the constants under the real environment.
+        self.addCleanup(importlib.reload, windows_module)
+        cases = (
+            ({"SYSTEMROOT": r"D:\WinRoot"}, RELOCATED_POWERSHELL_EXE),
+            ({}, DEFAULT_POWERSHELL_EXE),
+        )
+        for environment, expected_exe in cases:
+            with self.subTest(environment=environment):
+                with mock.patch.dict(os.environ, environment, clear=True):
+                    reloaded = importlib.reload(windows_module)
+                self.assertEqual(reloaded.POWERSHELL_EXE, expected_exe)
+
     def test_commands_pin_system_powershell(self) -> None:
         """Command arrays target the SystemRoot-pinned interpreter as fixed arrays."""
-        system_root = os.environ.get("SYSTEMROOT") or "C:\\Windows"
-        expected_exe = system_root + r"\System32\WindowsPowerShell\v1.0\powershell.exe"
+        expected_exe = windows_module.POWERSHELL_EXE
         for command, text in (
             (DISK_COMMAND, DISK_COMMAND_TEXT),
             (PARTITION_COMMAND, PARTITION_COMMAND_TEXT),

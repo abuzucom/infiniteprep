@@ -23,6 +23,8 @@ from infiniteprep.services.usb.macos import (
     KILL_SIGNAL,
     MAX_PLIST_OUTPUT_BYTES,
     MAX_STDERR_BYTES,
+    REAP_WAIT_SECONDS,
+    WAIT_GRACE_SECONDS,
     MacOSDriveInspector,
     _terminate_process,
     bounded_command_runner,
@@ -33,6 +35,14 @@ from infiniteprep.services.usb.models import (
     DriveInspectionError,
     InspectionParseError,
     SpaceInfo,
+)
+
+RUNNER_DEADLINE_SECONDS: Final[float] = 2.0
+# The longest legitimate path after the deadline: up to two terminate rounds,
+# each with two grace waits and one reap wait, two reader joins, and the
+# final grace wait.
+RUNNER_GRACE_SECONDS: Final[float] = (
+    2 * (2 * WAIT_GRACE_SECONDS + REAP_WAIT_SECONDS) + 2 * REAP_WAIT_SECONDS + WAIT_GRACE_SECONDS
 )
 
 PLIST_HEADER: Final[str] = (
@@ -1064,12 +1074,14 @@ class TestUsbMacosInspection(unittest.TestCase):
             bounded_command_runner([sys.executable, "-c", oversized], 15.0)
 
     def test_bounded_runner_kills_stuck_child(self) -> None:
-        """A child that never closes stdout fails within the deadline, not forever."""
+        """A child that never closes stdout fails within the deadline plus the runner grace."""
         started = time.monotonic()
-        result = bounded_command_runner([sys.executable, "-c", "import time; time.sleep(60)"], 2.0)
+        result = bounded_command_runner(
+            [sys.executable, "-c", "import time; time.sleep(60)"], RUNNER_DEADLINE_SECONDS
+        )
         elapsed = time.monotonic() - started
         self.assertNotEqual(result.returncode, 0)
-        self.assertLess(elapsed, 30.0)
+        self.assertLess(elapsed, RUNNER_DEADLINE_SECONDS + RUNNER_GRACE_SECONDS)
 
     def test_bounded_runner_survives_stderr_flood(self) -> None:
         """A child flooding stderr finishes within the deadline with bounded storage.
@@ -1079,11 +1091,11 @@ class TestUsbMacosInspection(unittest.TestCase):
         """
         started = time.monotonic()
         flood = "import sys; sys.stderr.write('e' * 200000); sys.stderr.flush()"
-        result = bounded_command_runner([sys.executable, "-c", flood], 2.0)
+        result = bounded_command_runner([sys.executable, "-c", flood], RUNNER_DEADLINE_SECONDS)
         elapsed = time.monotonic() - started
         self.assertEqual(result.returncode, 0)
         self.assertLessEqual(len(result.stderr), MAX_STDERR_BYTES)
-        self.assertLess(elapsed, 30.0)
+        self.assertLess(elapsed, RUNNER_DEADLINE_SECONDS + RUNNER_GRACE_SECONDS)
 
     def test_bounded_runner_rejects_nonpositive_timeout(self) -> None:
         """The runner validates its timeout argument directly."""

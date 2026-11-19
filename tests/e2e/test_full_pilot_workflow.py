@@ -17,7 +17,6 @@ from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
     EntityType,
-    FieldName,
     OperationStatus,
     ReviewStatus,
     SourceType,
@@ -131,6 +130,7 @@ def test_full_end_to_end_core_loop_and_edge_case_scenarios(tmp_path: Path) -> No
 
     # Process A1, B1, C1
     target_assets = [repo.get_file_by_path(str(p.resolve())) for p in (wav_a1, aiff_b1, mp3_c1)]
+    assert all(asset is not None for asset in target_assets)
     target_ids = [a.id for a in target_assets if a is not None]
     orchestrator.process_files(target_ids)
     for fid in target_ids:
@@ -207,4 +207,5 @@ def _verify_restore_and_eval_helper(
 
     eval_summary = run_evaluation_sample(crate_dir)
     assert eval_summary["total_imported_files"] >= 4
-    assert eval_summary["FieldName_BPM"] == FieldName.BPM.value
+    # The evaluation hashes every file before and after its run, so this is computed.
+    assert eval_summary["zero_unintended_file_mutations"] is True
