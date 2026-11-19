@@ -8,8 +8,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.adapters.transcoder.safe_transcoder import SafeTranscoderAdapter
@@ -28,20 +29,9 @@ STATIC_DIALOG_KINDS = ("question", "warning", "information")
 STATIC_DIALOG_FAILURE = "A static QMessageBox call renders untrusted text with AutoText."
 
 
-def _ensure_qapp() -> QApplication:
-    """Return an active QApplication instance for widget tests."""
-    app = QApplication.instance()
-    if isinstance(app, QApplication):
-        return app
-    return QApplication([])
-
-
+@pytest.mark.usefixtures("qapp")
 class PlainTextTestCase(unittest.TestCase):
-    """Provide a QApplication, a temporary folder, and an in-memory library."""
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls._app = _ensure_qapp()
+    """Provide the pytest-qt QApplication, a temporary folder, and an in-memory library."""
 
     def setUp(self) -> None:
         folder = tempfile.TemporaryDirectory()

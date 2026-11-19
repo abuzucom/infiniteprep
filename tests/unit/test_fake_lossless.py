@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+import pytest
 import soundfile as sf
-from PySide6.QtWidgets import QApplication
 from scipy.signal import butter, sosfilt
 
 from infiniteprep.adapters.transcoder.safe_transcoder import TranscodeMode, TranscodePreset
@@ -311,9 +311,9 @@ class FakeLosslessDetectionTests(unittest.TestCase):
             finally:
                 db.close()
 
+    @pytest.mark.usefixtures("qapp")
     def test_detail_panel_persists_fake_lossless_and_ignores_stale_generation(self) -> None:
         """DetailPanel persists current fake-lossless results and ignores stale generations."""
-        _app = QApplication.instance() or QApplication([])
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             db = DatabaseManager(tmp_path / "test.db")

@@ -60,16 +60,18 @@ def test_a_stored_unknown_placement_falls_back_to_the_default(tmp_path: Path) ->
     assert settings.unsorted_rows_placement == UNSORTED_PLACEMENT_FIRST
 
 
-def test_general_tab_shows_the_stored_placement() -> None:
+def test_general_tab_shows_the_stored_placement(qtbot: Any) -> None:
     """The General tab shows the stored placement when it opens."""
     tab = GeneralTab("dark_teal.xml", unsorted_placement=UNSORTED_PLACEMENT_LAST)
+    qtbot.addWidget(tab)
 
     assert tab.unsorted_rows_placement_combo.currentData() == UNSORTED_PLACEMENT_LAST
 
 
-def test_general_tab_writes_the_chosen_placement() -> None:
+def test_general_tab_writes_the_chosen_placement(qtbot: Any) -> None:
     """The General tab copies the chosen placement into the settings."""
     tab = GeneralTab("dark_teal.xml")
+    qtbot.addWidget(tab)
     settings = AppSettings()
 
     combo = tab.unsorted_rows_placement_combo
