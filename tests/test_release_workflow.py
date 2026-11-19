@@ -12,8 +12,9 @@ import yaml
 
 WORKFLOW_PATH = Path(__file__).resolve().parent.parent / ".github/workflows/build-packages.yml"
 RELEASE_PATH = Path(__file__).resolve().parent.parent / "packaging" / "release.py"
-# A manual run started on a tag also has ref_type tag. The event must also be a push.
-TAG_CONDITION = "github.event_name == 'push' && github.ref_type == 'tag'"
+# The push trigger lists v* tags only, so a push event is a tag push. A manual run
+# started on a tag is a workflow_dispatch event and never releases.
+TAG_CONDITION = "github.event_name == 'push'"
 PACKAGE_ARTIFACTS = (
     "InfinitePrep-windows-packages",
     "InfinitePrep-linux-packages",

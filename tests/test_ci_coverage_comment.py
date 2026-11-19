@@ -48,9 +48,11 @@ const core = {
   info: (message) => record({ action: 'info', message }),
   setFailed: (message) => record({ action: 'failed', message }),
 };
-{
+// actions/github-script runs the script inside an async function. A rejection
+// reaches the unhandledRejection handler above.
+(async () => {
 %(script)s
-}
+})();
 """
 
 BOT = "github-actions[bot]"

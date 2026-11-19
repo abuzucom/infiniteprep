@@ -141,8 +141,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    # The Ubuntu leg runs the suite under coverage, which takes longer than the
-    # plain suite. The other legs keep the shorter limit.
+    # The Ubuntu leg runs the suite under coverage, which takes the longest.
+    # Every leg shares the limit that this leg needs.
     timeout-minutes: 25
     env:
       QT_QPA_PLATFORM: offscreen
@@ -407,4 +407,4 @@ jobs:
               }
             }
 
-            main();
+            await main();
