@@ -207,7 +207,8 @@ def test_sticky_shared_folder_above_the_library_logs_no_warning(
     sticky.chmod(STICKY_SHARED_FOLDER)
     library_folder = sticky / "library"
     library_folder.mkdir(mode=OWNER_ONLY_FOLDER)
-    assert stat.S_IMODE(sticky.stat().st_mode) & stat.S_ISVTX
+    if not stat.S_IMODE(sticky.stat().st_mode) & stat.S_ISVTX:
+        pytest.skip("The filesystem drops the sticky bit.")
 
     with caplog.at_level(logging.WARNING):
         DatabaseManager(library_folder / LIBRARY_NAME).close()
