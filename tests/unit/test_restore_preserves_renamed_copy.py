@@ -51,10 +51,10 @@ def renamed_crash(
         real_rename(*args)
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(write_svc.tag_adapter, "_execute_optional_rename", rename_then_die)
-    with pytest.raises(KeyboardInterrupt):
-        write_svc.apply_single_plan(plan)
-    monkeypatch.undo()
+    with monkeypatch.context() as patch:
+        patch.setattr(write_svc.tag_adapter, "_execute_optional_rename", rename_then_die)
+        with pytest.raises(KeyboardInterrupt):
+            write_svc.apply_single_plan(plan)
     operation_id = write_svc.list_interrupted_operations()[0].operation_id
     return write_svc, operation_id, source, plan.destination_path, original_hash
 

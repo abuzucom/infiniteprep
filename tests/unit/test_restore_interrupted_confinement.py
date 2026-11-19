@@ -38,10 +38,10 @@ def test_restore_interrupted_refuses_a_path_outside_the_library(
     def die_mid_write(_path: Path, _tags: dict[str, str]) -> None:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(tag_adapter, "_write_tags_by_format", die_mid_write)
-    with pytest.raises(KeyboardInterrupt):
-        write_svc.apply_single_plan(write_svc.build_batch_preview([asset.id])[0])
-    monkeypatch.undo()
+    with monkeypatch.context() as patch:
+        patch.setattr(tag_adapter, "_write_tags_by_format", die_mid_write)
+        with pytest.raises(KeyboardInterrupt):
+            write_svc.apply_single_plan(write_svc.build_batch_preview([asset.id])[0])
     record = write_svc.list_interrupted_operations()[0]
     victim = tmp_path / "elsewhere" / "victim.wav"
     victim.parent.mkdir()

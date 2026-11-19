@@ -76,10 +76,10 @@ def crash_before_rename(write_svc: WriteService, plan: FileWritePlan, monkeypatc
     def die(_path: Path, _tags: dict[str, str]) -> None:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(write_svc.tag_adapter, "_write_tags_by_format", die)
-    with pytest.raises(KeyboardInterrupt):
-        write_svc.apply_single_plan(plan)
-    monkeypatch.undo()
+    with monkeypatch.context() as patch:
+        patch.setattr(write_svc.tag_adapter, "_write_tags_by_format", die)
+        with pytest.raises(KeyboardInterrupt):
+            write_svc.apply_single_plan(plan)
     return write_svc.list_interrupted_operations()[0].operation_id
 
 
@@ -112,10 +112,10 @@ def test_rename_refuses_a_file_that_the_existence_check_missed(
     def exists_missing_destination(self: Path, *args: Any, **kwargs: Any) -> bool:
         return False if self == destination else real_exists(self, *args, **kwargs)
 
-    monkeypatch.setattr(pathlib.Path, "exists", exists_missing_destination)
-    with pytest.raises(FileExistsError):
-        write_svc.apply_single_plan(plan)
-    monkeypatch.undo()
+    with monkeypatch.context() as patch:
+        patch.setattr(pathlib.Path, "exists", exists_missing_destination)
+        with pytest.raises(FileExistsError):
+            write_svc.apply_single_plan(plan)
 
     assert destination.read_bytes() == UNRELATED_BYTES
     assert compute_sha256(source) == original_hash

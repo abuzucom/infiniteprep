@@ -24,11 +24,11 @@ def test_cleanup_failure_does_not_mask_the_write_error(tmp_path: Path, monkeypat
     def fail_unlink(_self: Path, missing_ok: bool = False) -> None:
         raise PermissionError("simulated cleanup failure")
 
-    monkeypatch.setattr("infiniteprep.config.settings.os.replace", fail_replace)
-    monkeypatch.setattr(Path, "unlink", fail_unlink)
+    with monkeypatch.context() as patch:
+        patch.setattr("infiniteprep.config.settings.os.replace", fail_replace)
+        patch.setattr(Path, "unlink", fail_unlink)
 
-    with pytest.raises(RuntimeError, match="simulated write failure"):
-        manager.save(AppSettings(rename_template=REPLACEMENT_TEMPLATE))
+        with pytest.raises(RuntimeError, match="simulated write failure"):
+            manager.save(AppSettings(rename_template=REPLACEMENT_TEMPLATE))
 
-    monkeypatch.undo()
     assert manager.load().rename_template == ORIGINAL_TEMPLATE

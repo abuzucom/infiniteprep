@@ -48,10 +48,10 @@ def interrupted(
         source.write_bytes(CORRUPT_BYTES)
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(tag_adapter, "_write_tags_by_format", corrupt_then_die)
-    with pytest.raises(KeyboardInterrupt):
-        write_svc.apply_single_plan(write_svc.build_batch_preview([asset.id])[0])
-    monkeypatch.undo()
+    with monkeypatch.context() as patch:
+        patch.setattr(tag_adapter, "_write_tags_by_format", corrupt_then_die)
+        with pytest.raises(KeyboardInterrupt):
+            write_svc.apply_single_plan(write_svc.build_batch_preview([asset.id])[0])
     assert compute_sha256(source) == CORRUPT_HASH
     return repo, write_svc, source, original_hash
 
