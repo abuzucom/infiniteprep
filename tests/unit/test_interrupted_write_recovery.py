@@ -58,11 +58,12 @@ def crash_mid_write(write_svc: WriteService, file_id: str, source: Path, monkeyp
         source.write_bytes(CORRUPT_BYTES)
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(write_svc.tag_adapter, "_write_tags_by_format", corrupt_then_die)
-    plan = write_svc.build_batch_preview([file_id])[0]
-    with pytest.raises(KeyboardInterrupt):
-        write_svc.apply_single_plan(plan)
-    monkeypatch.undo()
+    # The context reverts only the fake writer. The storage isolation of the test stays.
+    with monkeypatch.context() as patch:
+        patch.setattr(write_svc.tag_adapter, "_write_tags_by_format", corrupt_then_die)
+        plan = write_svc.build_batch_preview([file_id])[0]
+        with pytest.raises(KeyboardInterrupt):
+            write_svc.apply_single_plan(plan)
     return write_svc.list_interrupted_operations()[0].operation_id
 
 
