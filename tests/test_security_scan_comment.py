@@ -135,7 +135,7 @@ def run_script(
             "SCAN_RESULT": scan_result,
         }
     )
-    subprocess.run(
+    completed = subprocess.run(
         [str(NODE), str(harness_path)],
         cwd=tmp_path,
         env=environment,
@@ -145,7 +145,15 @@ def run_script(
         timeout=120,
     )
     lines = [line for line in calls_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    return [json.loads(line) for line in lines]
+    calls = [json.loads(line) for line in lines]
+    # A recorded error exits 1 through the harness. Any other exit code means node
+    # itself failed, so the failure names its stderr instead of an empty call list.
+    expected_exit = 1 if any(call["action"] == "error" for call in calls) else 0
+    if completed.returncode != expected_exit:
+        raise AssertionError(
+            f"node exited {completed.returncode}, expected {expected_exit}: {completed.stderr}"
+        )
+    return calls
 
 
 class ScanSummaryWiringTest(unittest.TestCase):

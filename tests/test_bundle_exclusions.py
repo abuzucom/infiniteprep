@@ -151,9 +151,17 @@ class LibraryPruningTest(unittest.TestCase):
             _entry("libQt6Gui.so.6", FILTERS.SYMLINK_TYPECODE),
             _entry("libfreetype.so.6"),
         ]
+        symlink_source = entries[0][1]
+        asked_sources: list[str] = []
 
-        kept, dropped = FILTERS.prune_unneeded_libraries(entries, self._needed)
+        def record_needed(source: str) -> set[str]:
+            """Record each source the pruner reads, then answer as usual."""
+            asked_sources.append(source)
+            return self._needed(source)
 
+        kept, dropped = FILTERS.prune_unneeded_libraries(entries, record_needed)
+
+        self.assertNotIn(symlink_source, asked_sources)
         self.assertEqual(sorted(dropped), ["libQt6Gui.so.6", "libfreetype.so.6"])
         self.assertEqual(kept, [])
 

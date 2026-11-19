@@ -94,9 +94,12 @@ def test_mark_finished_lets_the_next_write_pass_preflight(
 ) -> None:
     """After Mark as finished, the library holds the file's current path and hash."""
     repo, write_svc, file_id, source = library
+    imported_hash = compute_sha256(source)
 
-    def corrupt_then_die(path: Path, _tags: dict[str, str]) -> None:
-        path.write_bytes(path.read_bytes() + b"\x00")
+    # The tag writer only sees the staged copy, which the adapter discards. The fake
+    # changes the source itself, so Mark as finished has new bytes to record.
+    def corrupt_then_die(_staged: Path, _tags: dict[str, str]) -> None:
+        source.write_bytes(source.read_bytes() + b"\x00")
         raise KeyboardInterrupt
 
     monkeypatch.setattr(write_svc.tag_adapter, "_write_tags_by_format", corrupt_then_die)
@@ -109,5 +112,6 @@ def test_mark_finished_lets_the_next_write_pass_preflight(
 
     asset = repo.get_file_by_id(file_id)
     assert asset is not None
+    assert compute_sha256(source) != imported_hash
     assert asset.content_hash == compute_sha256(source)
     assert write_svc.build_batch_preview([file_id])[0].is_safe_to_apply

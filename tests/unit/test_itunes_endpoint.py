@@ -14,10 +14,12 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from infiniteprep.adapters import http_json
 from infiniteprep.adapters.catalog.itunes import (
     ITUNES_SEARCH_HOST,
     ITUNES_SEARCH_URL,
@@ -31,6 +33,9 @@ from infiniteprep.domain.ports import MetadataSearchQuery
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "itunes_search"
 FILE_ID = "file-1"
+LIMITER_INTERVAL_SECONDS = 0.05
+# Any start far from zero makes the first request owe no wait.
+START_SECONDS = 1000.0
 
 
 def _recorded(name: str) -> dict[str, Any]:
@@ -135,17 +140,33 @@ def test_every_adapter_shares_the_provider_limiter() -> None:
     assert first.limiter is second.limiter
 
 
-def test_two_adapters_that_share_a_limiter_wait_for_each_other() -> None:
+def test_two_adapters_that_share_a_limiter_wait_for_each_other(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A second adapter waits for the interval the first adapter used."""
-    limiter = RequestLimiter(0.05)
+    clock_seconds = [START_SECONDS]
+    sleeps: list[float] = []
+
+    def record_sleep(seconds: float) -> None:
+        """Record the wait and move the fake clock past it."""
+        sleeps.append(seconds)
+        clock_seconds[0] += seconds
+
+    # The limiter reads time through the http_json module name. A fake clock that
+    # stands still makes the second request owe the whole interval.
+    fake_time = SimpleNamespace(monotonic=lambda: clock_seconds[0], sleep=record_sleep)
+    monkeypatch.setattr(http_json, "time", fake_time)
+    limiter = RequestLimiter(LIMITER_INTERVAL_SECONDS)
     repository = _repository()
     calls: list[tuple[str, dict[str, str]]] = []
     first = _adapter(repository, _recorded("match_with_genre_and_date"), calls, limiter)
     second = _adapter(repository, _recorded("match_with_genre_and_date"), calls, limiter)
 
     first.search(MetadataSearchQuery(artist="Deep Dish", title="The Dream"), file_id=FILE_ID)
+    assert sleeps == []
     second.search(MetadataSearchQuery(artist="Deep Dish", title="Flashdance"), file_id=FILE_ID)
 
+    assert sleeps == [pytest.approx(LIMITER_INTERVAL_SECONDS)]
     assert len(calls) == 2
     assert calls[0][0] == ITUNES_SEARCH_URL
     assert calls[1][0] == ITUNES_SEARCH_URL

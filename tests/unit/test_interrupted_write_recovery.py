@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +21,7 @@ from infiniteprep.services.write_service import PendingRecoveryError, WriteServi
 from tests.fixtures.audio_factory import create_wav_fixture
 
 CORRUPT_BYTES = b"half-written by a crash"
+CORRUPT_HASH = hashlib.sha256(CORRUPT_BYTES).hexdigest()
 
 
 @pytest.fixture
@@ -44,11 +46,16 @@ def library(tmp_path: Path) -> tuple[Repository, WriteService, list[str], Path, 
     return repo, write_svc, file_ids, paths[0], compute_sha256(paths[0])
 
 
-def crash_mid_write(write_svc: WriteService, file_id: str, monkeypatch: Any) -> str:
-    """Start a real write, corrupt the file, and stop it the way a process kill would."""
+def crash_mid_write(write_svc: WriteService, file_id: str, source: Path, monkeypatch: Any) -> str:
+    """Start a real write, corrupt the source, and stop it the way a process kill would.
 
-    def corrupt_then_die(path: Path, _tags: dict[str, str]) -> None:
-        path.write_bytes(CORRUPT_BYTES)
+    The tag writer only sees the staged copy, which the adapter discards. A
+    crash after the staged copy replaces the source leaves corrupt bytes at the
+    source path, so the fake writes them there.
+    """
+
+    def corrupt_then_die(_staged: Path, _tags: dict[str, str]) -> None:
+        source.write_bytes(CORRUPT_BYTES)
         raise KeyboardInterrupt
 
     monkeypatch.setattr(write_svc.tag_adapter, "_write_tags_by_format", corrupt_then_die)
@@ -65,10 +72,10 @@ def test_a_crash_mid_write_leaves_one_interrupted_record(
     """Only the IN_PROGRESS record is listed, and the corrupted file is still on disk."""
     _, write_svc, file_ids, source, _ = library
 
-    operation_id = crash_mid_write(write_svc, file_ids[0], monkeypatch)
+    operation_id = crash_mid_write(write_svc, file_ids[0], source, monkeypatch)
 
     assert [r.operation_id for r in write_svc.list_interrupted_operations()] == [operation_id]
-    assert compute_sha256(source) == library[4]
+    assert compute_sha256(source) == CORRUPT_HASH
     assert sorted(p.name for p in source.parent.iterdir()) == ["track_0.wav", "track_1.wav"]
 
 
@@ -77,7 +84,8 @@ def test_restore_returns_the_original_and_marks_rolled_back(
 ) -> None:
     """Restore puts back the verified backup and clears the interrupted list."""
     repo, write_svc, file_ids, source, original_hash = library
-    operation_id = crash_mid_write(write_svc, file_ids[0], monkeypatch)
+    operation_id = crash_mid_write(write_svc, file_ids[0], source, monkeypatch)
+    assert compute_sha256(source) == CORRUPT_HASH
 
     write_svc.restore_interrupted(operation_id)
 
@@ -91,9 +99,9 @@ def test_restore_returns_the_original_and_marks_rolled_back(
 def test_restore_with_a_tampered_backup_keeps_the_record_pending(
     library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A backup that fails its hash check raises, and the write stays interrupted."""
+    """A backup that fails its hash check raises, leaves the file, and keeps the record."""
     repo, write_svc, file_ids, source, _ = library
-    operation_id = crash_mid_write(write_svc, file_ids[0], monkeypatch)
+    operation_id = crash_mid_write(write_svc, file_ids[0], source, monkeypatch)
     record = repo.get_change_record(operation_id)
     assert record is not None
     Path(record.backup_reference).write_bytes(b"tampered")
@@ -101,7 +109,7 @@ def test_restore_with_a_tampered_backup_keeps_the_record_pending(
     with pytest.raises(ValueError, match="SHA-256"):
         write_svc.restore_interrupted(operation_id)
 
-    assert compute_sha256(source) == library[4]
+    assert compute_sha256(source) == CORRUPT_HASH
     assert [r.operation_id for r in write_svc.list_interrupted_operations()] == [operation_id]
 
 
@@ -110,23 +118,23 @@ def test_mark_finished_keeps_the_file_and_records_its_hash(
 ) -> None:
     """Mark as finished stores COMPLETED and the hash of the file as it is now."""
     repo, write_svc, file_ids, source, _ = library
-    operation_id = crash_mid_write(write_svc, file_ids[0], monkeypatch)
+    operation_id = crash_mid_write(write_svc, file_ids[0], source, monkeypatch)
 
     write_svc.mark_interrupted_finished(operation_id)
 
     stored = repo.get_change_record(operation_id)
     assert stored is not None
     assert stored.operation_status == OperationStatus.COMPLETED
-    assert stored.post_write_hash == compute_sha256(source)
-    assert compute_sha256(source) == library[4]
+    assert stored.post_write_hash == CORRUPT_HASH
+    assert compute_sha256(source) == CORRUPT_HASH
 
 
 def test_writes_are_blocked_while_a_record_is_pending(
     library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A pending record stops apply_batch before it touches any other file."""
-    _, write_svc, file_ids, _, _ = library
-    crash_mid_write(write_svc, file_ids[0], monkeypatch)
+    _, write_svc, file_ids, source, _ = library
+    crash_mid_write(write_svc, file_ids[0], source, monkeypatch)
     other_plan = write_svc.build_batch_preview([file_ids[1]])[0]
     other_hash = compute_sha256(other_plan.source_path)
 

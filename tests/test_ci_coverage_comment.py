@@ -120,7 +120,7 @@ def run_script(
             "STUB_CALLS": str(calls_path),
         }
     )
-    subprocess.run(
+    completed = subprocess.run(
         [str(NODE), str(harness_path)],
         cwd=tmp_path,
         env=environment,
@@ -130,7 +130,15 @@ def run_script(
         timeout=120,
     )
     lines = [line for line in calls_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    return [json.loads(line) for line in lines]
+    calls = [json.loads(line) for line in lines]
+    # A recorded error exits 1 through the harness. Any other exit code means node
+    # itself failed, so the failure names its stderr instead of an empty call list.
+    expected_exit = 1 if any(call["action"] == "error" for call in calls) else 0
+    if completed.returncode != expected_exit:
+        raise AssertionError(
+            f"node exited {completed.returncode}, expected {expected_exit}: {completed.stderr}"
+        )
+    return calls
 
 
 @unittest.skipIf(NODE is None, "node is not installed")
@@ -171,8 +179,6 @@ class CoverageCommentScriptTest(unittest.TestCase):
 
         actions = [call["action"] for call in calls]
         self.assertEqual(actions, ["create"])
-        self.assertNotIn("update", actions)
-        self.assertNotIn("delete", actions)
 
     def test_a_bot_comment_with_the_marker_inside_the_body_is_left_alone(self) -> None:
         """A bot comment that only mentions the marker is not the target."""
@@ -214,8 +220,6 @@ class CoverageCommentScriptTest(unittest.TestCase):
 
         actions = [call["action"] for call in calls]
         self.assertEqual(actions, ["info"])
-        self.assertNotIn("update", actions)
-        self.assertNotIn("create", actions)
 
     def test_a_newer_run_updates_the_comment(self) -> None:
         """A run newer than the posted run updates the comment."""

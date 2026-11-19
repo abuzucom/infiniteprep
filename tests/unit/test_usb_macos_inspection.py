@@ -1028,7 +1028,8 @@ class TestUsbMacosInspection(unittest.TestCase):
 
     def test_constructor_rejects_non_macos_platform(self) -> None:
         """Construction raises a clear error off macOS."""
-        if sys.platform == "darwin":
+        # setUp patches sys.platform to darwin, so the guard reads the real value.
+        if self.REAL_PLATFORM == "darwin":
             self.skipTest("the platform guard passes on macOS hosts")
         with (
             mock.patch("sys.platform", self.REAL_PLATFORM),

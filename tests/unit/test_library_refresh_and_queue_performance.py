@@ -22,7 +22,7 @@ from infiniteprep.config.settings import AppSettings, SettingsManager
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import FieldName, OperationStatus
-from infiniteprep.domain.models import ChangeRecord, utc_now_iso
+from infiniteprep.domain.models import AnalysisResult, ChangeRecord, FieldProposal, utc_now_iso
 from infiniteprep.domain.playlist_order import order_tracks
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.job_orchestrator import BatchKind, BatchState
@@ -71,8 +71,35 @@ def count_statements(repo: Repository) -> Iterator[list[str]]:
         conn.set_trace_callback(None)
 
 
+def seed_proposal_and_analysis(repo: Repository, file_id: str) -> None:
+    """Store one pending field proposal and one analysis result for file_id."""
+    repo.upsert_field_proposal(
+        FieldProposal(
+            id=f"proposal-{file_id}",
+            file_id=file_id,
+            field_name=FieldName.GENRE.value,
+            proposed_value="House",
+            provider="test",
+            provider_entity_id=f"entity-{file_id}",
+        )
+    )
+    repo.upsert_analysis_result(
+        AnalysisResult(
+            id=f"analysis-{file_id}",
+            file_id=file_id,
+            analyzer_name="test",
+            analyzer_version="1",
+            configuration={},
+            bpm=128.0,
+            key_tonic=None,
+            key_mode=None,
+            analysis_strength=None,
+        )
+    )
+
+
 def build_library(tmp_path: Path, count: int) -> tuple[Repository, ImportService, list[str]]:
-    """Import count WAV files, each with an approved artist and an analysis result."""
+    """Import count WAV files, each with approved fields, a proposal, and an analysis result."""
     repo = Repository(DatabaseManager(":memory:"))
     importer = ImportService(repo, MetadataTagAdapter())
     paths = [
@@ -85,6 +112,7 @@ def build_library(tmp_path: Path, count: int) -> tuple[Repository, ImportService
         review.set_manual_field_value(file_id, FieldName.ARTIST.value, "Sasha")
         review.set_manual_field_value(file_id, FieldName.BPM.value, "128")
         review.set_manual_field_value(file_id, FieldName.KEY.value, "Am")
+        seed_proposal_and_analysis(repo, file_id)
     return repo, importer, file_ids
 
 
@@ -143,8 +171,11 @@ def test_bulk_readers_match_the_per_file_readers(tmp_path: Path) -> None:
 
     for file_id in file_ids:
         assert approved[file_id] == repo.get_approved_fields_map(file_id)
-        assert proposals.get(file_id, []) == repo.list_field_proposals(file_id)
-    assert set(analyses) <= {file_ids[0]}
+        assert proposals[file_id] == repo.list_field_proposals(file_id)
+        assert len(proposals[file_id]) == 1
+    # The filtered reader returns the requested file only, with its own results.
+    assert set(analyses) == {file_ids[0]}
+    assert analyses[file_ids[0]] == repo.list_analysis_results(file_ids[0])
 
 
 def test_playlist_order_query_count_does_not_grow_with_the_playlist(tmp_path: Path) -> None:

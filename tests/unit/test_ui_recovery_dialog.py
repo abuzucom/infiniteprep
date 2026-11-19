@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,9 @@ from infiniteprep.ui import recovery_dialog as recovery_module
 from infiniteprep.ui.recovery_dialog import COLUMN_KEEP, COLUMN_RESTORE, RecoveryDialog
 from tests.fixtures.audio_factory import create_wav_fixture
 
+CORRUPT_BYTES = b"half-written"
+CORRUPT_HASH = hashlib.sha256(CORRUPT_BYTES).hexdigest()
+
 
 @pytest.fixture
 def interrupted(
@@ -38,14 +42,17 @@ def interrupted(
     ReviewService(repo).set_manual_field_value(asset.id, FieldName.ARTIST.value, "Sasha")
     write_svc = WriteService(repo, tag_adapter, backup_dir=tmp_path / "backups")
 
-    def corrupt_then_die(path: Path, _tags: dict[str, str]) -> None:
-        path.write_bytes(b"half-written")
+    # The tag writer only sees the staged copy, which the adapter discards. The fake
+    # corrupts the source itself, as a crash after the staged copy replaced it would.
+    def corrupt_then_die(_staged: Path, _tags: dict[str, str]) -> None:
+        source.write_bytes(CORRUPT_BYTES)
         raise KeyboardInterrupt
 
     monkeypatch.setattr(tag_adapter, "_write_tags_by_format", corrupt_then_die)
     with pytest.raises(KeyboardInterrupt):
         write_svc.apply_single_plan(write_svc.build_batch_preview([asset.id])[0])
     monkeypatch.undo()
+    assert compute_sha256(source) == CORRUPT_HASH
     return repo, write_svc, source, original_hash
 
 
@@ -79,7 +86,7 @@ def test_keep_button_marks_the_write_finished(
 
     dialog.table.cellWidget(0, COLUMN_KEEP).click()
 
-    assert compute_sha256(source) == interrupted[3]
+    assert compute_sha256(source) == CORRUPT_HASH
     stored = repo.get_change_record(operation_id)
     assert stored is not None
     assert stored.operation_status == OperationStatus.COMPLETED

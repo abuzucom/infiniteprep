@@ -55,11 +55,15 @@ def test_successful_write_leaves_one_completed_record(pending_write: Any) -> Non
 def test_failure_after_backup_rolls_the_file_back(
     pending_write: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A write that corrupts the file and then fails restores the original bytes."""
+    """A write that corrupts the file and then fails restores the original bytes.
+
+    The tag writer only sees the staged copy, which the adapter discards. The fake
+    corrupts the source itself, so the hash check proves the rollback restored it.
+    """
     repo, write_svc, plan, source, original_hash = pending_write
 
-    def corrupt_then_fail(path: Path, _tags: dict[str, str]) -> None:
-        path.write_bytes(b"partial write")
+    def corrupt_then_fail(_staged: Path, _tags: dict[str, str]) -> None:
+        source.write_bytes(b"partial write")
         raise RuntimeError("simulated power loss")
 
     monkeypatch.setattr(write_svc.tag_adapter, "_write_tags_by_format", corrupt_then_fail)
