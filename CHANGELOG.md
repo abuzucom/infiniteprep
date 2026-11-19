@@ -5,10 +5,26 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.80.2] (2026-11-19)
+## [0.80.3] (2026-11-19)
 
 ### Changed
 
+- Owned tests that could not fail now fail on the defect named in each test.
+  - The restore tests corrupt the real source before a fake crash. Each recovery must repair it.
+  - The bulk readers, the limiter, the coverage sort, the symlink filter, the lock hashes, and the release asset count each get an assertion that a defect breaks.
+  - The comment-script tests check the Node exit code against the recorded calls.
+  - Silent returns in the USB tests become skips with a reason. Checks that restated the test setup are gone.
+  - `test_action_versions.py` checks every external pin in the owned workflows. `scripts/check_action_versions.py` now also reads owner/repo/sub/path references such as `github/codeql-action/upload-sarif`.
+- Dead code leaves the owned tests. Each unused constant either gains the check its name describes or disappears.
+- `ci.yml`, `os-tests.yml`, and `dependency-review.yml` drop the push fallbacks. Each runs on pull requests only.
+  - The concurrency groups key on the pull request number. A newer commit always cancels the older run.
+  - The classify steps read the pull request revisions directly. `security-devops.yml` and `sync-check.yml` still run on a push and keep the fallbacks.
+  - The coverage comment job no longer repeats the event check.
+- The coverage and security scan comment scripts await `main`. Both test harnesses run the script inside an async function as `actions/github-script` does.
+- The `check-tag` and `release` jobs in `build-packages.yml` test `github.event_name == 'push'` alone. The push trigger lists `v*` tags only.
+- Workflow comments on the matrix timeout, the launcher probe order, and the removed push paths now match the code.
+- The staging cleanup race test pins the refused no-follow open. The cleanup logs a warning, keeps the link, and leaves the real folder untouched.
+- The version advances from 0.80.2 to 0.80.3 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - The ci test matrix skips the upstream test copies that other jobs already run.
   - The new `tests/conftest.py` adds the opt-in pytest flag `--exclude-upstream`. A local `pytest` run without the flag collects every test.
   - The new `tests/upstream_tests.py` reads the `tests/test_*.py` entries of the `pyproject.toml` `[tool.ruff] extend-exclude` list. That list names the `abuzucom/agents` copies and the review wiring test. A missing file, an entry outside `tests/`, or an empty result stops the run with a usage error.
