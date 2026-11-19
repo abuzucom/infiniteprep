@@ -132,6 +132,7 @@ class AttestationReleaseToolingTest(unittest.TestCase):
         assets = RELEASE.expected_assets(TEST_VERSION)
         expected = RELEASE.expected_packages(TEST_VERSION) | RELEASE.expected_bundles(TEST_VERSION)
         self.assertEqual(assets, expected)
+        self.assertEqual(len(assets), RELEASE_ASSET_COUNT)
 
     def test_asset_problems_with_bundles_and_packages_passes(self) -> None:
         """A folder holding the six packages and six bundles has zero asset problems."""

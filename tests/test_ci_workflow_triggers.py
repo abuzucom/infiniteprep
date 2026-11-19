@@ -10,9 +10,8 @@ import yaml
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW_PATH = REPOSITORY_ROOT / ".github/workflows/ci.yml"
-PULL_REQUEST_ONLY = "${{ github.event_name == 'pull_request' }}"
-PULL_REQUEST_NUMBER = "github.event.pull_request.number"
-COMMIT_SHA = "github.sha"
+# The pull_request trigger is the only trigger, so every run carries a pull request number.
+CONCURRENCY_GROUP = "ci-${{ github.event.pull_request.number }}"
 
 
 class CiWorkflowTriggerTest(unittest.TestCase):
@@ -35,17 +34,13 @@ class CiWorkflowTriggerTest(unittest.TestCase):
         self.assertIn("pull_request", triggers)
         self.assertIsNone(triggers["pull_request"])
 
-    def test_only_pull_request_runs_cancel(self) -> None:
-        """A run on the primary branch always completes."""
-        concurrency = self.workflow["concurrency"]
-        self.assertEqual(concurrency["cancel-in-progress"], PULL_REQUEST_ONLY)
+    def test_newer_commit_cancels_the_older_run(self) -> None:
+        """Every run belongs to a pull request, so a newer commit always replaces it."""
+        self.assertIs(self.workflow["concurrency"]["cancel-in-progress"], True)
 
-    def test_group_separates_pull_requests_and_commits(self) -> None:
-        """One group per pull request, and one group per pushed commit."""
-        group = self.workflow["concurrency"]["group"]
-        self.assertIn(PULL_REQUEST_NUMBER, group)
-        self.assertIn(COMMIT_SHA, group)
-        self.assertLess(group.index(PULL_REQUEST_NUMBER), group.index(COMMIT_SHA))
+    def test_group_keys_on_the_pull_request(self) -> None:
+        """One group per pull request."""
+        self.assertEqual(self.workflow["concurrency"]["group"], CONCURRENCY_GROUP)
 
 
 if __name__ == "__main__":

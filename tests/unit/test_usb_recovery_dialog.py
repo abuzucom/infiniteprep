@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import tempfile
 import unittest
-from datetime import UTC, datetime, timedelta
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -119,7 +120,6 @@ class UsbRecoveryDialogTests(unittest.TestCase):
         dialog = UsbRecoveryDialog(_build_match(requires_confirmation=True))
         self.addCleanup(dialog.close)
 
-        self.assertIsNotNone(dialog.confirm_checkbox)
         assert dialog.confirm_checkbox is not None
         self.assertFalse(dialog.confirm_checkbox.isChecked())
         self.assertFalse(dialog.resume_btn.isEnabled())
@@ -175,7 +175,11 @@ class UsbRecoveryDialogTests(unittest.TestCase):
                 playlist_names=base_entry.playlist_names,
                 track_paths=base_entry.track_paths,
             )
-            store.save_entries([warn_entry, overdue_entry])
+            # Exactly 28 days old at now_utc: one day short of the 29-day warning point.
+            fresh_entry = replace(
+                warn_entry, export_id="exp-fresh", started_at_utc="2026-10-03T13:00:00Z"
+            )
+            store.save_entries([warn_entry, overdue_entry, fresh_entry])
 
             notices: list[tuple[str, str]] = []
             now_utc = datetime(2026, 10, 31, 13, 0, tzinfo=UTC)
@@ -195,12 +199,11 @@ class UsbRecoveryDialogTests(unittest.TestCase):
             self.assertIn("exp-overdue", notices[0][1])
             self.assertIn("30 days", notices[1][1])
             self.assertIn("exp-warn", notices[1][1])
-            remaining = store.load_entries()
-            self.assertEqual([item.export_id for item in remaining], ["exp-warn"])
-            self.assertTrue(remaining[0].warned_expiry)
-            self.assertEqual(
-                now_utc - datetime(2026, 10, 2, 12, 0, tzinfo=UTC), timedelta(days=29, hours=1)
-            )
+            remaining = {item.export_id: item for item in store.load_entries()}
+            self.assertEqual(sorted(remaining), ["exp-fresh", "exp-warn"])
+            self.assertTrue(remaining["exp-warn"].warned_expiry)
+            # The classifier keeps the younger entry without a warning.
+            self.assertFalse(remaining["exp-fresh"].warned_expiry)
 
 
 class StorageTabUsbRecoverySettingsTests(unittest.TestCase):

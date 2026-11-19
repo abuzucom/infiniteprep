@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import errno
+import logging
 import os
 from pathlib import Path
 from typing import Final
@@ -13,6 +14,7 @@ from infiniteprep import private_files
 from infiniteprep.private_files import STAGING_DIR_PREFIX, private_staging_dir
 
 OUTSIDE_TEXT: Final[bytes] = b"outside data"
+CLEANUP_FAILURE_TEXT: Final[str] = "Could not remove the staging folder"
 
 # A symbolic link on Windows needs a privilege, and dir_fd cleanup is POSIX only.
 posix_only = pytest.mark.skipif(os.name == "nt", reason="POSIX links and dir_fd only.")
@@ -20,7 +22,7 @@ posix_only = pytest.mark.skipif(os.name == "nt", reason="POSIX links and dir_fd 
 
 @posix_only
 def test_cleanup_spares_a_link_swapped_in_after_the_link_check(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A link that passes the link check still never leads the cleanup into its target."""
     outside = tmp_path / "outside"
@@ -36,13 +38,21 @@ def test_cleanup_spares_a_link_swapped_in_after_the_link_check(
             return False
         return real_is_symlink(path)
 
-    with private_staging_dir(tmp_path) as staging:
+    with caplog.at_level(logging.WARNING), private_staging_dir(tmp_path) as staging:
         (staging / "copy.db").write_bytes(b"staged")
         staging.rename(moved_away)
         staging.symlink_to(outside, target_is_directory=True)
         monkeypatch.setattr(Path, "is_symlink", hide_staging_links)
 
     assert kept_file.read_bytes() == OUTSIDE_TEXT
+    # The no-follow open refuses the link, so the cleanup logs and leaves every name in place.
+    assert any(
+        CLEANUP_FAILURE_TEXT in record.getMessage() and staging.name in record.getMessage()
+        for record in caplog.records
+    )
+    # Path.is_symlink stays patched here, so os.path.islink reads the real link state.
+    assert os.path.islink(staging)
+    assert [path.name for path in moved_away.iterdir()] == ["copy.db"]
 
 
 @posix_only

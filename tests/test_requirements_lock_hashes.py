@@ -32,6 +32,9 @@ BUNDLE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "build-packages.yml"
 
 SHA256_PATTERN = re.compile(r"^--hash=sha256:([0-9a-f]{64})$")
 PIN_PATTERN = re.compile(r"^([A-Za-z0-9_.-]+)==([^\s;]+)")
+HASH_OPTION = "--hash="
+# pip prints this line when an artifact's bytes match no committed digest.
+HASH_MISMATCH_TEXT = "THESE PACKAGES DO NOT MATCH THE HASHES"
 UPGRADED_PACKAGE = "pyinstaller-hooks-contrib"
 UPGRADED_VERSION = "2026.10"
 
@@ -126,13 +129,18 @@ class ApplicationLockHashesTest(unittest.TestCase):
         for entry in entries:
             self.assertTrue(entry.digests, f"{entry.name} pins no artifact digest")
 
-    def test_every_artifact_digest_is_a_sha256_hex_value(self) -> None:
-        """Each digest names a SHA-256 value in lowercase hexadecimal."""
-        for entry in read_lock_entries(LOCKFILE):
-            for digest in entry.digests:
-                self.assertEqual(len(digest), 64)
-                self.assertEqual(digest, digest.lower())
-                self.assertTrue(all(character in "0123456789abcdef" for character in digest))
+    def test_every_raw_requirement_line_reaches_a_digest(self) -> None:
+        """A raw scan finds as many requirements as the parser maps to digests.
+
+        The scan does not use the parser, so a parser that drops an entry or
+        attaches its hashes to the wrong requirement fails here.
+        """
+        lines = LOCKFILE.read_text(encoding="utf-8").splitlines()
+        raw_requirements = [line for line in lines if PIN_PATTERN.match(line.strip())]
+        raw_hashes = [line for line in lines if line.strip().startswith(HASH_OPTION)]
+        entries = read_lock_entries(LOCKFILE)
+        self.assertEqual(len(entries), len(raw_requirements))
+        self.assertEqual(sum(len(entry.digests) for entry in entries), len(raw_hashes))
 
     def test_the_upgraded_package_pins_its_release_with_digests(self) -> None:
         """The upgraded application dependency names its release and its digests."""
@@ -199,7 +207,7 @@ class PipHashEnforcementTest(unittest.TestCase):
         requirement = self._requirement("0" * 64)
         result = run_pip_install(requirement, self.wheels, self.directory / "target")
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("hash", (result.stdout + result.stderr).lower())
+        self.assertIn(HASH_MISMATCH_TEXT, result.stdout + result.stderr)
 
     def test_pip_accepts_an_artifact_whose_digest_is_committed(self) -> None:
         """The committed digest lets the matching artifact install."""

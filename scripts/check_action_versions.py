@@ -17,6 +17,7 @@ USES_LINE = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)")
 VERSION = re.compile(r"\d+\.\d+\.\d+")
 REUSABLE_MARKER = "/.github/workflows/"
 GH_TIMEOUT_SECONDS = 60
+OWNER_REPO_PART_COUNT = 2
 
 
 @dataclass(frozen=True)
@@ -57,8 +58,10 @@ def parse_reference(reference: str) -> tuple[str, str, str] | None:
     if REUSABLE_MARKER in owner_repo:
         owner_repo, _, remainder = owner_repo.partition(REUSABLE_MARKER)
         workflow = REUSABLE_MARKER + remainder
+    # An action may live in a repository subfolder, as in owner/repo/sub/path.
+    # Its pin still names a commit of owner/repo, so the tags of that repository apply.
     parts = owner_repo.split("/")
-    if len(parts) != 2:
+    if len(parts) < OWNER_REPO_PART_COUNT or not all(parts):
         return None
     return parts[0], parts[1], workflow
 

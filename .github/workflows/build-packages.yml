@@ -17,11 +17,12 @@ permissions:
 
 jobs:
   # A tag must match every version file and point to a commit on main (D317).
-  # A manual run started on a tag also has ref_type tag. The event check keeps
-  # manual runs from releasing (D248).
+  # The push trigger lists v* tags only, so a push event is a tag push. A manual
+  # run is a workflow_dispatch event, so the event check keeps it from
+  # releasing (D248).
   check-tag:
     name: check-tag
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: github.event_name == 'push'
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
@@ -607,7 +608,7 @@ jobs:
   release:
     name: release
     needs: bundle
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: github.event_name == 'push'
     # The owner configures the release environment with a required reviewer.
     # The job receives its write token only after that approval.
     environment: release

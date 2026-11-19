@@ -5,6 +5,8 @@ import re
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = ROOT / ".github" / "workflows"
 CI_WORKFLOW = WORKFLOWS / "ci.yml"
@@ -96,10 +98,10 @@ class CoverageMeasurementTest(unittest.TestCase):
         self.assertNotIn("continue-on-error", self.matrix)
 
     def test_the_test_job_holds_no_write_permission(self) -> None:
-        """The job that runs the suite holds no write permission."""
-        permissions = extract_permissions(self.matrix)
-        for name, value in permissions.items():
-            self.assertNotEqual(value, "write", f"the test job holds {name}: write")
+        """The suite job declares no permissions and inherits the read-only workflow set."""
+        self.assertNotRegex(self.matrix, r"(?m)^\s{4}permissions:")
+        workflow = yaml.safe_load(self.text)
+        self.assertEqual(workflow["permissions"], {"contents": "read"})
 
     def test_the_job_allows_time_for_the_measured_suite(self) -> None:
         """The job timeout covers the suite under coverage."""
@@ -118,8 +120,7 @@ class CoverageCommentJobTest(unittest.TestCase):
     def test_the_job_writes_only_the_pull_request_comment(self) -> None:
         """The job holds the pull request write permission and nothing else."""
         permissions = extract_permissions(self.job)
-        self.assertEqual(permissions.get("contents"), "read")
-        self.assertEqual(permissions.get("pull-requests"), "write")
+        self.assertEqual(permissions, {"contents": "read", "pull-requests": "write"})
 
     def test_the_job_downloads_the_summary_with_a_pinned_action(self) -> None:
         """The summary arrives through the pinned download action."""
@@ -158,10 +159,6 @@ class CoverageCommentJobTest(unittest.TestCase):
         """An older run never overwrites the result of a newer run."""
         self.assertIn("infiniteprep-coverage-run", self.job)
         self.assertIn("newestPosted > runId", self.job)
-
-    def test_the_job_runs_only_on_a_pull_request(self) -> None:
-        """The job stays out of the way on a push to main."""
-        self.assertIn("github.event_name == 'pull_request'", self.job)
 
     def test_the_job_skips_a_pull_request_from_a_fork(self) -> None:
         """A pull request from a fork receives a read-only token."""

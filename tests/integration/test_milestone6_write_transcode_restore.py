@@ -141,6 +141,7 @@ def test_write_service_blocks_external_modification_and_filename_collision(
 
     wav1 = create_wav_fixture(tmp_path / "track1.wav", tags={"artist": "A", "title": "T"})
     wav2 = create_wav_fixture(tmp_path / "Sasha - Xpander.wav")
+    wav2_hash = compute_sha256(wav2)
     asset = importer.import_paths([wav1]).imported_files[0]
     review_svc.set_manual_field_value(asset.id, FieldName.ARTIST.value, "Sasha")
     review_svc.set_manual_field_value(asset.id, FieldName.TITLE.value, "Xpander")
@@ -151,7 +152,8 @@ def test_write_service_blocks_external_modification_and_filename_collision(
     )
     assert collision_plans[0].is_safe_to_apply is False
     assert len(collision_plans[0].collision_warnings) == 1
-    assert wav2.exists()
+    # The preview must leave the colliding file's bytes untouched.
+    assert compute_sha256(wav2) == wav2_hash
 
     # External modification check
     wav1.write_bytes(wav1.read_bytes() + b"\x00\x00")

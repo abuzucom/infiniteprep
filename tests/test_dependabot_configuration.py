@@ -55,7 +55,9 @@ class DependabotConfigurationTest(unittest.TestCase):
 
     def test_every_ecosystem_scans_the_repository_root(self) -> None:
         for entry in updates():
-            self.assertEqual(entry.get("directory"), "/", str(entry.get("package-ecosystem")))
+            self.assertIn(
+                entry.get("directory"), EXPECTED_DIRECTORIES, str(entry.get("package-ecosystem"))
+            )
 
     def test_every_ecosystem_declares_a_schedule(self) -> None:
         for entry in updates():
@@ -100,7 +102,9 @@ class DependabotConfigurationTest(unittest.TestCase):
             naming = entry.get("pull-request-branch-name")
             if naming is None:
                 continue
-            self.assertEqual(naming.get("prefix", "dependabot"), "dependabot")
+            # Dependabot joins the prefix and the separator, defaults "dependabot" and "/".
+            branch_prefix = naming.get("prefix", "dependabot") + naming.get("separator", "/")
+            self.assertEqual(branch_prefix, DEPENDABOT_BRANCH_PREFIX)
 
 
 if __name__ == "__main__":

@@ -24,7 +24,6 @@ from tests.fixtures.memory_settings import MemorySettingsManager
 
 FILENAME_COLUMN: int = 0
 DURATION_COLUMN: int = 2
-TITLE_COLUMN: int = 4
 BPM_COLUMN: int = 7
 KEY_COLUMN: int = 8
 REVIEW_STATUS_COLUMN: int = 9

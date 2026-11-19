@@ -189,7 +189,7 @@ jobs:
               }
             }
 
-            main();
+            await main();
 
   # The job order keeps the SARIF upload as the last step of the workflow.
   msdo:

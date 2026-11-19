@@ -20,6 +20,16 @@ def _load_builder():
 
 builder = _load_builder()
 
+
+def covered_class(name: str, covered: int, total: int) -> str:
+    """Return one Cobertura class element with covered of total lines hit."""
+    lines = "".join(
+        f'<line number="{number}" hits="{1 if number <= covered else 0}"/>'
+        for number in range(1, total + 1)
+    )
+    return f'<class name="{name}" filename="src/{name}"><lines>{lines}</lines></class>'
+
+
 REPORT = """<?xml version="1.0" ?>
 <coverage line-rate="0.5" branch-rate="0.5" lines-covered="3" lines-valid="4"
   branches-covered="1" branches-valid="2" version="7.17.3">
@@ -66,11 +76,24 @@ class BuildCoverageSummaryTest(unittest.TestCase):
         self.assertEqual(files[1], {"path": "src/b.py", "percent": 100.0})
 
     def test_the_least_covered_file_comes_first(self) -> None:
-        """The files sort by the percent and then by the path."""
-        summary = builder.read_summary(self.write_report(REPORT))
+        """The files sort by the percent and then by the path.
+
+        Input order, path order, and percent order all differ, so only the
+        (percent, path) sort yields b, c, a.
+        """
+        classes = "".join(
+            covered_class(name, covered, total)
+            for name, covered, total in (("c.py", 1, 10), ("a.py", 1, 2), ("b.py", 1, 10))
+        )
+        report = (
+            '<coverage lines-covered="3" lines-valid="22" branches-covered="0" '
+            f'branches-valid="0"><packages><classes>{classes}</classes></packages></coverage>'
+        )
+
+        summary = builder.read_summary(self.write_report(report))
 
         paths = [item["path"] for item in summary["files"]]
-        self.assertEqual(paths, ["src/a.py", "src/b.py"])
+        self.assertEqual(paths, ["src/b.py", "src/c.py", "src/a.py"])
 
     def test_the_source_prefix_appears_once(self) -> None:
         """A path that already holds the prefix keeps one prefix."""

@@ -234,15 +234,8 @@ class UsbExportManifestTests(unittest.TestCase):
             self.assertTrue(completed_path.is_file())
             self.assertFalse(in_progress_path.exists())
             self.assertIsNone(read_in_progress_manifest(mount_root))
-            loaded = read_completed_manifest(mount_root)
-            self.assertEqual(loaded, completed)
-            assert loaded is not None
-            self.assertTrue(loaded.started_at_utc.endswith("Z"))
-            self.assertIsNotNone(loaded.completed_at_utc)
-            assert loaded.completed_at_utc is not None
-            self.assertTrue(loaded.completed_at_utc.endswith("Z"))
-            self.assertEqual(loaded.omissions[0].track.relative_path, "crate/b.flac")
-            self.assertEqual(loaded.omissions[0].source_value, "Composed By Name")
+            # Equality covers every field the builder set, the omissions included.
+            self.assertEqual(read_completed_manifest(mount_root), completed)
 
     def test_symlinked_metadata_dir_or_manifest_file_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -264,7 +257,7 @@ class UsbExportManifestTests(unittest.TestCase):
             try:
                 meta_link.symlink_to(outside_dir, target_is_directory=True)
             except OSError:
-                return
+                self.skipTest("this platform cannot create a directory symlink")
             with self.assertRaises(ValueError):
                 write_in_progress_manifest(mount_root, in_prog)
             with self.assertRaises(ValueError):
@@ -285,7 +278,7 @@ class UsbExportManifestTests(unittest.TestCase):
 
     def test_posix_read_uses_nofollow_and_blocks_swapped_symlink(self) -> None:
         if not hasattr(os, "O_NOFOLLOW"):
-            return
+            self.skipTest("this platform has no O_NOFOLLOW")
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             mount_root = root / "usb"
@@ -374,7 +367,6 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
             candidate = TargetCandidate(name="sdb", inspection=inspection, error=None)
             match = store.match_reconnected_target(candidate)
 
-            self.assertIsNotNone(match)
             assert match is not None
             self.assertFalse(match.requires_confirmation)
             self.assertEqual(match.entry.export_id, entry.export_id)
@@ -410,9 +402,8 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
                 TargetCandidate(name="sdb", inspection=changed_drive, error=None)
             )
 
-            self.assertIsNotNone(match_mount)
-            self.assertIsNotNone(match_drive)
-            assert match_mount is not None and match_drive is not None
+            assert match_mount is not None
+            assert match_drive is not None
             self.assertTrue(match_mount.requires_confirmation)
             self.assertTrue(match_drive.requires_confirmation)
 
@@ -437,7 +428,6 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
                 TargetCandidate(name="sdb", inspection=candidate_inspection, error=None)
             )
 
-            self.assertIsNotNone(match)
             assert match is not None
             self.assertTrue(match.requires_confirmation)
             self.assertEqual(match.entry.export_id, entry.export_id)
@@ -726,7 +716,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             try:
                 journal_path.symlink_to(outside)
             except OSError:
-                return
+                self.skipTest("this platform cannot create a file symlink")
             store = UsbRecoveryJournalStore(journal_path)
             with self.assertRaises(ValueError):
                 store.load_entries()
@@ -843,7 +833,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
 
     def test_journal_store_rejects_posix_fifo_without_blocking(self) -> None:
         if not hasattr(os, "mkfifo"):
-            return
+            self.skipTest("this platform has no named pipes")
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             fifo_path = root / "usb_recovery_journal.json"

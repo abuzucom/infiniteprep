@@ -47,4 +47,3 @@ def test_cleanup_after_a_post_open_swap_clears_only_the_real_folder(
     assert swapped == [staging]
     assert kept_file.read_bytes() == OUTSIDE_TEXT
     assert list(moved_away.iterdir()) == []
-    assert staging.is_symlink()

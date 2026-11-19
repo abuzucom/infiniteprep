@@ -304,6 +304,10 @@ class SpaceRefusalTests(unittest.TestCase):
         needed = self.estimate + compute_reserve_bytes(self.estimate, percent_only)
         blocked = self.evaluate_with(needed - 1, reserve)
         self.assertEqual(refusal_codes(blocked), (RefusalCode.INSUFFICIENT_SPACE,))
+        # A summed reserve would need one byte more and block here. The larger kind passes.
+        passing = self.evaluate_with(needed, reserve)
+        self.assertTrue(passing.passed)
+        self.assertEqual(passing.reserve_bytes, needed - self.estimate)
 
 
 if __name__ == "__main__":

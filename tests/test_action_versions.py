@@ -7,6 +7,26 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CHECKER_PATH = REPO_ROOT / "scripts" / "check_action_versions.py"
+# The review callers and the agents workflows are protected upstream copies.
+OWNED_WORKFLOWS = (
+    "ci.yml",
+    "os-tests.yml",
+    "security-devops.yml",
+    "dependency-review.yml",
+    "build-packages.yml",
+    "deploy-pages.yml",
+)
+USES_KEY = "uses:"
+LOCAL_REFERENCE_PREFIX = "./"
+
+
+def is_external_uses_line(line: str) -> bool:
+    """Return whether one workflow line references an action outside this repository."""
+    stripped = line.strip().removeprefix("- ").strip()
+    if not stripped.startswith(USES_KEY):
+        return False
+    reference = stripped.removeprefix(USES_KEY).strip()
+    return bool(reference) and not reference.startswith(LOCAL_REFERENCE_PREFIX)
 
 
 def load_checker():
@@ -116,20 +136,40 @@ class ActionVersionCheckerTest(unittest.TestCase):
         parsed = self.checker.parse_reference("actions/checkout@" + "a" * 40)
         self.assertEqual(parsed, ("actions", "checkout", ""))
 
+    def test_a_sub_path_action_reference_parses_to_its_repository(self):
+        """An action in a repository subfolder pins the tags of that repository."""
+        parsed = self.checker.parse_reference("github/codeql-action/upload-sarif@" + "c" * 40)
+        self.assertEqual(parsed, ("github", "codeql-action", ""))
+
+    def test_a_reference_with_an_empty_part_is_not_a_pin(self):
+        """A malformed owner or repository part never becomes a pin."""
+        self.assertIsNone(self.checker.parse_reference("github//upload-sarif@" + "c" * 40))
+
     def test_a_local_reference_is_not_a_pin(self):
         self.assertIsNone(self.checker.parse_reference("./.github/workflows/agents-compliance.yml"))
 
     def test_a_short_revision_is_not_a_pin(self):
         self.assertIsNone(self.checker.parse_reference("actions/checkout@v4"))
 
-    def test_every_workflow_pin_names_a_release(self):
-        pins = self.checker.collect_repository_pins(REPO_ROOT / ".github" / "workflows")
-        self.assertTrue(pins)
-        for pin in pins:
-            with self.subTest(pin=pin.path, repository=pin.repository):
-                self.assertRegex(pin.sha, r"^[0-9a-f]{40}$")
-                if pin.claimed_version:
-                    self.assertRegex(pin.claimed_version, r"^\d+\.\d+\.\d+$")
+    def test_every_owned_workflow_pin_names_a_release(self):
+        """Every external action line in an owned workflow is a pin with a version comment.
+
+        The raw line count catches a reference the parser skips. The claimed version
+        lets check_action_versions.py compare the pin with its upstream release.
+        """
+        workflows = REPO_ROOT / ".github" / "workflows"
+        for name in OWNED_WORKFLOWS:
+            path = workflows / name
+            lines = path.read_text(encoding="utf-8").splitlines()
+            external_lines = [line for line in lines if is_external_uses_line(line)]
+            pins = self.checker.collect_pins(path)
+            with self.subTest(workflow=name):
+                self.assertTrue(external_lines)
+                self.assertEqual(len(pins), len(external_lines))
+            for pin in pins:
+                with self.subTest(workflow=name, repository=pin.repository):
+                    missing = f"{name}: {pin.repository} names no version"
+                    self.assertTrue(pin.claimed_version, missing)
 
 
 if __name__ == "__main__":
