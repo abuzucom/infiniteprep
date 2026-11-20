@@ -7,6 +7,8 @@ same code.
 
 from __future__ import annotations
 
+import functools
+import io
 import struct
 from pathlib import Path
 from typing import Final
@@ -43,6 +45,8 @@ FORM_HEADER_SIZE: Final[int] = 8
 FLAC_MAGIC_SIZE: Final[int] = 4
 FLAC_BLOCK_HEADER_SIZE: Final[int] = 4
 FLAC_BLOCK_TYPE_MASK: Final[int] = 0x7F
+# Distinct WAV renderings kept in memory. The suite uses a handful of argument sets.
+WAV_RENDER_CACHE_SIZE: Final[int] = 32
 
 
 def synthesize_rhythmic_chord_pcm(
@@ -81,6 +85,31 @@ def synthesize_rhythmic_chord_pcm(
     return np.column_stack([mono, mono]).astype(np.float32)
 
 
+@functools.lru_cache(maxsize=WAV_RENDER_CACHE_SIZE)
+def render_wav_bytes(
+    duration_sec: float,
+    sample_rate: int,
+    subtype: str,
+    bpm: float,
+    frequencies_hz: tuple[float, ...],
+) -> bytes:
+    """Return the encoded untagged WAV for one argument set.
+
+    The cache is deliberate. The result is immutable bytes from a pure function of
+    the arguments, and synthesis plus encoding ran again in about 150 fixture calls.
+    Every caller writes its own copy, so no test shares a file with another.
+    """
+    pcm = synthesize_rhythmic_chord_pcm(
+        duration_sec=duration_sec,
+        sample_rate=sample_rate,
+        bpm=bpm,
+        frequencies_hz=frequencies_hz,
+    )
+    with io.BytesIO() as buffer:
+        sf.write(buffer, pcm, sample_rate, subtype=subtype, format="WAV")
+        return buffer.getvalue()
+
+
 def create_wav_fixture(
     file_path: Path,
     *,
@@ -94,13 +123,9 @@ def create_wav_fixture(
 ) -> Path:
     """Create a valid WAV file with optional ID3v2.3 tags and PRIV:TRAKTOR4 binary frame."""
     file_path.parent.mkdir(parents=True, exist_ok=True)
-    pcm = synthesize_rhythmic_chord_pcm(
-        duration_sec=duration_sec,
-        sample_rate=sample_rate,
-        bpm=bpm,
-        frequencies_hz=frequencies_hz,
+    file_path.write_bytes(
+        render_wav_bytes(duration_sec, sample_rate, subtype, bpm, tuple(frequencies_hz))
     )
-    sf.write(str(file_path), pcm, sample_rate, subtype=subtype, format="WAV")
     if tags or include_traktor_frame:
         tag = _build_id3_fixture_tag(tags or {}, include_traktor_frame)
         _append_form_chunk(file_path, riff_chunk(b"id3 ", tag), "<I")
