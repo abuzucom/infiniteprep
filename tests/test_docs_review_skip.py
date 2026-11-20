@@ -98,6 +98,11 @@ def load_jobs(caller: ReviewCaller) -> dict[str, Any]:
     return dict(yaml.safe_load(text)["jobs"])
 
 
+def load_jobs_by_caller() -> dict[str, dict[str, Any]]:
+    """Return the parsed jobs of every review caller, keyed by workflow file name."""
+    return {caller.workflow: load_jobs(caller) for caller in CALLERS}
+
+
 def list_needs(job: dict[str, Any]) -> list[str]:
     """Return the needs of a job as a list."""
     needs = job.get("needs", [])
@@ -107,11 +112,18 @@ def list_needs(job: dict[str, Any]) -> list[str]:
 class ClassifyJobTest(unittest.TestCase):
     """The class comes from default-branch code, and the pull request is data."""
 
+    jobs_by_workflow: dict[str, dict[str, Any]]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Parse each review caller once. No test changes the parsed data."""
+        cls.jobs_by_workflow = load_jobs_by_caller()
+
     def test_classify_job_holds_a_read_only_token_and_no_secret(self) -> None:
         """The job that reads pull request objects cannot write and sees no secret."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
-                job = load_jobs(caller)["classify"]
+                job = self.jobs_by_workflow[caller.workflow]["classify"]
                 self.assertEqual(job["permissions"], {"contents": "read"})
                 self.assertNotIn("secrets", job)
                 self.assertEqual(list_needs(job), [caller.resolve_job])
@@ -121,7 +133,7 @@ class ClassifyJobTest(unittest.TestCase):
         """The first checkout names no ref, so a workflow_run job gets the default branch."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
-                trusted = load_jobs(caller)["classify"]["steps"][0]
+                trusted = self.jobs_by_workflow[caller.workflow]["classify"]["steps"][0]
                 self.assertTrue(trusted["uses"].startswith(CHECKOUT_ACTION))
                 self.assertEqual(trusted["with"]["path"], TRUSTED_PATH)
                 self.assertNotIn("ref", trusted["with"])
@@ -133,7 +145,7 @@ class ClassifyJobTest(unittest.TestCase):
         """The trusted checkout is the only checkout, so no pull request file lands on disk."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
-                steps = load_jobs(caller)["classify"]["steps"]
+                steps = self.jobs_by_workflow[caller.workflow]["classify"]["steps"]
                 checkouts = [s for s in steps if s.get("uses", "").startswith(CHECKOUT_ACTION)]
                 self.assertEqual(len(checkouts), 1)
 
@@ -141,7 +153,7 @@ class ClassifyJobTest(unittest.TestCase):
         """The head commit arrives as Git objects, and only this step sees the token."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
-                fetch = load_jobs(caller)["classify"]["steps"][1]
+                fetch = self.jobs_by_workflow[caller.workflow]["classify"]["steps"][1]
                 self.assertEqual(fetch["working-directory"], TRUSTED_PATH)
                 self.assertEqual(fetch["env"]["GH_TOKEN"], RUN_ACCESS_EXPRESSION)
                 head_source = f"needs.{caller.resolve_job}.outputs.head_sha"
@@ -154,7 +166,7 @@ class ClassifyJobTest(unittest.TestCase):
         """The classifier runs from the trusted checkout and receives no token."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
-                steps = load_jobs(caller)["classify"]["steps"]
+                steps = self.jobs_by_workflow[caller.workflow]["classify"]["steps"]
                 self.assertEqual(len([step for step in steps if "run" in step]), 2)
                 classify = steps[-1]
                 self.assertEqual(classify["id"], "classify")
@@ -165,7 +177,7 @@ class ClassifyJobTest(unittest.TestCase):
 
     def test_unapproved_forks_get_no_classification(self) -> None:
         """The security caller classifies only when a review job would run."""
-        condition = load_jobs(CALLERS[0])["classify"]["if"]
+        condition = self.jobs_by_workflow[CALLERS[0].workflow]["classify"]["if"]
         for fragment in SECURITY_CLASSIFY_GUARDS:
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, condition)
@@ -174,10 +186,17 @@ class ClassifyJobTest(unittest.TestCase):
 class ReviewSkipTest(unittest.TestCase):
     """A docs-only pull request skips the model review and still reports a check."""
 
+    jobs_by_workflow: dict[str, dict[str, Any]]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Parse each review caller once. No test changes the parsed data."""
+        cls.jobs_by_workflow = load_jobs_by_caller()
+
     def test_review_jobs_run_unless_the_class_is_docs(self) -> None:
         """A failed classify job yields no class, and the review runs."""
         for caller in CALLERS:
-            jobs = load_jobs(caller)
+            jobs = self.jobs_by_workflow[caller.workflow]
             for job_name in caller.review_jobs:
                 with self.subTest(workflow=caller.workflow, job=job_name):
                     job = jobs[job_name]
@@ -191,7 +210,7 @@ class ReviewSkipTest(unittest.TestCase):
         """Website and mixed changes keep both reviews."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
-                job = load_jobs(caller)[SKIP_JOB]
+                job = self.jobs_by_workflow[caller.workflow][SKIP_JOB]
                 self.assertEqual(job["if"], IS_DOCS)
                 self.assertEqual(job["permissions"], {"checks": "write"})
                 self.assertNotIn("secrets", job)
@@ -200,7 +219,7 @@ class ReviewSkipTest(unittest.TestCase):
         """The check keeps its name, so a required check still reports."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
-                steps = load_jobs(caller)[SKIP_JOB]["steps"]
+                steps = self.jobs_by_workflow[caller.workflow][SKIP_JOB]["steps"]
                 self.assertEqual(len(steps), 1)
                 script = steps[0]["with"]["script"]
                 self.assertIn(f"name: '{caller.check_name}'", script)

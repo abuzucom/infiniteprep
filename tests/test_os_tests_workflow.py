@@ -55,10 +55,14 @@ def find_classify_step(steps: list[dict[str, Any]]) -> dict[str, Any]:
 class OsTestsTriggerTest(unittest.TestCase):
     """The cross-platform tests run for code events only."""
 
-    def setUp(self) -> None:
-        """Parse the workflow."""
-        self.workflow = load_workflow(OS_TESTS_WORKFLOW)
-        self.triggers = self.workflow[OS_TESTS_TRIGGER_KEY]
+    workflow: dict[Any, Any]
+    triggers: dict[str, Any]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Parse the workflow once. No test changes the parsed data."""
+        cls.workflow = load_workflow(OS_TESTS_WORKFLOW)
+        cls.triggers = cls.workflow[OS_TESTS_TRIGGER_KEY]
 
     def test_push_starts_no_run(self) -> None:
         """A merged change already passed its cross-platform run on the pull request."""
@@ -84,9 +88,12 @@ class OsTestsTriggerTest(unittest.TestCase):
 class OsTestsJobTest(unittest.TestCase):
     """Both platform jobs skip on a light change and run in every other case."""
 
-    def setUp(self) -> None:
-        """Parse the jobs."""
-        self.jobs = load_workflow(OS_TESTS_WORKFLOW)["jobs"]
+    jobs: dict[str, Any]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Parse the jobs once. No test changes the parsed data."""
+        cls.jobs = load_workflow(OS_TESTS_WORKFLOW)["jobs"]
 
     def test_changes_job_classifies_the_change(self) -> None:
         """The changes job runs the classifier and exports the light flag."""
@@ -125,10 +132,14 @@ class OsTestsJobTest(unittest.TestCase):
 class SyncCheckSplitTest(unittest.TestCase):
     """sync-check keeps the pull request text checks and loses the platform jobs."""
 
-    def setUp(self) -> None:
-        """Parse the workflow."""
-        self.workflow = load_workflow(SYNC_WORKFLOW)
-        self.jobs = self.workflow["jobs"]
+    workflow: dict[Any, Any]
+    jobs: dict[str, Any]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Parse the workflow once. No test changes the parsed data."""
+        cls.workflow = load_workflow(SYNC_WORKFLOW)
+        cls.jobs = cls.workflow["jobs"]
 
     def test_platform_jobs_left_sync_check(self) -> None:
         """An edited event in sync-check can no longer cancel or mask a platform run."""
