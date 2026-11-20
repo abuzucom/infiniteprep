@@ -10,13 +10,18 @@ from infiniteprep.ui.waveform_worker import WaveformAnalysisPool
 
 
 def skip_waveform_analysis(
-    _pool: WaveformAnalysisPool,
-    _path: Path,
-    _file_id: str,
-    _generation: int,
-    _fake_lossless_method: str | None = None,
+    pool: WaveformAnalysisPool,
+    path: Path,
+    file_id: str,
+    generation: int,
+    fake_lossless_method: str | None = None,
 ) -> None:
-    """Accept a waveform job and queue nothing, so no worker thread decodes audio."""
+    """Accept a waveform job and queue nothing, so no worker thread decodes audio.
+
+    The parameter names match WaveformAnalysisPool.submit, because callers pass
+    fake_lossless_method by keyword.
+    """
+    _ = (pool, path, file_id, generation, fake_lossless_method)
 
 
 def keep_waveform_pool_idle(monkeypatch: pytest.MonkeyPatch) -> None:
