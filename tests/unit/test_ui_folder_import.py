@@ -39,7 +39,6 @@ TRACK_COUNT = 2
 GATE_TIMEOUT_SEC = 10.0
 SIGNAL_TIMEOUT_MS = 10_000
 TIMER_INTERVAL_MS = 10
-RESPONSIVE_WAIT_MS = 200
 STUCK_TEST_TIMEOUT_MS = 100
 
 
@@ -113,11 +112,15 @@ def test_import_runs_off_the_ui_thread_and_commits(qtbot: Any, window_parts: Any
     timer.timeout.connect(lambda: ticks.append(1))
     timer.start(TIMER_INTERVAL_MS)
 
+    def ticks_arrived() -> bool:
+        """Report whether the UI thread ran the timer while the import was running."""
+        return bool(ticks)
+
     with qtbot.waitSignal(window.import_controller.completed, timeout=SIGNAL_TIMEOUT_MS) as done:
         window.start_folder_import(folder)
         assert window.import_controller.is_running()
-        qtbot.wait(RESPONSIVE_WAIT_MS)
-        assert ticks
+        # A blocked UI thread runs no timer, so the wait times out and fails the test.
+        qtbot.waitUntil(ticks_arrived, timeout=SIGNAL_TIMEOUT_MS)
         gate.set()
 
     timer.stop()
