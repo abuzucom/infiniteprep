@@ -13,7 +13,7 @@ SAVE_STEP_NAME = "Save package attestation bundles"
 STRICT_MODE = "set -euo pipefail"
 VERIFY_COMMAND = "gh attestation verify"
 DOWNLOAD_COMMAND = "gh release download"
-REUSE_COPY = 'cp "$dl_dir/$bname" "$bundle"'
+REUSE_COPY = 'cp "$download_dir/$bundle_name" "$bundle"'
 
 
 def _load_save_step_script() -> str:
@@ -54,12 +54,12 @@ class BundleReuseHardeningTest(unittest.TestCase):
         """The verify command names the package, the downloaded bundle, and the repository."""
         [line] = [line for line in self.script.splitlines() if VERIFY_COMMAND in line]
         self.assertIn('"${bundle%.sigstore.json}"', line)
-        self.assertIn('--bundle "$dl_dir/$bname"', line)
+        self.assertIn('--bundle "$download_dir/$bundle_name"', line)
         self.assertIn('--repo "$repo"', line)
 
     def test_empty_download_stops_the_job(self) -> None:
         """An absent or empty downloaded bundle exits before verification."""
-        guard = self.script.index('[ ! -s "$dl_dir/$bname" ]')
+        guard = self.script.index('[ ! -s "$download_dir/$bundle_name" ]')
         self.assertLess(guard, self.script.index(VERIFY_COMMAND))
 
     def test_published_release_stops_the_job(self) -> None:
