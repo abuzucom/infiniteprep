@@ -26,8 +26,8 @@ def _load_release() -> ModuleType:
 
 
 RELEASE = _load_release()
-PACKAGES = tuple(sorted(RELEASE.expected_packages(VERSION)))
-BUNDLES = tuple(sorted(RELEASE.expected_bundles(VERSION)))
+PACKAGES = tuple(sorted(RELEASE.list_expected_packages(VERSION)))
+BUNDLES = tuple(sorted(RELEASE.list_expected_bundles(VERSION)))
 
 
 def _write_files(folder: Path, names: tuple[str, ...]) -> None:
@@ -51,7 +51,7 @@ class ExplicitBundleRequirementTest(unittest.TestCase):
         """One bundle beside the six packages yields one extra-file problem."""
         with tempfile.TemporaryDirectory() as folder:
             _write_files(Path(folder), (*PACKAGES, BUNDLES[0]))
-            problems = RELEASE.asset_problems(Path(folder), VERSION)
+            problems = RELEASE.find_asset_problems(Path(folder), VERSION)
         self.assertEqual(len(problems), 1, problems)
         self.assertIn(BUNDLES[0], problems[0])
         self.assertIn(NOT_AN_ASSET, problems[0])
@@ -60,7 +60,7 @@ class ExplicitBundleRequirementTest(unittest.TestCase):
         """Every bundle counts as an extra file when the flag is absent."""
         with tempfile.TemporaryDirectory() as folder:
             _write_files(Path(folder), (*PACKAGES, *BUNDLES))
-            problems = RELEASE.asset_problems(Path(folder), VERSION)
+            problems = RELEASE.find_asset_problems(Path(folder), VERSION)
             exit_code, _ = _run_check_assets([folder, VERSION])
         self.assertEqual(len(problems), len(BUNDLES), problems)
         self.assertTrue(all(NOT_AN_ASSET in problem for problem in problems), problems)
@@ -70,7 +70,7 @@ class ExplicitBundleRequirementTest(unittest.TestCase):
         """The six packages and six bundles pass under --require-bundles."""
         with tempfile.TemporaryDirectory() as folder:
             _write_files(Path(folder), (*PACKAGES, *BUNDLES))
-            problems = RELEASE.asset_problems(Path(folder), VERSION, require_bundles=True)
+            problems = RELEASE.find_asset_problems(Path(folder), VERSION, require_bundles=True)
             exit_code, _ = _run_check_assets([folder, VERSION, "--require-bundles"])
         self.assertEqual(problems, [])
         self.assertEqual(exit_code, 0)

@@ -119,18 +119,20 @@ class AttestationReleaseToolingTest(unittest.TestCase):
     """packaging/release.py identifies packages and Sigstore bundles (D328)."""
 
     def test_expected_bundles_names_six_sigstore_files(self) -> None:
-        """expected_bundles returns the six .sigstore.json file names."""
-        bundles = RELEASE.expected_bundles(TEST_VERSION)
-        packages = RELEASE.expected_packages(TEST_VERSION)
+        """list_expected_bundles returns the six .sigstore.json file names."""
+        bundles = RELEASE.list_expected_bundles(TEST_VERSION)
+        packages = RELEASE.list_expected_packages(TEST_VERSION)
         self.assertEqual(len(bundles), BUNDLE_COUNT)
         self.assertEqual(len(packages), PACKAGE_COUNT)
         for package in packages:
             self.assertIn(f"{package}.sigstore.json", bundles)
 
     def test_expected_assets_returns_twelve_names(self) -> None:
-        """expected_assets returns the union of six packages and six bundles."""
-        assets = RELEASE.expected_assets(TEST_VERSION)
-        expected = RELEASE.expected_packages(TEST_VERSION) | RELEASE.expected_bundles(TEST_VERSION)
+        """list_expected_assets returns the union of six packages and six bundles."""
+        assets = RELEASE.list_expected_assets(TEST_VERSION)
+        expected = RELEASE.list_expected_packages(TEST_VERSION) | RELEASE.list_expected_bundles(
+            TEST_VERSION
+        )
         self.assertEqual(assets, expected)
         self.assertEqual(len(assets), RELEASE_ASSET_COUNT)
 
@@ -138,18 +140,18 @@ class AttestationReleaseToolingTest(unittest.TestCase):
         """A folder holding the six packages and six bundles has zero asset problems."""
         with tempfile.TemporaryDirectory() as folder:
             dir_path = Path(folder)
-            for name in RELEASE.expected_assets(TEST_VERSION):
+            for name in RELEASE.list_expected_assets(TEST_VERSION):
                 (dir_path / name).write_text("test", encoding="utf-8")
-            problems = RELEASE.asset_problems(dir_path, TEST_VERSION, require_bundles=True)
+            problems = RELEASE.find_asset_problems(dir_path, TEST_VERSION, require_bundles=True)
             self.assertEqual(problems, [])
 
     def test_require_bundles_flag_reports_missing_bundles(self) -> None:
         """check-assets --require-bundles reports missing bundles even when packages are present."""
         with tempfile.TemporaryDirectory() as folder:
             dir_path = Path(folder)
-            for name in RELEASE.expected_packages(TEST_VERSION):
+            for name in RELEASE.list_expected_packages(TEST_VERSION):
                 (dir_path / name).write_text("test", encoding="utf-8")
-            problems = RELEASE.asset_problems(dir_path, TEST_VERSION, require_bundles=True)
+            problems = RELEASE.find_asset_problems(dir_path, TEST_VERSION, require_bundles=True)
             self.assertEqual(len(problems), BUNDLE_COUNT)
             for problem in problems:
                 self.assertIn("Bundle", problem)
@@ -159,14 +161,14 @@ class AttestationReleaseToolingTest(unittest.TestCase):
         """write_checksums hashes all 12 assets and excludes SHA256SUMS.txt."""
         with tempfile.TemporaryDirectory() as folder:
             dir_path = Path(folder)
-            for name in RELEASE.expected_assets(TEST_VERSION):
+            for name in RELEASE.list_expected_assets(TEST_VERSION):
                 (dir_path / name).write_text(f"content-{name}", encoding="utf-8")
             checksum_path = RELEASE.write_checksums(dir_path)
             lines = checksum_path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(len(lines), RELEASE_ASSET_COUNT)
             recorded_names = [line.split("  ")[1] for line in lines]
             self.assertEqual(recorded_names, sorted(recorded_names))
-            self.assertEqual(set(recorded_names), RELEASE.expected_assets(TEST_VERSION))
+            self.assertEqual(set(recorded_names), RELEASE.list_expected_assets(TEST_VERSION))
 
 
 class AttestationReadmeTest(unittest.TestCase):

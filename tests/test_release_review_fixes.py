@@ -39,8 +39,8 @@ def _load_release() -> ModuleType:
 RELEASE = _load_release()
 # The expected names come from the release constants (D355).
 # tests/test_release_constants.py pins the current names by hand.
-PACKAGES = tuple(sorted(RELEASE.expected_packages(VERSION)))
-BUNDLES = tuple(sorted(RELEASE.expected_bundles(VERSION)))
+PACKAGES = tuple(sorted(RELEASE.list_expected_packages(VERSION)))
+BUNDLES = tuple(sorted(RELEASE.list_expected_bundles(VERSION)))
 PACKAGES_AND_BUNDLES = PACKAGES + BUNDLES
 
 
@@ -85,7 +85,7 @@ class MissingVersionFileTest(unittest.TestCase):
             with self.subTest(missing=missing), tempfile.TemporaryDirectory() as folder:
                 root = Path(folder)
                 _make_repo(root, *texts)
-                problems = RELEASE.tag_problems(f"v{VERSION}", root)
+                problems = RELEASE.find_tag_problems(f"v{VERSION}", root)
                 self.assertEqual(len(problems), 1, problems)
                 self.assertIn(missing, problems[0])
                 self.assertIn("missing", problems[0])
@@ -95,7 +95,7 @@ class MissingVersionFileTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             _make_repo(root, INIT_TEXT, "[project\n", CHANGELOG_TEXT)
-            problems = RELEASE.tag_problems(f"v{VERSION}", root)
+            problems = RELEASE.find_tag_problems(f"v{VERSION}", root)
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("pyproject.toml", problems[0])
 
@@ -108,7 +108,7 @@ class EmptyVersionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             _make_repo(root, "", "[project]\n", "# Changelog\n")
-            problems = RELEASE.tag_problems("v", root)
+            problems = RELEASE.find_tag_problems("v", root)
         self.assertTrue(problems)
         self.assertTrue(any("names no version" in problem for problem in problems), problems)
         self.assertEqual(sum("states no version" in problem for problem in problems), 3, problems)
@@ -126,11 +126,11 @@ class ChangelogEndTest(unittest.TestCase):
     def test_last_heading_without_newline_gives_an_empty_body(self) -> None:
         """The section body is empty instead of raising ValueError."""
         changelog = f"# Changelog\n\n## [{VERSION}] (2026-11-09)"
-        self.assertEqual(RELEASE.changelog_section(VERSION, changelog).strip(), "")
+        self.assertEqual(RELEASE.extract_changelog_section(VERSION, changelog).strip(), "")
 
 
 class FileDigestTest(unittest.TestCase):
-    """file_sha256 matches hashlib on a file larger than one read."""
+    """compute_file_sha256 matches hashlib on a file larger than one read."""
 
     def test_digest_matches_hashlib(self) -> None:
         """The digest equals hashlib.sha256 over the whole content."""
@@ -140,7 +140,7 @@ class FileDigestTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "large.bin"
             path.write_bytes(content)
-            self.assertEqual(RELEASE.file_sha256(path), hashlib.sha256(content).hexdigest())
+            self.assertEqual(RELEASE.compute_file_sha256(path), hashlib.sha256(content).hexdigest())
 
 
 class AssetNameTest(unittest.TestCase):
@@ -150,7 +150,7 @@ class AssetNameTest(unittest.TestCase):
         """The expected package names for the version pass."""
         with tempfile.TemporaryDirectory() as folder:
             _make_assets(Path(folder), PACKAGES)
-            self.assertEqual(RELEASE.asset_problems(Path(folder), VERSION), [])
+            self.assertEqual(RELEASE.find_asset_problems(Path(folder), VERSION), [])
             exit_code, _ = _run_main(["check-assets", folder, VERSION])
         self.assertEqual(exit_code, 0)
 
@@ -158,7 +158,7 @@ class AssetNameTest(unittest.TestCase):
         """A missing package is named and fails the check."""
         with tempfile.TemporaryDirectory() as folder:
             _make_assets(Path(folder), PACKAGES[1:])
-            problems = RELEASE.asset_problems(Path(folder), VERSION)
+            problems = RELEASE.find_asset_problems(Path(folder), VERSION)
             exit_code, output = _run_main(["check-assets", folder, VERSION])
         self.assertEqual(len(problems), 1, problems)
         self.assertIn(PACKAGES[0], problems[0])
@@ -169,14 +169,14 @@ class AssetNameTest(unittest.TestCase):
         """Packages of another version all fail, in both directions."""
         with tempfile.TemporaryDirectory() as folder:
             _make_assets(Path(folder), tuple(name.replace(VERSION, "1.1.9") for name in PACKAGES))
-            problems = RELEASE.asset_problems(Path(folder), VERSION)
+            problems = RELEASE.find_asset_problems(Path(folder), VERSION)
         self.assertEqual(len(problems), 2 * len(PACKAGES), problems)
 
     def test_extra_name_fails(self) -> None:
         """An extra file is named and fails the check."""
         with tempfile.TemporaryDirectory() as folder:
             _make_assets(Path(folder), (*PACKAGES, "stray.txt"))
-            problems = RELEASE.asset_problems(Path(folder), VERSION)
+            problems = RELEASE.find_asset_problems(Path(folder), VERSION)
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("stray.txt", problems[0])
 
@@ -184,7 +184,7 @@ class AssetNameTest(unittest.TestCase):
         """The packages and the matching Sigstore bundles pass (D328)."""
         with tempfile.TemporaryDirectory() as folder:
             _make_assets(Path(folder), PACKAGES_AND_BUNDLES)
-            problems = RELEASE.asset_problems(Path(folder), VERSION, require_bundles=True)
+            problems = RELEASE.find_asset_problems(Path(folder), VERSION, require_bundles=True)
             self.assertEqual(problems, [])
             exit_code, _ = _run_main(["check-assets", folder, VERSION, "--require-bundles"])
         self.assertEqual(exit_code, 0)
@@ -193,7 +193,7 @@ class AssetNameTest(unittest.TestCase):
         """A missing bundle is named and fails when bundles are required."""
         with tempfile.TemporaryDirectory() as folder:
             _make_assets(Path(folder), (*PACKAGES, *BUNDLES[1:]))
-            problems = RELEASE.asset_problems(Path(folder), VERSION, require_bundles=True)
+            problems = RELEASE.find_asset_problems(Path(folder), VERSION, require_bundles=True)
             exit_code, output = _run_main(["check-assets", folder, VERSION, "--require-bundles"])
         self.assertEqual(len(problems), 1, problems)
         self.assertIn(BUNDLES[0], problems[0])

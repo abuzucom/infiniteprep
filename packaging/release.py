@@ -99,7 +99,7 @@ def read_versions(root: Path) -> dict[str, str]:
     }
 
 
-def tag_problems(tag: str, root: Path) -> list[str]:
+def find_tag_problems(tag: str, root: Path) -> list[str]:
     """Return one line per missing file, empty version, or version that differs from the tag."""
     if not tag.startswith(TAG_PREFIX):
         return [f"Tag {tag!r} does not start with {TAG_PREFIX!r}."]
@@ -115,42 +115,44 @@ def tag_problems(tag: str, root: Path) -> list[str]:
     return problems
 
 
-def file_sha256(path: Path) -> str:
+def compute_file_sha256(path: Path) -> str:
     """Return the SHA-256 hex digest of a file."""
     with path.open("rb") as handle:
         return hashlib.file_digest(handle, "sha256").hexdigest()
 
 
-def expected_packages(version: str) -> set[str]:
+def list_expected_packages(version: str) -> set[str]:
     """Return the six package file names that a build of this version makes."""
     return {f"{ASSET_PREFIX}-{version}-{suffix}" for suffix in ASSET_SUFFIXES}
 
 
-def expected_bundles(version: str) -> set[str]:
+def list_expected_bundles(version: str) -> set[str]:
     """Return the six Sigstore bundle file names that attest this version's packages (D328)."""
-    return {f"{name}{BUNDLE_SUFFIX}" for name in expected_packages(version)}
+    return {f"{name}{BUNDLE_SUFFIX}" for name in list_expected_packages(version)}
 
 
-def expected_assets(version: str, *, include_bundles: bool = True) -> set[str]:
+def list_expected_assets(version: str, *, include_bundles: bool = True) -> set[str]:
     """Return the expected asset names of this version (D319, D328)."""
-    packages = expected_packages(version)
-    return packages | expected_bundles(version) if include_bundles else packages
+    packages = list_expected_packages(version)
+    return packages | list_expected_bundles(version) if include_bundles else packages
 
 
-def _asset_kind(name: str) -> str:
+def _classify_asset_kind(name: str) -> str:
     """Return 'Bundle' for a Sigstore bundle and 'Package' for a release package."""
     return "Bundle" if name.endswith(BUNDLE_SUFFIX) else "Package"
 
 
-def asset_problems(folder: Path, version: str, *, require_bundles: bool = False) -> list[str]:
+def find_asset_problems(folder: Path, version: str, *, require_bundles: bool = False) -> list[str]:
     """Return one line per expected asset that is missing and per extra entry.
 
     Only require_bundles makes the Sigstore bundles expected. Without it, a
     bundle counts as an extra entry.
     """
     present = {path.name for path in folder.iterdir()}
-    expected = expected_assets(version, include_bundles=require_bundles)
-    missing = [f"{_asset_kind(name)} {name} is missing." for name in sorted(expected - present)]
+    expected = list_expected_assets(version, include_bundles=require_bundles)
+    missing = [
+        f"{_classify_asset_kind(name)} {name} is missing." for name in sorted(expected - present)
+    ]
     extra = [
         f"{name} is not a release asset of version {version}."
         for name in sorted(present - expected)
@@ -163,13 +165,13 @@ def write_checksums(folder: Path) -> Path:
     assets = sorted(
         path for path in folder.iterdir() if path.is_file() and path.name != CHECKSUM_FILE
     )
-    lines = [f"{file_sha256(path)}  {path.name}\n" for path in assets]
+    lines = [f"{compute_file_sha256(path)}  {path.name}\n" for path in assets]
     output = folder / CHECKSUM_FILE
     output.write_text("".join(lines), encoding="utf-8", newline="\n")
     return output
 
 
-def changelog_section(version: str, changelog: str) -> str:
+def extract_changelog_section(version: str, changelog: str) -> str:
     """Return the body of one version's CHANGELOG section, without its heading.
 
     A version with no section raises ValueError.
@@ -185,22 +187,22 @@ def changelog_section(version: str, changelog: str) -> str:
     raise ValueError(f"CHANGELOG.md has no section for version {version}. Add one first.")
 
 
-def release_notes(version: str, root: Path) -> str:
+def build_release_notes(version: str, root: Path) -> str:
     """Return the release notes: the CHANGELOG section, then the download block."""
     changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
-    return f"{changelog_section(version, changelog)}\n{DOWNLOAD_NOTES}"
+    return f"{extract_changelog_section(version, changelog)}\n{DOWNLOAD_NOTES}"
 
 
 def _report_assets(folder: Path, version: str, *, require_bundles: bool = False) -> int:
     """Print each asset problem and return 0 when the folder holds the expected assets."""
-    problems = asset_problems(folder, version, require_bundles=require_bundles)
+    problems = find_asset_problems(folder, version, require_bundles=require_bundles)
     for problem in problems:
         print(f"release: {problem}")
     if problems:
         print("release: rebuild the packages for this tag, then rerun the release job.")
         return CHECK_FAILED
     # A folder without problems holds exactly the expected names.
-    count = len(expected_assets(version, include_bundles=require_bundles))
+    count = len(list_expected_assets(version, include_bundles=require_bundles))
     print(f"release: {folder} holds the {count} release assets of version {version}.")
     return 0
 
@@ -230,7 +232,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.error(f"{args.folder} is not a folder. Pass the folder of release assets.")
         return _report_assets(args.folder, args.version, require_bundles=args.require_bundles)
     if args.command == "check-tag":
-        problems = tag_problems(args.tag, ROOT)
+        problems = find_tag_problems(args.tag, ROOT)
         for problem in problems:
             print(f"release: {problem}")
         if problems:
@@ -244,7 +246,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"release: wrote {write_checksums(args.folder)}")
         return 0
     if args.command == "notes":
-        args.output.write_text(release_notes(args.version, ROOT), encoding="utf-8", newline="\n")
+        args.output.write_text(
+            build_release_notes(args.version, ROOT), encoding="utf-8", newline="\n"
+        )
         print(f"release: wrote {args.output}")
         return 0
     parser.error(f"Subcommand {args.command} has no handler. Add one to main().")
