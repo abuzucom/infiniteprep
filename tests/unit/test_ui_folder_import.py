@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -89,8 +90,12 @@ class FailingBatch:
 @pytest.fixture
 def window_parts(
     qtbot: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> tuple[MainWindow, Repository, threading.Event, Path]:
-    """Build a main window whose imports wait on a gate, plus a folder of tracks."""
+) -> Iterator[tuple[MainWindow, Repository, threading.Event, Path]]:
+    """Build a main window whose imports wait on a gate, plus a folder of tracks.
+
+    Teardown opens the gate. A test that fails before it opens the gate would
+    otherwise leave the import worker waiting out the whole gate timeout.
+    """
     monkeypatch.setattr(main_window_module, "SettingsManager", MemorySettingsManager)
     repository = Repository(DatabaseManager(tmp_path / "library.sqlite3"))
     gate = threading.Event()
@@ -101,7 +106,8 @@ def window_parts(
     folder = tmp_path / "crate"
     for index in range(TRACK_COUNT):
         create_wav_fixture(folder / f"track{index}.wav", duration_sec=0.5 + index)
-    return window, repository, gate, folder
+    yield window, repository, gate, folder
+    gate.set()
 
 
 def test_import_runs_off_the_ui_thread_and_commits(qtbot: Any, window_parts: Any) -> None:
@@ -298,8 +304,11 @@ def test_progress_and_report_labels_show_plain_text(qtbot: Any, window_parts: An
 @pytest.fixture
 def stuck_parts(
     qtbot: Any, tmp_path: Path
-) -> tuple[FolderImportController, threading.Event, Path, list[int]]:
-    """Build a controller with a short time limit whose exit call only records the code."""
+) -> Iterator[tuple[FolderImportController, threading.Event, Path, list[int]]]:
+    """Build a controller with a short time limit whose exit call only records the code.
+
+    Teardown opens the gate, so a failed test never leaves the worker waiting.
+    """
     repository = Repository(DatabaseManager(tmp_path / "stuck.sqlite3"))
     gate = threading.Event()
     parent = QWidget()
@@ -313,7 +322,8 @@ def stuck_parts(
     )
     folder = tmp_path / "crate"
     create_wav_fixture(folder / "track.wav", duration_sec=0.5)
-    return controller, gate, folder, exit_codes
+    yield controller, gate, folder, exit_codes
+    gate.set()
 
 
 def test_a_stuck_file_offers_quit_now(qtbot: Any, stuck_parts: Any) -> None:
