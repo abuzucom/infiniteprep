@@ -139,36 +139,59 @@ class VersionOnlyEditTest(unittest.TestCase):
         self.assertFalse(classifier.is_version_only_edit("setup.py", "a\n", "a\n"))
 
 
+def run_git_in(root: Path, *arguments: str) -> str:
+    """Run one Git command in the repository at root and return its output."""
+    result = subprocess.run(
+        [GIT, "-C", str(root), *GIT_IDENTITY, "-c", "commit.gpgsign=false", *arguments],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def commit_files_in(root: Path, files: dict[str, str]) -> str:
+    """Write the files into root, commit them, and return the commit revision."""
+    for name, text in files.items():
+        target = root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+    run_git_in(root, "add", "--all")
+    run_git_in(root, "commit", "--quiet", "--message", "change")
+    return run_git_in(root, "rev-parse", "HEAD")
+
+
 class ClassifyRangeTest(unittest.TestCase):
     """The classifier reads a real commit range from a Git repository."""
 
+    template_root: Path
+    template_base: str
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Build the base repository once. Each test works on its own copy."""
+        template = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(template.cleanup)
+        cls.template_root = Path(template.name) / "repository"
+        cls.template_root.mkdir()
+        run_git_in(cls.template_root, "init", "--quiet")
+        cls.template_base = commit_files_in(cls.template_root, BASE_FILES)
+
     def setUp(self) -> None:
-        """Create a repository with one base commit."""
+        """Copy the base repository. The copy keeps the base commit revision."""
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
-        self.root = Path(self.directory.name)
-        self.run_git("init", "--quiet")
-        self.base = self.commit_files(BASE_FILES)
+        self.root = Path(self.directory.name) / "repository"
+        shutil.copytree(self.template_root, self.root)
+        self.base = self.template_base
 
     def run_git(self, *arguments: str) -> str:
         """Run one Git command in the test repository and return its output."""
-        result = subprocess.run(
-            [GIT, "-C", str(self.root), *GIT_IDENTITY, "-c", "commit.gpgsign=false", *arguments],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip()
+        return run_git_in(self.root, *arguments)
 
     def commit_files(self, files: dict[str, str]) -> str:
         """Write the files, commit them, and return the commit revision."""
-        for name, text in files.items():
-            target = self.root / name
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(text, encoding="utf-8")
-        self.run_git("add", "--all")
-        self.run_git("commit", "--quiet", "--message", "change")
-        return self.run_git("rev-parse", "HEAD")
+        return commit_files_in(self.root, files)
 
     def classify(self, head: str) -> str:
         """Classify the range from the base commit to the given head."""

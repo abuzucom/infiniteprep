@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
@@ -90,6 +91,8 @@ def run_script(
     comments: list[dict],
     run_id: int = 100,
     raw_summary: str | None = None,
+    *,
+    script: str,
 ) -> list[dict]:
     """Run the workflow script and return the recorded API calls."""
     summary_path = tmp_path / "coverage-summary.json"
@@ -113,7 +116,7 @@ def run_script(
     calls_path = tmp_path / "calls.json"
     calls_path.write_text("", encoding="utf-8")
     harness_path = tmp_path / "harness.js"
-    harness_path.write_text(HARNESS % {"script": extract_script()}, encoding="utf-8")
+    harness_path.write_text(HARNESS % {"script": script}, encoding="utf-8")
     environment = dict(os.environ)
     environment.update(
         {
@@ -147,14 +150,28 @@ def run_script(
 class CoverageCommentScriptTest(unittest.TestCase):
     """Exercise the comment script of the ci workflow."""
 
+    script: str
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Extract the comment script once. Every test runs the same text."""
+        cls.script = extract_script()
+
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
+    def run_comment_script(
+        self, summary: object, comments: list[dict], **options: Any
+    ) -> list[dict]:
+        """Run the shared comment script in this test's folder."""
+        return run_script(
+            tmp_path=self.tmp, summary=summary, comments=comments, script=self.script, **options
+        )
+
     def test_a_valid_summary_creates_the_comment(self) -> None:
         """A valid summary becomes a comment with the total and the file rows."""
-        calls = run_script(
-            self.tmp,
+        calls = self.run_comment_script(
             {"total": 87.9, "files": [{"path": "src/infiniteprep/ui/theme.py", "percent": 42.4}]},
             [],
         )
@@ -167,8 +184,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
 
     def test_a_foreign_comment_never_becomes_the_target(self) -> None:
         """A comment from another author that carries the marker is left alone."""
-        calls = run_script(
-            self.tmp,
+        calls = self.run_comment_script(
             {"total": 87.9, "files": []},
             [
                 {
@@ -184,8 +200,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
 
     def test_a_bot_comment_with_the_marker_inside_the_body_is_left_alone(self) -> None:
         """A bot comment that only mentions the marker is not the target."""
-        calls = run_script(
-            self.tmp,
+        calls = self.run_comment_script(
             {"total": 87.9, "files": []},
             [
                 {
@@ -201,8 +216,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
 
     def test_a_second_bot_comment_is_removed(self) -> None:
         """A second coverage comment from the bot does not survive."""
-        calls = run_script(
-            self.tmp,
+        calls = self.run_comment_script(
             {"total": 87.9, "files": []},
             [bot_comment(11, 90), bot_comment(12, 90)],
         )
@@ -213,8 +227,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
 
     def test_an_older_run_never_replaces_a_newer_result(self) -> None:
         """A run older than the posted run writes nothing."""
-        calls = run_script(
-            self.tmp,
+        calls = self.run_comment_script(
             {"total": 87.9, "files": []},
             [bot_comment(13, 500)],
             run_id=100,
@@ -225,8 +238,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
 
     def test_a_newer_run_updates_the_comment(self) -> None:
         """A run newer than the posted run updates the comment."""
-        calls = run_script(
-            self.tmp,
+        calls = self.run_comment_script(
             {"total": 87.9, "files": []},
             [bot_comment(14, 50)],
             run_id=100,
@@ -238,8 +250,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
 
     def test_a_path_with_a_fence_character_is_rejected(self) -> None:
         """A crafted file path never reaches the comment."""
-        calls = run_script(
-            self.tmp,
+        calls = self.run_comment_script(
             {"total": 87.9, "files": [{"path": "src/a.py`\n@someone", "percent": 1.0}]},
             [],
         )
@@ -249,8 +260,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
 
     def test_an_unexpected_field_is_rejected(self) -> None:
         """A summary with an extra field never reaches the comment."""
-        calls = run_script(
-            self.tmp,
+        calls = self.run_comment_script(
             {"total": 87.9, "files": [], "body": "injected"},
             [],
         )
@@ -260,7 +270,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
 
     def test_a_total_out_of_range_is_rejected(self) -> None:
         """A total outside the range never reaches the comment."""
-        calls = run_script(self.tmp, {"total": 1000, "files": []}, [])
+        calls = self.run_comment_script({"total": 1000, "files": []}, [])
 
         self.assertEqual([call["action"] for call in calls], ["error"])
         self.assertIn("out of range", calls[0]["message"])
@@ -268,15 +278,14 @@ class CoverageCommentScriptTest(unittest.TestCase):
     def test_too_many_files_are_rejected(self) -> None:
         """A file list longer than the cap never reaches the comment."""
         files = [{"path": f"src/file{index}.py", "percent": 1.0} for index in range(21)]
-        calls = run_script(self.tmp, {"total": 87.9, "files": files}, [])
+        calls = self.run_comment_script({"total": 87.9, "files": files}, [])
 
         self.assertEqual([call["action"] for call in calls], ["error"])
         self.assertIn("out of range", calls[0]["message"])
 
     def test_a_file_record_with_an_extra_field_is_rejected(self) -> None:
         """A file record with an extra field never reaches the comment."""
-        calls = run_script(
-            self.tmp,
+        calls = self.run_comment_script(
             {"total": 87.9, "files": [{"path": "src/a.py", "percent": 1.0, "note": "x"}]},
             [],
         )
@@ -286,7 +295,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
 
     def test_a_summary_that_is_not_json_is_rejected(self) -> None:
         """A summary that is not valid JSON never reaches the comment."""
-        calls = run_script(self.tmp, None, [], raw_summary="not json")
+        calls = self.run_comment_script(None, [], raw_summary="not json")
 
         self.assertEqual([call["action"] for call in calls], ["error"])
 

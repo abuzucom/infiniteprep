@@ -21,6 +21,8 @@ GIT = shutil.which("git") or "git"
 GIT_IDENTITY = ("-c", "user.name=Test Author", "-c", "user.email=author@example.invalid")
 CLASSIFY_COMMAND = 'python3 scripts/classify_changed_paths.py --base "$BASE_SHA" --head "$HEAD_SHA"'
 TRUSTED_PATH = "trusted-base"
+ORIGIN_NAME = "origin"
+CONTRIBUTOR_NAME = "contributor"
 # The workflow expression that hands the run's own access grant to the fetch.
 RUN_ACCESS_EXPRESSION = "${{ github.token }}"
 SHA_GUARD = '[[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]'
@@ -230,19 +232,38 @@ class ReviewSkipTest(unittest.TestCase):
 class FetchedCommitClassificationTest(unittest.TestCase):
     """The trusted classifier reads a pull request commit fetched by its hash."""
 
+    template_root: Path
+    template_base_sha: str
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Build the origin and both clones once. Each test works on its own copy."""
+        template = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(template.cleanup)
+        cls.template_root = Path(template.name) / "repositories"
+        origin = cls.template_root / ORIGIN_NAME
+        origin.mkdir(parents=True)
+        run_git(origin, "init", "--quiet")
+        cls.template_base_sha = commit_file(origin, "src/app.py", "VALUE = 1\n")
+        for clone_name in (TRUSTED_PATH, CONTRIBUTOR_NAME):
+            run_git(cls.template_root, "clone", "--quiet", str(origin), clone_name)
+
     def setUp(self) -> None:
-        """Create an origin, a trusted clone, and a contributor clone of it."""
+        """Copy the origin and both clones, then point each clone at the copied origin.
+
+        The template clones name the template origin. Without the new URL a test
+        would push into the shared template.
+        """
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
-        root = Path(self.directory.name)
-        origin = root / "origin"
-        origin.mkdir()
-        run_git(origin, "init", "--quiet")
-        self.base_sha = commit_file(origin, "src/app.py", "VALUE = 1\n")
+        root = Path(self.directory.name) / "repositories"
+        shutil.copytree(self.template_root, root)
+        self.base_sha = self.template_base_sha
         self.trusted = root / TRUSTED_PATH
-        self.contributor = root / "contributor"
-        run_git(root, "clone", "--quiet", str(origin), str(self.trusted))
-        run_git(root, "clone", "--quiet", str(origin), str(self.contributor))
+        self.contributor = root / CONTRIBUTOR_NAME
+        origin = root / ORIGIN_NAME
+        for clone in (self.trusted, self.contributor):
+            run_git(clone, "remote", "set-url", "origin", str(origin))
 
     def publish_head(self, *files: tuple[str, str]) -> str:
         """Commit the files, push them to the pull request ref, and return the head."""
