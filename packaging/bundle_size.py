@@ -75,25 +75,79 @@ class SizeReport(NamedTuple):
     packages: tuple[PackageSize, ...]
 
 
+class BundleMeasurement(NamedTuple):
+    """The unpacked size of one bundle and its largest folders."""
+
+    total_bytes: int
+    folders: tuple[FolderSize, ...]
+
+
+# One pending folder of a walk: its path, its parts below the walk root, and the
+# folder group it counts toward. The group is None above the folders root.
+PendingFolder = tuple[str, tuple[str, ...], "str | None"]
+
+
+def _walk_sizes(root: Path, group_parts: tuple[str, ...] | None) -> tuple[int, dict[str, int]]:
+    """Walk root once and return the regular file total and the total per folder group.
+
+    Each real folder directly below the folder at group_parts starts a group. A
+    group_parts of None starts no group. A symbolic link is skipped and never
+    followed. A link to a folder must not pull a second copy of that folder into
+    the total.
+    """
+    total = 0
+    group_totals: dict[str, int] = {}
+    pending: list[PendingFolder] = [(os.fspath(root), (), None)]
+    while pending:
+        folder, parts, group = pending.pop()
+        folder_bytes = 0
+        with os.scandir(folder) as entries:
+            for entry in entries:
+                folder_bytes += _measure_entry(entry, parts, group, group_parts, pending)
+        total += folder_bytes
+        if group is not None:
+            group_totals[group] = group_totals.get(group, 0) + folder_bytes
+    return total, group_totals
+
+
+def _measure_entry(
+    entry: os.DirEntry[str],
+    parts: tuple[str, ...],
+    group: str | None,
+    group_parts: tuple[str, ...] | None,
+    pending: list[PendingFolder],
+) -> int:
+    """Return the size of one regular file entry, or queue one real folder and return 0."""
+    if entry.is_symlink():
+        return 0
+    if entry.is_dir(follow_symlinks=False):
+        starts_group = group is None and parts == group_parts
+        pending.append((entry.path, (*parts, entry.name), entry.name if starts_group else group))
+        return 0
+    if entry.is_file(follow_symlinks=False):
+        return entry.stat(follow_symlinks=False).st_size
+    return 0
+
+
+def _rank_folders(group_totals: dict[str, int], count: int) -> tuple[FolderSize, ...]:
+    """Return at most count folder groups, largest first, then by name."""
+    folders = [FolderSize(name, size) for name, size in group_totals.items()]
+    folders.sort(key=_folder_order)
+    return tuple(folders[:count])
+
+
+def _folder_order(folder: FolderSize) -> tuple[int, str]:
+    """Order folders by size, largest first, then by name."""
+    return -folder.bytes, folder.name
+
+
 def directory_bytes(root: Path) -> int:
     """Return the sum of the regular file sizes below root.
 
     A symbolic link is skipped and never followed. A link to a folder must not
     pull a second copy of that folder into the total.
     """
-    total = 0
-    pending = [root]
-    while pending:
-        current = pending.pop()
-        with os.scandir(current) as entries:
-            for entry in entries:
-                if entry.is_symlink():
-                    continue
-                if entry.is_dir(follow_symlinks=False):
-                    pending.append(Path(entry.path))
-                elif entry.is_file(follow_symlinks=False):
-                    total += entry.stat(follow_symlinks=False).st_size
-    return total
+    return _walk_sizes(root, None)[0]
 
 
 def largest_folders(root: Path, count: int = LARGEST_FOLDER_COUNT) -> tuple[FolderSize, ...]:
@@ -102,15 +156,24 @@ def largest_folders(root: Path, count: int = LARGEST_FOLDER_COUNT) -> tuple[Fold
     Each folder holds the total size of the regular files below it. The list
     holds at most count folders.
     """
-    folders: list[FolderSize] = []
-    with os.scandir(root) as entries:
-        for entry in entries:
-            if entry.is_symlink():
-                continue
-            if entry.is_dir(follow_symlinks=False):
-                folders.append(FolderSize(entry.name, directory_bytes(Path(entry.path))))
-    folders.sort(key=lambda folder: (-folder.bytes, folder.name))
-    return tuple(folders[:count])
+    return _rank_folders(_walk_sizes(root, ())[1], count)
+
+
+def measure_bundle(
+    bundle: Path, folders_root: Path, count: int = LARGEST_FOLDER_COUNT
+) -> BundleMeasurement:
+    """Return the bundle total and the largest folders of folders_root.
+
+    A folders root at or below the bundle shares one walk with the total, as the
+    macOS step does with the Contents folder. Any other folders root gets its own
+    walk.
+    """
+    try:
+        group_parts = folders_root.relative_to(bundle).parts
+    except ValueError:
+        return BundleMeasurement(directory_bytes(bundle), largest_folders(folders_root, count))
+    total, group_totals = _walk_sizes(bundle, group_parts)
+    return BundleMeasurement(total, _rank_folders(group_totals, count))
 
 
 def derive_limit(measured_bytes: int) -> int:
@@ -187,7 +250,8 @@ def build_report(
     measured_bytes: int | None,
 ) -> SizeReport:
     """Return the size report of one bundle and the packages built from it."""
-    bundle_bytes = directory_bytes(bundle)
+    measurement = measure_bundle(bundle, folders_root)
+    bundle_bytes = measurement.total_bytes
     limit_bytes = None if measured_bytes is None else derive_limit(measured_bytes)
     headroom_bytes = None if limit_bytes is None else limit_bytes - bundle_bytes
     over_limit = limit_bytes is not None and bundle_bytes > limit_bytes
@@ -199,7 +263,7 @@ def build_report(
         limit_bytes=limit_bytes,
         headroom_bytes=headroom_bytes,
         over_limit=over_limit,
-        folders=largest_folders(folders_root),
+        folders=measurement.folders,
         packages=tuple(packages),
     )
 
@@ -230,23 +294,40 @@ def format_size(value: int) -> str:
     return f"{value / BYTES_PER_MEBIBYTE:.1f} MiB ({value:,} bytes)"
 
 
+def _render_limit_lines(report: SizeReport) -> list[str]:
+    """Return the measured size, limit, headroom or excess, and result lines of one report.
+
+    build_report sets the limit and the headroom together with the measured size.
+    A report without all three gets the not-recorded lines.
+    """
+    measured_bytes = report.measured_bytes
+    limit_bytes = report.limit_bytes
+    headroom_bytes = report.headroom_bytes
+    if measured_bytes is None or limit_bytes is None or headroom_bytes is None:
+        return [
+            "- Measured size on main: not recorded yet",
+            "- Limit: not recorded yet",
+            "- Result: no limit recorded",
+        ]
+    if report.over_limit:
+        margin_line = f"- Excess: {format_size(-headroom_bytes)}"
+        result = "over the limit"
+    else:
+        margin_line = f"- Headroom: {format_size(headroom_bytes)}"
+        result = "within the limit"
+    return [
+        f"- Measured size on main: {measured_bytes:,} bytes",
+        f"- Limit: {format_size(limit_bytes)}",
+        margin_line,
+        f"- Result: {result}",
+    ]
+
+
 def render_markdown(report: SizeReport) -> str:
     """Return the Markdown report of one bundle."""
     lines = [f"## Bundle size: {report.operating_system}", ""]
     lines.append(f"- Unpacked bundle: {format_size(report.bundle_bytes)}")
-    if report.measured_bytes is None:
-        lines.append("- Measured size on main: not recorded yet")
-        lines.append("- Limit: not recorded yet")
-        result = "no limit recorded"
-    else:
-        lines.append(f"- Measured size on main: {report.measured_bytes:,} bytes")
-        lines.append(f"- Limit: {format_size(report.limit_bytes or 0)}")
-        if report.over_limit:
-            lines.append(f"- Excess: {format_size(-(report.headroom_bytes or 0))}")
-        else:
-            lines.append(f"- Headroom: {format_size(report.headroom_bytes or 0)}")
-        result = "over the limit" if report.over_limit else "within the limit"
-    lines.append(f"- Result: {result}")
+    lines.extend(_render_limit_lines(report))
     lines.append("")
     lines.append("### Largest folders")
     lines.append("")
@@ -290,8 +371,8 @@ def read_package(value: str) -> PackageSize:
     return PackageSize(name, package_path.as_posix(), package_path.stat().st_size)
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Run the size check from the command line and return 0 on a pass, 1 on a failure."""
+def _build_parser() -> argparse.ArgumentParser:
+    """Return the command-line parser of the size check."""
     parser = argparse.ArgumentParser(description="Report the bundle and package sizes.")
     commands = parser.add_subparsers(dest="command", required=True)
     check = commands.add_parser("check", help="Report the sizes and fail past the limit.")
@@ -311,8 +392,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     check.add_argument("--limits", type=Path, default=LIMITS_FILE, help="The limits file.")
     check.add_argument("--report-dir", type=Path, help="The folder that receives the reports.")
-    args = parser.parse_args(argv)
+    return parser
 
+
+def _read_inputs(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> tuple[Path, Path, tuple[PackageSize, ...]]:
+    """Return the bundle, the folders root, and the packages, or exit through parser.error."""
     bundle = args.bundle
     if not bundle.is_dir():
         parser.error(f"{bundle} is not a folder. Pass the built bundle folder.")
@@ -325,6 +411,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         packages = tuple(read_package(value) for value in args.packages)
     except ValueError as error:
         parser.error(str(error))
+    return bundle, folders_root, packages
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run the size check from the command line and return 0 on a pass, 1 on a failure."""
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    bundle, folders_root, packages = _read_inputs(parser, args)
     try:
         measured_bytes = load_limits(args.limits)[args.operating_system]
     except (OSError, ValueError) as error:
@@ -336,6 +430,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.report_dir:
         write_reports(args.report_dir, report, markdown)
     print(markdown, end="")
+    return _report_outcome(report)
+
+
+def _report_outcome(report: SizeReport) -> int:
+    """Print the limit outcome to stderr and return 1 past the limit, 0 otherwise."""
     if report.over_limit:
         print(
             f"bundle_size: the {report.operating_system} bundle is {report.bundle_bytes:,} bytes,"

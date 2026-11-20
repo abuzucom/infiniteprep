@@ -5,6 +5,7 @@ import importlib.util
 import re
 import sys
 from pathlib import Path
+from types import ModuleType
 
 from PyInstaller.depend import bindepend
 
@@ -12,7 +13,7 @@ project_root = Path.cwd()
 src_dir = project_root / "src"
 
 
-def load_bundle_filters():
+def load_bundle_filters() -> ModuleType:
     """Load packaging/bundle_filters.py from its exact path.
 
     sys.path stays unchanged, so no other file named bundle_filters can take its place.
@@ -37,8 +38,24 @@ prune_unneeded_libraries = bundle_filters.prune_unneeded_libraries
 # macOS bundle settings (D83a3c). The identifier stays fixed once released (D297).
 MACOS_BUNDLE_IDENTIFIER = "dev.infiniteprep.app"
 MACOS_MINIMUM_VERSION = "14.4"
-version_source = (src_dir / "infiniteprep" / "__init__.py").read_text(encoding="utf-8")
-APP_VERSION = re.search(r'^__version__ = "([^"]+)"$', version_source, re.MULTILINE).group(1)
+
+
+def read_app_version(init_text: str) -> str:
+    """Return the __version__ value of the package init text.
+
+    A missing version line stops the build with a message instead of an AttributeError.
+    """
+    match = re.search(r'^__version__ = "([^"]+)"$', init_text, re.MULTILINE)
+    if match is None:
+        raise SystemExit(
+            "src/infiniteprep/__init__.py has no __version__ line. Restore the version line."
+        )
+    return match.group(1)
+
+
+APP_VERSION = read_app_version(
+    (src_dir / "infiniteprep" / "__init__.py").read_text(encoding="utf-8")
+)
 # The app never imports setuptools or pkg_resources (D313). Excluding them also keeps
 # PyInstaller from adding the pkg_resources runtime hook.
 UNUSED_PYTHON_PACKAGES = ["setuptools", "pkg_resources"]
@@ -82,7 +99,7 @@ a = Analysis(
 )
 
 
-def report_dropped(reason, dropped):
+def report_dropped(reason: str, dropped: list[str]) -> None:
     """Print each removed destination, so the build log names every change."""
     for destination in sorted(dropped):
         print(f"infiniteprep.spec: dropped {destination} ({reason})")
@@ -95,14 +112,23 @@ a.datas, dropped = drop_entries(a.datas, is_gpl3_component)
 report_dropped("GPL-3", dropped)
 
 
-def is_orphan_on_this_platform(destination):
+def is_orphan_on_this_platform(destination: str) -> bool:
     """Return True for a Qt file that no kept binary loads on the build platform."""
     return is_orphaned_qt_component(destination, sys.platform)
 
 
-def linked_library_names(source):
+# The orphan check and the Linux prune both read the links of the same binaries.
+# The cache lets each binary's links come from one bindepend read per build.
+LINKED_NAMES_CACHE: dict[str, frozenset[str]] = {}
+
+
+def linked_library_names(source: str) -> frozenset[str]:
     """Return the names of the libraries a collected binary links against."""
-    return {name for name, _path in bindepend.get_imports(source)}
+    cached = LINKED_NAMES_CACHE.get(source)
+    if cached is None:
+        cached = frozenset(name for name, _path in bindepend.get_imports(source))
+        LINKED_NAMES_CACHE[source] = cached
+    return cached
 
 
 # Qt files that nothing loads go before the Linux prune, so it sees the final set (D313).

@@ -55,13 +55,13 @@ class PackageNamePinTest(unittest.TestCase):
     """The asset constants produce the six hand-pinned package names."""
 
     def test_expected_packages_match_the_pin(self) -> None:
-        """expected_packages returns exactly the six pinned names."""
-        self.assertEqual(RELEASE.expected_packages(VERSION), PINNED_PACKAGES)
+        """list_expected_packages returns exactly the six pinned names."""
+        self.assertEqual(RELEASE.list_expected_packages(VERSION), PINNED_PACKAGES)
 
     def test_expected_bundles_match_the_pin(self) -> None:
-        """expected_bundles adds the Sigstore suffix to each pinned name (D328)."""
+        """list_expected_bundles adds the Sigstore suffix to each pinned name (D328)."""
         pinned_bundles = {f"{name}{PINNED_BUNDLE_SUFFIX}" for name in PINNED_PACKAGES}
-        self.assertEqual(RELEASE.expected_bundles(VERSION), pinned_bundles)
+        self.assertEqual(RELEASE.list_expected_bundles(VERSION), pinned_bundles)
 
 
 class ReleasePermissionConstantTest(unittest.TestCase):

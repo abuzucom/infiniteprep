@@ -266,7 +266,7 @@ D(N+92).
 | D318 | Release notes hold the CHANGELOG section, a download block, then the generated PR list. |
 | D319 | The release job checks the six exact package names. |
 | D320 | Each draft asset downloads into a fresh `mktemp -d` folder. |
-| D321 | `file_sha256` uses `hashlib.file_digest`. |
+| D321 | `compute_file_sha256` uses `hashlib.file_digest`. |
 | D322 | The `v0.48.0` tags in the README and `release.py` stay as generic examples. |
 | D323 | No retry loops around `gh` calls. A rerun of the release job is the retry. |
 | D324 | The `notes` command does not create its output folder. |

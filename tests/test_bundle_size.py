@@ -365,18 +365,14 @@ class WorkflowTest(unittest.TestCase):
         return [step for step in self.steps if REPORT_SCRIPT in step.get("run", "")]
 
     def test_each_operating_system_reports_its_sizes(self) -> None:
-        """One step per operating system names the bundle and its packages."""
+        """One size step names the bundle and the packages of every operating system."""
         steps = self._size_steps()
-        self.assertEqual(len(steps), 3)
-        systems = []
-        for step in steps:
-            run = step["run"]
-            self.assertIn("--bundle", run)
-            self.assertIn("--package", run)
-            self.assertIn("--report-dir", run)
-            found = re.search(r"--os ([a-z]+)", run)
-            self.assertIsNotNone(found)
-            systems.append(found.group(1))
+        self.assertEqual(len(steps), 1)
+        run = steps[0]["run"]
+        self.assertIn("--bundle", run)
+        self.assertIn("--package", run)
+        self.assertIn("--report-dir", run)
+        systems = re.findall(r"--os ([a-z]+)", run)
         self.assertEqual(sorted(systems), sorted(OPERATING_SYSTEMS))
 
     def test_the_macos_step_reports_the_folders_of_the_app(self) -> None:

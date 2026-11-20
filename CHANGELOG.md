@@ -5,10 +5,25 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.80.5] (2026-11-20)
+## [0.80.6] (2026-11-20)
+
+### Fixed
+
+- `scripts/check_action_versions.py` names a failed or timed-out `gh` fetch instead of reporting every pin as one that names no release. A pin that names its release costs one ref lookup. An annotated tag resolves to its commit. Other pins list the tags 100 per page.
+- `packaging/release.py check-tag` reports an unparsable `pyproject.toml` as a parse failure. A directory in place of a version file gives the missing-file line instead of an `IsADirectoryError`.
+- `packaging/check_bundle.py` reads the notice rule from one set of regular files. `compile_pattern` rejects two adjacent `**` parts and two `*` joined only by `?`. A bundle folder without read access now fails the check.
+- `infiniteprep.spec` stops the build with a message when the package init has no version line.
 
 ### Changed
 
+- CI and packaging code does less repeated work.
+  - The coverage summary compiles the condition pattern once and keeps the lowest files with `heapq.nsmallest`.
+  - The bundle check indexes the allowlist by exact path and by literal first path part. One `os.scandir` walk lists the bundle.
+  - The size report walks each bundle once, the macOS `Contents` layout included. The prune loop classifies each destination once.
+  - The spec reads the links of each binary once per build.
+  - `build-packages.yml` reads the app version once into `APP_VERSION`. One size step covers every operating system. Each release step views the release once and looks up asset names in an associative array. The save step reuses draft bundles through `reuse_draft_bundle`.
+  - `scripts/classify_changed_paths.py` reads version file texts apart from the version decision.
+- Nine helpers in `packaging/release.py` carry verb-noun names. The old names have no aliases. Decision D321 names `compute_file_sha256`.
 - Owned tests spend less time waiting and rebuilding the same inputs.
   - The waveform duration cap test lowers the cap to 2 s. The stuck child runner test uses a 0.2 s deadline. The stderr flood test keeps 2.0 s because its child must finish inside the window.
   - The migration, rate limit, two-thread lookup, folder import, and layout persistence tests wait for the checked event instead of a fixed sleep. The migration and lookup tests now assert the overlap that the old sleeps only made likely.
@@ -23,7 +38,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The git-backed tests build each template repository once and copy the template into every test.
   - The ASCII checks use `str.isascii`. The in-memory isolation test checks ten closed managers. The digest test builds its content from a repeated byte run.
   - The pip runs stop after 120 s. The folder import fixtures open each import gate in teardown.
-- The version advances from 0.80.4 to 0.80.5 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.80.4 to 0.80.6 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ## [0.80.4] (2026-11-19)
 

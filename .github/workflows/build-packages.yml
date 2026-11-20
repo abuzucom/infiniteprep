@@ -106,6 +106,13 @@ jobs:
       - name: Check installed requirements
         run: python -m pip check
 
+      # One interpreter start reads the version. Every later step reads APP_VERSION.
+      - name: Record app version
+        shell: bash
+        run: |
+          app_version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          echo "APP_VERSION=$app_version" >> "$GITHUB_ENV"
+
       - name: Generate Python SBOM
         shell: bash
         run: |
@@ -137,7 +144,7 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then app="$app.exe"; fi
           result="$RUNNER_TEMP/smoke-version.txt"
           "$app" --smoke-check "$result"
-          expected="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          expected="$APP_VERSION"
           actual="$(cat "$result")"
           if [ "$actual" != "$expected" ]; then
             echo "Smoke check wrote '$actual', expected '$expected'."
@@ -155,7 +162,7 @@ jobs:
           result="$RUNNER_TEMP/x11-smoke-version.txt"
           QT_QPA_PLATFORM=xcb xvfb-run --auto-servernum \
             dist/InfinitePrep/InfinitePrep --smoke-check "$result"
-          expected="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          expected="$APP_VERSION"
           if [ "$(cat "$result")" != "$expected" ]; then
             echo 'The X11 start reported the wrong version.'
             exit 1
@@ -223,7 +230,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = (python -c 'import infiniteprep; print(infiniteprep.__version__)').Trim()
+          $version = $env:APP_VERSION
           $staging = Join-Path $env:RUNNER_TEMP 'portable'
           New-Item -ItemType Directory -Force $staging | Out-Null
           Copy-Item -Recurse dist\InfinitePrep (Join-Path $staging 'InfinitePrep')
@@ -255,7 +262,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = (python -c 'import infiniteprep; print(infiniteprep.__version__)').Trim()
+          $version = $env:APP_VERSION
           $makensis = Join-Path $env:RUNNER_TEMP 'nsis-3.13\makensis.exe'
           $source = (Resolve-Path dist\InfinitePrep).Path
           $output = Join-Path (Resolve-Path dist).Path "InfinitePrep-$version-windows-x64-setup.exe"
@@ -273,7 +280,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = (python -c 'import infiniteprep; print(infiniteprep.__version__)').Trim()
+          $version = $env:APP_VERSION
           $setup = (Resolve-Path "dist\InfinitePrep-$version-windows-x64-setup.exe").Path
           $installDir = Join-Path $env:RUNNER_TEMP 'install\InfinitePrep'
           $dataMarker = Join-Path $env:LOCALAPPDATA 'InfinitePrep\ci-keep.txt'
@@ -330,7 +337,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          version="$APP_VERSION"
           folder="InfinitePrep-$version"
           staging="$RUNNER_TEMP/tarball"
           mkdir -p "$staging"
@@ -378,7 +385,7 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: '1'
           LDAI_NO_APPSTREAM: '1'
         run: |
-          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          version="$APP_VERSION"
           tools="$RUNNER_TEMP/appimage-tools"
           appdir="$RUNNER_TEMP/AppDir"
           icon="$RUNNER_TEMP/infiniteprep.png"
@@ -410,7 +417,7 @@ jobs:
         env:
           APPIMAGE_EXTRACT_AND_RUN: '1'
         run: |
-          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          version="$APP_VERSION"
           folder="InfinitePrep-$version"
           check_smoke() {
             local result="$RUNNER_TEMP/linux-smoke.txt"
@@ -476,7 +483,7 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          version="$APP_VERSION"
           staging="$RUNNER_TEMP/dmg"
           mkdir -p "$staging"
           ditto dist/InfinitePrep.app "$staging/InfinitePrep.app"
@@ -491,7 +498,7 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          version="$APP_VERSION"
           mount="$RUNNER_TEMP/dmg-mount"
           mkdir -p "$mount"
           hdiutil attach -readonly -nobrowse -mountpoint "$mount" \
@@ -532,61 +539,41 @@ jobs:
       # past the limit for its operating system fails the job. The limit is the
       # measured size on main plus 50 percent, and the limits file holds that
       # measured size.
-      - name: Report bundle and package sizes (Windows)
-        if: runner.os == 'Windows'
+      - name: Report bundle and package sizes
         shell: bash
         run: |
           set -euo pipefail
-          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
+          version="$APP_VERSION"
           report="$RUNNER_TEMP/size-report"
+          # Each case arm names the operating system, the bundle, and its packages.
+          case "$RUNNER_OS" in
+            Windows)
+              size_arguments=(--os windows --bundle dist/InfinitePrep
+                --package "portable-zip=dist/InfinitePrep-$version-windows-x64-portable.zip"
+                --package "setup-exe=dist/InfinitePrep-$version-windows-x64-setup.exe")
+              ;;
+            macOS)
+              size_arguments=(--os macos --bundle dist/InfinitePrep.app
+                --folders-root dist/InfinitePrep.app/Contents
+                --package "dmg=dist/InfinitePrep-$version-macos-arm64.dmg")
+              ;;
+            Linux)
+              size_arguments=(--os linux --bundle dist/InfinitePrep
+                --package "tarball=dist/InfinitePrep-$version-linux-x86_64.tar.gz"
+                --package "portable-tarball=dist/InfinitePrep-$version-linux-x86_64-portable.tar.gz"
+                --package "appimage=dist/InfinitePrep-$version-linux-x86_64.AppImage")
+              ;;
+            *)
+              echo "No size report covers runner OS $RUNNER_OS. Add a case arm for it."
+              exit 1
+              ;;
+          esac
           status=0
-          python packaging/bundle_size.py check \
-            --os windows \
-            --bundle dist/InfinitePrep \
-            --package "portable-zip=dist/InfinitePrep-$version-windows-x64-portable.zip" \
-            --package "setup-exe=dist/InfinitePrep-$version-windows-x64-setup.exe" \
+          python packaging/bundle_size.py check "${size_arguments[@]}" \
             --report-dir "$report" || status=$?
-          if [ -f "$report/bundle-size-windows.md" ]; then
-            cat "$report/bundle-size-windows.md" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          exit "$status"
-
-      - name: Report bundle and package sizes (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
-          report="$RUNNER_TEMP/size-report"
-          status=0
-          python packaging/bundle_size.py check \
-            --os macos \
-            --bundle dist/InfinitePrep.app \
-            --folders-root dist/InfinitePrep.app/Contents \
-            --package "dmg=dist/InfinitePrep-$version-macos-arm64.dmg" \
-            --report-dir "$report" || status=$?
-          if [ -f "$report/bundle-size-macos.md" ]; then
-            cat "$report/bundle-size-macos.md" >> "$GITHUB_STEP_SUMMARY"
-          fi
-          exit "$status"
-
-      - name: Report bundle and package sizes (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="$(python -c 'import infiniteprep; print(infiniteprep.__version__)')"
-          report="$RUNNER_TEMP/size-report"
-          status=0
-          python packaging/bundle_size.py check \
-            --os linux \
-            --bundle dist/InfinitePrep \
-            --package "tarball=dist/InfinitePrep-$version-linux-x86_64.tar.gz" \
-            --package "portable-tarball=dist/InfinitePrep-$version-linux-x86_64-portable.tar.gz" \
-            --package "appimage=dist/InfinitePrep-$version-linux-x86_64.AppImage" \
-            --report-dir "$report" || status=$?
-          if [ -f "$report/bundle-size-linux.md" ]; then
-            cat "$report/bundle-size-linux.md" >> "$GITHUB_STEP_SUMMARY"
+          summary="$report/bundle-size-${size_arguments[1]}.md"
+          if [ -f "$summary" ]; then
+            cat "$summary" >> "$GITHUB_STEP_SUMMARY"
           fi
           exit "$status"
 
@@ -705,24 +692,36 @@ jobs:
           # therefore reuses each bundle already on the draft (D328).
           # A draft asset is untrusted input. Each reused bundle must verify
           # against this build's package and this repository before reuse.
-          if is_draft="$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft 2>/dev/null)"; then
+          reuse_draft_bundle() {
+            local bundle="$1"
+            local bundle_name download_dir
+            bundle_name="$(basename "$bundle")"
+            echo "Reusing existing $bundle_name from draft release."
+            download_dir="$(mktemp -d "$RUNNER_TEMP/existing-bundle.XXXXXX")"
+            gh release download "$tag" --repo "$repo" --pattern "$bundle_name" --dir "$download_dir"
+            if [ ! -s "$download_dir/$bundle_name" ]; then
+              echo "Downloaded $bundle_name is absent or empty. Delete the draft asset, then rerun."
+              exit 1
+            fi
+            gh attestation verify "${bundle%.sigstore.json}" --repo "$repo" --bundle "$download_dir/$bundle_name"
+            cp "$download_dir/$bundle_name" "$bundle"
+          }
+          # One view reads the draft state and the asset names. A missing release fails the view.
+          view_status=0
+          release_json="$(gh release view "$tag" --repo "$repo" --json isDraft,assets 2>/dev/null)" || view_status=$?
+          if [ "$view_status" -eq 0 ]; then
+            is_draft="$(jq -r '.isDraft' <<<"$release_json")"
             if [ "$is_draft" != "true" ]; then
               echo "Release $tag is already published. This job only fills drafts."
               exit 1
             fi
-            existing="$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name')"
+            declare -A on_draft=()
+            while IFS= read -r asset_name; do
+              if [ -n "$asset_name" ]; then on_draft["$asset_name"]=1; fi
+            done < <(jq -r '.assets[].name' <<<"$release_json")
             for bundle in "$assets"/*.sigstore.json; do
-              bname="$(basename "$bundle")"
-              if grep -Fxq -- "$bname" <<<"$existing"; then
-                echo "Reusing existing $bname from draft release."
-                dl_dir="$(mktemp -d "$RUNNER_TEMP/existing-bundle.XXXXXX")"
-                gh release download "$tag" --repo "$repo" --pattern "$bname" --dir "$dl_dir"
-                if [ ! -s "$dl_dir/$bname" ]; then
-                  echo "Downloaded $bname is absent or empty. Delete the draft asset, then rerun."
-                  exit 1
-                fi
-                gh attestation verify "${bundle%.sigstore.json}" --repo "$repo" --bundle "$dl_dir/$bname"
-                cp "$dl_dir/$bname" "$bundle"
+              if [ -n "${on_draft["$(basename "$bundle")"]+present}" ]; then
+                reuse_draft_bundle "$bundle"
               fi
             done
           fi
@@ -749,7 +748,11 @@ jobs:
           tag="$GITHUB_REF_NAME"
           repo="$GITHUB_REPOSITORY"
           assets="$RUNNER_TEMP/release-assets"
-          if is_draft="$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft 2>/dev/null)"; then
+          # One view reads the draft state and the asset names. A missing release fails the view.
+          view_status=0
+          release_json="$(gh release view "$tag" --repo "$repo" --json isDraft,assets 2>/dev/null)" || view_status=$?
+          if [ "$view_status" -eq 0 ]; then
+            is_draft="$(jq -r '.isDraft' <<<"$release_json")"
             if [ "$is_draft" != "true" ]; then
               echo "Release $tag is already published. This job only fills drafts."
               exit 1
@@ -759,23 +762,27 @@ jobs:
             gh release create "$tag" --repo "$repo" --draft --verify-tag \
               --title "InfinitePrep $tag" \
               --notes-file "$RUNNER_TEMP/release-notes.md" --generate-notes
+            # A new draft holds no assets yet.
+            release_json='{"assets": []}'
           fi
-          existing="$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name')"
           # The draft may hold only this build's assets. A stray file fails the job.
+          declare -A on_draft=()
           while IFS= read -r name; do
-            if [ -n "$name" ] && [ ! -f "$assets/$name" ]; then
+            if [ -z "$name" ]; then continue; fi
+            on_draft["$name"]=1
+            if [ ! -f "$assets/$name" ]; then
               echo "The draft holds $name, which this build does not make."
               echo "Delete $name from the draft, then rerun the release job."
               exit 1
             fi
-          done <<< "$existing"
+          done < <(jq -r '.assets[].name' <<<"$release_json")
           for file in "$assets"/*; do
             name="$(basename "$file")"
-            if printf '%s\n' "$existing" | grep -Fxq -- "$name"; then
+            if [ -n "${on_draft["$name"]+present}" ]; then
               # A new folder per asset keeps old downloads apart without deleting anything.
-              check="$(mktemp -d "$RUNNER_TEMP/existing-asset.XXXXXX")"
-              gh release download "$tag" --repo "$repo" --pattern "$name" --dir "$check"
-              old="$(sha256sum "$check/$name" | cut -d ' ' -f 1)"
+              download_dir="$(mktemp -d "$RUNNER_TEMP/existing-asset.XXXXXX")"
+              gh release download "$tag" --repo "$repo" --pattern "$name" --dir "$download_dir"
+              old="$(sha256sum "$download_dir/$name" | cut -d ' ' -f 1)"
               new="$(sha256sum "$file" | cut -d ' ' -f 1)"
               if [ "$old" != "$new" ]; then
                 echo "$name on the draft has SHA-256 $old, but this build made $new."

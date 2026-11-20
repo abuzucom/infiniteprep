@@ -62,7 +62,7 @@ class TagCheckTest(unittest.TestCase):
             root = Path(temp)
             _make_repo(root, "1.2.0", "1.2.0", CHANGELOG)
 
-            self.assertEqual(RELEASE.tag_problems("v1.2.0", root), [])
+            self.assertEqual(RELEASE.find_tag_problems("v1.2.0", root), [])
 
     def test_each_mismatched_file_is_named(self) -> None:
         """A stale pyproject.toml and an older tag each produce their own line."""
@@ -70,8 +70,8 @@ class TagCheckTest(unittest.TestCase):
             root = Path(temp)
             _make_repo(root, "1.2.0", "1.1.0", CHANGELOG)
 
-            problems = RELEASE.tag_problems("v1.2.0", root)
-            older = RELEASE.tag_problems("v1.1.0", root)
+            problems = RELEASE.find_tag_problems("v1.2.0", root)
+            older = RELEASE.find_tag_problems("v1.1.0", root)
 
         self.assertEqual(len(problems), 1)
         self.assertIn("pyproject.toml", problems[0])
@@ -86,7 +86,7 @@ class TagCheckTest(unittest.TestCase):
             root = Path(temp)
             _make_repo(root, "1.2.0", "1.2.0", CHANGELOG)
 
-            problems = RELEASE.tag_problems("1.2.0", root)
+            problems = RELEASE.find_tag_problems("1.2.0", root)
 
         self.assertEqual(len(problems), 1)
         self.assertIn("does not start with", problems[0])
@@ -125,19 +125,19 @@ class NotesTest(unittest.TestCase):
 
     def test_section_stops_at_the_next_release(self) -> None:
         """The 1.2.0 section holds its own entries and none of 1.1.0."""
-        section = RELEASE.changelog_section("1.2.0", CHANGELOG)
+        section = RELEASE.extract_changelog_section("1.2.0", CHANGELOG)
         self.assertIn("The new feature.", section)
         self.assertNotIn("The old fix.", section)
         self.assertNotIn("## [1.2.0]", section)
 
     def test_last_section_runs_to_the_end(self) -> None:
         """The oldest section ends at the end of the file."""
-        self.assertIn("The old fix.", RELEASE.changelog_section("1.1.0", CHANGELOG))
+        self.assertIn("The old fix.", RELEASE.extract_changelog_section("1.1.0", CHANGELOG))
 
     def test_missing_version_raises(self) -> None:
         """A version without a section raises ValueError with the version named."""
         with self.assertRaises(ValueError) as caught:
-            RELEASE.changelog_section("9.9.9", CHANGELOG)
+            RELEASE.extract_changelog_section("9.9.9", CHANGELOG)
         self.assertIn("9.9.9", str(caught.exception))
 
     def test_notes_end_with_the_download_block(self) -> None:
@@ -146,7 +146,7 @@ class NotesTest(unittest.TestCase):
             root = Path(temp)
             _make_repo(root, "1.2.0", "1.2.0", CHANGELOG)
 
-            notes = RELEASE.release_notes("1.2.0", root)
+            notes = RELEASE.build_release_notes("1.2.0", root)
 
         self.assertTrue(notes.startswith("### Added"))
         for fragment in ("SHA256SUMS.txt", "Open Anyway", "NOTICE"):

@@ -99,6 +99,10 @@ MACOS_ORPHAN_FRAMEWORKS: Final[tuple[str, ...]] = (
     "qtquick",
 )
 FRAMEWORK_SUFFIX: Final[str] = ".framework"
+# The path parts of the orphaned framework folders, such as "qtpdf.framework".
+MACOS_ORPHAN_FRAMEWORK_PARTS: Final[frozenset[str]] = frozenset(
+    f"{name}{FRAMEWORK_SUFFIX}" for name in MACOS_ORPHAN_FRAMEWORKS
+)
 DARWIN_PLATFORM: Final[str] = "darwin"
 LINUX_PLATFORM: Final[str] = "linux"
 
@@ -140,8 +144,7 @@ def is_orphaned_qt_component(destination: str, platform: str) -> bool:
         return True
     if key != DARWIN_PLATFORM:
         return False
-    framework_parts = {f"{name}{FRAMEWORK_SUFFIX}" for name in MACOS_ORPHAN_FRAMEWORKS}
-    if framework_parts.intersection(path.parts):
+    if MACOS_ORPHAN_FRAMEWORK_PARTS.intersection(path.parts):
         return True
     # PyInstaller also places a top-level symlink named after each framework binary.
     return path.name in MACOS_ORPHAN_FRAMEWORKS
@@ -211,17 +214,19 @@ def prune_unneeded_libraries(
     kept = list(entries)
     dropped: list[str] = []
     cache: dict[str, set[str]] = {}
+    # Each prunable destination maps to its file name once, before the first round.
+    candidates = {
+        entry[0]: PurePosixPath(entry[0]).name for entry in kept if is_prunable_library(entry[0])
+    }
     while True:
         needed = _all_needed_names(kept, needed_names, cache)
-        unused = {
-            entry[0]
-            for entry in kept
-            if is_prunable_library(entry[0]) and PurePosixPath(entry[0]).name not in needed
-        }
+        unused = {destination for destination, name in candidates.items() if name not in needed}
         if not unused:
             return kept, dropped
         dropped.extend(sorted(unused))
         kept = [entry for entry in kept if entry[0] not in unused]
+        for destination in unused:
+            del candidates[destination]
 
 
 def _all_needed_names(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import heapq
 import json
 import re
 import xml.etree.ElementTree as ET
@@ -10,11 +11,13 @@ from pathlib import Path
 from typing import Final
 
 MAX_FILES: Final[int] = 20
+# Cobertura writes branch coverage as "50% (1/2)": covered and total conditions.
+CONDITION_COUNTS: Final[re.Pattern[str]] = re.compile(r"\((\d+)/(\d+)\)")
 
 
 def _branch_conditions(branch: ET.Element) -> tuple[int, int]:
     """Return the covered and the total conditions of one branch element."""
-    match = re.search(r"\((\d+)/(\d+)\)", branch.get("condition-coverage", ""))
+    match = CONDITION_COUNTS.search(branch.get("condition-coverage", ""))
     if match is None:
         return 0, 0
     return int(match.group(1)), int(match.group(2))
@@ -36,16 +39,21 @@ def _file_path(filename: str, source_prefix: str) -> str:
     return f"{prefix}/{path}"
 
 
-def _file_record(element: ET.Element, source_prefix: str) -> dict[str, object]:
-    """Return the path and the coverage percent of one class element."""
+def _coverage_counts(element: ET.Element) -> tuple[int, int]:
+    """Return the covered and the measured lines plus conditions of one class element."""
     lines = element.findall("./lines/line")
-    branches = element.findall("./branches/branch")
     covered = sum(1 for line in lines if int(line.get("hits", "0")) > 0)
     measured = len(lines)
-    for branch in branches:
+    for branch in element.findall("./branches/branch"):
         branch_covered, branch_total = _branch_conditions(branch)
         covered += branch_covered
         measured += branch_total
+    return covered, measured
+
+
+def _file_record(element: ET.Element, source_prefix: str) -> dict[str, object]:
+    """Return the path and the coverage percent of one class element."""
+    covered, measured = _coverage_counts(element)
     percent = 100.0 if measured == 0 else 100.0 * covered / measured
     path = _file_path(element.get("filename") or "", source_prefix)
     return {"path": path, "percent": round(percent, 1)}
@@ -59,9 +67,15 @@ def build_summary(report: ET.Element, source_prefix: str = "") -> dict[str, obje
     branches_valid = int(report.get("branches-valid", "0"))
     measured = lines_valid + branches_valid
     total = 100.0 if measured == 0 else 100.0 * (lines_covered + branches_covered) / measured
-    files = [_file_record(element, source_prefix) for element in report.iter("class")]
-    files.sort(key=lambda item: (item["percent"], item["path"]))
-    return {"total": round(total, 1), "files": files[:MAX_FILES]}
+    records = (_file_record(element, source_prefix) for element in report.iter("class"))
+    # nsmallest returns the same list as a full sort cut to MAX_FILES, without the full sort.
+    files = heapq.nsmallest(MAX_FILES, records, key=_coverage_order)
+    return {"total": round(total, 1), "files": files}
+
+
+def _coverage_order(record: dict[str, object]) -> tuple[object, object]:
+    """Order file records by coverage percent, then by path."""
+    return record["percent"], record["path"]
 
 
 def read_summary(coverage_xml: Path, source_prefix: str = "") -> dict[str, object]:

@@ -136,15 +136,32 @@ def run_git(repository: str, arguments: list[str]) -> str:
     return result.stdout.decode("utf-8")
 
 
-def find_version_only_files(repository: str, base: str, head: str, paths: list[str]) -> frozenset[str]:
-    """Return the changed version files that changed only their version."""
-    verified = set()
+def read_version_file_texts(
+    repository: str, base: str, head: str, paths: list[str]
+) -> dict[str, tuple[str, str]]:
+    """Return the base and head text of each changed version file, keyed by path.
+
+    Only paths in VERSION_FILES reach Git.
+    """
+    texts: dict[str, tuple[str, str]] = {}
     for path in sorted(VERSION_FILES.intersection(paths)):
         old_text = run_git(repository, ["show", f"{base}:{path}"])
         new_text = run_git(repository, ["show", f"{head}:{path}"])
-        if is_version_only_edit(path, old_text, new_text):
-            verified.add(path)
-    return frozenset(verified)
+        texts[path] = (old_text, new_text)
+    return texts
+
+
+def select_version_only_files(texts: dict[str, tuple[str, str]]) -> frozenset[str]:
+    """Return the paths whose old and new text differ only in the version."""
+    return frozenset(
+        path for path, (old_text, new_text) in texts.items()
+        if is_version_only_edit(path, old_text, new_text)
+    )
+
+
+def find_version_only_files(repository: str, base: str, head: str, paths: list[str]) -> frozenset[str]:
+    """Return the changed version files that changed only their version."""
+    return select_version_only_files(read_version_file_texts(repository, base, head, paths))
 
 
 def classify_range(repository: str, base: str, head: str) -> str:
