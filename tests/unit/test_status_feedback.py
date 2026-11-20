@@ -29,6 +29,7 @@ from infiniteprep.ui.main_window import (
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 from tests.fixtures.audio_factory import create_wav_fixture
 from tests.fixtures.memory_settings import MemorySettingsManager
+from tests.fixtures.waveform_stub import keep_waveform_pool_idle
 
 STATUS_COLUMN: int = TABLE_COLUMNS.index("Review Status")
 PLAYBACK_ERROR: str = "Playback failed: decoder error."
@@ -180,8 +181,12 @@ def test_status_cell_shows_a_readable_label(
     assert format_status_cell("not_a_status") == "not_a_status"
 
 
-def test_detail_header_says_yes_or_no_for_write_support(qtbot: Any, tmp_path: Path) -> None:
+def test_detail_header_says_yes_or_no_for_write_support(
+    qtbot: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The detail header shows Yes or No for write support instead of True or False."""
+    # The test covers the header text, so no waveform analysis runs.
+    keep_waveform_pool_idle(monkeypatch)
     repository = Repository(DatabaseManager(":memory:"))
     track = create_wav_fixture(tmp_path / "crate" / "a.wav")
     report = ImportService(repository, MetadataTagAdapter()).import_paths([track])

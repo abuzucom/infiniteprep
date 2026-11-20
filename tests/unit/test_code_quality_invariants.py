@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+import pytest
+
+# Code points below 128 are ASCII.
+ASCII_LIMIT: Final[int] = 128
 SRC_ROOT: Final[Path] = Path(__file__).resolve().parents[2] / "src" / "infiniteprep"
 MAX_FUNCTION_LINES: Final[int] = 60
 MAX_LOCAL_VARIABLES: Final[int] = 10
@@ -63,14 +68,42 @@ def find_inner_loop_breaks(node: ast.AST, loop_depth: int = 0) -> list[int]:
     return violations
 
 
-def test_all_source_files_are_ascii_only_and_free_of_todo_markers() -> None:
+@dataclass(frozen=True)
+class ParsedSource:
+    """One source file under src/infiniteprep with its text and syntax tree."""
+
+    path: Path
+    text: str
+    tree: ast.Module
+
+
+@pytest.fixture(scope="module")
+def parsed_sources() -> list[ParsedSource]:
+    """Read and parse every source file once for all invariant tests in this module."""
+    sources = []
+    for file_path in collect_source_files():
+        text = file_path.read_text(encoding="utf-8")
+        sources.append(ParsedSource(file_path, text, ast.parse(text, filename=str(file_path))))
+    return sources
+
+
+def first_non_ascii(text: str) -> tuple[int, str]:
+    """Return the offset and character of the first non-ASCII character in text."""
+    return next((idx, ch) for idx, ch in enumerate(text) if ord(ch) >= ASCII_LIMIT)
+
+
+def test_all_source_files_are_ascii_only_and_free_of_todo_markers(
+    parsed_sources: list[ParsedSource],
+) -> None:
     """Verify every file in src/infiniteprep is strict ASCII and has no deferred-work markers."""
-    files = collect_source_files()
-    assert len(files) > 0, "Expected at least one source file in src/infiniteprep"
-    for file_path in files:
-        raw_text = file_path.read_text(encoding="utf-8")
-        for idx, ch in enumerate(raw_text):
-            assert ord(ch) < 128, (
+    assert len(parsed_sources) > 0, "Expected at least one source file in src/infiniteprep"
+    for source in parsed_sources:
+        file_path, raw_text = source.path, source.text
+        # isascii() checks the whole text at C speed. Only a failing file is scanned
+        # again to report where the first non-ASCII character sits.
+        if not raw_text.isascii():
+            idx, ch = first_non_ascii(raw_text)
+            pytest.fail(
                 f"Non-ASCII character {ch!r} at offset {idx} in {file_path.name}; "
                 "replace with ASCII text."
             )
@@ -83,11 +116,13 @@ def test_all_source_files_are_ascii_only_and_free_of_todo_markers() -> None:
                     )
 
 
-def test_functions_respect_length_locals_nesting_and_docstrings() -> None:
+def test_functions_respect_length_locals_nesting_and_docstrings(
+    parsed_sources: list[ParsedSource],
+) -> None:
     """Verify function length <= 60, locals <= 10, nesting <= 3, and return annotations."""
-    for file_path in collect_source_files():
-        tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
-        for node in ast.walk(tree):
+    for source in parsed_sources:
+        file_path = source.path
+        for node in ast.walk(source.tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             start_line = node.lineno
@@ -116,11 +151,13 @@ def test_functions_respect_length_locals_nesting_and_docstrings() -> None:
             )
 
 
-def test_no_assignments_in_conditionals_or_empty_catch_blocks() -> None:
+def test_no_assignments_in_conditionals_or_empty_catch_blocks(
+    parsed_sources: list[ParsedSource],
+) -> None:
     """Verify no walrus assignments in conditionals and no empty except blocks."""
-    for file_path in collect_source_files():
-        tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
-        for node in ast.walk(tree):
+    for source in parsed_sources:
+        file_path = source.path
+        for node in ast.walk(source.tree):
             if isinstance(node, (ast.If, ast.While)):
                 for sub in ast.walk(node.test):
                     assert not isinstance(sub, ast.NamedExpr), (
@@ -133,11 +170,11 @@ def test_no_assignments_in_conditionals_or_empty_catch_blocks() -> None:
                 )
 
 
-def test_no_weak_hashing_or_unsafe_execution_calls() -> None:
+def test_no_weak_hashing_or_unsafe_execution_calls(parsed_sources: list[ParsedSource]) -> None:
     """Verify no md5/sha1, eval/exec, or subprocess shell=True calls exist in src/."""
-    for file_path in collect_source_files():
-        tree = ast.parse(file_path.read_text(encoding="utf-8"), filename=str(file_path))
-        for node in ast.walk(tree):
+    for source in parsed_sources:
+        file_path = source.path
+        for node in ast.walk(source.tree):
             if not isinstance(node, ast.Call):
                 continue
             if isinstance(node.func, ast.Name):

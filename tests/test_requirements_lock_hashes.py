@@ -33,6 +33,7 @@ BUNDLE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "build-packages.yml"
 SHA256_PATTERN = re.compile(r"^--hash=sha256:([0-9a-f]{64})$")
 PIN_PATTERN = re.compile(r"^([A-Za-z0-9_.-]+)==([^\s;]+)")
 HASH_OPTION = "--hash="
+PIP_TIMEOUT_SECONDS = 120
 # pip prints this line when an artifact's bytes match no committed digest.
 HASH_MISMATCH_TEXT = "THESE PACKAGES DO NOT MATCH THE HASHES"
 UPGRADED_PACKAGE = "pyinstaller-hooks-contrib"
@@ -116,6 +117,8 @@ def run_pip_install(
         encoding="utf-8",
         errors="replace",
         check=False,
+        # A hung pip run fails the test instead of stalling the job until its timeout.
+        timeout=PIP_TIMEOUT_SECONDS,
     )
 
 

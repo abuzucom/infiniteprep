@@ -38,6 +38,9 @@ from infiniteprep.services.usb.models import (
 )
 
 RUNNER_DEADLINE_SECONDS: Final[float] = 2.0
+# The stuck child never exits, so its test waits out the whole deadline. A short
+# deadline keeps that wait small. Tests whose child must finish keep the longer one.
+STUCK_CHILD_DEADLINE_SECONDS: Final[float] = 0.2
 # The longest legitimate path after the deadline: up to two terminate rounds,
 # each with two grace waits and one reap wait, two reader joins, and the
 # final grace wait.
@@ -1077,11 +1080,11 @@ class TestUsbMacosInspection(unittest.TestCase):
         """A child that never closes stdout fails within the deadline plus the runner grace."""
         started = time.monotonic()
         result = bounded_command_runner(
-            [sys.executable, "-c", "import time; time.sleep(60)"], RUNNER_DEADLINE_SECONDS
+            [sys.executable, "-c", "import time; time.sleep(60)"], STUCK_CHILD_DEADLINE_SECONDS
         )
         elapsed = time.monotonic() - started
         self.assertNotEqual(result.returncode, 0)
-        self.assertLess(elapsed, RUNNER_DEADLINE_SECONDS + RUNNER_GRACE_SECONDS)
+        self.assertLess(elapsed, STUCK_CHILD_DEADLINE_SECONDS + RUNNER_GRACE_SECONDS)
 
     def test_bounded_runner_survives_stderr_flood(self) -> None:
         """A child flooding stderr finishes within the deadline with bounded storage.

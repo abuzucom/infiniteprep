@@ -39,6 +39,8 @@ def test_file_and_detail_column_widths_persist_between_windows(
     review_service = ReviewService(repository)
     settings_manager = MemorySettingsManager()
     monkeypatch.setattr(main_window_module, "SettingsManager", lambda: settings_manager)
+    # A zero delay fires the save timer on the next event loop turn, not after 300 ms.
+    monkeypatch.setattr(main_window_module, "LAYOUT_SAVE_DELAY_MS", 0)
     first_window = MainWindow(repository, ImportService(repository), review_service)
     qtbot.addWidget(first_window)
     first_window.file_table.horizontalHeader().resizeSection(0, 217)

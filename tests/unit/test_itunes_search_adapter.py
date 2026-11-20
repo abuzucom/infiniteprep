@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 import threading
-import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from infiniteprep.adapters import http_json
 from infiniteprep.adapters.catalog.itunes import (
     ITUNES_SEARCH_URL,
     ItunesSearchAdapter,
@@ -25,8 +26,11 @@ from infiniteprep.services.reconciliation import ReconciliationService
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "itunes_search"
 FILE_ID = "file-1"
 RATE_LIMIT_INTERVAL_SEC = 0.2
-# The Windows scheduler returns from a sleep early by up to one timer tick.
-RATE_LIMIT_TOLERANCE_SEC = 0.02
+# A fake clock far past zero, so the first request owes no wait.
+START_SECONDS = 1000.0
+THREAD_COUNT = 2
+# Upper bound on the wait for the second thread to miss the cache.
+OVERLAP_TIMEOUT_SEC = 10.0
 
 
 def _recorded(name: str) -> dict[str, Any]:
@@ -161,20 +165,33 @@ def test_the_response_is_cached_in_the_shared_sqlite_cache() -> None:
     assert first[0].provider_entity_id == second[0].provider_entity_id
 
 
-def test_the_rate_limit_holds_the_next_request_back() -> None:
+def test_the_rate_limit_holds_the_next_request_back(monkeypatch: pytest.MonkeyPatch) -> None:
     """Two calls in a row wait the minimum interval between them."""
+    clock_seconds = [START_SECONDS]
+    sleeps: list[float] = []
+
+    def read_clock() -> float:
+        """Return the fake clock, which moves only when the limiter sleeps."""
+        return clock_seconds[0]
+
+    def record_sleep(seconds: float) -> None:
+        """Record the wait and move the fake clock past it."""
+        sleeps.append(seconds)
+        clock_seconds[0] += seconds
+
+    # The limiter reads time through the http_json module name.
+    fake_time = SimpleNamespace(monotonic=read_clock, sleep=record_sleep)
+    monkeypatch.setattr(http_json, "time", fake_time)
     adapter = _adapter(
         _repository(),
         _recorded("match_with_genre_and_date"),
         limiter=RequestLimiter(RATE_LIMIT_INTERVAL_SEC),
     )
 
-    started = time.monotonic()
     adapter.search(_query(), file_id=FILE_ID)
     adapter.search(MetadataSearchQuery(artist="Deep Dish", title="Flashdance"), file_id=FILE_ID)
-    elapsed = time.monotonic() - started
 
-    assert elapsed >= RATE_LIMIT_INTERVAL_SEC - RATE_LIMIT_TOLERANCE_SEC
+    assert sleeps == [pytest.approx(RATE_LIMIT_INTERVAL_SEC)]
 
 
 def test_an_unrelated_row_supplies_no_candidate() -> None:
@@ -205,18 +222,34 @@ def test_the_cache_key_names_the_provider_and_the_endpoint() -> None:
     assert "itunes.apple.com" not in key
 
 
-def test_two_threads_send_one_lookup_for_the_same_track() -> None:
+def test_two_threads_send_one_lookup_for_the_same_track(monkeypatch: pytest.MonkeyPatch) -> None:
     """Two threads that miss the cache together send one request between them."""
     repository = _repository()
     limiter = RequestLimiter(0.0)
     calls: list[str] = []
     lock = threading.Lock()
+    missed_threads: set[int] = set()
+    both_missed = threading.Event()
+    real_get_cached_response = repository.get_cached_response
+
+    def record_misses(cache_key: str) -> dict[str, Any] | None:
+        """Read the cache and note each thread that found nothing."""
+        cached = real_get_cached_response(cache_key)
+        if cached is None:
+            with lock:
+                missed_threads.add(threading.get_ident())
+                if len(missed_threads) >= THREAD_COUNT:
+                    both_missed.set()
+        return cached
 
     def fake_get(url: str, _params: dict[str, str]) -> dict[str, Any]:
+        """Hold the request until the other thread has missed the cache too."""
         with lock:
             calls.append(url)
-        time.sleep(0.05)
+        both_missed.wait(OVERLAP_TIMEOUT_SEC)
         return _recorded("match_with_genre_and_date")
+
+    monkeypatch.setattr(repository, "get_cached_response", record_misses)
 
     adapter = ItunesSearchAdapter(repository=repository, http_get_json=fake_get, limiter=limiter)
     results: list[int] = []
@@ -227,12 +260,14 @@ def test_two_threads_send_one_lookup_for_the_same_track() -> None:
         )
         results.append(len(matches))
 
-    threads = [threading.Thread(target=run_search) for _ in range(2)]
+    threads = [threading.Thread(target=run_search) for _ in range(THREAD_COUNT)]
     for thread in threads:
         thread.start()
     for thread in threads:
-        thread.join(timeout=10)
+        thread.join(timeout=OVERLAP_TIMEOUT_SEC)
 
+    # Both threads missed the cache while the one request was in flight.
+    assert both_missed.is_set()
     assert len(calls) == 1
     assert results == [1, 1]
 

@@ -26,6 +26,8 @@ OK_STATUS = 200
 LOOPBACK = "127.0.0.1"
 TARGET_PATH = "/target"
 JOIN_TIMEOUT_SEC = 5.0
+# shutdown() waits for the next poll. The default 0.5 s poll would add that wait.
+SERVER_POLL_SEC = 0.01
 
 
 class _RedirectHandler(BaseHTTPRequestHandler):
@@ -60,7 +62,9 @@ def redirect_server() -> Iterator[tuple[str, list[str]]]:
     hits: list[str] = []
     handler = type("Handler", (_RedirectHandler,), {"target_hits": hits})
     server = ThreadingHTTPServer((LOOPBACK, 0), handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": SERVER_POLL_SEC}, daemon=True
+    )
     thread.start()
     try:
         yield f"http://{LOOPBACK}:{server.server_address[1]}", hits

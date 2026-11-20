@@ -36,6 +36,8 @@ FILE_ID = "file-1"
 LIMITER_INTERVAL_SECONDS = 0.05
 # Any start far from zero makes the first request owe no wait.
 START_SECONDS = 1000.0
+# shutdown() waits for the next poll. The default 0.5 s poll would add that wait.
+SERVER_POLL_SEC = 0.01
 
 
 def _recorded(name: str) -> dict[str, Any]:
@@ -108,7 +110,9 @@ def test_a_redirect_response_becomes_an_error_and_never_reaches_the_target() -> 
             """Keep the test output free of the server log."""
 
     server = HTTPServer(("127.0.0.1", 0), RedirectHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread = threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": SERVER_POLL_SEC}, daemon=True
+    )
     thread.start()
     try:
         opener = build_search_opener()

@@ -16,6 +16,7 @@ BASH = shutil.which("bash")
 PWSH = shutil.which("pwsh")
 GIT = shutil.which("git")
 GUARD_EXIT = 2
+TEMPLATE_BRANCHES = ("main", "feature")
 
 
 def bash_can_run_scripts() -> bool:
@@ -54,13 +55,29 @@ def git(repo: Path, *args: str) -> None:
     )
 
 
-def make_repo(tmp_path: Path, branch: str = "main") -> Path:
-    """Create a git repo holding copies of the dev scripts, committed on branch."""
-    repo = tmp_path / "repo"
+def build_template_repo(repo: Path, branch: str) -> Path:
+    """Create a git repo at repo holding copies of the dev scripts, committed on branch."""
     shutil.copytree(DEV_SCRIPTS, repo / "scripts" / "dev")
     git(repo, "init", "-q", "-b", branch)
     git(repo, "add", ".")
     git(repo, "commit", "-q", "-m", "scripts")
+    return repo
+
+
+@pytest.fixture(scope="module")
+def repo_templates(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Path]:
+    """Build one committed template repo per branch, once for the module.
+
+    Each git spawn costs tens of milliseconds, and every test needs the same commit.
+    """
+    root = tmp_path_factory.mktemp("dev-script-templates")
+    return {branch: build_template_repo(root / branch, branch) for branch in TEMPLATE_BRANCHES}
+
+
+def make_repo(tmp_path: Path, templates: dict[str, Path], branch: str = "main") -> Path:
+    """Copy the template repo for branch into tmp_path. The copy keeps its commit."""
+    repo = tmp_path / "repo"
+    shutil.copytree(templates[branch], repo)
     return repo
 
 
@@ -75,9 +92,11 @@ def run_bash(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 
 @needs_bash
-def test_update_script_refuses_a_dirty_tree(tmp_path: Path) -> None:
+def test_update_script_refuses_a_dirty_tree(
+    tmp_path: Path, repo_templates: dict[str, Path]
+) -> None:
     """Uncommitted changes stop the run before anything is pulled or installed."""
-    repo = make_repo(tmp_path)
+    repo = make_repo(tmp_path, repo_templates)
     (repo / "notes.txt").write_text("local edit", encoding="utf-8")
     result = run_bash(repo / "scripts" / "dev" / "update_and_check.sh", "--dry-run")
     assert result.returncode == GUARD_EXIT
@@ -85,9 +104,11 @@ def test_update_script_refuses_a_dirty_tree(tmp_path: Path) -> None:
 
 
 @needs_bash
-def test_update_script_refuses_a_branch_other_than_main(tmp_path: Path) -> None:
+def test_update_script_refuses_a_branch_other_than_main(
+    tmp_path: Path, repo_templates: dict[str, Path]
+) -> None:
     """A checkout on another branch stops the run unless --no-pull is given."""
-    repo = make_repo(tmp_path, branch="feature")
+    repo = make_repo(tmp_path, repo_templates, branch="feature")
     script = repo / "scripts" / "dev" / "update_and_check.sh"
     refused = run_bash(script, "--dry-run")
     assert refused.returncode == GUARD_EXIT
@@ -98,9 +119,11 @@ def test_update_script_refuses_a_branch_other_than_main(tmp_path: Path) -> None:
 
 
 @needs_bash
-def test_update_script_dry_run_lists_the_steps_and_changes_nothing(tmp_path: Path) -> None:
+def test_update_script_dry_run_lists_the_steps_and_changes_nothing(
+    tmp_path: Path, repo_templates: dict[str, Path]
+) -> None:
     """A dry run on a clean main prints every step and leaves the checkout untouched."""
-    repo = make_repo(tmp_path)
+    repo = make_repo(tmp_path, repo_templates)
     result = run_bash(repo / "scripts" / "dev" / "update_and_check.sh", "--dry-run")
     assert result.returncode == 0
     for step in ("git pull --ff-only", "Would install", "Would run checks", "Would launch"):
@@ -110,18 +133,22 @@ def test_update_script_dry_run_lists_the_steps_and_changes_nothing(tmp_path: Pat
 
 
 @needs_bash
-def test_update_script_rejects_unknown_options(tmp_path: Path) -> None:
+def test_update_script_rejects_unknown_options(
+    tmp_path: Path, repo_templates: dict[str, Path]
+) -> None:
     """An unknown option stops the run with the list of valid options."""
-    repo = make_repo(tmp_path)
+    repo = make_repo(tmp_path, repo_templates)
     result = run_bash(repo / "scripts" / "dev" / "update_and_check.sh", "--force")
     assert result.returncode == GUARD_EXIT
     assert "Unknown option: --force" in result.stdout
 
 
 @needs_bash
-def test_copy_script_copies_at_most_per_format_and_leaves_sources(tmp_path: Path) -> None:
+def test_copy_script_copies_at_most_per_format_and_leaves_sources(
+    tmp_path: Path, repo_templates: dict[str, Path]
+) -> None:
     """The copy helper takes at most PER_FORMAT files of each format and never edits sources."""
-    repo = make_repo(tmp_path)
+    repo = make_repo(tmp_path, repo_templates)
     source = tmp_path / "music"
     source.mkdir()
     for index in range(3):
@@ -138,18 +165,22 @@ def test_copy_script_copies_at_most_per_format_and_leaves_sources(tmp_path: Path
 
 
 @needs_bash
-def test_copy_script_rejects_a_missing_folder(tmp_path: Path) -> None:
+def test_copy_script_rejects_a_missing_folder(
+    tmp_path: Path, repo_templates: dict[str, Path]
+) -> None:
     """A source folder that does not exist stops the helper before it creates anything."""
-    repo = make_repo(tmp_path)
+    repo = make_repo(tmp_path, repo_templates)
     result = run_bash(repo / "scripts" / "dev" / "make_test_copies.sh", str(tmp_path / "nope"))
     assert result.returncode == GUARD_EXIT
     assert not (repo / "scratch").exists()
 
 
 @needs_bash
-def test_copy_script_treats_a_dash_named_folder_as_a_path(tmp_path: Path) -> None:
+def test_copy_script_treats_a_dash_named_folder_as_a_path(
+    tmp_path: Path, repo_templates: dict[str, Path]
+) -> None:
     """A source folder named like a find option is copied from, never run as an option."""
-    repo = make_repo(tmp_path)
+    repo = make_repo(tmp_path, repo_templates)
     work = tmp_path / "work"
     (work / "-delete").mkdir(parents=True)
     (work / "-delete" / "track.mp3").write_bytes(b"mp3 bytes")
@@ -170,10 +201,10 @@ def test_copy_script_treats_a_dash_named_folder_as_a_path(tmp_path: Path) -> Non
 @needs_bash
 @pytest.mark.parametrize("per_format", ["0", "1001", "x"])
 def test_copy_script_rejects_a_count_outside_one_to_a_thousand(
-    tmp_path: Path, per_format: str
+    tmp_path: Path, repo_templates: dict[str, Path], per_format: str
 ) -> None:
     """PER_FORMAT outside 1 to 1000 stops the helper before it creates anything."""
-    repo = make_repo(tmp_path)
+    repo = make_repo(tmp_path, repo_templates)
     source = tmp_path / "music"
     source.mkdir()
     script = repo / "scripts" / "dev" / "make_test_copies.sh"

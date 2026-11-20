@@ -23,6 +23,8 @@ PYPROJECT_TEXT = f'[project]\nname = "infiniteprep"\nversion = "{VERSION}"\n'
 CHANGELOG_TEXT = f"# Changelog\n\n## [{VERSION}] (2026-11-09)\n\n- The feature.\n"
 # Three MiB spans several reads for any chunked digest.
 LARGE_FILE_BYTES = 3 * 1024 * 1024 + 17
+# The digest test content repeats the byte values 0 to 250.
+DIGEST_PATTERN_LENGTH = 251
 
 
 def _load_release() -> ModuleType:
@@ -132,7 +134,9 @@ class FileDigestTest(unittest.TestCase):
 
     def test_digest_matches_hashlib(self) -> None:
         """The digest equals hashlib.sha256 over the whole content."""
-        content = bytes(index % 251 for index in range(LARGE_FILE_BYTES))
+        # The repeated 251-byte run gives the same bytes as index % 251 per position.
+        pattern = bytes(range(DIGEST_PATTERN_LENGTH))
+        content = (pattern * (LARGE_FILE_BYTES // len(pattern) + 1))[:LARGE_FILE_BYTES]
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "large.bin"
             path.write_bytes(content)

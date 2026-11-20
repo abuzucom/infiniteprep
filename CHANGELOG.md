@@ -5,6 +5,26 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.80.5] (2026-11-20)
+
+### Changed
+
+- Owned tests spend less time waiting and rebuilding the same inputs.
+  - The waveform duration cap test lowers the cap to 2 s. The stuck child runner test uses a 0.2 s deadline. The stderr flood test keeps 2.0 s because its child must finish inside the window.
+  - The migration, rate limit, two-thread lookup, folder import, and layout persistence tests wait for the checked event instead of a fixed sleep. The migration and lookup tests now assert the overlap that the old sleeps only made likely.
+  - The local HTTP servers poll every 10 ms. Shutdown returns at once.
+  - The WAV fixture factory renders each argument set once and writes a fresh copy for every caller. The new `tests/unit/test_audio_factory_cache.py` pins that the cached bytes match a direct write.
+  - Three detail panel tests keep the waveform pool idle through the shared stub in `tests/fixtures/waveform_stub.py`.
+  - Module-scoped fixtures share three read-only inputs.
+    - The ID3 frame at the inflation limit.
+    - The analyzed test tones.
+    - The parsed `src/` files for the invariant tests.
+  - Five root test modules parse each workflow once per class. The comment script tests extract the script once per class.
+  - The git-backed tests build each template repository once and copy the template into every test.
+  - The ASCII checks use `str.isascii`. The in-memory isolation test checks ten closed managers. The digest test builds its content from a repeated byte run.
+  - The pip runs stop after 120 s. The folder import fixtures open each import gate in teardown.
+- The version advances from 0.80.4 to 0.80.5 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
 ## [0.80.4] (2026-11-19)
 
 ### Changed

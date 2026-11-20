@@ -16,6 +16,13 @@ from infiniteprep.services.waveform_analysis import (
     downsample_waveform,
 )
 
+# A lowered duration cap and the lowest sample rate the analyzer accepts.
+CAP_SECONDS = 2
+CAP_SAMPLE_RATE = 8000
+# One tone per band. The read-only tests share their analyses.
+MID_TONE_HZ = 1000
+SHARED_TONE_FREQUENCIES = (60, MID_TONE_HZ, 8000)
+
 
 def write_tone(path: Path, frequency: float, seconds: float = 1.25) -> Path:
     """Create a floating-point sine fixture without stored audio assets."""
@@ -34,9 +41,27 @@ def test_cancelled_analysis_exits_before_file_access(tmp_path: Path) -> None:
         analyze_waveform(tmp_path / "missing.wav", cancel_event=cancel_event)
 
 
+@pytest.fixture(scope="module")
+def analyzed_tones(tmp_path_factory: pytest.TempPathFactory) -> dict[int, SpectrumWaveform]:
+    """Analyze each read-only test tone once for the whole module.
+
+    SpectrumWaveform holds immutable arrays, so sharing one result is safe. Tests
+    that check the cache or rewrite the source keep their own files.
+    """
+    folder = tmp_path_factory.mktemp("tones")
+    return {
+        frequency: analyze_waveform(
+            write_tone(folder / f"tone-{frequency}.wav", frequency), folder / "cache"
+        )
+        for frequency in SHARED_TONE_FREQUENCIES
+    }
+
+
 @pytest.mark.parametrize("frequency,band", [(60, "low"), (1000, "mid"), (8000, "high")])
-def test_band_dominance(tmp_path: Path, frequency: float, band: str) -> None:
-    waveform = analyze_waveform(write_tone(tmp_path / "tone.wav", frequency), tmp_path / "cache")
+def test_band_dominance(
+    analyzed_tones: dict[int, SpectrumWaveform], frequency: int, band: str
+) -> None:
+    waveform = analyzed_tones[frequency]
     dominant = getattr(waveform, band)[10:].mean()
     for other in {"low", "mid", "high"} - {band}:
         assert dominant > getattr(waveform, other)[10:].mean() * 5
@@ -64,8 +89,8 @@ def test_cache_content_and_eviction(tmp_path: Path) -> None:
     assert unrelated.read_text(encoding="utf-8") == "retain"
 
 
-def test_overview_preserves_peaks(tmp_path: Path) -> None:
-    waveform = analyze_waveform(write_tone(tmp_path / "tone.wav", 1000), tmp_path / "cache")
+def test_overview_preserves_peaks(analyzed_tones: dict[int, SpectrumWaveform]) -> None:
+    waveform = analyzed_tones[MID_TONE_HZ]
     overview = downsample_waveform(waveform, 17)
     assert len(overview.overall) == 17
     assert overview.overall.max() == waveform.overall.max()
@@ -110,15 +135,20 @@ def test_corrupt_cache_recomputes(tmp_path: Path) -> None:
     np.testing.assert_array_equal(expected.mid, actual.mid)
 
 
-def test_duration_cap(tmp_path: Path) -> None:
-    """Generate silent audio past the cap without allocating a full track array."""
+def test_duration_cap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Audio past the duration cap stops at the cap.
+
+    A lowered cap keeps the fixture to a few seconds. The real 1800 s cap would
+    need about 14 million samples for the same check.
+    """
+    monkeypatch.setattr(analysis, "MAX_PREVIEW_DURATION_SEC", CAP_SECONDS)
     source = tmp_path / "long.wav"
-    with sf.SoundFile(source, mode="w", samplerate=8000, channels=1) as audio:
-        for _ in range(1801):
-            audio.write(np.zeros(8000, dtype=np.float32))
+    with sf.SoundFile(source, mode="w", samplerate=CAP_SAMPLE_RATE, channels=1) as audio:
+        for _ in range(CAP_SECONDS + 1):
+            audio.write(np.zeros(CAP_SAMPLE_RATE, dtype=np.float32))
     waveform = analyze_waveform(source, tmp_path / "cache")
-    assert waveform.duration_sec == 1800
-    assert len(waveform.overall) == 270000
+    assert waveform.duration_sec == CAP_SECONDS
+    assert len(waveform.overall) == CAP_SECONDS * analysis.COLUMNS_PER_SECOND
 
 
 def test_file_size_cap(tmp_path: Path) -> None:

@@ -60,8 +60,12 @@ class SyncCheckJobTest(unittest.TestCase):
 class ComplianceTriggerTest(unittest.TestCase):
     """The AGENTS.md compliance workflow runs on pull requests to main."""
 
-    def setUp(self) -> None:
-        self.triggers = read_triggers(load_workflow("agents-md-compliance.yml"))
+    triggers: dict[str, Any]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Parse the compliance workflow once. No test changes the parsed data."""
+        cls.triggers = read_triggers(load_workflow("agents-md-compliance.yml"))
 
     def test_pull_request_trigger_targets_main(self) -> None:
         self.assertEqual(self.triggers["pull_request"]["branches"], ["main"])

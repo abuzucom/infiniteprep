@@ -34,6 +34,15 @@ def v23_tag(frames: bytes) -> bytes:
     return tag_bytes(3, frames)
 
 
+@pytest.fixture(scope="module")
+def frame_at_limit() -> bytes:
+    """Return one compressed frame at the inflation limit, built once for the module.
+
+    Compressing the 16 MiB body is the slow step, and the bytes never change.
+    """
+    return compressed_priv_frame(MAX_INFLATED_FRAME_BYTES)
+
+
 def test_frame_inflating_past_the_frame_limit_is_dropped() -> None:
     """A compressed frame that inflates past MAX_INFLATED_FRAME_BYTES is dropped and named."""
     tag = parse_id3v2(v23_tag(compressed_priv_frame(MAX_INFLATED_FRAME_BYTES + 1)))
@@ -42,19 +51,18 @@ def test_frame_inflating_past_the_frame_limit_is_dropped() -> None:
     assert tag.dropped_frames == ("PRIV",)
 
 
-def test_frame_inflating_to_exactly_the_frame_limit_is_kept() -> None:
+def test_frame_inflating_to_exactly_the_frame_limit_is_kept(frame_at_limit: bytes) -> None:
     """A compressed frame at MAX_INFLATED_FRAME_BYTES still inflates in full."""
-    tag = parse_id3v2(v23_tag(compressed_priv_frame(MAX_INFLATED_FRAME_BYTES)))
+    tag = parse_id3v2(v23_tag(frame_at_limit))
     assert tag is not None
     assert tag.dropped_frames == ()
     assert len(tag.frames[0].body) == MAX_INFLATED_FRAME_BYTES
 
 
-def test_frames_past_the_tag_inflation_budget_are_dropped() -> None:
+def test_frames_past_the_tag_inflation_budget_are_dropped(frame_at_limit: bytes) -> None:
     """Once a tag inflates MAX_INFLATED_TAG_BYTES in total, later compressed frames are dropped."""
     frames_in_budget = MAX_INFLATED_TAG_BYTES // MAX_INFLATED_FRAME_BYTES
-    frame = compressed_priv_frame(MAX_INFLATED_FRAME_BYTES)
-    tag = parse_id3v2(v23_tag(frame * (frames_in_budget + 1)))
+    tag = parse_id3v2(v23_tag(frame_at_limit * (frames_in_budget + 1)))
     assert tag is not None
     assert len(tag.frames) == frames_in_budget
     assert tag.dropped_frames == ("PRIV",)

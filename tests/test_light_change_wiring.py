@@ -48,6 +48,11 @@ def load_jobs(workflow_name: str) -> dict[str, Any]:
     return dict(yaml.safe_load(text)["jobs"])
 
 
+def load_jobs_by_workflow(workflow_jobs: tuple[tuple[str, str], ...]) -> dict[str, dict[str, Any]]:
+    """Return the parsed jobs of each named workflow, keyed by workflow file name."""
+    return {workflow_name: load_jobs(workflow_name) for workflow_name, _job in workflow_jobs}
+
+
 def find_classify_index(steps: list[dict[str, Any]]) -> int:
     """Return the position of the classify step."""
     return next(index for index, step in enumerate(steps) if step.get("id") == "classify")
@@ -56,11 +61,18 @@ def find_classify_index(steps: list[dict[str, Any]]) -> int:
 class ClassifyStepTest(unittest.TestCase):
     """Each workflow classifies the change with the repository script."""
 
+    jobs_by_workflow: dict[str, dict[str, Any]]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Parse each classifying workflow once. No test changes the parsed data."""
+        cls.jobs_by_workflow = load_jobs_by_workflow(CLASSIFYING_JOBS)
+
     def test_checkout_fetches_the_whole_history(self) -> None:
         """The merge base lookup needs the complete history and no credentials."""
         for workflow_name, job_name in CLASSIFYING_JOBS:
             with self.subTest(workflow=workflow_name):
-                checkout = load_jobs(workflow_name)[job_name]["steps"][0]
+                checkout = self.jobs_by_workflow[workflow_name][job_name]["steps"][0]
                 self.assertTrue(checkout["uses"].startswith("actions/checkout@"))
                 self.assertEqual(checkout["with"]["fetch-depth"], 0)
                 self.assertIs(checkout["with"]["persist-credentials"], False)
@@ -69,7 +81,7 @@ class ClassifyStepTest(unittest.TestCase):
         """Event data reaches the script as environment values, never as shell text."""
         for workflow_name, job_name in CLASSIFYING_JOBS:
             with self.subTest(workflow=workflow_name):
-                steps = load_jobs(workflow_name)[job_name]["steps"]
+                steps = self.jobs_by_workflow[workflow_name][job_name]["steps"]
                 classify = steps[find_classify_index(steps)]
                 self.assertEqual(classify["run"], CLASSIFY_COMMAND)
                 self.assertEqual(classify["env"], REVISION_SOURCES_BY_WORKFLOW[workflow_name])
@@ -78,9 +90,12 @@ class ClassifyStepTest(unittest.TestCase):
 class TestMatrixSkipTest(unittest.TestCase):
     """The ci test matrix skips on a light change and runs in every other case."""
 
-    def setUp(self) -> None:
-        """Parse the ci jobs."""
-        self.jobs = load_jobs("ci.yml")
+    jobs: dict[str, Any]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Parse the ci jobs once. No test changes the parsed data."""
+        cls.jobs = load_jobs("ci.yml")
 
     def test_changes_job_exports_the_light_flag(self) -> None:
         """The job output reads the light flag of the classify step."""
@@ -107,11 +122,18 @@ class TestMatrixSkipTest(unittest.TestCase):
 class ScanSkipTest(unittest.TestCase):
     """Each scan job always reports, and its scan steps skip on a light change."""
 
+    jobs_by_workflow: dict[str, dict[str, Any]]
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Parse each scan workflow once. No test changes the parsed data."""
+        cls.jobs_by_workflow = load_jobs_by_workflow(SCAN_JOBS)
+
     def test_scan_jobs_carry_no_job_condition(self) -> None:
         """The job runs on every change, so its check always reports a result."""
         for workflow_name, job_name in SCAN_JOBS:
             with self.subTest(workflow=workflow_name):
-                job = load_jobs(workflow_name)[job_name]
+                job = self.jobs_by_workflow[workflow_name][job_name]
                 self.assertNotIn("if", job)
                 self.assertNotIn("needs", job)
 
@@ -119,7 +141,7 @@ class ScanSkipTest(unittest.TestCase):
         """A crashed classify step stops the job with a failure, never with a silent skip."""
         for workflow_name, job_name in SCAN_JOBS:
             with self.subTest(workflow=workflow_name):
-                steps = load_jobs(workflow_name)[job_name]["steps"]
+                steps = self.jobs_by_workflow[workflow_name][job_name]["steps"]
                 classify = steps[find_classify_index(steps)]
                 self.assertNotIn("continue-on-error", classify)
                 self.assertNotIn("if", classify)
@@ -127,7 +149,7 @@ class ScanSkipTest(unittest.TestCase):
     def test_every_step_after_classify_skips_on_a_light_change(self) -> None:
         """The scan and its upload carry the light condition."""
         for workflow_name, job_name in SCAN_JOBS:
-            steps = load_jobs(workflow_name)[job_name]["steps"]
+            steps = self.jobs_by_workflow[workflow_name][job_name]["steps"]
             later_steps = steps[find_classify_index(steps) + 1 :]
             self.assertTrue(later_steps, workflow_name)
             for step in later_steps:
