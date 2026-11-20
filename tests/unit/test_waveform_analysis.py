@@ -16,6 +16,10 @@ from infiniteprep.services.waveform_analysis import (
     downsample_waveform,
 )
 
+# A lowered duration cap and the lowest sample rate the analyzer accepts.
+CAP_SECONDS = 2
+CAP_SAMPLE_RATE = 8000
+
 
 def write_tone(path: Path, frequency: float, seconds: float = 1.25) -> Path:
     """Create a floating-point sine fixture without stored audio assets."""
@@ -110,15 +114,20 @@ def test_corrupt_cache_recomputes(tmp_path: Path) -> None:
     np.testing.assert_array_equal(expected.mid, actual.mid)
 
 
-def test_duration_cap(tmp_path: Path) -> None:
-    """Generate silent audio past the cap without allocating a full track array."""
+def test_duration_cap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Audio past the duration cap stops at the cap.
+
+    A lowered cap keeps the fixture to a few seconds. The real 1800 s cap would
+    need about 14 million samples for the same check.
+    """
+    monkeypatch.setattr(analysis, "MAX_PREVIEW_DURATION_SEC", CAP_SECONDS)
     source = tmp_path / "long.wav"
-    with sf.SoundFile(source, mode="w", samplerate=8000, channels=1) as audio:
-        for _ in range(1801):
-            audio.write(np.zeros(8000, dtype=np.float32))
+    with sf.SoundFile(source, mode="w", samplerate=CAP_SAMPLE_RATE, channels=1) as audio:
+        for _ in range(CAP_SECONDS + 1):
+            audio.write(np.zeros(CAP_SAMPLE_RATE, dtype=np.float32))
     waveform = analyze_waveform(source, tmp_path / "cache")
-    assert waveform.duration_sec == 1800
-    assert len(waveform.overall) == 270000
+    assert waveform.duration_sec == CAP_SECONDS
+    assert len(waveform.overall) == CAP_SECONDS * analysis.COLUMNS_PER_SECOND
 
 
 def test_file_size_cap(tmp_path: Path) -> None:
