@@ -25,6 +25,7 @@ from infiniteprep.ui.detail_panel import (
     format_other_tag_value,
 )
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.waveform_stub import keep_waveform_pool_idle
 
 TRACK_SECONDS = 2.0
 SEEK_SECONDS = 0.75
@@ -39,8 +40,10 @@ ADDED_RAW_TAGS: dict[str, object] = {
 
 
 @pytest.fixture
-def panel_parts(qtbot: Any, tmp_path: Path) -> Any:
+def panel_parts(qtbot: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     """Import two real WAV files and return the panel, repository, and both file IDs."""
+    # These tests cover refreshes and playback, so no waveform analysis runs.
+    keep_waveform_pool_idle(monkeypatch)
     first = create_wav_fixture(
         tmp_path / "music" / "first.wav",
         duration_sec=TRACK_SECONDS,

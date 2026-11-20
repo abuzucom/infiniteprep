@@ -23,6 +23,7 @@ from infiniteprep.ui.detail_panel import (
     DetailPanel,
 )
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.waveform_stub import keep_waveform_pool_idle
 
 ARTIST_ROW: int = DISPLAY_FIELDS.index(FieldName.ARTIST)
 TITLE_ROW: int = DISPLAY_FIELDS.index(FieldName.TITLE)
@@ -36,8 +37,12 @@ class SaveFailedError(RuntimeError):
 
 
 @pytest.fixture
-def panel_and_file(qtbot: Any, tmp_path: Path) -> tuple[DetailPanel, str]:
+def panel_and_file(
+    qtbot: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[DetailPanel, str]:
     """Import one WAV and show its rows in a detail panel."""
+    # These tests cover row actions, so no waveform analysis runs.
+    keep_waveform_pool_idle(monkeypatch)
     repository = Repository(DatabaseManager(":memory:"))
     track = create_wav_fixture(tmp_path / "crate" / "a.wav")
     report = ImportService(repository, MetadataTagAdapter()).import_paths([track])
