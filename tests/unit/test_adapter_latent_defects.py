@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import io
 import logging
 import subprocess
@@ -112,10 +113,14 @@ class _Response(io.BytesIO):
 
 
 def _raising(error: Exception) -> Any:
-    """Return an http_get_json stand-in that raises error on every request."""
+    """Return an http_get_json stand-in that raises a copy of error on every request.
+
+    A fresh copy per raise keeps the shared error instances free of tracebacks
+    and context from earlier tests.
+    """
 
     def http_get_json(_url: str, _params: dict[str, str]) -> dict[str, Any]:
-        raise error
+        raise copy.copy(error)
 
     return http_get_json
 

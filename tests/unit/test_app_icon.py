@@ -30,9 +30,14 @@ def test_the_loaded_icon_holds_the_logo(qapp: Any) -> None:
 
 def test_the_application_carries_the_logo_icon(qapp: Any) -> None:
     """Every window without its own icon inherits the application icon."""
-    qapp.setWindowIcon(QIcon())
-    apply_application_icon(qapp)
-    assert not qapp.windowIcon().isNull()
+    # The session app outlives this test, so the original icon goes back afterwards.
+    original_icon = qapp.windowIcon()
+    try:
+        qapp.setWindowIcon(QIcon())
+        apply_application_icon(qapp)
+        assert not qapp.windowIcon().isNull()
+    finally:
+        qapp.setWindowIcon(original_icon)
 
 
 def test_a_missing_icon_file_logs_a_warning(

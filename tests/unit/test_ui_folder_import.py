@@ -375,7 +375,13 @@ def test_copy_button_puts_the_report_on_the_clipboard(qtbot: Any) -> None:
     report = ImportBatchReport(batch_id="batch-3", scanned_count=1)
     dialog = ImportReportDialog(report)
     qtbot.addWidget(dialog)
+    clipboard = QApplication.clipboard()
+    # The session clipboard outlives this test, so its text goes back afterwards.
+    original_text = clipboard.text()
 
-    dialog.copy_button.click()
+    try:
+        dialog.copy_button.click()
 
-    assert QApplication.clipboard().text() == format_import_report(report)
+        assert clipboard.text() == format_import_report(report)
+    finally:
+        clipboard.setText(original_text)

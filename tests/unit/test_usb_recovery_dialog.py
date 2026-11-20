@@ -8,8 +8,9 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDialog, QLabel
+from PySide6.QtWidgets import QDialog, QLabel
 
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import AppSettings, SettingsManager
@@ -36,15 +37,6 @@ from tests.unit.usb_preflight_support import (
     build_inspection,
     build_partition,
 )
-
-
-def _ensure_qapp() -> QApplication:
-    """Return an active QApplication instance for widget tests."""
-    app = QApplication.instance()
-    if isinstance(app, QApplication):
-        return app
-    return QApplication([])
-
 
 CORRUPT_LAUNCH_CHECK_UTC = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
 
@@ -80,12 +72,9 @@ def _build_match(*, requires_confirmation: bool, html_text: bool = False) -> Usb
     )
 
 
+@pytest.mark.usefixtures("qapp")
 class UsbRecoveryDialogTests(unittest.TestCase):
     """Verify reconnect choices, confirmation gating, and plain-text rendering."""
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls._app = _ensure_qapp()
 
     def test_drive_fields_render_as_plain_text(self) -> None:
         dialog = UsbRecoveryDialog(_build_match(requires_confirmation=False, html_text=True))
@@ -206,12 +195,9 @@ class UsbRecoveryDialogTests(unittest.TestCase):
             self.assertFalse(remaining["exp-fresh"].warned_expiry)
 
 
+@pytest.mark.usefixtures("qapp")
 class StorageTabUsbRecoverySettingsTests(unittest.TestCase):
     """Verify StorageTab and SettingsDialog persist USB recovery expiry preferences."""
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls._app = _ensure_qapp()
 
     def test_storage_tab_exposes_controls_and_persists_settings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

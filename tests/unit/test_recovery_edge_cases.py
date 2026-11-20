@@ -102,10 +102,10 @@ def test_mark_finished_lets_the_next_write_pass_preflight(
         source.write_bytes(source.read_bytes() + b"\x00")
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(write_svc.tag_adapter, "_write_tags_by_format", corrupt_then_die)
-    with pytest.raises(KeyboardInterrupt):
-        write_svc.apply_single_plan(write_svc.build_batch_preview([file_id])[0])
-    monkeypatch.undo()
+    with monkeypatch.context() as patch:
+        patch.setattr(write_svc.tag_adapter, "_write_tags_by_format", corrupt_then_die)
+        with pytest.raises(KeyboardInterrupt):
+            write_svc.apply_single_plan(write_svc.build_batch_preview([file_id])[0])
     operation_id = write_svc.list_interrupted_operations()[0].operation_id
 
     write_svc.mark_interrupted_finished(operation_id)

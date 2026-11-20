@@ -144,10 +144,10 @@ def test_recovery_dialog_shows_local_time_not_stored_text(
     def stop_mid_write(_path: Path, _tags: dict[str, str]) -> None:
         raise KeyboardInterrupt
 
-    monkeypatch.setattr(tag_adapter, "_write_tags_by_format", stop_mid_write)
-    with pytest.raises(KeyboardInterrupt):
-        write_service.apply_single_plan(write_service.build_batch_preview([asset.id])[0])
-    monkeypatch.undo()
+    with monkeypatch.context() as patch:
+        patch.setattr(tag_adapter, "_write_tags_by_format", stop_mid_write)
+        with pytest.raises(KeyboardInterrupt):
+            write_service.apply_single_plan(write_service.build_batch_preview([asset.id])[0])
     dialog = RecoveryDialog(write_service)
     qtbot.addWidget(dialog)
 

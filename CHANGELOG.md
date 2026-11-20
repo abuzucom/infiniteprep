@@ -5,10 +5,18 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.80.3] (2026-11-19)
+## [0.80.4] (2026-11-19)
 
 ### Changed
 
+- Every test runs against its own storage registry.
+  - An autouse fixture in `tests/conftest.py` installs a fresh registry per test. The fixture configures each folder below `tmp_path` in the per-user layout. No test reads or writes the real per-user profile through the default folders.
+  - The fixture skips the swap when the app package is absent. The `lint-and-style` job runs one invariant test without the package.
+  - The new `tests/unit/test_storage_registry_isolation.py` pins the fresh registry and the `tmp_path` folders.
+  - Ten tests reverted every patch with `monkeypatch.undo()` and lost the registry swap. Each now patches inside a scoped `monkeypatch.context()`.
+- Qt tests share the pytest-qt `qapp` fixture. The private `QApplication` helpers are gone. Each General tab test registers its widget with `qtbot`.
+- Tests that changed session state restore the state afterwards. The state covers the application icon, the clipboard text, and the shared network error instances.
+- The version advances from 0.80.3 to 0.80.4 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 - Owned tests that could not fail now fail on the defect named in each test.
   - The restore tests corrupt the real source before a fake crash. Each recovery must repair it.
   - The bulk readers, the limiter, the coverage sort, the symlink filter, the lock hashes, and the release asset count each get an assertion that a defect breaks.
