@@ -38,9 +38,11 @@ def load_storage_paths() -> ModuleType | None:
         return importlib.import_module(STORAGE_MODULE)
     except ModuleNotFoundError as error:
         missing = error.name or ""
-        if missing == APP_PACKAGE or not missing.startswith(f"{APP_PACKAGE}."):
-            return None
-        raise
+        # A submodule of the app package that fails to import is a defect in the tree.
+        if missing.startswith(f"{APP_PACKAGE}."):
+            raise
+        # Any other missing module is an absent dependency, such as platformdirs.
+        return None
 
 
 def load_upstream_module() -> ModuleType:
