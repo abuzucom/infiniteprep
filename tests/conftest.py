@@ -23,10 +23,24 @@ LOADER_PATH = Path(__file__).resolve().parent / "upstream_tests.py"
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 UPSTREAM_PATHS_KEY = pytest.StashKey[frozenset[Path]]()
 APP_PACKAGE = "infiniteprep"
-# The lint-and-style job runs one invariant test with only ruff and pytest
-# installed. The app package is absent there, and no test can reach the
-# registry, so the fixture leaves that run alone.
-APP_PACKAGE_INSTALLED = importlib.util.find_spec(APP_PACKAGE) is not None
+STORAGE_MODULE = f"{APP_PACKAGE}.storage_paths"
+
+
+def load_storage_paths() -> ModuleType | None:
+    """Return the storage module, or None when a third-party dependency is absent.
+
+    The lint-and-style job runs one invariant test with only ruff and pytest
+    installed. The source tree is importable there, but platformdirs is not, and
+    no test there can reach the registry. A missing module inside the app package
+    is a real defect, so it still raises.
+    """
+    try:
+        return importlib.import_module(STORAGE_MODULE)
+    except ModuleNotFoundError as error:
+        missing = error.name or ""
+        if missing == APP_PACKAGE or not missing.startswith(f"{APP_PACKAGE}."):
+            return None
+        raise
 
 
 def load_upstream_module() -> ModuleType:
@@ -75,10 +89,10 @@ def isolate_storage_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     A test that installs its own registry replaces this one. Autouse fixtures run
     first, so that later monkeypatch wins.
     """
-    if not APP_PACKAGE_INSTALLED:
+    storage_paths = load_storage_paths()
+    if storage_paths is None:
         yield
         return
-    storage_paths = importlib.import_module(f"{APP_PACKAGE}.storage_paths")
     # The layout mirrors per_user_locations(): backups and tools live in the data folder.
     data_dir = tmp_path / "storage-data"
     registry = storage_paths.StorageRegistry()
