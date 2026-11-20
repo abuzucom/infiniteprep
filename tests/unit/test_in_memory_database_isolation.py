@@ -5,6 +5,9 @@ from __future__ import annotations
 from infiniteprep.db.connection import DatabaseManager
 
 PROBE_TABLE_SQL = "CREATE TABLE IF NOT EXISTS isolation_probe (value TEXT)"
+# Each manager runs every schema migration. Ten closed managers keep the reuse
+# check while cutting that cost from the earlier fifty open ones.
+REPLACEMENT_MANAGER_COUNT = 10
 
 
 def count_probe_rows(manager: DatabaseManager) -> int:
@@ -36,6 +39,9 @@ def test_a_replacement_manager_starts_empty_while_an_old_connection_lives() -> N
     old_conn.commit()
     del old
 
-    for _ in range(50):
-        assert count_probe_rows(DatabaseManager(":memory:")) == 0
+    for _ in range(REPLACEMENT_MANAGER_COUNT):
+        replacement = DatabaseManager(":memory:")
+        assert count_probe_rows(replacement) == 0
+        # Closing frees the database, so the next manager has a real chance of reuse.
+        replacement.close()
     old_conn.close()

@@ -59,6 +59,8 @@ from tests.unit.usb_preflight_support import (
 )
 
 REPO_SRC = Path(__file__).resolve().parents[2] / "src"
+# Code points below 128 are ASCII.
+ASCII_LIMIT = 128
 EXPIRY_BASELINE_UTC = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 OVERDUE_SCAN_OFFSET = timedelta(days=31)
 MANUAL_CLEANUP_OFFSET = timedelta(days=32)
@@ -891,8 +893,11 @@ class WorktreeCodeQualityInvariantsTests(unittest.TestCase):
     def test_target_files_meet_quality_invariants(self) -> None:
         for file_path in self.TARGET_PATHS:
             raw_text = file_path.read_text(encoding="utf-8")
-            for idx, ch in enumerate(raw_text):
-                self.assertLess(ord(ch), 128, f"Non-ASCII at {idx} in {file_path.name}")
+            # isascii() checks the whole text at C speed. Only a failing file is scanned
+            # again to name the offset of the first non-ASCII character.
+            if not raw_text.isascii():
+                idx = next(idx for idx, ch in enumerate(raw_text) if ord(ch) >= ASCII_LIMIT)
+                self.fail(f"Non-ASCII at {idx} in {file_path.name}")
             for line_num, line in enumerate(raw_text.splitlines(), start=1):
                 self.assertLessEqual(
                     len(line), 100, f"Line {line_num} in {file_path.name} exceeds 100 chars"
