@@ -80,6 +80,7 @@ class WavListInfoMergeTests(unittest.TestCase):
         )
 
     def test_unnamed_fields_survive_a_single_field_write(self) -> None:
+        """A genre write keeps every other stored INFO field."""
         synchronize_wav_list_info_chunk(self.wav, {FieldName.GENRE.value: "House"})
 
         fields = read_list_info(self.wav)
@@ -91,6 +92,7 @@ class WavListInfoMergeTests(unittest.TestCase):
         self.assertEqual(fields[b"ISFT"], "Recorder 1.0")
 
     def test_named_field_replaces_the_stored_value(self) -> None:
+        """A title write replaces the stored title and keeps the comment."""
         synchronize_wav_list_info_chunk(self.wav, {FieldName.TITLE.value: "New Title"})
 
         fields = read_list_info(self.wav)
@@ -99,6 +101,7 @@ class WavListInfoMergeTests(unittest.TestCase):
         self.assertEqual(fields[b"ICMT"], "Ripped from vinyl")
 
     def test_file_holds_one_list_info_chunk_after_the_write(self) -> None:
+        """The write leaves exactly one LIST INFO chunk in the file."""
         synchronize_wav_list_info_chunk(self.wav, {FieldName.GENRE.value: "House"})
 
         data = self.wav.read_bytes()
@@ -111,6 +114,7 @@ class WavListInfoMergeTests(unittest.TestCase):
         self.assertEqual(len(list_info), 1)
 
     def test_fields_of_a_second_list_info_chunk_survive(self) -> None:
+        """Fields from a second LIST INFO chunk carry into the merged chunk."""
         append_list_info(self.wav, info_subchunk(b"IENG", "Mastering Engineer"))
 
         synchronize_wav_list_info_chunk(self.wav, {FieldName.GENRE.value: "House"})
@@ -121,6 +125,7 @@ class WavListInfoMergeTests(unittest.TestCase):
         self.assertEqual(fields[b"IGNR"], "House")
 
     def test_odd_sized_payload_keeps_its_exact_bytes(self) -> None:
+        """An odd-sized field payload reads back with its exact bytes after the write."""
         odd_payload = b"Recorder 1.0\x00"
         self.assertEqual(len(odd_payload) % 2, 1)
 
