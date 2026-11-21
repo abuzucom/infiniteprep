@@ -22,6 +22,7 @@ from infiniteprep.ui.detail_panel import (
     OTHER_TAG_DISPLAY_LIMIT,
     TRUNCATION_MARK,
     DetailPanel,
+    field_display_name,
     format_other_tag_value,
 )
 from tests.fixtures.audio_factory import create_wav_fixture
@@ -121,13 +122,13 @@ def test_selecting_another_file_keeps_playback(panel_parts: Any) -> None:
 
 
 def test_every_field_name_has_a_row(panel_parts: Any) -> None:
-    """The fields table lists every FieldName in enum order."""
+    """The fields table lists every FieldName in enum order, by its readable name."""
     panel, _repository, first_id, _second_id = panel_parts
     panel.load_file_asset(first_id)
 
     table = panel.fields_table
     shown = [table.item(row, COLUMN_FIELD_NAME).text() for row in range(table.rowCount())]
-    assert shown == [field.value for field in FieldName]
+    assert shown == [field_display_name(field.value) for field in FieldName]
 
 
 def _rendered_tooltip(tooltip: str) -> str:
