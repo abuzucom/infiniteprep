@@ -38,9 +38,15 @@ class WeightedColumnSizer(QObject):
         self._minimum_width = minimum_width
         self._pinned: set[int] = set()
         self._applying = False
+        # Qt still delivers viewport events while it deletes the table. Any call on the
+        # deleted table then raises, so the filter keeps its own viewport reference and
+        # stops once the table is gone.
+        self._table_alive = True
+        self._viewport = table.viewport()
         self.reset_header_modes()
         table.horizontalHeader().sectionResized.connect(self._on_section_resized)
-        table.viewport().installEventFilter(self)
+        table.destroyed.connect(self._on_table_destroyed)
+        self._viewport.installEventFilter(self)
 
     def reset_header_modes(self) -> None:
         """Make every column user-resizable and turn the last-section stretch off.
@@ -93,9 +99,14 @@ class WeightedColumnSizer(QObject):
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         """Share the spare width again whenever the table viewport changes size."""
-        if watched is self._table.viewport() and event.type() == QEvent.Type.Resize:
+        is_viewport_resize = event.type() == QEvent.Type.Resize and watched is self._viewport
+        if is_viewport_resize and self._table_alive:
             self.share_spare_width()
         return False
+
+    def _on_table_destroyed(self) -> None:
+        """Stop sizing once Qt starts deleting the table."""
+        self._table_alive = False
 
     def _content_width(self, column: int) -> int:
         """Return the width the column's cells need, or the header's width for no rows.
