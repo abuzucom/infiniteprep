@@ -28,7 +28,9 @@ from infiniteprep.ui.main_window import (
 )
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
 from tests.fixtures.memory_settings import MemorySettingsManager
+from tests.fixtures.qt_dialogs import MESSAGE_ICON_INDEX, MESSAGE_TEXT_INDEX, MESSAGE_TITLE_INDEX
 from tests.fixtures.waveform_stub import keep_waveform_pool_idle
 
 STATUS_COLUMN: int = TABLE_COLUMNS.index("Review Status")
@@ -41,10 +43,13 @@ BATCH_TIMEOUT_MS: int = 10_000
 def announcements(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Record every announcement message instead of sending it to the platform."""
     spoken: list[str] = []
+
+    def record_announcement(event: Any) -> None:
+        """Keep the message text of one accessibility announcement."""
+        spoken.append(event.message())
+
     monkeypatch.setattr(
-        accessible_names_module.QAccessible,
-        "updateAccessibility",
-        lambda event: spoken.append(event.message()),
+        accessible_names_module.QAccessible, "updateAccessibility", record_announcement
     )
     return spoken
 
@@ -52,13 +57,9 @@ def announcements(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 @pytest.fixture
 def messages(monkeypatch: pytest.MonkeyPatch) -> list[tuple[QMessageBox.Icon, str, str]]:
     """Record main window messages instead of opening a blocking box."""
-    shown: list[tuple[QMessageBox.Icon, str, str]] = []
+    shown = CallRecorder(MESSAGE_ICON_INDEX, MESSAGE_TITLE_INDEX, MESSAGE_TEXT_INDEX)
     monkeypatch.setattr(main_window_module, "SettingsManager", MemorySettingsManager)
-    monkeypatch.setattr(
-        main_window_module,
-        "show_plain_message",
-        lambda _parent, icon, title, text: shown.append((icon, title, text)),
-    )
+    monkeypatch.setattr(main_window_module, "show_plain_message", shown)
     return shown
 
 

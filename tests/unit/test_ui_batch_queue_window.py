@@ -22,6 +22,7 @@ from infiniteprep.ui.folder_import import ImportReportDialog
 from infiniteprep.ui.main_window import CLOSE_CANCEL, CLOSE_STAY, MainWindow
 from tests.fixtures.audio_factory import create_wav_fixture
 from tests.fixtures.batch_jobs import GatedJobs
+from tests.fixtures.call_recorder import CallRecorder
 from tests.fixtures.memory_settings import MemorySettingsManager
 
 TRACK_COUNT = 2
@@ -192,8 +193,9 @@ def test_an_idle_window_closes_without_a_prompt(
 ) -> None:
     """With no batch running or waiting, close asks nothing."""
     window, _repository, _jobs, _folder = window_parts
-    prompts: list[int] = []
-    monkeypatch.setattr(window, "ask_close_during_import", lambda: prompts.append(1))
+    # A wrongly shown prompt answers Keep Working, so the window would stay open.
+    prompts = CallRecorder(reply=CLOSE_STAY)
+    monkeypatch.setattr(window, "ask_close_during_import", prompts)
     window.show()
 
     window.close()

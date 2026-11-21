@@ -23,6 +23,8 @@ from infiniteprep.ui.detail_panel import (
     DetailPanel,
 )
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
+from tests.fixtures.qt_dialogs import MESSAGE_ICON_INDEX, MESSAGE_TEXT_INDEX
 from tests.fixtures.waveform_stub import keep_waveform_pool_idle
 
 ARTIST_ROW: int = DISPLAY_FIELDS.index(FieldName.ARTIST)
@@ -130,12 +132,8 @@ def test_lock_without_an_approved_value_explains_itself(
 ) -> None:
     """Lock on a field with no approved value says what to do and changes nothing."""
     panel, _file_id = panel_and_file
-    shown: list[tuple[QMessageBox.Icon, str]] = []
-    monkeypatch.setattr(
-        detail_panel_module,
-        "show_plain_message",
-        lambda _parent, icon, _title, text: shown.append((icon, text)),
-    )
+    shown = CallRecorder(MESSAGE_ICON_INDEX, MESSAGE_TEXT_INDEX)
+    monkeypatch.setattr(detail_panel_module, "show_plain_message", shown)
 
     artist_button(panel, "Lock").click()
 
