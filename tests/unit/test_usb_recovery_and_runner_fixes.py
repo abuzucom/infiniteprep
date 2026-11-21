@@ -27,7 +27,7 @@ from infiniteprep.services.usb.windows import (
     VOLUME_COMMAND_TEXT,
 )
 from tests.fixtures.call_recorder import CallRecorder
-from tests.unit.test_usb_manifest_and_recovery import _build_journal_entry, _build_manifest
+from tests.unit.usb_manifest_support import build_journal_entry, build_manifest
 from tests.unit.usb_preflight_support import build_inspection, build_partition
 
 DEFAULT_SIZE = 7
@@ -66,8 +66,8 @@ class UsbRecoveryRetryTests(unittest.TestCase):
             mount_root = Path(tmp_dir) / "usb"
             mount_root.mkdir()
             store = FailOnceJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
-            entry = _build_journal_entry(str(mount_root))
-            in_prog = _build_manifest(
+            entry = build_journal_entry(str(mount_root))
+            in_prog = build_manifest(
                 export_id=entry.export_id,
                 state=MANIFEST_STATE_IN_PROGRESS,
                 completed_at_utc=None,

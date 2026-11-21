@@ -18,13 +18,7 @@ from infiniteprep.services.usb.manifest import (
     MANIFEST_STATE_IN_PROGRESS,
     USB_METADATA_DIR_NAME,
     ExportScope,
-    ManifestReaderResult,
-    ManifestTagEntry,
-    ManifestTargetCounts,
-    ManifestTrackOmission,
-    ManifestTrackRef,
     ManifestTrackTags,
-    UsbExportManifest,
     compute_my_tags_digest,
     read_completed_manifest,
     read_in_progress_manifest,
@@ -41,6 +35,12 @@ from infiniteprep.services.usb.recovery import (
 )
 from infiniteprep.services.usb.targets import TargetCandidate
 from tests.fixtures.call_recorder import CallRecorder
+from tests.unit.usb_manifest_support import (
+    build_journal_entry,
+    build_manifest,
+    build_sample_assignments,
+    build_sample_vocabulary,
+)
 from tests.unit.usb_preflight_support import (
     build_drive,
     build_inspection,
@@ -59,96 +59,13 @@ def select_export_id_and_path(item: UsbJournalEntry, path: Path) -> tuple[str, P
     return item.export_id, path
 
 
-def _sample_vocabulary() -> list[ManifestTagEntry]:
-    """Return a sample My Tags vocabulary."""
-    return [
-        ManifestTagEntry(category="Energy", name="Peak", parent="Club"),
-        ManifestTagEntry(category="Mood", name="Dark", parent=""),
-        ManifestTagEntry(category="Situation", name="Warmup", parent="Set"),
-    ]
-
-
-def _sample_assignments() -> list[ManifestTrackTags]:
-    """Return sample My Tags assignments per track relative path."""
-    return [
-        ManifestTrackTags(relative_path="crate/b.flac", tags=("Warmup", "Dark")),
-        ManifestTrackTags(relative_path="crate/a.aiff", tags=("Peak", "Dark")),
-    ]
-
-
-def _build_manifest(
-    *,
-    export_id: str = "exp-001",
-    state: str = MANIFEST_STATE_COMPLETED,
-    completed_at_utc: str | None = "2026-11-15T12:05:00Z",
-    scope: ExportScope = ExportScope.MULTIPLE_PLAYLISTS,
-    playlist_names: tuple[str, ...] = ("Warmup", "Peak Hour"),
-) -> UsbExportManifest:
-    """Build a populated USB export manifest fixture."""
-    vocab = _sample_vocabulary()
-    assignments = _sample_assignments()
-    return UsbExportManifest(
-        export_id=export_id,
-        state=state,
-        started_at_utc="2026-11-15T12:00:00Z",
-        completed_at_utc=completed_at_utc,
-        app_version="0.63.0",
-        adapter_versions={"rekordbox": "6.8.0", "serato": "3.1.2"},
-        analysis_versions={"bpm": "1.2", "key": "2.0", "waveform": "1.0"},
-        readers=(
-            ManifestReaderResult(name="id3", version="2.4", result="ok"),
-            ManifestReaderResult(name="flac", version="1.4", result="ok"),
-        ),
-        scope=scope,
-        playlist_names=playlist_names,
-        track_count=2,
-        target_counts={
-            "rekordbox": ManifestTargetCounts(
-                exported=1, exported_with_omissions=1, skipped=0, failed=0
-            ),
-            "serato": ManifestTargetCounts(
-                exported=2, exported_with_omissions=0, skipped=0, failed=0
-            ),
-        },
-        omissions=(
-            ManifestTrackOmission(
-                track=ManifestTrackRef(
-                    relative_path="crate/b.flac",
-                    title="Night Drive",
-                    artist="DJ Example",
-                ),
-                field_name="composer",
-                source_value="Composed By Name",
-                reason="unsupported_in_target_schema",
-            ),
-        ),
-        my_tags_sha256=compute_my_tags_digest(vocab, assignments),
-    )
-
-
-def _build_journal_entry(mount_point: str, export_id: str = "exp-001") -> UsbJournalEntry:
-    """Build a computer-side journal entry aligned with the default test stick."""
-    drive = build_drive()
-    return UsbJournalEntry(
-        export_id=export_id,
-        started_at_utc="2026-10-01T12:00:00Z",
-        volume_uuid="1A2B-3C4D",
-        drive_identity=drive,
-        mount_point=mount_point,
-        scope=ExportScope.SINGLE_PLAYLIST,
-        playlist_names=("Club Set",),
-        track_paths=("crate/a.aiff", "crate/b.flac"),
-        backup_path="backups/exp-001",
-    )
-
-
 class MyTagsDigestTests(unittest.TestCase):
     """Canonical SHA-256 digest over My Tags vocabulary and assignments."""
 
     def test_digest_is_order_independent_and_lowercase_sha256(self) -> None:
-        vocab_a = _sample_vocabulary()
+        vocab_a = build_sample_vocabulary()
         vocab_b = list(reversed(vocab_a))
-        assign_a = _sample_assignments()
+        assign_a = build_sample_assignments()
         assign_b = [
             ManifestTrackTags(relative_path="crate/a.aiff", tags=("Dark", "Peak")),
             ManifestTrackTags(relative_path="crate/b.flac", tags=("Dark", "Warmup")),
@@ -162,8 +79,8 @@ class MyTagsDigestTests(unittest.TestCase):
         self.assertRegex(digest_a, r"^[0-9a-f]{64}$")
 
     def test_digest_changes_when_tag_data_or_assignment_changes(self) -> None:
-        vocab = _sample_vocabulary()
-        assignments = _sample_assignments()
+        vocab = build_sample_vocabulary()
+        assignments = build_sample_assignments()
         base = compute_my_tags_digest(vocab, assignments)
 
         renamed_vocab = [replace(vocab[0], name="Closing"), *vocab[1:]]
@@ -184,8 +101,8 @@ class UsbExportManifestTests(unittest.TestCase):
     def test_in_progress_manifest_preserves_existing_completed_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir)
-            prior = _build_manifest(export_id="exp-prior", state=MANIFEST_STATE_COMPLETED)
-            current = _build_manifest(
+            prior = build_manifest(export_id="exp-prior", state=MANIFEST_STATE_COMPLETED)
+            current = build_manifest(
                 export_id="exp-current",
                 state=MANIFEST_STATE_IN_PROGRESS,
                 completed_at_utc=None,
@@ -207,12 +124,12 @@ class UsbExportManifestTests(unittest.TestCase):
     def test_completed_manifest_replaces_in_progress_and_round_trips_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir)
-            in_prog = _build_manifest(
+            in_prog = build_manifest(
                 export_id="exp-new",
                 state=MANIFEST_STATE_IN_PROGRESS,
                 completed_at_utc=None,
             )
-            completed = _build_manifest(
+            completed = build_manifest(
                 export_id="exp-new",
                 state=MANIFEST_STATE_COMPLETED,
                 completed_at_utc="2026-11-15T12:10:00Z",
@@ -240,7 +157,7 @@ class UsbExportManifestTests(unittest.TestCase):
             outside_file = outside_dir / "secret.json"
             outside_file.write_text('{"secret": true}\n', encoding="utf-8")
 
-            in_prog = _build_manifest(
+            in_prog = build_manifest(
                 export_id="exp-sym",
                 state=MANIFEST_STATE_IN_PROGRESS,
                 completed_at_utc=None,
@@ -288,7 +205,7 @@ class UsbExportManifestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
             mount_root.mkdir()
-            valid = _build_manifest()
+            valid = build_manifest()
             manifest_path = write_completed_manifest(mount_root, valid)
             base_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
 
@@ -320,7 +237,7 @@ class UsbExportManifestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
             mount_root.mkdir()
-            manifest_path = write_completed_manifest(mount_root, _build_manifest())
+            manifest_path = write_completed_manifest(mount_root, build_manifest())
             payload = json.loads(manifest_path.read_text(encoding="utf-8"))
             payload["started_at_utc"] = "2026-07-15T12:00:00-04:00"
             payload["completed_at_utc"] = "2026-11-15T14:00:00+02:00"
@@ -345,8 +262,8 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
             mount_root = Path(tmp_dir) / "usb"
             mount_root.mkdir()
             store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
-            entry = _build_journal_entry(str(mount_root))
-            in_prog = _build_manifest(
+            entry = build_journal_entry(str(mount_root))
+            in_prog = build_manifest(
                 export_id=entry.export_id,
                 state=MANIFEST_STATE_IN_PROGRESS,
                 completed_at_utc=None,
@@ -371,8 +288,8 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
             mount_root.mkdir()
             other_mount.mkdir()
             store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
-            entry = _build_journal_entry(str(mount_root))
-            in_prog = _build_manifest(
+            entry = build_journal_entry(str(mount_root))
+            in_prog = build_manifest(
                 export_id=entry.export_id,
                 state=MANIFEST_STATE_IN_PROGRESS,
                 completed_at_utc=None,
@@ -405,8 +322,8 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
             mount_root = Path(tmp_dir) / "usb"
             mount_root.mkdir()
             store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
-            entry = _build_journal_entry(str(mount_root))
-            in_prog = _build_manifest(
+            entry = build_journal_entry(str(mount_root))
+            in_prog = build_manifest(
                 export_id=entry.export_id,
                 state=MANIFEST_STATE_IN_PROGRESS,
                 completed_at_utc=None,
@@ -432,8 +349,8 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
             mount_root.mkdir()
             other_root.mkdir()
             store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
-            entry = _build_journal_entry(str(mount_root))
-            in_prog = _build_manifest(
+            entry = build_journal_entry(str(mount_root))
+            in_prog = build_manifest(
                 export_id=entry.export_id,
                 state=MANIFEST_STATE_IN_PROGRESS,
                 completed_at_utc=None,
@@ -457,8 +374,8 @@ class UsbReconnectChoiceTests(unittest.TestCase):
         mount_root = Path(tmp_dir) / "usb"
         mount_root.mkdir()
         store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
-        entry = _build_journal_entry(str(mount_root))
-        in_prog = _build_manifest(
+        entry = build_journal_entry(str(mount_root))
+        in_prog = build_manifest(
             export_id=entry.export_id,
             state=MANIFEST_STATE_IN_PROGRESS,
             completed_at_utc=None,
@@ -601,7 +518,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             wrong_mount.mkdir()
             write_in_progress_manifest(
                 wrong_mount,
-                _build_manifest(
+                build_manifest(
                     export_id="exp-other",
                     state=MANIFEST_STATE_IN_PROGRESS,
                     completed_at_utc=None,
@@ -635,7 +552,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
                 )
             write_in_progress_manifest(
                 mount_root,
-                _build_manifest(
+                build_manifest(
                     export_id="exp-mismatch",
                     state=MANIFEST_STATE_IN_PROGRESS,
                     completed_at_utc=None,
@@ -654,7 +571,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             journal_path = Path(tmp_dir) / "usb_recovery_journal.json"
             store = UsbRecoveryJournalStore(journal_path)
-            entry = _build_journal_entry(str(Path(tmp_dir) / "usb"))
+            entry = build_journal_entry(str(Path(tmp_dir) / "usb"))
             store.save_entries([entry])
             base_raw = json.loads(journal_path.read_text(encoding="utf-8"))
 
@@ -725,7 +642,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
         start = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
         with tempfile.TemporaryDirectory() as tmp_dir:
             store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
-            entry = _build_journal_entry("/media/dj/STICK")
+            entry = build_journal_entry("/media/dj/STICK")
             entry.started_at_utc = "2026-10-01T12:00:00Z"
             store.save_entries([entry])
 
@@ -751,8 +668,8 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
         start = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
         with tempfile.TemporaryDirectory() as tmp_dir:
             store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
-            first = _build_journal_entry("/media/dj/STICK1", export_id="exp-1")
-            second = _build_journal_entry("/media/dj/STICK2", export_id="exp-2")
+            first = build_journal_entry("/media/dj/STICK1", export_id="exp-1")
+            second = build_journal_entry("/media/dj/STICK2", export_id="exp-2")
             store.save_entries([first, second])
 
             disabled_scan = store.evaluate_expiry(
@@ -776,16 +693,16 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
             resolved = replace(
-                _build_journal_entry("/media/dj/STICK1", export_id="exp-resolved"),
+                build_journal_entry("/media/dj/STICK1", export_id="exp-resolved"),
                 started_at_utc="2026-08-01T12:00:00Z",
                 last_recovery_action=ReconnectChoice.RESUME.value,
             )
             expired = replace(
-                _build_journal_entry("/media/dj/STICK2", export_id="exp-expired"),
+                build_journal_entry("/media/dj/STICK2", export_id="exp-expired"),
                 started_at_utc="2026-09-01T12:00:00Z",
             )
             active = replace(
-                _build_journal_entry("/media/dj/STICK3", export_id="exp-active"),
+                build_journal_entry("/media/dj/STICK3", export_id="exp-active"),
                 started_at_utc="2026-10-30T12:00:00Z",
             )
             store.save_entries([resolved, expired, active])
@@ -814,7 +731,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
 
             bulk = [
                 replace(
-                    _build_journal_entry("/media/dj/STICK", export_id=f"exp-{idx}"),
+                    build_journal_entry("/media/dj/STICK", export_id=f"exp-{idx}"),
                     started_at_utc="2026-10-01T12:00:00Z",
                 )
                 for idx in range(MAX_CLEANUP_HISTORY_RECORDS + BULK_HISTORY_OVERFLOW_COUNT)
@@ -850,7 +767,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
                     linked_dir / "nested" / "usb_recovery_journal.json",
                     allowed_root=root,
                 )
-                entry = _build_journal_entry("/media/dj/STICK1")
+                entry = build_journal_entry("/media/dj/STICK1")
                 with self.assertRaises(ValueError):
                     confined.save_entries([entry])
                 outside_file = outside / "usb_recovery_journal.json"
@@ -860,7 +777,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
 
             journal_path = root / "usb_recovery_journal.json"
             direct_store = UsbRecoveryJournalStore(journal_path, allowed_root=root)
-            direct_store.save_entries([_build_journal_entry("/media/dj/STICK2")])
+            direct_store.save_entries([build_journal_entry("/media/dj/STICK2")])
             raw = json.loads(journal_path.read_text(encoding="utf-8"))
             raw["entries"][0]["started_at_utc"] = "2026-07-15T12:00:00-04:00"
             journal_path.write_text(json.dumps(raw), encoding="utf-8")
