@@ -1,6 +1,6 @@
-"""The UI-R style sheet that the theme adds after the qt-material style sheet.
+"""The app style sheet that the theme adds after the qt-material style sheet.
 
-qt-material styles every widget from the theme file. This sheet sets the UI-R text
+qt-material styles every widget from the theme file. This sheet sets the text
 sizes, button variants, focus ring, and table lines from the design tokens. A later
 rule with the same selector wins, so these rules override the qt-material rules.
 """
@@ -88,6 +88,6 @@ def _table_rules(palette: Palette) -> list[str]:
 
 
 def build_style_sheet(palette: Palette, preset: str) -> str:
-    """Return the UI-R style sheet for a palette and a text size preset."""
+    """Return the app style sheet for a palette and a text size preset."""
     rules = _text_rules(palette, preset) + _button_rules(palette, preset) + _table_rules(palette)
     return "\n".join(rules)

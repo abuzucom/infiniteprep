@@ -1,6 +1,6 @@
-"""Design tokens for the UI-R visual system: colors, key colors, text sizes, and spacing.
+"""Design tokens: colors, key colors, text sizes, and spacing.
 
-The palettes carry the color roles that UI-R step 3 (#245) defined. The dark palette
+Each palette carries the same color roles in dark and light values. The dark palette
 uses the logo navy background, the logo royal blue for primary buttons, and the logo
 sky blue for focus, selection, and progress. Status colors follow the Okabe-Ito set.
 """
@@ -48,7 +48,7 @@ DARK_PALETTE: Final[Palette] = Palette(
     line="#232c52",
     text="#e8ecf8",
     text_muted="#9aa6c8",
-    # The logo royal blue #2456e0, a step lighter, so the fill reaches 3:1 on the surface.
+    # Light enough that the button fill reaches 3:1 on the surface color.
     primary="#2a5ce6",
     on_primary="#ffffff",
     highlight="#38bdf8",
@@ -69,7 +69,7 @@ LIGHT_PALETTE: Final[Palette] = Palette(
     text_muted="#56607a",
     primary="#1d4ed8",
     on_primary="#ffffff",
-    # Darker than the specimen value #0284c7, so text in this color reaches 4.5:1.
+    # Dark enough that text in this color reaches 4.5:1 on the light surfaces.
     highlight="#0369a1",
     status={
         StatusRole.DONE: "#00785a",

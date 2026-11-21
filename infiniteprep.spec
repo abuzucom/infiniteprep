@@ -78,10 +78,10 @@ a = Analysis(
     datas=[
         (str(src_dir / "infiniteprep" / "db" / "schema.sql"), "infiniteprep/db"),
         (str(APP_ICON_SOURCE), "infiniteprep/ui"),
-        # The UI-R theme files that ui/theme.py hands to qt-material by path (#245).
+        # The theme files that ui/theme.py hands to qt-material by path.
         (str(THEMES_SOURCE / "infiniteprep_dark.xml"), "infiniteprep/ui/themes"),
         (str(THEMES_SOURCE / "infiniteprep_light.xml"), "infiniteprep/ui/themes"),
-        # The UI-R icons and the license file of each icon set (#245, step 4).
+        # The icons and the license file of each icon set.
         (str(ICONS_SOURCE / "tabler" / "*.svg"), "infiniteprep/ui/icons/tabler"),
         (str(ICONS_SOURCE / "tabler" / "LICENSE"), "infiniteprep/ui/icons/tabler"),
         (str(ICONS_SOURCE / "lucide" / "*.svg"), "infiniteprep/ui/icons/lucide"),

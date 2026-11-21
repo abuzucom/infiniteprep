@@ -1,4 +1,4 @@
-"""Behavioral tests for the UI-R main window shell: stages, sidebar, and breakpoints (#342)."""
+"""Behavioral tests for the main window shell: stages, sidebar, and breakpoints."""
 
 from __future__ import annotations
 
@@ -88,14 +88,14 @@ def visible_names(window: MainWindow) -> list[str]:
     return [window.file_table.item(row, 0).text() for row in range(window.file_table.rowCount())]
 
 
-def test_every_review_status_counts_in_exactly_one_stage() -> None:
-    """Each status belongs to one of Analyze, Review, Apply, and Export (owner, 2026-11-21)."""
+def test_status_stage_map() -> None:
+    """Each status belongs to exactly one of Analyze, Review, Apply, and Export."""
     for status in ReviewStatus:
         owners = [stage for stage, statuses in STAGE_STATUSES.items() if status in statuses]
         assert len(owners) == 1, status
 
 
-def test_stage_counts_cover_the_whole_library() -> None:
+def test_stage_counts() -> None:
     """Import counts every track, and each other stage counts its statuses."""
     statuses = ["unprocessed", "error", "no_match", "approved", "written", "written"]
 
@@ -120,9 +120,7 @@ def test_stage_counts_cover_the_whole_library() -> None:
         (["written", "applied"], WorkflowStage.EXPORT),
     ],
 )
-def test_the_current_stage_is_the_first_with_work(
-    statuses: list[str], expected: WorkflowStage
-) -> None:
+def test_current_stage(statuses: list[str], expected: WorkflowStage) -> None:
     """The current stage is the first one that still has tracks waiting."""
     assert find_current_stage(count_stages(statuses)) is expected
 
@@ -139,7 +137,7 @@ def test_the_current_stage_is_the_first_with_work(
         (LibraryFilter.HAS_WARNINGS, "written", False, False),
     ],
 )
-def test_library_filters_select_their_tracks(
+def test_library_filters(
     chosen: LibraryFilter, status: str, has_warnings: bool, expected: bool
 ) -> None:
     """Each sidebar filter keeps the tracks it names and drops the rest."""
@@ -157,19 +155,19 @@ def test_library_filters_select_their_tracks(
         (960, LayoutMode.NARROW),
     ],
 )
-def test_breakpoints_follow_the_issue_table(width: int, expected: LayoutMode) -> None:
+def test_breakpoints(width: int, expected: LayoutMode) -> None:
     """The layout switches at 1600 and 1280 px."""
     assert find_layout_mode(width) is expected
 
 
-def test_a_window_on_a_screen_keeps_its_geometry() -> None:
+def test_on_screen_window_stays() -> None:
     """A saved position that a screen still shows stays as saved."""
     saved = QRect(100, 100, 1200, 800)
 
     assert fit_window_on_screens(saved, [SCREEN]) == saved
 
 
-def test_a_window_on_a_missing_monitor_moves_back_on_screen() -> None:
+def test_offscreen_window_moves() -> None:
     """A position on a monitor that is gone moves to the center of a screen and fits it."""
     saved = QRect(3000, 200, 2400, 900)
 
@@ -181,12 +179,8 @@ def test_a_window_on_a_missing_monitor_moves_back_on_screen() -> None:
     assert moved.height() == saved.height()
 
 
-def test_a_window_that_barely_touches_a_screen_moves_back() -> None:
-    """A window that overlaps a screen only at one corner moves to the screen center.
-
-    The security review of this PR found that a one-pixel overlap kept the window
-    almost entirely off screen.
-    """
+def test_corner_window_moves() -> None:
+    """A window that overlaps a screen only at one corner moves to the screen center."""
     saved = QRect(SCREEN.right(), SCREEN.bottom(), 1200, 800)
 
     moved = fit_window_on_screens(saved, [SCREEN])
@@ -195,23 +189,21 @@ def test_a_window_that_barely_touches_a_screen_moves_back() -> None:
     assert SCREEN.contains(moved)
 
 
-def test_a_window_with_its_top_strip_on_screen_stays_put() -> None:
-    """A window whose top 120 px of strip a screen shows keeps its position."""
+def test_top_strip_window_stays() -> None:
+    """A window keeps its position while a screen shows 120 px of its 32 px top strip."""
     saved = QRect(SCREEN.right() - 200, 100, 1200, 800)
 
     assert fit_window_on_screens(saved, [SCREEN]) == saved
 
 
-def test_stage_text_drops_the_label_when_compact() -> None:
+def test_compact_stage_text() -> None:
     """A compact stage button shows its number and count, and its name stays spoken."""
     assert format_stage_text(WorkflowStage.REVIEW, 4, show_label=True) == "3  Review  4"
     assert format_stage_text(WorkflowStage.REVIEW, 4, show_label=False) == "3  4"
     assert format_stage_name(WorkflowStage.REVIEW, 1) == "Review, 1 track"
 
 
-def test_the_window_keeps_the_minimum_size(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_minimum_size(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """The window never shrinks below 960 x 600."""
     window, _repository = build_window(qtbot, tmp_path)
 
@@ -219,9 +211,7 @@ def test_the_window_keeps_the_minimum_size(
     assert window.minimumHeight() == MINIMUM_WINDOW_HEIGHT
 
 
-def test_the_bar_shows_counts_and_the_current_action(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_bar_counts(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """Imported tracks wait on Analyze, so the primary button carries Analyze."""
     window, _repository = build_window(qtbot, tmp_path, ("a.wav", "b.wav"))
     bar = window.workflow_bar
@@ -232,9 +222,7 @@ def test_the_bar_shows_counts_and_the_current_action(
     assert bar.stage_buttons[WorkflowStage.ANALYZE].accessibleName() == "Analyze, 2 tracks"
 
 
-def test_an_empty_library_waits_on_import(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_empty_library(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """With no tracks, Import is current and the sidebar says no folder exists."""
     window, _repository = build_window(qtbot, tmp_path)
 
@@ -242,9 +230,7 @@ def test_an_empty_library_waits_on_import(
     assert [label.text() for label in window.sidebar.folder_labels] == [NO_FOLDERS_TEXT]
 
 
-def test_a_stage_button_runs_its_action(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_stage_button_action(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """The Analyze stage button and the primary button both analyze the visible tracks."""
     analyzed: list[list[str]] = []
     window, _repository = build_window(
@@ -258,9 +244,29 @@ def test_a_stage_button_runs_its_action(
     assert analyzed == [window.visible_file_ids] * 3
 
 
-def test_alt_and_a_number_run_that_stage(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
+def test_locked_stage_shortcut(
+    qtbot: Any,
+    tmp_path: Path,
+    settings: MemorySettingsManager,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """While a batch locks Review, Alt+3 approves nothing, like the disabled buttons."""
+    messages: list[str] = []
+    monkeypatch.setattr(
+        main_window_module, "show_plain_message", lambda *args: messages.append(args[2])
+    )
+    window, _repository = build_window(qtbot, tmp_path, ("a.wav",))
+    window.workflow_bar.set_stages_locked({WorkflowStage.REVIEW})
+
+    window.stage_shortcuts[WorkflowStage.REVIEW].activated.emit()
+
+    assert messages == []
+    window.workflow_bar.set_stages_locked(set())
+    window.stage_shortcuts[WorkflowStage.REVIEW].activated.emit()
+    assert len(messages) == 1
+
+
+def test_stage_shortcuts(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """Alt+2 runs Analyze, and the Analyze button tooltip names that key."""
     analyzed: list[list[str]] = []
     window, _repository = build_window(
@@ -279,18 +285,14 @@ def test_alt_and_a_number_run_that_stage(
     ]
 
 
-def test_the_sidebar_lists_source_folders_with_counts(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_sidebar_folders(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """Each source folder shows its name and its track count."""
     window, _repository = build_window(qtbot, tmp_path, ("a.wav", "b.wav"))
 
     assert [label.text() for label in window.sidebar.folder_labels] == ["crate  2"]
 
 
-def test_the_sidebar_filters_replace_the_status_dropdown(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_needs_review_filter(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """Needs review shows only the tracks that wait on Review."""
     window, repository = build_window(qtbot, tmp_path, ("a.wav", "b.wav"))
     file_ids = {Path(asset.current_path).name: asset.id for asset in repository.list_files()}
@@ -307,9 +309,7 @@ def test_the_sidebar_filters_replace_the_status_dropdown(
     assert visible_names(window) == ["a.wav", "b.wav"]
 
 
-def test_a_wide_window_keeps_the_sidebar_open(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_wide_layout(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """From 1600 px the sidebar sits in the window, every label shows, and no toggle shows."""
     window, _repository = build_window(qtbot, tmp_path, ("a.wav",))
 
@@ -325,9 +325,7 @@ def test_a_wide_window_keeps_the_sidebar_open(
     )
 
 
-def test_a_medium_window_opens_the_sidebar_as_a_drawer(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_medium_layout(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """From 1280 to 1599 px the sidebar hides behind a button and labels compact."""
     window, _repository = build_window(qtbot, tmp_path, ("a.wav",))
 
@@ -348,9 +346,7 @@ def test_a_medium_window_opens_the_sidebar_as_a_drawer(
     assert not window.sidebar.isVisible()
 
 
-def test_a_narrow_window_puts_the_detail_panel_below_the_table(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_narrow_layout(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """Below 1280 px the detail panel moves under the table."""
     window, _repository = build_window(qtbot, tmp_path, ("a.wav",))
 
@@ -360,9 +356,7 @@ def test_a_narrow_window_puts_the_detail_panel_below_the_table(
     assert window.detail_splitter.orientation() == Qt.Orientation.Vertical
 
 
-def test_the_detail_panel_starts_at_its_set_width(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_panel_width(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """Beside the table, the detail panel starts at 480 px after a layout change."""
     window, _repository = build_window(qtbot, tmp_path, ("a.wav",))
     show_at_width(qtbot, window, NARROW_WIDTH)
@@ -373,7 +367,7 @@ def test_the_detail_panel_starts_at_its_set_width(
     qtbot.waitUntil(lambda: window.detail_splitter.sizes()[1] == DETAIL_PANEL_WIDTH)
 
 
-def test_the_window_remembers_its_size_and_position(
+def test_geometry_saved(
     qtbot: Any,
     tmp_path: Path,
     settings: MemorySettingsManager,
@@ -401,9 +395,7 @@ def test_the_window_remembers_its_size_and_position(
     assert restored == [saved_state]
 
 
-def test_a_damaged_saved_geometry_leaves_the_default_size(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_damaged_geometry(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """A saved geometry that is not base64 opens the window at its default size."""
     settings.settings.window_geometry = "not base64 !"
 
@@ -412,9 +404,7 @@ def test_a_damaged_saved_geometry_leaves_the_default_size(
     assert window.width() == main_window_module.MAIN_WINDOW_WIDTH
 
 
-def test_the_key_notation_picker_sits_above_the_table(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_key_picker_placement(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """The Key Notation label focuses its picker, which now lives in the filter row."""
     window, _repository = build_window(qtbot, tmp_path)
 

@@ -1,4 +1,4 @@
-"""The UI-R workflow bar: five numbered stages, the current stage's action, and tools."""
+"""The workflow bar: five numbered stages, the current stage's action, and tools."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ STAGE_LABELS: Final[dict[WorkflowStage, str]] = {
     WorkflowStage.APPLY: "Apply",
     WorkflowStage.EXPORT: "Export",
 }
-# Icons from the UI-R step 4 table (#245): Import folder, Analyze, Approve all,
+# Each stage shows the icon of its main action: Import folder, Analyze, Approve all,
 # Write tags, and Export playlist.
 STAGE_ICONS: Final[dict[WorkflowStage, str]] = {
     WorkflowStage.IMPORT: "folder-input",
@@ -34,7 +34,7 @@ STAGE_ICONS: Final[dict[WorkflowStage, str]] = {
     WorkflowStage.APPLY: "tag-plus",
     WorkflowStage.EXPORT: "square-arrow-out-up-right",
 }
-# The primary button names the action of the current stage (UI-R step 2, column B).
+# The primary button names the action of the current stage.
 STAGE_ACTION_LABELS: Final[dict[WorkflowStage, str]] = {
     WorkflowStage.IMPORT: "Import folder",
     WorkflowStage.ANALYZE: "Analyze",
@@ -168,6 +168,10 @@ class WorkflowBar(QWidget):
         """Draw the icons in the colors of the theme in effect."""
         self._palette = palette
         self._render()
+
+    def is_stage_locked(self, stage: WorkflowStage) -> bool:
+        """Return True while a stage's action must wait, such as Review during a batch."""
+        return stage in self._locked
 
     def set_stages_locked(self, stages: set[WorkflowStage]) -> None:
         """Disable the stages whose action must wait, such as Review while a batch runs."""

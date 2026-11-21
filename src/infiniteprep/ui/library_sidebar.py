@@ -1,4 +1,4 @@
-"""The UI-R sidebar: workflow stages, library filters, source folders, and planned lists."""
+"""The sidebar: workflow stages, library filters, source folders, and planned lists."""
 
 from __future__ import annotations
 

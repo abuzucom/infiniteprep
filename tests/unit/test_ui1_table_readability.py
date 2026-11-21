@@ -1,4 +1,4 @@
-"""UI-1 (#244): library and detail table widths, readable names, and warning summaries."""
+"""Library and detail table widths, readable names, and warning summaries."""
 
 from __future__ import annotations
 
@@ -38,6 +38,9 @@ from tests.fixtures.waveform_stub import keep_waveform_pool_idle
 
 WINDOW_HEIGHT = 820
 WINDOW_WIDTHS = (1024, 1360, 1920)
+# The narrowest window whose table area, beside the sidebar and the 480 px panel,
+# reaches the 1100 px that shows every column.
+WIDE_START_WIDTH = 1850
 FILENAME_COLUMN = 0
 ARTIST_COLUMN = 3
 TITLE_COLUMN = 4
@@ -111,18 +114,20 @@ def test_library_table_does_not_stretch_the_last_section(
 
 
 @pytest.mark.parametrize("width", WINDOW_WIDTHS)
-def test_spare_width_goes_two_to_one_to_the_named_columns(
+def test_equal_stretch_shares(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager, width: int
 ) -> None:
-    """Filename, Artist, and Title get two parts each. Mix and Label get one part each."""
+    """Each shown stretching column (Filename, Artist, Title) gets an equal share."""
     window = open_window(qtbot, tmp_path, width)
+    header = window.file_table.horizontalHeader()
     widths = section_widths(window.file_table)
-    unit = widths[MIX_COLUMN]
+    shares = [
+        widths[column] for column in LARGE_SHARE_COLUMNS if not header.isSectionHidden(column)
+    ]
 
-    for column in LARGE_SHARE_COLUMNS:
-        assert abs(widths[column] - 2 * unit) <= ROUNDING_SLACK_PX
-    assert abs(widths[LABEL_COLUMN] - unit) <= ROUNDING_SLACK_PX
-    assert widths[WARNINGS_COLUMN] < widths[FILENAME_COLUMN]
+    assert len(shares) >= len(LARGE_SHARE_COLUMNS) - 1
+    assert max(shares) - min(shares) <= ROUNDING_SLACK_PX
+    assert widths[WARNINGS_COLUMN] < widths[ARTIST_COLUMN]
 
 
 @pytest.mark.parametrize("width", WINDOW_WIDTHS)
@@ -144,8 +149,12 @@ def test_columns_fill_the_viewport_without_overflow(
 def test_wider_window_gives_the_extra_width_to_the_named_columns(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
-    """A wider window widens the weighted columns and leaves the fitted columns as they were."""
-    window = open_window(qtbot, tmp_path, WINDOW_WIDTHS[0])
+    """A wider window widens the weighted columns and leaves the fitted columns as they were.
+
+    Both widths use the wide layout with every column shown, so only the spare width
+    changes between them.
+    """
+    window = open_window(qtbot, tmp_path, WIDE_START_WIDTH)
     narrow = section_widths(window.file_table)
 
     window.resize(WINDOW_WIDTHS[-1], WINDOW_HEIGHT)

@@ -13,6 +13,7 @@ from typing import Final
 from PySide6.QtCore import QByteArray, QMimeData, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QCloseEvent,
+    QColor,
     QDrag,
     QGuiApplication,
     QKeyEvent,
@@ -45,6 +46,7 @@ from PySide6.QtWidgets import (
 
 from infiniteprep.config.settings import (
     SUPPORTED_UNSORTED_PLACEMENTS,
+    TEXT_SIZE_STANDARD,
     UNSORTED_PLACEMENT_FIRST,
     AppSettings,
     SettingsManager,
@@ -77,7 +79,16 @@ from infiniteprep.ui.batch_queue_dock import BatchQueueDock
 from infiniteprep.ui.column_sizing import WeightedColumnSizer
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.folder_import import FolderImportController, ImportReportDialog
-from infiniteprep.ui.icon_loader import themed_icon
+from infiniteprep.ui.icon_loader import cached_themed_icon, themed_icon
+from infiniteprep.ui.library_columns import (
+    WARNING_ICON,
+    ColumnVisibility,
+    LibraryColumn,
+    format_column_choices,
+    key_cell_style,
+    parse_column_choices,
+    status_icon,
+)
 from infiniteprep.ui.library_sidebar import LibrarySidebar
 from infiniteprep.ui.stylesheet import BUTTON_VARIANT_PROPERTY, ICON_BUTTON_VARIANT
 from infiniteprep.ui.table_sort import (
@@ -89,7 +100,13 @@ from infiniteprep.ui.table_sort import (
 )
 from infiniteprep.ui.theme import DEFAULT_DARK_THEME, THEME_PALETTES, resolve_theme
 from infiniteprep.ui.time_format import split_time_seconds
-from infiniteprep.ui.tokens import DARK_PALETTE, Palette
+from infiniteprep.ui.tokens import (
+    DARK_PALETTE,
+    STANDARD_TABLE_ROW_HEIGHT,
+    Palette,
+    StatusRole,
+    scaled_size,
+)
 from infiniteprep.ui.workflow import (
     DETAIL_PANEL_WIDTH,
     MINIMUM_WINDOW_HEIGHT,
@@ -121,17 +138,15 @@ TABLE_COLUMNS: Final[tuple[str, ...]] = (
 )
 MAIN_WINDOW_WIDTH: Final[int] = 1360
 MAIN_WINDOW_HEIGHT: Final[int] = 820
-if len(TABLE_COLUMNS) != SORT_COLUMN_COUNT:
+if len(TABLE_COLUMNS) != SORT_COLUMN_COUNT or len(TABLE_COLUMNS) != len(LibraryColumn):
     raise RuntimeError("The library table columns and the sort kinds must stay aligned.")
 WARNINGS_COLUMN: Final[int] = TABLE_COLUMNS.index("Hardware / Rip Warnings")
-# Filename, Artist, and Title take two parts of the spare width each. Mix / Version and
-# Label / Cat# take one part each. Every other column fits its cells (owner, UI-1).
+# Filename, Artist, and Title share the spare width equally. Every other column fits
+# its cells.
 LIBRARY_COLUMN_WEIGHTS: Final[dict[int, int]] = {
-    TABLE_COLUMNS.index("Filename"): 2,
-    TABLE_COLUMNS.index("Artist (Cur -> Prop)"): 2,
-    TABLE_COLUMNS.index("Title (Cur -> Prop)"): 2,
-    TABLE_COLUMNS.index("Mix / Version"): 1,
-    TABLE_COLUMNS.index("Label / Cat#"): 1,
+    LibraryColumn.FILENAME: 1,
+    LibraryColumn.ARTIST: 1,
+    LibraryColumn.TITLE: 1,
 }
 # Below this share a weighted column stops shrinking and the table scrolls sideways.
 LIBRARY_MIN_SHARE_PX: Final[int] = 80
@@ -420,8 +435,8 @@ class MainWindow(QMainWindow):
     def _setup_workflow_bar(self) -> None:
         """Connect the workflow bar and the sidebar to the stage actions and tools.
 
-        The earlier toolbar names stay on the buttons that now run those actions, so
-        the batch locks and the callers keep working.
+        The bulk_btn, transcode_btn, export_playlist_btn, and journal_btn attributes
+        name the buttons that run those actions, for the batch locks and the callers.
         """
         self._stage_actions: dict[WorkflowStage, Callable[[], None]] = {
             WorkflowStage.IMPORT: self._prompt_import_folder,
@@ -451,8 +466,15 @@ class MainWindow(QMainWindow):
         self._setup_shortcuts()
 
     def _on_stage_triggered(self, stage_value: str) -> None:
-        """Run the action of the stage that a bar, sidebar, or primary button names."""
-        self._stage_actions[WorkflowStage(stage_value)]()
+        """Run the action of the stage that a button or Alt shortcut names, unless locked.
+
+        The buttons of a locked stage are disabled. The Alt shortcut reaches this method
+        anyway, so the lock check sits here too.
+        """
+        stage = WorkflowStage(stage_value)
+        if self.workflow_bar.is_stage_locked(stage):
+            return
+        self._stage_actions[stage]()
 
     def _on_library_filter_changed(self, _filter_value: str) -> None:
         """Show the tracks of the new filter and close the sidebar drawer."""
@@ -469,7 +491,7 @@ class MainWindow(QMainWindow):
         self.settings_shortcut = QShortcut(QKeySequence(SETTINGS_SHORTCUT), self)
         self.settings_shortcut.setContext(context)
         self.settings_shortcut.activated.connect(self._trigger_open_settings)
-        # Alt and the stage number run that stage, as the number on the bar shows (owner).
+        # Alt and the stage number run that stage, as the number on the bar shows.
         self.stage_shortcuts: dict[WorkflowStage, QShortcut] = {}
         for stage in WorkflowStage:
             shortcut = QShortcut(stage_shortcut(stage), self)
@@ -561,6 +583,26 @@ class MainWindow(QMainWindow):
         self.file_table.play_selection_requested.connect(self._play_selected_file)
         self.file_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.file_table.customContextMenuRequested.connect(self._on_library_context_menu)
+        self._setup_column_visibility()
+
+    def _setup_column_visibility(self) -> None:
+        """Let columns move, hide them by width and by header menu choice, and save both."""
+        header = self.file_table.horizontalHeader()
+        header.setSectionsMovable(True)
+        stored = getattr(SettingsManager().load(), "file_table_column_choices", "")
+        self.column_visibility = ColumnVisibility(
+            self.file_table, TABLE_COLUMNS, parse_column_choices(stored)
+        )
+        self.column_visibility.changed.connect(self._on_column_choices_changed)
+
+    def _on_column_choices_changed(self) -> None:
+        """Store the header menu choices and refit the columns that still show."""
+        settings_manager = SettingsManager()
+        settings = settings_manager.load()
+        settings.file_table_column_choices = format_column_choices(self.column_visibility.choices)
+        settings_manager.save(settings)
+        self.file_sizer.refit()
+        self._schedule_layout_save()
 
     def _apply_layout_mode(self, mode: LayoutMode) -> None:
         """Arrange the bar, the sidebar, and the detail panel for a window width band.
@@ -652,13 +694,18 @@ class MainWindow(QMainWindow):
         self._layout_save_timer.timeout.connect(self._save_table_layouts)
         for header, encoded_state, saved_column_count, sizer in headers:
             saved_layout_fits = saved_column_count == header.count() and bool(encoded_state)
-            # A saved layout keeps every width as saved (owner, UI-1).
+            # A saved layout keeps every width as saved.
             if saved_layout_fits and self._restore_header_state(header, encoded_state):
                 sizer.keep_restored_widths()
             header.sectionResized.connect(self._schedule_layout_save)
+        # A dragged column order persists the same way as a dragged width.
+        self.file_table.horizontalHeader().sectionMoved.connect(self._schedule_layout_save)
+        # A restored layout carries the hidden flags of its last session. The width rules
+        # and the header menu choices decide again for the current width.
+        self.column_visibility.apply()
 
     def _schedule_layout_save(self, *_args: int) -> None:
-        """Restart the layout save timer after a column resize."""
+        """Restart the layout save timer after a column resize, move, or hide."""
         self._layout_save_timer.start()
 
     def flush_layout_save(self) -> None:
@@ -768,9 +815,16 @@ class MainWindow(QMainWindow):
             self.sidebar.set_folders(folders)
 
     def _apply_theme_palette(self) -> None:
-        """Draw the bar, sidebar, and toggle icons in the colors of the stored theme."""
-        stored_theme = getattr(SettingsManager().load(), "theme", DEFAULT_DARK_THEME)
+        """Use the stored theme's colors for icons and the stored text size for table rows."""
+        settings = SettingsManager().load()
+        stored_theme = getattr(settings, "theme", DEFAULT_DARK_THEME)
         palette: Palette = THEME_PALETTES.get(resolve_theme(stored_theme), DARK_PALETTE)
+        self._palette = palette
+        text_size = getattr(settings, "text_size", TEXT_SIZE_STANDARD)
+        row_height = scaled_size(STANDARD_TABLE_ROW_HEIGHT, text_size)
+        rows = self.file_table.verticalHeader()
+        rows.setMinimumSectionSize(min(rows.minimumSectionSize(), row_height))
+        rows.setDefaultSectionSize(row_height)
         self.workflow_bar.set_palette(palette)
         self.sidebar.set_palette(palette)
         self.sidebar_toggle_btn.setIcon(themed_icon(SIDEBAR_TOGGLE_ICON, palette.text))
@@ -903,7 +957,37 @@ class MainWindow(QMainWindow):
                 item.setData(Qt.ItemDataRole.UserRole, row.file_id)
             if column_index == WARNINGS_COLUMN and row.warning_details:
                 item.setToolTip(row.warning_details)
+                warning_color = self._palette.status[StatusRole.WARNING]
+                item.setIcon(cached_themed_icon(WARNING_ICON, warning_color))
+            if column_index == LibraryColumn.STATUS:
+                self._show_status_icon(item, row)
+            if column_index == LibraryColumn.KEY:
+                self._color_key_cell(item, row)
             self.file_table.setItem(row_index, column_index, item)
+
+    def _show_status_icon(self, item: QTableWidgetItem, row: LibraryRow) -> None:
+        """Show the status as an icon. The label stays as tooltip and spoken text.
+
+        The search reads the row cells, so a search for a status still finds the row.
+        """
+        state = status_icon(row.review_status, self._palette)
+        if state is None:
+            return
+        label = item.text()
+        icon_name, color = state
+        item.setIcon(cached_themed_icon(icon_name, color))
+        item.setText("")
+        item.setToolTip(label)
+        item.setData(Qt.ItemDataRole.AccessibleTextRole, label)
+
+    @staticmethod
+    def _color_key_cell(item: QTableWidgetItem, row: LibraryRow) -> None:
+        """Fill a key cell with its Open Key color and the text color that reads on it."""
+        style = key_cell_style(row.key)
+        if style is None:
+            return
+        item.setBackground(QColor(style.fill))
+        item.setForeground(QColor(style.text))
 
     def _build_library_row(self, asset: FileAsset, snapshot: LibrarySnapshot) -> LibraryRow:
         """Build the table row for one asset with the values the sort needs."""

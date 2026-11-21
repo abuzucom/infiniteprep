@@ -1,8 +1,8 @@
-"""Workflow stages, library filters, and window breakpoints of the UI-R shell (#342).
+"""Workflow stages, library filters, and window breakpoints of the main window shell.
 
 The workflow bar and the sidebar show five stages: Import, Analyze, Review, Apply,
 and Export. Import counts every track. Each review status belongs to one of the
-other four stages, so each track counts in exactly one of them (owner, 2026-11-21).
+other four stages, so each track counts in exactly one of them.
 """
 
 from __future__ import annotations
@@ -86,7 +86,7 @@ def find_current_stage(counts: dict[WorkflowStage, int]) -> WorkflowStage:
 
 
 class LibraryFilter(StrEnum):
-    """The sidebar library filters. They replace the review status dropdown."""
+    """The sidebar library filters. Each one picks which tracks the table shows."""
 
     ALL = "all"
     NEEDS_REVIEW = "needs_review"

@@ -64,7 +64,7 @@ def mnemonic_key(label: str) -> str:
     return kept[index + 1].upper()
 
 
-def test_screen_readers_name_every_workflow_bar_button(window: MainWindow) -> None:
+def test_bar_spoken_names(window: MainWindow) -> None:
     """Each stage button speaks its stage and count, and each tool button speaks its tool."""
     bar = window.workflow_bar
     buttons = [*bar.stage_buttons.values(), bar.transcode_btn, bar.history_btn, bar.settings_btn]

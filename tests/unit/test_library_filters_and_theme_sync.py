@@ -109,9 +109,7 @@ def opaque_colors(icon: QIcon) -> set[str]:
     }
 
 
-def test_reload_settings_redraws_the_icons_in_the_stored_theme(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
+def test_reload_redraws_icons(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
     """After the Settings dialog changes the theme, the bar icons take its colors."""
     window, _repo, _ids = build_window(qtbot, tmp_path, ["a.wav"])
     stored = settings.load()

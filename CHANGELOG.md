@@ -15,6 +15,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A sidebar holds the stages, the library filters (All tracks, Needs review, Has warnings, Ready to write), the source folders with track counts, and the planned playlists and crates.
   - From 1600 px the sidebar stays open. Below 1600 px it opens from a button beside the search field, and the bar keeps only the current stage's label. Below 1280 px the detail panel moves under the table.
   - The window opens no smaller than 960 x 600 and remembers its size and position. A window saved on a monitor that is gone moves back onto a screen.
+- The library table follows the window width.
+  - Filename, Artist, and Title share the spare width equally. The other columns fit their cells.
+  - Label / Cat# and Filename show from a 1100 px table. Format, Duration, and Mix hide below a 1000 px table. Artist, Title, BPM, Key, Status, and Warnings always show.
+  - A right-click on the header shows or hides any other column, and that choice persists. Reset columns hands every column back to the width rules. Columns can be dragged into a new order, which persists.
+  - The Status column shows a state icon in its status color. The status name stays as tooltip and spoken text.
+  - The Warnings column shows a warning icon beside the count.
+  - Key cells take the Open Key color of their key. Minor keys use the darker shade.
+  - Rows are 24 px tall at the Standard text size.
 - UI-R visual system (UI-2, #342).
   - Two new themes, Dark and Light, built from the logo colors. Every text color reaches 4.5:1 and every graphic color 3:1 in both themes.
   - Each Open Key number has its own key color. Minor keys use a darker shade of the same hue. Key cells use black or white text, whichever reads better.

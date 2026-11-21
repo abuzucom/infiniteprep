@@ -39,8 +39,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DARK_THEME: Final[str] = DARK_THEME_ID
 DEFAULT_LIGHT_THEME: Final[str] = LIGHT_THEME_ID
-# The native style is the fallback when qt-material cannot apply. It left the pickers
-# in UI-R (#245), so a picker shows it only when no other theme can apply.
+# The native style is the fallback when qt-material cannot apply. A picker shows it
+# only when no other theme can apply.
 NATIVE_THEME: Final[str] = "native"
 SYSTEM_THEME: Final[str] = "system"
 
@@ -56,7 +56,7 @@ THEME_PALETTES: Final[dict[str, Palette]] = {
 }
 # The project theme files ship inside this package, next to this module.
 PROJECT_THEMES_DIR: Final[Path] = Path(__file__).resolve().parent / "themes"
-# qt-material sizes its text in pixels. The UI-R presets name points at 96 DPI.
+# qt-material sizes its text in pixels. The text size presets name points at 96 DPI.
 PIXELS_PER_POINT: Final[float] = 96 / 72
 # The pickers show these labels. Settings keep the identifiers, so stored files stay valid.
 THEME_LABELS: Final[dict[str, str]] = {
@@ -81,7 +81,7 @@ def fill_theme_picker(combo: QComboBox, themes: list[str]) -> None:
 def select_theme(combo: QComboBox, theme: str) -> bool:
     """Point a theme picker at the theme identifier. Return False when it lacks the theme.
 
-    A pre-UI-R theme value selects the UI-R theme that replaces it.
+    A legacy theme value selects the matching project theme.
     """
     index = combo.findData(theme)
     if index < 0:
@@ -228,11 +228,11 @@ def _qt_material_extra(palette: Palette, text_size: str) -> dict[str, str]:
 def _apply_project_theme(
     module: ModuleType, app: QApplication, resolved: str, text_size: str
 ) -> None:
-    """Apply a project theme file through qt-material and add the UI-R style sheet.
+    """Apply a project theme file through qt-material and add the app style sheet.
 
     The light theme file holds its line and surface colors in their final roles, so
     the qt-material invert_secondary swap stays off for both themes. qt-material
-    returns without a style sheet when it cannot read the theme file. The UI-R sheet
+    returns without a style sheet when it cannot read the theme file. The app sheet
     then stays off too, so no partial theme sits over the native style.
     """
     palette = THEME_PALETTES[resolved]
@@ -254,8 +254,8 @@ def apply_application_theme(
     """Apply the chosen theme and report whether the application took effect.
 
     A theme that cannot apply leaves the native theme in effect. The result names
-    the theme value in effect and the reason a theme did not apply. A pre-UI-R
-    theme value applies the UI-R theme that replaces it.
+    the theme value in effect and the reason a theme did not apply. A legacy theme
+    value applies the matching project theme.
     """
     resolved = resolve_theme(theme_name)
     if resolved == NATIVE_THEME:
