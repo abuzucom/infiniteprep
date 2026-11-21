@@ -75,18 +75,22 @@ class WindowsRemovableFlagTests(unittest.TestCase):
     """The removable flag follows the volume DriveType, not the bus."""
 
     def test_usb_disk_with_a_fixed_volume_is_not_removable(self) -> None:
+        """A USB disk with a Fixed volume keeps its USB bus but is not removable."""
         drive = inspect_one("USB", "Fixed")
 
         self.assertFalse(drive.is_removable)
         self.assertEqual(drive.bus_type, "USB")
 
     def test_usb_disk_with_a_removable_volume_is_removable(self) -> None:
+        """A USB disk with a Removable volume is removable."""
         self.assertTrue(inspect_one("USB", "Removable").is_removable)
 
     def test_usb_disk_without_a_drive_type_is_not_removable(self) -> None:
+        """A USB disk with no volume DriveType is not removable."""
         self.assertFalse(inspect_one("USB", None).is_removable)
 
     def test_drive_type_match_ignores_case(self) -> None:
+        """A lowercase removable DriveType still marks the disk removable."""
         self.assertTrue(inspect_one("USB", "removable").is_removable)
 
 

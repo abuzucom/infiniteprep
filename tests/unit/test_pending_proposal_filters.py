@@ -76,6 +76,7 @@ class BulkApproveTests(ProposalFilterTestCase):
     """Bulk approve reads pending proposals only."""
 
     def test_superseded_proposal_does_not_block_the_pending_value(self) -> None:
+        """A higher superseded proposal leaves bulk approve free to approve the pending one."""
         file_id = self.import_track("a.wav")
         self.store_proposal(file_id, FieldName.LABEL.value, "Tribal America", score=GOOD_SCORE)
         self.store_proposal(
@@ -95,6 +96,7 @@ class BulkApproveTests(ProposalFilterTestCase):
         self.assertEqual(approved.approved_value, "Tribal America")
 
     def test_second_run_approves_nothing_new(self) -> None:
+        """A repeat bulk approve finds no pending proposal left to approve."""
         file_id = self.import_track("a.wav")
         self.store_proposal(file_id, FieldName.LABEL.value, "Tribal America", score=GOOD_SCORE)
         service = ReviewService(self.repo)
@@ -110,6 +112,7 @@ class TopProposalValueTests(ProposalFilterTestCase):
     """The effective top proposal skips rejected and superseded rows."""
 
     def test_rejected_and_superseded_values_are_skipped(self) -> None:
+        """The top value comes from the pending proposal despite higher scored rejected rows."""
         file_id = self.import_track("a.wav")
         self.store_proposal(
             file_id,
@@ -132,6 +135,7 @@ class TopProposalValueTests(ProposalFilterTestCase):
         self.assertEqual(values, {FieldName.BPM.value: "128.0"})
 
     def test_playlist_order_ignores_a_rejected_bpm(self) -> None:
+        """Playlist ordering by BPM uses the pending BPM instead of a rejected one."""
         slow_id = self.import_track("slow.wav")
         fast_id = self.import_track("fast.wav")
         self.store_proposal(slow_id, FieldName.BPM.value, "120.0", score=GOOD_SCORE)
