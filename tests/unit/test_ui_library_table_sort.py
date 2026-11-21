@@ -74,20 +74,16 @@ def click_header(window: MainWindow, column: int) -> None:
 
 def visible_names(window: MainWindow) -> list[str]:
     """Return the file name shown in each visible row."""
-    names = []
-    for row in range(window.file_table.rowCount()):
-        item = window.file_table.item(row, 0)
-        names.append(str(item.text()))
-    return names
+    table = window.file_table
+    return [str(table.item(row, 0).text()) for row in range(table.rowCount())]
 
 
 def visible_ids(window: MainWindow) -> list[str]:
     """Return the file ID stored on the first cell of each visible row."""
-    ids = []
-    for row in range(window.file_table.rowCount()):
-        item = window.file_table.item(row, 0)
-        ids.append(str(item.data(Qt.ItemDataRole.UserRole)))
-    return ids
+    table = window.file_table
+    return [
+        str(table.item(row, 0).data(Qt.ItemDataRole.UserRole)) for row in range(table.rowCount())
+    ]
 
 
 def test_table_starts_sorted_by_filename_ascending(qtbot: Any, tmp_path: Path) -> None:

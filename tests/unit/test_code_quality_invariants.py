@@ -179,7 +179,7 @@ def test_all_source_files_are_ascii_only_and_free_of_todo_markers(
     parsed_sources: list[ParsedSource],
 ) -> None:
     """Verify every file in src/infiniteprep is strict ASCII and has no deferred-work markers."""
-    assert len(parsed_sources) > 0, "Expected at least one source file in src/infiniteprep"
+    assert parsed_sources, "Expected at least one source file in src/infiniteprep"
     for source in parsed_sources:
         # isascii() checks the whole text at C speed. Only a failing file is scanned
         # again to report where the first non-ASCII character sits.
