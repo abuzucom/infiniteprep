@@ -33,9 +33,9 @@ from infiniteprep.ui.storage_prompt import (
     build_restore_prompt,
 )
 from tests.fixtures.sqlite_version import read_user_version
+from tests.fixtures.storage_fallback import redirect_user_dirs_by_name
 
 EXE_NAME = "InfinitePrep.exe"
-PER_USER_DIR_FUNCTIONS = ("user_data_dir", "user_config_dir", "user_cache_dir")
 RESTORE_TIME = datetime(2026, 11, 15, 9, 30, 5, tzinfo=UTC)
 NEWER_ONLY_TABLE = "newer_only"
 SIDE_FILE_SUFFIXES = ("-wal", "-shm")
@@ -140,8 +140,7 @@ def test_restore_refuses_to_overwrite_an_existing_copy(library: Path) -> None:
 @pytest.fixture
 def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Isolate the per-user folders and the registry, and record prompts and errors."""
-    for name in PER_USER_DIR_FUNCTIONS:
-        monkeypatch.setattr(storage_paths.platformdirs, name, lambda *_, n=name: str(tmp_path / n))
+    redirect_user_dirs_by_name(tmp_path, monkeypatch)
     monkeypatch.setattr(storage_paths, "STORAGE_REGISTRY", StorageRegistry())
     app_folder = tmp_path / "InfinitePrep"
     app_folder.mkdir()

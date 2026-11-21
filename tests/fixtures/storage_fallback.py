@@ -53,6 +53,14 @@ def redirect_user_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return root
 
 
+def redirect_user_dirs_by_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point each per-user folder at a tmp_path subfolder named after its platformdirs function."""
+    for function_name in USER_DIR_FUNCTIONS:
+        monkeypatch.setattr(
+            storage_paths.platformdirs, function_name, build_fixed_folder(tmp_path / function_name)
+        )
+
+
 def read_fallback_list(user_dirs: Path) -> list[str]:
     """Return the remembered folders, or an empty list when the file is absent."""
     path = user_dirs / "config" / FALLBACK_LIST_NAME

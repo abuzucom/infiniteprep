@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from infiniteprep import storage_paths
 from infiniteprep.storage_paths import (
     PORTABLE_DATA_DIR_NAME,
     PORTABLE_MARKER_NAME,
@@ -14,12 +13,12 @@ from infiniteprep.storage_paths import (
     StorageMode,
     resolve_locations,
 )
+from tests.fixtures.storage_fallback import redirect_user_dirs_by_name
 
 EXE_NAME = "InfinitePrep.exe"
 # The name the probe once used. A file with it must survive the probe.
 OLD_PROBE_NAME = ".write-probe"
 KEPT_CONTENT = b"user file"
-PER_USER_DIR_FUNCTIONS = ("user_data_dir", "user_config_dir", "user_cache_dir")
 
 
 def _never_asked(folder: Path) -> FallbackAnswer:
@@ -29,8 +28,7 @@ def _never_asked(folder: Path) -> FallbackAnswer:
 
 def test_probe_leaves_existing_files_alone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Portable resolution keeps every file in Data unchanged and adds none."""
-    for name in PER_USER_DIR_FUNCTIONS:
-        monkeypatch.setattr(storage_paths.platformdirs, name, lambda *_, n=name: str(tmp_path / n))
+    redirect_user_dirs_by_name(tmp_path, monkeypatch)
     app_folder = tmp_path / "InfinitePrep"
     data = app_folder / PORTABLE_DATA_DIR_NAME
     data.mkdir(parents=True)
