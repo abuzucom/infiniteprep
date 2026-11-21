@@ -5,17 +5,30 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.80.7] (2026-11-21)
+## [0.80.8] (2026-11-21)
+
+### Fixed
+
+- The library table gives its spare width to the columns that need it (UI-1, #244).
+  - Filename, Artist, and Title take two parts of the spare width each. Mix / Version and Label / Cat# take one part each. The other columns fit the cell contents.
+  - No column stretches to fill the table. A saved layout from an older version loads without the last-column stretch.
+  - A dragged column keeps its width. A saved layout keeps every width as saved.
+  - Each header shows its full name in a tooltip.
+  - The warnings column shows a count such as "2 warnings". The full warnings show in the cell tooltip. The search box no longer matches warning text.
+- The detail panel field table fits its Field, Source & Score, and Actions columns. Existing Tag, Top Proposal, and Approved / Edit share the spare width equally.
+- The Field column shows readable names such as "Mix name" and "Catalog number". Stored field keys stay unchanged.
+- The Key Notation box shows Standard, Camelot, and Open Key. The stored notation values stay unchanged.
 
 ### Changed
 
 - Unit tests share the repeated helpers through `tests/fixtures/`.
   - `memory_keyring.py` holds the keyring fakes. `tests/conftest.py` holds `restore_keyring`.
-  - `storage_fallback.py` holds the storage prompt recorder, the per-user folder redirect, and the fallback list reader.
+  - `storage_fallback.py` holds the storage prompt recorder, the per-user folder redirects, and the fallback list reader.
   - `sqlite_version.py`, `fake_http.py`, `memory_repository.py`, `id3v2_render.py`, and `stereo_wav.py` hold the version reader, the response fake, the in-memory repository, the v2.3 render helpers, and the stereo WAV writer.
   - Two window tests import the existing `MemorySettingsManager`.
-- Two Discogs release id tests merge into one parametrized test with all nine ids. A short stream decode test that repeated another line for line is gone. The metadata read test derives its expected fields from the written tags.
-- The version advances from 0.80.6 to 0.80.7 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- Unit tests replace recorder and stand-in lambdas with the callable `CallRecorder` in `tests/fixtures/call_recorder.py` or with named functions. `qt_dialogs.py` and `waveform_stub.py` name the argument positions the recorders keep.
+- Two Discogs release id tests merge into one parametrized test with all nine ids. A named constant sets the overlong id length. A short stream decode test that repeated another line for line is gone. The metadata read test derives its expected fields from the written tags.
+- The version advances from 0.80.6 to 0.80.8 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ## [0.80.6] (2026-11-20)
 

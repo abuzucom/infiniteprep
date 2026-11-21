@@ -49,10 +49,8 @@ def test_format_clock_shows_milliseconds(seconds: float, expected: str) -> None:
     assert format_clock(seconds) == expected
 
 
-def test_tables_allow_column_resizing_and_stretch_the_last_section(
-    qtbot: Any,
-) -> None:
-    """All D78 tables allow manual resizing while filling the final column."""
+def test_tables_allow_column_resizing(qtbot: Any) -> None:
+    """All D78 tables allow manual resizing. UI-1 tables never stretch the last column."""
     repository = Repository(DatabaseManager(":memory:"))
     review_service = ReviewService(repository)
     write_service = WriteService(repository)
@@ -66,14 +64,12 @@ def test_tables_allow_column_resizing_and_stretch_the_last_section(
     for widget in widgets:
         qtbot.addWidget(widget)
 
-    tables = [
-        main_window.file_table,
-        detail_panel.fields_table,
-        journal_dialog.table,
-        write_plan_dialog.table,
-        recovery_dialog.table,
-    ]
-    for table in tables:
+    stretched = [journal_dialog.table, write_plan_dialog.table, recovery_dialog.table]
+    unstretched = [main_window.file_table, detail_panel.fields_table]
+    for table in stretched + unstretched:
         header = table.horizontalHeader()
         assert header.sectionResizeMode(0) == QHeaderView.ResizeMode.Interactive
-        assert header.stretchLastSection()
+    for table in stretched:
+        assert table.horizontalHeader().stretchLastSection()
+    for table in unstretched:
+        assert not table.horizontalHeader().stretchLastSection()

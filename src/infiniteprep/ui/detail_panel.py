@@ -43,6 +43,7 @@ from infiniteprep.services.fake_lossless import FakeLosslessResult
 from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
 from infiniteprep.ui.action_handlers import show_plain_message
 from infiniteprep.ui.audio_player import AudioPreviewWidget
+from infiniteprep.ui.column_sizing import WeightedColumnSizer
 from infiniteprep.ui.contrast import warning_text_color
 from infiniteprep.ui.waveform_worker import CANCEL_WAIT_MS, WaveformAnalysisPool
 
@@ -83,6 +84,37 @@ COLUMN_TOP_PROPOSAL: Final[int] = 2
 COLUMN_PROPOSAL_SOURCE: Final[int] = 3
 COLUMN_APPROVED_EDIT: Final[int] = 4
 COLUMN_ACTIONS: Final[int] = 5
+# Existing Tag, Top Proposal, and Approved / Edit share the spare width equally. The
+# other columns fit their cells, so the Actions column is only as wide as its buttons.
+FIELDS_TABLE_WEIGHTS: Final[dict[int, int]] = {
+    COLUMN_EXISTING_TAG: 1,
+    COLUMN_TOP_PROPOSAL: 1,
+    COLUMN_APPROVED_EDIT: 1,
+}
+FIELDS_TABLE_MIN_SHARE_PX: Final[int] = 80
+# The Field column shows these names. Stored rows and approvals keep the field keys.
+# The keys are the stored string values, the same strings the table rows carry.
+FIELD_LABELS: Final[dict[str, str]] = {
+    FieldName.ARTIST.value: "Artist",
+    FieldName.TITLE.value: "Title",
+    FieldName.MIX_NAME.value: "Mix name",
+    FieldName.REMIXER.value: "Remixer",
+    FieldName.RELEASE_TITLE.value: "Release title",
+    FieldName.LABEL.value: "Label",
+    FieldName.CATALOG_NUMBER.value: "Catalog number",
+    FieldName.TRACK_NUMBER.value: "Track number",
+    FieldName.DISC_NUMBER.value: "Disc number",
+    FieldName.VINYL_POSITION.value: "Vinyl position",
+    FieldName.GENRE.value: "Genre",
+    FieldName.STYLE.value: "Style",
+    FieldName.BPM.value: "BPM",
+    FieldName.KEY.value: "Key",
+    FieldName.YEAR.value: "Year",
+    FieldName.ACOUSTID_ID.value: "AcoustID ID",
+    FieldName.MB_RECORDING_ID.value: "MusicBrainz recording ID",
+    FieldName.MB_RELEASE_ID.value: "MusicBrainz release ID",
+    FieldName.DISCOGS_RELEASE_ID.value: "Discogs release ID",
+}
 ACTION_ROW_MARGIN_PX: Final[int] = 2
 # Row widget roles. A row widget carries the object name "<field>:<role>", so focus
 # finds the same control again after the table rebuilds.
@@ -119,6 +151,14 @@ def row_widget_name(field_name: str, role: str) -> str:
 def field_label(field_name: str) -> str:
     """Return the spoken form of a field name, such as "catalog number"."""
     return field_name.replace("_", " ")
+
+
+def field_display_name(field_name: str) -> str:
+    """Return the name the Field column shows, such as "Catalog number".
+
+    An unknown key shows as stored, so no row loses its name.
+    """
+    return FIELD_LABELS.get(field_name, field_name)
 
 
 def _format_scalar_tag_value(value: object) -> str:
@@ -298,9 +338,9 @@ class DetailPanel(QWidget):
                 "Actions",
             ]
         )
-        header = self.fields_table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        header.setStretchLastSection(True)
+        self.fields_sizer = WeightedColumnSizer(
+            self.fields_table, FIELDS_TABLE_WEIGHTS, FIELDS_TABLE_MIN_SHARE_PX
+        )
         # Tab moves through the edit box and the buttons of each row. With cell
         # navigation on, Tab returns focus to the table and skips the buttons.
         self.fields_table.setTabKeyNavigation(False)
@@ -682,6 +722,7 @@ class DetailPanel(QWidget):
         self._fields_file_id = asset.id
         self._acted_field = None
         self._restore_row_state(kept)
+        self.fields_sizer.refit()
 
     def _row_controls(self) -> Iterator[QWidget]:
         """Yield the edit box and the buttons of every current field row."""
@@ -749,7 +790,9 @@ class DetailPanel(QWidget):
             field_name, approved.approved_value if approved else ""
         )
 
-        self.fields_table.setItem(row_index, COLUMN_FIELD_NAME, QTableWidgetItem(field_name))
+        self.fields_table.setItem(
+            row_index, COLUMN_FIELD_NAME, QTableWidgetItem(field_display_name(field_name))
+        )
         self.fields_table.setItem(
             row_index,
             COLUMN_EXISTING_TAG,

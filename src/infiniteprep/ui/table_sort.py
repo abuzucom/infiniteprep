@@ -97,6 +97,8 @@ class LibraryRow:
     bpm: float | None
     key: tuple[PitchClass, KeyMode] | None
     review_status: str
+    # The full warning text for the warnings cell tooltip. The cell itself shows a count.
+    warning_details: str = ""
 
 
 @dataclass(frozen=True)
