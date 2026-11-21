@@ -29,13 +29,8 @@ from tests.fixtures.id3v2_bytes import tag_bytes, utf16, v23_frame
 from tests.fixtures.mp4_bytes import audio_entry, data_atom, esds, item, m4a_file, mvhd, trak, udta
 
 TAGS = {"artist": "Kerri Chandler", "title": "Rain", "bpm": "124", "key": "8A", "label": "Madhouse"}
-EXPECTED_STANDARD = {
-    "artist": "Kerri Chandler",
-    "title": "Rain",
-    "bpm": "124",
-    "key": "8A",
-    "label": "Madhouse",
-}
+# Every written standard field reads back unchanged.
+EXPECTED_STANDARD = dict(TAGS)
 RATE_44K = 44_100
 FIXTURE_SECONDS = 2.0
 MP3_FRAMES = 120
