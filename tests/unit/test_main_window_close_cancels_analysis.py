@@ -15,6 +15,8 @@ from infiniteprep.services.fake_lossless import (
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.main_window import MainWindow
+from tests.fixtures.call_recorder import CallRecorder
+from tests.fixtures.waveform_stub import SIGNAL_FILE_ID_INDEX, SIGNAL_GENERATION_INDEX
 
 FILE_ID = "file-1"
 GENERATION = 1
@@ -46,11 +48,9 @@ def test_closing_the_main_window_drops_late_detail_results(
     )
     qtbot.addWidget(window)
     pool = window.detail_panel.waveform_pool
-    monkeypatch.setattr(pool._pool, "start", lambda _task: None)
-    delivered: list[tuple[str, int]] = []
-    pool.fake_lossless_ready.connect(
-        lambda file_id, generation, _result: delivered.append((file_id, generation))
-    )
+    monkeypatch.setattr(pool._pool, "start", CallRecorder())
+    delivered = CallRecorder(SIGNAL_FILE_ID_INDEX, SIGNAL_GENERATION_INDEX)
+    pool.fake_lossless_ready.connect(delivered)
     pool.submit(tmp_path / "track.flac", FILE_ID, GENERATION)
 
     window.close()
