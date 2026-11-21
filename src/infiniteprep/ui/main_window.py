@@ -368,7 +368,18 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("InfinitePrep - DJ Music Metadata & Audio Preparation")
         self.setMinimumSize(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
         self.resize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
+        self._create_widgets(enable_audio_backend)
+        self._setup_workflow_bar()
+        self._setup_central_widget()
+        self._setup_batch_queue()
+        self._restore_table_layouts()
+        self._apply_theme_palette()
+        self.refresh_file_table()
+        self._restore_window_geometry()
+        self._apply_layout_mode(find_layout_mode(self.width()))
 
+    def _create_widgets(self, enable_audio_backend: bool) -> None:
+        """Create the search field, pickers, bar, sidebar, table, and detail panel."""
         self.search_input = QLineEdit(self)
         self.key_notation_combo = QComboBox(self)
         self.workflow_bar = WorkflowBar(self)
@@ -384,14 +395,6 @@ class MainWindow(QMainWindow):
             parent=self,
             enable_audio_backend=enable_audio_backend,
         )
-        self._setup_workflow_bar()
-        self._setup_central_widget()
-        self._setup_batch_queue()
-        self._restore_table_layouts()
-        self._apply_theme_palette()
-        self.refresh_file_table()
-        self._restore_window_geometry()
-        self._apply_layout_mode(find_layout_mode(self.width()))
 
     def _setup_batch_queue(self) -> None:
         """Create the batch queue, its dock panel, and the import controller it drives."""
