@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 
 import keyring
 import pytest
-from keyring.backend import KeyringBackend
-from keyring.errors import KeyringError, PasswordDeleteError
 
 from infiniteprep.config.credentials import ENV_VAR_MAP, SERVICE_NAME
 from infiniteprep.data_cleanup import (
@@ -20,49 +17,10 @@ from infiniteprep.data_cleanup import (
     run_cleanup,
 )
 from infiniteprep.storage_paths import StorageLocations, StorageMode
+from tests.fixtures.memory_keyring import FailingKeyring, MemoryKeyring
 
 DATA_ONLY = CleanupChoice(delete_data=True, delete_keys=False)
 KEYS_ONLY = CleanupChoice(delete_data=False, delete_keys=True)
-
-
-class MemoryKeyring(KeyringBackend):
-    """A keyring backend that keeps passwords in a dictionary."""
-
-    priority = 1
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.store: dict[tuple[str, str], str] = {}
-
-    def get_password(self, service: str, username: str) -> str | None:
-        """Return the stored password or None."""
-        return self.store.get((service, username))
-
-    def set_password(self, service: str, username: str, password: str) -> None:
-        """Store a password."""
-        self.store[(service, username)] = password
-
-    def delete_password(self, service: str, username: str) -> None:
-        """Delete a password, raising PasswordDeleteError when it is absent."""
-        if (service, username) not in self.store:
-            raise PasswordDeleteError("not found")
-        del self.store[(service, username)]
-
-
-class FailingKeyring(MemoryKeyring):
-    """A keyring backend whose deletes always fail."""
-
-    def delete_password(self, service: str, username: str) -> None:
-        """Fail every delete."""
-        raise KeyringError("backend unavailable")
-
-
-@pytest.fixture
-def restore_keyring() -> Iterator[None]:
-    """Put back the original keyring backend after the test."""
-    original = keyring.get_keyring()
-    yield
-    keyring.set_keyring(original)
 
 
 def _per_user(root: Path) -> StorageLocations:
