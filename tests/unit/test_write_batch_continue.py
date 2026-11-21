@@ -17,9 +17,15 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import PendingRecoveryError, WriteService
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
 
 TRACK_NAMES = ("a_first.wav", "b_broken.wav", "c_last.wav")
 BROKEN_NAME = "b_broken.wav"
+
+
+def select_progress_file_name(_done: int, _total: int, path: str) -> str:
+    """Return the file name of one progress report."""
+    return Path(path).name
 
 
 @pytest.fixture
@@ -107,12 +113,14 @@ def test_stop_on_failure_ends_the_batch_at_the_first_failed_write(write_parts: A
 def test_cancel_stops_before_the_next_write_and_keeps_finished_writes(write_parts: Any) -> None:
     """A cancel request after the first file keeps that write and skips the rest."""
     repo, write_svc, plans = write_parts
-    started: list[str] = []
+    started = CallRecorder(record=select_progress_file_name)
+
+    def cancel_after_first_start() -> bool:
+        """Ask to stop once one write has started."""
+        return bool(started)
 
     result = write_svc.apply_batch_continuing(
-        plans,
-        should_cancel=lambda: bool(started),
-        progress=lambda _done, _total, path: started.append(Path(path).name),
+        plans, should_cancel=cancel_after_first_start, progress=started
     )
 
     assert started == [TRACK_NAMES[0]]

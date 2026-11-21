@@ -15,7 +15,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - A sidebar holds the stages, the library filters (All tracks, Needs review, Has warnings, Ready to write), the source folders with track counts, and the planned playlists and crates.
   - From 1600 px the sidebar stays open. Below 1600 px it opens from a button beside the search field, and the bar keeps only the current stage's label. Below 1280 px the detail panel moves under the table.
   - The window opens no smaller than 960 x 600 and remembers its size and position. A window saved on a monitor that is gone moves back onto a screen.
-
 - UI-R visual system (UI-2, #342).
   - Two new themes, Dark and Light, built from the logo colors. Every text color reaches 4.5:1 and every graphic color 3:1 in both themes.
   - Each Open Key number has its own key color. Minor keys use a darker shade of the same hue. Key cells use black or white text, whichever reads better.
@@ -29,6 +28,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The theme pickers offer Dark, Light, and Match System. Native left the pickers and applies only when the theme package cannot load.
 - Settings from an older version that name Dark Teal, Light Teal, or Native load as Dark or Light.
 - The project orientation notes that the agent prose rules do not govern on-screen text.
+- Unit tests share the repeated helpers through `tests/fixtures/`.
+  - `memory_keyring.py` holds the keyring fakes. `tests/conftest.py` holds `restore_keyring`.
+  - `storage_fallback.py` holds the storage prompt recorder, the per-user folder redirects, and the fallback list reader.
+  - `sqlite_version.py`, `fake_http.py`, `memory_repository.py`, `id3v2_render.py`, and `stereo_wav.py` hold the version reader, the response fake, the in-memory repository, the v2.3 render helpers, and the stereo WAV writer.
+  - Two window tests import the existing `MemorySettingsManager`.
+- Unit tests replace recorder and stand-in lambdas with the callable `CallRecorder` in `tests/fixtures/call_recorder.py` or with named functions. `qt_dialogs.py` and `waveform_stub.py` name the argument positions the recorders keep.
+- Two Discogs release id tests merge into one parametrized test with all nine ids. A named constant sets the overlong id length. A short stream decode test that repeated another line for line is gone. The metadata read test derives its expected fields from the written tags.
+- The version advances from 0.81.0 to 0.81.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 

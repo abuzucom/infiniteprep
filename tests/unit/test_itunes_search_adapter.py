@@ -16,12 +16,12 @@ from infiniteprep.adapters.catalog.itunes import (
     ItunesSearchAdapter,
     RequestLimiter,
 )
-from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, EntityType
 from infiniteprep.domain.models import CandidateMatch, FileAsset, ReleaseDetails
 from infiniteprep.domain.ports import MetadataSearchQuery
 from infiniteprep.services.reconciliation import ReconciliationService
+from tests.fixtures.memory_repository import build_memory_repository
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "itunes_search"
 FILE_ID = "file-1"
@@ -36,11 +36,6 @@ OVERLAP_TIMEOUT_SEC = 10.0
 def _recorded(name: str) -> dict[str, Any]:
     """Return the recorded iTunes response stored under the fixture directory."""
     return json.loads((FIXTURE_DIR / f"{name}.json").read_text(encoding="utf-8"))
-
-
-def _repository() -> Repository:
-    """Return a Repository on a fresh in-memory database."""
-    return Repository(DatabaseManager(":memory:"))
 
 
 def _query() -> MetadataSearchQuery:
@@ -86,7 +81,7 @@ def _adapter(
 
 def test_search_returns_the_matching_row_with_a_genre_and_a_date() -> None:
     """A matching row supplies the coarse genre and the release year."""
-    adapter = _adapter(_repository(), _recorded("match_with_genre_and_date"))
+    adapter = _adapter(build_memory_repository(), _recorded("match_with_genre_and_date"))
 
     matches = adapter.search(_query(), file_id=FILE_ID)
 
@@ -102,14 +97,14 @@ def test_search_returns_the_matching_row_with_a_genre_and_a_date() -> None:
 
 def test_search_without_a_match_returns_no_candidate() -> None:
     """An empty response produces no candidate."""
-    adapter = _adapter(_repository(), _recorded("no_match"))
+    adapter = _adapter(build_memory_repository(), _recorded("no_match"))
 
     assert adapter.search(_query(), file_id=FILE_ID) == []
 
 
 def test_the_earliest_release_date_wins_among_tied_rows() -> None:
     """Two collections for one track keep the earliest release date."""
-    adapter = _adapter(_repository(), _recorded("two_collections"))
+    adapter = _adapter(build_memory_repository(), _recorded("two_collections"))
 
     matches = adapter.search(_query(), file_id=FILE_ID)
 
@@ -120,7 +115,7 @@ def test_the_earliest_release_date_wins_among_tied_rows() -> None:
 
 def test_the_cached_response_keeps_no_artwork() -> None:
     """The shared cache holds the read fields only, so no artwork URL stays in it."""
-    repository = _repository()
+    repository = build_memory_repository()
     adapter = _adapter(repository, _recorded("artwork_only"))
 
     adapter.search(_query(), file_id=FILE_ID)
@@ -142,7 +137,7 @@ def test_the_cached_response_keeps_no_artwork() -> None:
 
 def test_the_response_artwork_is_ignored() -> None:
     """No artwork field from the response reaches the candidate."""
-    adapter = _adapter(_repository(), _recorded("artwork_only"))
+    adapter = _adapter(build_memory_repository(), _recorded("artwork_only"))
 
     candidate = adapter.search(_query(), file_id=FILE_ID)[0]
 
@@ -154,7 +149,7 @@ def test_the_response_artwork_is_ignored() -> None:
 
 def test_the_response_is_cached_in_the_shared_sqlite_cache() -> None:
     """A second identical search reads the cached response instead of the network."""
-    repository = _repository()
+    repository = build_memory_repository()
     calls: list[tuple[str, dict[str, str]]] = []
     adapter = _adapter(repository, _recorded("match_with_genre_and_date"), calls)
 
@@ -183,7 +178,7 @@ def test_the_rate_limit_holds_the_next_request_back(monkeypatch: pytest.MonkeyPa
     fake_time = SimpleNamespace(monotonic=read_clock, sleep=record_sleep)
     monkeypatch.setattr(http_json, "time", fake_time)
     adapter = _adapter(
-        _repository(),
+        build_memory_repository(),
         _recorded("match_with_genre_and_date"),
         limiter=RequestLimiter(RATE_LIMIT_INTERVAL_SEC),
     )
@@ -196,14 +191,14 @@ def test_the_rate_limit_holds_the_next_request_back(monkeypatch: pytest.MonkeyPa
 
 def test_an_unrelated_row_supplies_no_candidate() -> None:
     """A row that matches neither the artist nor the title supplies no value."""
-    adapter = _adapter(_repository(), _recorded("unrelated_row"))
+    adapter = _adapter(build_memory_repository(), _recorded("unrelated_row"))
 
     assert adapter.search(_query(), file_id=FILE_ID) == []
 
 
 def test_a_malformed_duration_leaves_the_candidate_without_a_duration() -> None:
     """A row with a malformed duration still supplies the genre and the year."""
-    adapter = _adapter(_repository(), _recorded("malformed_duration"))
+    adapter = _adapter(build_memory_repository(), _recorded("malformed_duration"))
 
     matches = adapter.search(_query(), file_id=FILE_ID)
 
@@ -214,7 +209,7 @@ def test_a_malformed_duration_leaves_the_candidate_without_a_duration() -> None:
 
 def test_the_cache_key_names_the_provider_and_the_endpoint() -> None:
     """The cache key holds the provider and the endpoint, so no other source shares it."""
-    adapter = _adapter(_repository(), _recorded("match_with_genre_and_date"))
+    adapter = _adapter(build_memory_repository(), _recorded("match_with_genre_and_date"))
 
     key = adapter._cache_key({"term": "Deep Dish The Dream"})
 
@@ -224,7 +219,7 @@ def test_the_cache_key_names_the_provider_and_the_endpoint() -> None:
 
 def test_two_threads_send_one_lookup_for_the_same_track(monkeypatch: pytest.MonkeyPatch) -> None:
     """Two threads that miss the cache together send one request between them."""
-    repository = _repository()
+    repository = build_memory_repository()
     limiter = RequestLimiter(0.0)
     calls: list[str] = []
     lock = threading.Lock()
@@ -275,7 +270,7 @@ def test_two_threads_send_one_lookup_for_the_same_track(monkeypatch: pytest.Monk
 def test_the_request_carries_the_shared_user_agent_and_the_search_terms() -> None:
     """The request names the search endpoint and sends the artist and the title."""
     calls: list[tuple[str, dict[str, str]]] = []
-    adapter = _adapter(_repository(), _recorded("match_with_genre_and_date"), calls)
+    adapter = _adapter(build_memory_repository(), _recorded("match_with_genre_and_date"), calls)
 
     adapter.search(_query(), file_id=FILE_ID)
 
@@ -289,7 +284,7 @@ def test_the_request_carries_the_shared_user_agent_and_the_search_terms() -> Non
 
 def test_each_proposal_records_itunes_search_as_its_source() -> None:
     """A proposal from the adapter names iTunes Search as the provider."""
-    repository = _repository()
+    repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
     adapter = _adapter(repository, _recorded("match_with_genre_and_date"))
 
@@ -307,7 +302,7 @@ def test_each_proposal_records_itunes_search_as_its_source() -> None:
 
 def test_a_field_another_source_supplied_gets_no_itunes_proposal() -> None:
     """A higher ranked source keeps the field and the iTunes proposal never appears."""
-    repository = _repository()
+    repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
     discogs_candidate = CandidateMatch(
         id="discogs-rel-1",
@@ -339,7 +334,7 @@ def test_no_network_call_reaches_the_response_without_a_search_term(
 ) -> None:
     """A query without an artist or a title never reaches the network."""
     calls: list[tuple[str, dict[str, str]]] = []
-    adapter = _adapter(_repository(), _recorded(fixture_name), calls)
+    adapter = _adapter(build_memory_repository(), _recorded(fixture_name), calls)
 
     assert adapter.search(MetadataSearchQuery(), file_id=FILE_ID) == []
     assert calls == []

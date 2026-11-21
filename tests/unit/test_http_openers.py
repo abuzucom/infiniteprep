@@ -16,8 +16,7 @@ from infiniteprep.adapters.catalog import discogs as discogs_module
 from infiniteprep.adapters.catalog import musicbrainz as musicbrainz_module
 from infiniteprep.adapters.fingerprint import chromaprint_acoustid as acoustid_module
 from infiniteprep.adapters.llm import ollama_openai as ollama_openai_module
-from infiniteprep.db.connection import DatabaseManager
-from infiniteprep.db.repositories import Repository
+from tests.fixtures.memory_repository import build_memory_repository
 
 # A structurally fake key. The recording stub never sends it anywhere.
 STUB_KEY = "synthetic"
@@ -118,17 +117,19 @@ class _StubResponse:
 
 
 def _discogs_send() -> Any:
-    adapter = discogs_module.DiscogsAdapter(_repository(), user_token=STUB_KEY)
+    adapter = discogs_module.DiscogsAdapter(build_memory_repository(), user_token=STUB_KEY)
     return adapter._default_http_get_json(f"{discogs_module.DISCOGS_BASE_URL}/releases/1", {})
 
 
 def _musicbrainz_send() -> Any:
-    adapter = musicbrainz_module.MusicBrainzAdapter(_repository())
+    adapter = musicbrainz_module.MusicBrainzAdapter(build_memory_repository())
     return adapter._default_http_get_json(f"{musicbrainz_module.MB_BASE_URL}/recording", {})
 
 
 def _acoustid_send() -> Any:
-    adapter = acoustid_module.ChromaprintAcoustIDAdapter(_repository(), api_key=STUB_KEY)
+    adapter = acoustid_module.ChromaprintAcoustIDAdapter(
+        build_memory_repository(), api_key=STUB_KEY
+    )
     return adapter._default_http_get_json("https://api.acoustid.org/v2/lookup", {})
 
 
@@ -163,8 +164,3 @@ def test_credentialed_adapters_send_through_the_no_redirect_opener(
 
     assert send() == {}
     assert len(sent) == 1
-
-
-def _repository() -> Repository:
-    """Return a repository over an empty in-memory database."""
-    return Repository(DatabaseManager(":memory:"))

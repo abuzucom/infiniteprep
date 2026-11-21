@@ -25,6 +25,7 @@ from infiniteprep.db.migrations.runner import (
     NewerLibraryError,
     migrate_database,
 )
+from tests.fixtures.sqlite_version import read_user_version
 
 LIBRARY_NAME = "infiniteprep.sqlite3"
 SCHEMA_TABLES = {
@@ -45,12 +46,6 @@ class InjectedMigrationError(RuntimeError):
     """Raised by a test migration to force a mid-run failure."""
 
 
-def _user_version(db_path: Path) -> int:
-    """Read user_version through a separate connection."""
-    with closing(sqlite3.connect(db_path)) as conn, conn:
-        return int(conn.execute("PRAGMA user_version").fetchone()[0])
-
-
 def _table_names(db_path: Path) -> set[str]:
     """Return the names of the application tables in the library at db_path."""
     with closing(sqlite3.connect(db_path)) as conn, conn:
@@ -69,18 +64,15 @@ def _column_names(db_path: Path, table: str) -> set[str]:
 
 def _create_version_zero_library(db_path: Path) -> None:
     """Build a library the way every release before D349 left it: schema, data, version 0."""
-    manager_conn = sqlite3.connect(db_path)
-    try:
-        MIGRATIONS[0].apply(manager_conn)
-        manager_conn.execute(
+    with closing(sqlite3.connect(db_path)) as connection:
+        MIGRATIONS[0].apply(connection)
+        connection.execute(
             "INSERT INTO source_groups (id, user_label, grouping_basis, original_folder) "
             "VALUES (?, ?, ?, ?)",
             SOURCE_GROUP_ROW,
         )
-        manager_conn.execute("PRAGMA user_version = 0")
-        manager_conn.commit()
-    finally:
-        manager_conn.close()
+        connection.execute("PRAGMA user_version = 0")
+        connection.commit()
 
 
 def _add_notes_table(conn: sqlite3.Connection) -> None:
@@ -129,7 +121,7 @@ def test_fresh_library_reaches_latest_without_backup(library: Path) -> None:
     with DatabaseManager(library):
         pass
 
-    assert _user_version(library) == LATEST_VERSION
+    assert read_user_version(library) == LATEST_VERSION
     assert _table_names(library) >= SCHEMA_TABLES
     assert not backup_path_for(library).exists()
     assert not sidecar_path_for(library).exists()
@@ -157,9 +149,9 @@ def test_existing_version_zero_library_keeps_data_and_gets_backup(library: Path)
         row = manager.connect().execute("SELECT id, user_label FROM source_groups").fetchone()
 
     assert tuple(row) == SOURCE_GROUP_ROW[:2]
-    assert _user_version(library) == LATEST_VERSION
+    assert read_user_version(library) == LATEST_VERSION
     assert backup_path_for(library).is_file()
-    assert _user_version(backup_path_for(library)) == 0
+    assert read_user_version(backup_path_for(library)) == 0
     assert read_backup_version(library) == 0
     with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         assert conn.execute("SELECT COUNT(*) FROM source_groups").fetchone()[0] == 1
@@ -187,7 +179,7 @@ def test_two_step_migration_runs_in_order(library: Path, opened: sqlite3.Connect
     reached = migrate_database(opened, library, migrations=steps)
 
     assert reached == 3
-    assert _user_version(library) == 3
+    assert read_user_version(library) == 3
     assert {"id", "body", "pinned"} == _column_names(library, "crate_notes")
     assert read_backup_version(library) == 0
     assert "crate_notes" not in _table_names(backup_path_for(library))
@@ -205,7 +197,7 @@ def test_failed_migration_rolls_back_and_keeps_backup(
     assert caught.value.failed_version == 3
     assert caught.value.backup_path == backup_path_for(library)
     assert isinstance(caught.value.__cause__, InjectedMigrationError)
-    assert _user_version(library) == 0
+    assert read_user_version(library) == 0
     assert not {"crate_notes", "half_done"} & _table_names(library)
     with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
@@ -230,7 +222,7 @@ def test_newer_library_is_refused_untouched(library: Path) -> None:
     assert caught.value.library_version == newer_version
     assert caught.value.known_version == LATEST_VERSION
     assert caught.value.backup_path == backup_path_for(library)
-    assert _user_version(library) == newer_version
+    assert read_user_version(library) == newer_version
     assert _table_names(library) == set()
     assert backup_path_for(library).is_file()
 
@@ -301,5 +293,5 @@ def test_failed_backup_stops_migration(
     with pytest.raises(BackupVerificationError):
         migrate_database(opened, library, migrations=steps)
 
-    assert _user_version(library) == 0
+    assert read_user_version(library) == 0
     assert "crate_notes" not in _table_names(library)

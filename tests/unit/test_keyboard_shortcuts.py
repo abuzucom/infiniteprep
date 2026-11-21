@@ -14,7 +14,11 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui import main_window as main_window_module
 from infiniteprep.ui.main_window import MainWindow
+from tests.fixtures.call_recorder import CallRecorder
 from tests.fixtures.memory_settings import MemorySettingsManager
+
+# Positional argument index of QFileDialog.getExistingDirectory(parent, caption).
+FOLDER_CAPTION_INDEX = 1
 
 # The spoken name of each workflow bar button in an empty library.
 EXPECTED_BAR_NAMES: tuple[str, ...] = (
@@ -88,12 +92,9 @@ def test_import_shortcut_opens_the_folder_picker(
     window: MainWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The Open key sequence asks for a folder to import."""
-    asked: list[str] = []
-    monkeypatch.setattr(
-        main_window_module.QFileDialog,
-        "getExistingDirectory",
-        lambda _parent, caption: asked.append(caption) or "",
-    )
+    # The picker recorder keeps each caption and answers with no folder.
+    asked = CallRecorder(FOLDER_CAPTION_INDEX, reply="")
+    monkeypatch.setattr(main_window_module.QFileDialog, "getExistingDirectory", asked)
 
     window.import_shortcut.activated.emit()
 

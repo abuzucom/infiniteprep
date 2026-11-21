@@ -26,7 +26,8 @@ from infiniteprep.services.usb.windows import (
     UTF8_OUTPUT_PREFIX,
     VOLUME_COMMAND_TEXT,
 )
-from tests.unit.test_usb_manifest_and_recovery import _build_journal_entry, _build_manifest
+from tests.fixtures.call_recorder import CallRecorder
+from tests.unit.usb_manifest_support import build_journal_entry, build_manifest
 from tests.unit.usb_preflight_support import build_inspection, build_partition
 
 DEFAULT_SIZE = 7
@@ -37,6 +38,11 @@ STDERR_FLOOD_BYTES = 256 * 1024
 UNSTALLED_RUN_SECONDS = 10.0
 # Win32 ERROR_SHARING_VIOLATION. A C errno 32 reads as "Broken pipe".
 WIN32_SHARING_VIOLATION = 32
+
+
+def select_export_id(item: UsbJournalEntry, _path: Path) -> str:
+    """Return the export id that one recovery callback received."""
+    return item.export_id
 
 
 class FailOnceJournalStore(UsbRecoveryJournalStore):
@@ -60,8 +66,8 @@ class UsbRecoveryRetryTests(unittest.TestCase):
             mount_root = Path(tmp_dir) / "usb"
             mount_root.mkdir()
             store = FailOnceJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
-            entry = _build_journal_entry(str(mount_root))
-            in_prog = _build_manifest(
+            entry = build_journal_entry(str(mount_root))
+            in_prog = build_manifest(
                 export_id=entry.export_id,
                 state=MANIFEST_STATE_IN_PROGRESS,
                 completed_at_utc=None,
@@ -73,7 +79,7 @@ class UsbRecoveryRetryTests(unittest.TestCase):
                 TargetCandidate(name="sdb", inspection=inspection, error=None)
             )
             assert match is not None
-            calls: list[str] = []
+            calls = CallRecorder(record=select_export_id)
 
             store.fail_next_save = True
             with self.assertRaises(OSError):
@@ -81,7 +87,7 @@ class UsbRecoveryRetryTests(unittest.TestCase):
                     match,
                     ReconnectChoice.RESUME,
                     mount_root,
-                    resume_callback=lambda item, _path: calls.append(item.export_id),
+                    resume_callback=calls,
                 )
             self.assertIsNotNone(read_in_progress_manifest(mount_root))
 
@@ -89,7 +95,7 @@ class UsbRecoveryRetryTests(unittest.TestCase):
                 match,
                 ReconnectChoice.RESUME,
                 mount_root,
-                resume_callback=lambda item, _path: calls.append(item.export_id),
+                resume_callback=calls,
             )
 
             self.assertEqual(updated.last_recovery_action, ReconnectChoice.RESUME.value)

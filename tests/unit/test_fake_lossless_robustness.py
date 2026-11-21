@@ -24,6 +24,8 @@ from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.waveform_worker import WaveformAnalysisPool, _AnalysisTask
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
+from tests.fixtures.waveform_stub import SIGNAL_FILE_ID_INDEX, SIGNAL_GENERATION_INDEX
 
 SAMPLE_RATE_HZ = 44100
 NYQUIST_HZ = SAMPLE_RATE_HZ / 2.0
@@ -89,10 +91,8 @@ def test_spectral_cutoff_ignores_the_nyquist_edge_bin() -> None:
 def test_expected_detection_failure_emits_a_failure_signal(tmp_path: Path) -> None:
     """An unreadable source reports a fake-lossless failure instead of silence."""
     task = _AnalysisTask(FILE_ID, GENERATION, tmp_path / "missing.flac", threading.Event())
-    failures: list[tuple[str, int, str]] = []
-    task.signals.fake_lossless_failed.connect(
-        lambda file_id, generation, message: failures.append((file_id, generation, message))
-    )
+    failures = CallRecorder()
+    task.signals.fake_lossless_failed.connect(failures)
 
     task._run_fake_lossless()
 
@@ -119,11 +119,9 @@ def test_pool_drops_results_that_arrive_after_cancellation(
 ) -> None:
     """A queued result delivered after cancel_all never reaches listeners."""
     pool = WaveformAnalysisPool()
-    monkeypatch.setattr(pool._pool, "start", lambda _task: None)
-    delivered: list[tuple[str, int]] = []
-    pool.fake_lossless_ready.connect(
-        lambda file_id, generation, _result: delivered.append((file_id, generation))
-    )
+    monkeypatch.setattr(pool._pool, "start", CallRecorder())
+    delivered = CallRecorder(SIGNAL_FILE_ID_INDEX, SIGNAL_GENERATION_INDEX)
+    pool.fake_lossless_ready.connect(delivered)
     pool.submit(tmp_path / "track.flac", FILE_ID, GENERATION)
 
     pool._forward_fake_lossless_ready(FILE_ID, GENERATION, _suspect_result())

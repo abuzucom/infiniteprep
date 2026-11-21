@@ -16,6 +16,8 @@ from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.waveform_analysis import SpectrumWaveform
 from infiniteprep.ui.detail_panel import DetailPanel
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
+from tests.fixtures.waveform_stub import SIGNAL_FILE_ID_INDEX
 
 PEAK_BIN_COUNT = 2
 SPECTRUM_BAND_COUNT = 4
@@ -83,10 +85,8 @@ def test_stale_track_result_does_not_replace_selected_waveform(
     monkeypatch.setattr("infiniteprep.ui.waveform_worker.analyze_waveform", analyze)
     panel = DetailPanel(repository, ReviewService(repository))
     qtbot.addWidget(panel)
-    completed: list[str] = []
-    panel.waveform_pool.completed.connect(
-        lambda file_id, _generation, _data: completed.append(file_id)
-    )
+    completed = CallRecorder(SIGNAL_FILE_ID_INDEX)
+    panel.waveform_pool.completed.connect(completed)
     panel.load_file_asset(first_asset.id)
     qtbot.waitUntil(first_started.is_set, timeout=ANALYSIS_WAIT_TIMEOUT_MS)
     panel.load_file_asset(second_asset.id)

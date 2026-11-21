@@ -11,6 +11,8 @@ from infiniteprep.ui.waveform_worker import (
     WaveformAnalysisPool,
     _AnalysisTask,
 )
+from tests.fixtures.call_recorder import CallRecorder
+from tests.fixtures.waveform_stub import SIGNAL_PAYLOAD_INDEX
 
 ANALYSIS_TASK_COUNT = 5
 ANALYSIS_WAIT_TIMEOUT_MS = 3_000
@@ -35,10 +37,10 @@ def test_analysis_task_skips_analysis_when_already_cancelled(monkeypatch: Any) -
 
     monkeypatch.setattr("infiniteprep.ui.waveform_worker.analyze_waveform", unexpected_analysis)
     task = _AnalysisTask("track", 1, Path("track.wav"), cancel_event)
-    completed: list[object] = []
-    failed: list[str] = []
-    task.signals.completed.connect(lambda *_args: completed.append(_args))
-    task.signals.failed.connect(lambda _file_id, _generation, message: failed.append(message))
+    completed = CallRecorder()
+    failed = CallRecorder(SIGNAL_PAYLOAD_INDEX)
+    task.signals.completed.connect(completed)
+    task.signals.failed.connect(failed)
 
     task.run()
 
@@ -57,8 +59,8 @@ def test_worker_logs_unexpected_failure_and_emits_safe_message(
 
     monkeypatch.setattr("infiniteprep.ui.waveform_worker.analyze_waveform", fail_analysis)
     pool = WaveformAnalysisPool()
-    failures: list[str] = []
-    pool.failed.connect(lambda _file_id, _generation, message: failures.append(message))
+    failures = CallRecorder(SIGNAL_PAYLOAD_INDEX)
+    pool.failed.connect(failures)
     pool.submit(Path("track.wav"), "track", 1)
 
     qtbot.waitUntil(lambda: bool(failures), timeout=ANALYSIS_WAIT_TIMEOUT_MS)
@@ -77,8 +79,8 @@ def test_worker_emits_safe_message_for_file_access_failure(qtbot: Any, monkeypat
 
     monkeypatch.setattr("infiniteprep.ui.waveform_worker.analyze_waveform", fail_analysis)
     pool = WaveformAnalysisPool()
-    failures: list[str] = []
-    pool.failed.connect(lambda _file_id, _generation, message: failures.append(message))
+    failures = CallRecorder(SIGNAL_PAYLOAD_INDEX)
+    pool.failed.connect(failures)
     pool.submit(Path("track.wav"), "track", 1)
 
     qtbot.waitUntil(lambda: bool(failures), timeout=ANALYSIS_WAIT_TIMEOUT_MS)
@@ -114,8 +116,8 @@ def test_worker_pool_limits_active_analyses(qtbot: Any, monkeypatch: Any) -> Non
 
     monkeypatch.setattr("infiniteprep.ui.waveform_worker.analyze_waveform", analyze)
     pool = WaveformAnalysisPool()
-    completed: list[tuple[str, int, object]] = []
-    pool.completed.connect(lambda *result: completed.append(result))
+    completed = CallRecorder()
+    pool.completed.connect(completed)
 
     try:
         pool.submit(Path("track-0.wav"), "track-0", 0)

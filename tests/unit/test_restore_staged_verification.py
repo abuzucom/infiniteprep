@@ -16,16 +16,11 @@ from infiniteprep.db.migrations.backup import (
     BackupVerificationError,
     restore_pre_migration_backup,
 )
+from tests.fixtures.sqlite_version import read_user_version
 
 LIBRARY_NAME = "infiniteprep.sqlite3"
 RESTORE_TIME = datetime(2026, 11, 15, 12, 0, 0, tzinfo=UTC)
 STAGED_SUFFIX = ".restore.tmp"
-
-
-def _version_of(db_path: Path) -> int:
-    """Read user_version through a separate connection."""
-    with closing(sqlite3.connect(db_path)) as conn:
-        return int(conn.execute("PRAGMA user_version").fetchone()[0])
 
 
 @pytest.fixture
@@ -63,6 +58,6 @@ def test_staged_copy_that_differs_from_the_record_is_never_installed(
     with pytest.raises(BackupVerificationError):
         restore_pre_migration_backup(library, now=RESTORE_TIME)
 
-    assert _version_of(library) == LATEST_VERSION + 1
+    assert read_user_version(library) == LATEST_VERSION + 1
     assert list(library.parent.glob(f"{LIBRARY_NAME}.newer-*")) == []
     assert not library.with_name(library.name + STAGED_SUFFIX).exists()
