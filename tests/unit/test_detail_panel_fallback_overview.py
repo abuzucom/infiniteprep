@@ -20,6 +20,8 @@ from infiniteprep.ui.audio_player import (
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.waveform_worker import WaveformAnalysisPool
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
+from tests.fixtures.waveform_stub import SIGNAL_FILE_ID_INDEX
 
 ANALYSIS_WAIT_TIMEOUT_MS = 3_000
 POOL_DRAIN_TIMEOUT_MS = 3_000
@@ -64,10 +66,10 @@ def test_cancelled_task_emits_no_overview(qtbot: Any, tmp_path: Path, monkeypatc
     monkeypatch.setattr(
         "infiniteprep.ui.waveform_worker.extract_waveform_envelope", cancel_during_extraction
     )
-    emitted: list[str] = []
-    pool.overview_ready.connect(lambda file_id, _generation, _data: emitted.append(file_id))
-    pool.completed.connect(lambda file_id, _generation, _data: emitted.append(file_id))
-    pool.failed.connect(lambda file_id, _generation, _message: emitted.append(file_id))
+    emitted = CallRecorder(SIGNAL_FILE_ID_INDEX)
+    pool.overview_ready.connect(emitted)
+    pool.completed.connect(emitted)
+    pool.failed.connect(emitted)
 
     pool.submit(source, "track", GENERATION)
 

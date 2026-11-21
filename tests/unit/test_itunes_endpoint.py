@@ -27,9 +27,9 @@ from infiniteprep.adapters.catalog.itunes import (
     RequestLimiter,
     build_search_opener,
 )
-from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.ports import MetadataSearchQuery
+from tests.fixtures.memory_repository import build_memory_repository
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "itunes_search"
 FILE_ID = "file-1"
@@ -43,11 +43,6 @@ SERVER_POLL_SEC = 0.01
 def _recorded(name: str) -> dict[str, Any]:
     """Return the recorded iTunes response stored under the fixture directory."""
     return json.loads((FIXTURE_DIR / f"{name}.json").read_text(encoding="utf-8"))
-
-
-def _repository() -> Repository:
-    """Return a Repository on a fresh in-memory database."""
-    return Repository(DatabaseManager(":memory:"))
 
 
 def _adapter(
@@ -130,7 +125,7 @@ def test_a_redirect_response_becomes_an_error_and_never_reaches_the_target() -> 
 
 def test_the_request_path_refuses_a_url_outside_the_published_endpoint() -> None:
     """The default request path rejects any URL that is not the published endpoint."""
-    adapter = ItunesSearchAdapter(repository=_repository(), limiter=RequestLimiter(0.0))
+    adapter = ItunesSearchAdapter(repository=build_memory_repository(), limiter=RequestLimiter(0.0))
 
     with pytest.raises(ValueError, match="published endpoint"):
         adapter._default_http_get_json("https://127.0.0.1/search", {})
@@ -138,8 +133,8 @@ def test_the_request_path_refuses_a_url_outside_the_published_endpoint() -> None
 
 def test_every_adapter_shares_the_provider_limiter() -> None:
     """Two adapters in the process wait for the same interval."""
-    first = ItunesSearchAdapter(repository=_repository())
-    second = ItunesSearchAdapter(repository=_repository())
+    first = ItunesSearchAdapter(repository=build_memory_repository())
+    second = ItunesSearchAdapter(repository=build_memory_repository())
 
     assert first.limiter is second.limiter
 
@@ -161,7 +156,7 @@ def test_two_adapters_that_share_a_limiter_wait_for_each_other(
     fake_time = SimpleNamespace(monotonic=lambda: clock_seconds[0], sleep=record_sleep)
     monkeypatch.setattr(http_json, "time", fake_time)
     limiter = RequestLimiter(LIMITER_INTERVAL_SECONDS)
-    repository = _repository()
+    repository = build_memory_repository()
     calls: list[tuple[str, dict[str, str]]] = []
     first = _adapter(repository, _recorded("match_with_genre_and_date"), calls, limiter)
     second = _adapter(repository, _recorded("match_with_genre_and_date"), calls, limiter)

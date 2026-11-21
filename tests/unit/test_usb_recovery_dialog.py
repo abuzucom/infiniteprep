@@ -32,6 +32,7 @@ from infiniteprep.ui.usb_recovery_dialog import (
     format_expiry_warning_text,
     format_overdue_cleanup_text,
 )
+from tests.fixtures.call_recorder import CallRecorder
 from tests.unit.usb_preflight_support import (
     build_drive,
     build_inspection,
@@ -170,13 +171,13 @@ class UsbRecoveryDialogTests(unittest.TestCase):
             )
             store.save_entries([warn_entry, overdue_entry, fresh_entry])
 
-            notices: list[tuple[str, str]] = []
+            notices = CallRecorder()
             now_utc = datetime(2026, 10, 31, 13, 0, tzinfo=UTC)
             scan = process_usb_recovery_at_launch(
                 settings_manager=settings_mgr,
                 journal_store=store,
                 now_utc=now_utc,
-                show_notice=lambda title, body: notices.append((title, body)),
+                show_notice=notices,
             )
 
             self.assertEqual(
@@ -245,12 +246,12 @@ class StorageTabUsbRecoverySettingsTests(unittest.TestCase):
             journal_path.write_text(corrupt_text, encoding="utf-8")
             store = UsbRecoveryJournalStore(journal_path, allowed_root=root)
 
-            launch_notices: list[tuple[str, str]] = []
+            launch_notices = CallRecorder()
             scan = process_usb_recovery_at_launch(
                 settings_manager=settings_mgr,
                 journal_store=store,
                 now_utc=CORRUPT_LAUNCH_CHECK_UTC,
-                show_notice=lambda title, body: launch_notices.append((title, body)),
+                show_notice=launch_notices,
             )
             self.assertEqual(scan, UsbExpiryScanResult((), (), ()))
             self.assertEqual(len(launch_notices), 1)
@@ -259,10 +260,10 @@ class StorageTabUsbRecoverySettingsTests(unittest.TestCase):
 
             tab = StorageTab(AppSettings())
             self.addCleanup(tab.close)
-            cleanup_errors: list[tuple[str, str]] = []
+            cleanup_errors = CallRecorder()
             removed_count = tab.clean_usb_recovery_journal(
                 journal_store=store,
-                show_error=lambda title, body: cleanup_errors.append((title, body)),
+                show_error=cleanup_errors,
             )
             self.assertIsNone(removed_count)
             self.assertEqual(len(cleanup_errors), 1)

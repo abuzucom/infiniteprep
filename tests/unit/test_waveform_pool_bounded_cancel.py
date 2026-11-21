@@ -9,6 +9,8 @@ from typing import Any
 from PySide6.QtCore import QCoreApplication
 
 from infiniteprep.ui.waveform_worker import WaveformAnalysisPool
+from tests.fixtures.call_recorder import CallRecorder
+from tests.fixtures.waveform_stub import SIGNAL_FILE_ID_INDEX
 
 BOUNDED_CANCEL_WAIT_MS = 50
 WORKER_START_TIMEOUT_MS = 3_000
@@ -32,9 +34,9 @@ def test_bounded_cancel_returns_before_a_stuck_worker_finishes(
 
     monkeypatch.setattr("infiniteprep.ui.waveform_worker.analyze_waveform", analyze)
     pool = WaveformAnalysisPool()
-    results: list[str] = []
-    pool.completed.connect(lambda file_id, _generation, _data: results.append(file_id))
-    pool.failed.connect(lambda file_id, _generation, _message: results.append(file_id))
+    results = CallRecorder(SIGNAL_FILE_ID_INDEX)
+    pool.completed.connect(results)
+    pool.failed.connect(results)
     pool.submit(tmp_path / "track.wav", "stuck", GENERATION)
     qtbot.waitUntil(started.is_set, timeout=WORKER_START_TIMEOUT_MS)
 

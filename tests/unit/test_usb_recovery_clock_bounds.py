@@ -21,6 +21,7 @@ from infiniteprep.services.usb.recovery import (
     UsbRecoveryJournalStore,
 )
 from infiniteprep.ui.usb_recovery_dialog import format_clock_suspect_text
+from tests.fixtures.call_recorder import CallRecorder
 from tests.unit.usb_preflight_support import build_drive
 
 STARTED_AT_TEXT = "2026-10-01T12:00:00Z"
@@ -112,13 +113,13 @@ class UsbRecoveryClockBoundsTests(unittest.TestCase):
         settings_manager.update(
             usb_recovery_expiry_enabled=True, usb_recovery_expiry_days=EXPIRY_DAYS
         )
-        notices: list[tuple[str, str]] = []
+        notices = CallRecorder()
 
         scan = process_usb_recovery_at_launch(
             settings_manager=settings_manager,
             journal_store=self.store,
             now_utc=STARTED_AT_UTC - CLOCK_FAR_BEHIND,
-            show_notice=lambda title, body: notices.append((title, body)),
+            show_notice=notices,
         )
 
         self.assertEqual(_suspect_ids(scan), [ENTRY_ID])

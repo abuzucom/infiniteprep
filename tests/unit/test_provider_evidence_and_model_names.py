@@ -13,6 +13,7 @@ from infiniteprep.adapters.llm.ollama_bootstrap import OllamaBootstrapService
 from infiniteprep.adapters.provider_fields import MAX_PROVIDER_TEXT_CHARS
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
+from tests.fixtures.fake_http import FakeResponse
 
 SAMPLE_DURATION_SEC = 480.0
 SAMPLE_FINGERPRINT = "AQAA_TEST"
@@ -48,24 +49,6 @@ def test_acoustid_evidence_keeps_only_checked_fields(tmp_path: Path) -> None:
     assert len(stored["title"]) == MAX_PROVIDER_TEXT_CHARS
 
 
-class _FakeResponse:
-    """Stands in for a urlopen response and serves fixed bytes."""
-
-    def __init__(self, body: bytes) -> None:
-        """Store the body that read returns."""
-        self._body = body
-
-    def __enter__(self) -> _FakeResponse:
-        return self
-
-    def __exit__(self, *_exc: object) -> None:
-        return None
-
-    def read(self, size: int = -1) -> bytes:
-        """Return at most size bytes of the body."""
-        return self._body if size < 0 else self._body[:size]
-
-
 def test_ollama_model_list_keeps_only_safe_references_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -76,7 +59,7 @@ def test_ollama_model_list_keeps_only_safe_references_once(
         b' {"name": "hf.co/user/model:q4"}]}'
     )
     monkeypatch.setattr(
-        ollama_bootstrap.urllib.request, "urlopen", lambda *_a, **_k: _FakeResponse(body)
+        ollama_bootstrap.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse(body)
     )
 
     assert OllamaBootstrapService().list_installed_models() == [

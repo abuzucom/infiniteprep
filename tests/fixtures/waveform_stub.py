@@ -8,6 +8,12 @@ import pytest
 
 from infiniteprep.ui.waveform_worker import WaveformAnalysisPool
 
+# The pool and task signals emit (file_id, generation, payload). The payload holds
+# the analysis result, the overview data, or the failure message.
+SIGNAL_FILE_ID_INDEX = 0
+SIGNAL_GENERATION_INDEX = 1
+SIGNAL_PAYLOAD_INDEX = 2
+
 
 def skip_waveform_analysis(
     pool: WaveformAnalysisPool,
