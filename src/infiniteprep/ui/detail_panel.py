@@ -93,26 +93,27 @@ FIELDS_TABLE_WEIGHTS: Final[dict[int, int]] = {
 }
 FIELDS_TABLE_MIN_SHARE_PX: Final[int] = 80
 # The Field column shows these names. Stored rows and approvals keep the field keys.
-FIELD_LABELS: Final[dict[FieldName, str]] = {
-    FieldName.ARTIST: "Artist",
-    FieldName.TITLE: "Title",
-    FieldName.MIX_NAME: "Mix name",
-    FieldName.REMIXER: "Remixer",
-    FieldName.RELEASE_TITLE: "Release title",
-    FieldName.LABEL: "Label",
-    FieldName.CATALOG_NUMBER: "Catalog number",
-    FieldName.TRACK_NUMBER: "Track number",
-    FieldName.DISC_NUMBER: "Disc number",
-    FieldName.VINYL_POSITION: "Vinyl position",
-    FieldName.GENRE: "Genre",
-    FieldName.STYLE: "Style",
-    FieldName.BPM: "BPM",
-    FieldName.KEY: "Key",
-    FieldName.YEAR: "Year",
-    FieldName.ACOUSTID_ID: "AcoustID ID",
-    FieldName.MB_RECORDING_ID: "MusicBrainz recording ID",
-    FieldName.MB_RELEASE_ID: "MusicBrainz release ID",
-    FieldName.DISCOGS_RELEASE_ID: "Discogs release ID",
+# The keys are the stored string values, the same strings the table rows carry.
+FIELD_LABELS: Final[dict[str, str]] = {
+    FieldName.ARTIST.value: "Artist",
+    FieldName.TITLE.value: "Title",
+    FieldName.MIX_NAME.value: "Mix name",
+    FieldName.REMIXER.value: "Remixer",
+    FieldName.RELEASE_TITLE.value: "Release title",
+    FieldName.LABEL.value: "Label",
+    FieldName.CATALOG_NUMBER.value: "Catalog number",
+    FieldName.TRACK_NUMBER.value: "Track number",
+    FieldName.DISC_NUMBER.value: "Disc number",
+    FieldName.VINYL_POSITION.value: "Vinyl position",
+    FieldName.GENRE.value: "Genre",
+    FieldName.STYLE.value: "Style",
+    FieldName.BPM.value: "BPM",
+    FieldName.KEY.value: "Key",
+    FieldName.YEAR.value: "Year",
+    FieldName.ACOUSTID_ID.value: "AcoustID ID",
+    FieldName.MB_RECORDING_ID.value: "MusicBrainz recording ID",
+    FieldName.MB_RELEASE_ID.value: "MusicBrainz release ID",
+    FieldName.DISCOGS_RELEASE_ID.value: "Discogs release ID",
 }
 ACTION_ROW_MARGIN_PX: Final[int] = 2
 # Row widget roles. A row widget carries the object name "<field>:<role>", so focus
