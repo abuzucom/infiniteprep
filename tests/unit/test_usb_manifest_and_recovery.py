@@ -63,6 +63,7 @@ class MyTagsDigestTests(unittest.TestCase):
     """Canonical SHA-256 digest over My Tags vocabulary and assignments."""
 
     def test_digest_is_order_independent_and_lowercase_sha256(self) -> None:
+        """Reordered tags and assignments give the same lowercase SHA-256 digest."""
         vocab_a = build_sample_vocabulary()
         vocab_b = list(reversed(vocab_a))
         assign_a = build_sample_assignments()
@@ -78,6 +79,7 @@ class MyTagsDigestTests(unittest.TestCase):
         self.assertRegex(digest_a, r"^[0-9a-f]{64}$")
 
     def test_digest_changes_when_tag_data_or_assignment_changes(self) -> None:
+        """A changed tag field or track assignment changes the digest."""
         vocab = build_sample_vocabulary()
         assignments = build_sample_assignments()
         base = compute_my_tags_digest(vocab, assignments)
@@ -98,6 +100,7 @@ class UsbExportManifestTests(unittest.TestCase):
     """Temporary in-progress and latest completed JSON manifests on the USB drive."""
 
     def test_in_progress_manifest_preserves_existing_completed_manifest(self) -> None:
+        """Writing an in-progress manifest leaves the completed manifest in place."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir)
             prior = build_manifest(export_id="exp-prior", state=MANIFEST_STATE_COMPLETED)
@@ -121,6 +124,7 @@ class UsbExportManifestTests(unittest.TestCase):
             self.assertEqual(read_in_progress_manifest(mount_root), current)
 
     def test_completed_manifest_replaces_in_progress_and_round_trips_fields(self) -> None:
+        """A completed write removes the in-progress marker and reads back every field."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir)
             in_prog = build_manifest(
@@ -147,6 +151,7 @@ class UsbExportManifestTests(unittest.TestCase):
             self.assertEqual(read_completed_manifest(mount_root), completed)
 
     def test_symlinked_metadata_dir_or_manifest_file_is_rejected(self) -> None:
+        """A symlinked metadata folder or manifest file blocks every read, write, and removal."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             mount_root = root / "usb"
@@ -186,6 +191,7 @@ class UsbExportManifestTests(unittest.TestCase):
             self.assertTrue(outside_file.exists())
 
     def test_posix_read_uses_nofollow_and_blocks_swapped_symlink(self) -> None:
+        """A completed manifest that is a symlink fails to read where O_NOFOLLOW exists."""
         if not hasattr(os, "O_NOFOLLOW"):
             self.skipTest("this platform has no O_NOFOLLOW")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -201,6 +207,7 @@ class UsbExportManifestTests(unittest.TestCase):
                 read_completed_manifest(mount_root)
 
     def test_malformed_manifest_counts_and_types_are_rejected(self) -> None:
+        """Negative counts, wrong value types, and a missing completion time fail to read."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
             mount_root.mkdir()
@@ -223,6 +230,7 @@ class UsbExportManifestTests(unittest.TestCase):
                     read_completed_manifest(mount_root)
 
     def test_oversized_manifest_is_rejected(self) -> None:
+        """A manifest larger than the USB JSON size limit fails to read."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
             meta_dir = mount_root / USB_METADATA_DIR_NAME
@@ -233,6 +241,7 @@ class UsbExportManifestTests(unittest.TestCase):
                 read_completed_manifest(mount_root)
 
     def test_manifest_normalizes_non_utc_and_dst_timestamps_to_utc(self) -> None:
+        """The reader converts offset timestamps to UTC and rejects offset-free ones."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
             mount_root.mkdir()
@@ -257,6 +266,7 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
     """Volume ID and confirmation matching for reconnected USB targets."""
 
     def test_exact_volume_uuid_identity_and_mount_match_without_confirmation(self) -> None:
+        """A target with the same volume id, drive, and mount matches with no confirmation."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
             mount_root.mkdir()
@@ -281,6 +291,7 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
             self.assertEqual(match.entry.export_id, entry.export_id)
 
     def test_uuid_match_with_changed_drive_or_mount_requires_confirmation(self) -> None:
+        """A volume id match on a changed drive or mount needs confirmation."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
             other_mount = Path(tmp_dir) / "usb2"
@@ -317,6 +328,7 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
             self.assertTrue(match_drive.requires_confirmation)
 
     def test_empty_uuid_matches_serial_and_marker_with_confirmation(self) -> None:
+        """Without a volume id the serial and marker match only with confirmation."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
             mount_root.mkdir()
@@ -342,6 +354,7 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
             self.assertEqual(match.entry.export_id, entry.export_id)
 
     def test_unrelated_target_returns_none(self) -> None:
+        """A target that shares no identity with a journal entry gives no match."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
             other_root = Path(tmp_dir) / "other"
@@ -383,6 +396,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
         return store, mount_root, entry
 
     def test_unconfirmed_choice_raises_when_confirmation_required(self) -> None:
+        """A choice without confirmation raises on a match that needs one."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
             partition = build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),))
