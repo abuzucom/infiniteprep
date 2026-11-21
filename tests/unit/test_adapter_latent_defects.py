@@ -137,6 +137,7 @@ def _responding(body: bytes) -> Any:
 
 
 def test_musicbrainz_candidate_ids_differ_per_file() -> None:
+    """The same MusicBrainz result gives each file its own candidate id."""
     adapter = MusicBrainzAdapter(
         build_memory_repository(), http_get_json=_returning(MB_SEARCH_PAYLOAD), min_interval_sec=0.0
     )
@@ -148,6 +149,7 @@ def test_musicbrainz_candidate_ids_differ_per_file() -> None:
 
 
 def test_discogs_candidate_ids_differ_per_file() -> None:
+    """The same Discogs result gives each file its own candidate id and keeps the year."""
     payload = {"results": [{"id": 249504, "title": "Deep Dish - Junk Science", "year": "1998"}]}
     adapter = DiscogsAdapter(
         build_memory_repository(),
@@ -162,6 +164,7 @@ def test_discogs_candidate_ids_differ_per_file() -> None:
 
 
 def test_itunes_candidate_ids_differ_per_file() -> None:
+    """The same iTunes result gives each file its own candidate id."""
     adapter = ItunesSearchAdapter(
         build_memory_repository(),
         http_get_json=_returning(ITUNES_PAYLOAD),
@@ -177,6 +180,7 @@ def test_itunes_candidate_ids_differ_per_file() -> None:
 
 
 def test_discogs_release_tracks_keep_distinct_entity_ids_and_drop_year_zero() -> None:
+    """Unpositioned entries get index ids and every track drops the zero year."""
     adapter = DiscogsAdapter(
         build_memory_repository(),
         user_token=DISCOGS_STUB_KEY,
@@ -193,6 +197,7 @@ def test_discogs_release_tracks_keep_distinct_entity_ids_and_drop_year_zero() ->
 
 
 def test_discogs_unpositioned_entry_never_collides_with_a_numbered_track() -> None:
+    """Unpositioned, odd, and repeated positions all get distinct entity ids."""
     payload = {
         "id": 249504,
         "tracklist": [
@@ -224,6 +229,7 @@ def test_discogs_unpositioned_entry_never_collides_with_a_numbered_track() -> No
     ],
 )
 def test_discogs_suffixed_key_never_matches_another_position(positions: list[str]) -> None:
+    """A suffixed duplicate key never equals a real position written the same way."""
     payload = {
         "id": 249504,
         "tracklist": [
@@ -245,6 +251,7 @@ def test_discogs_suffixed_key_never_matches_another_position(positions: list[str
 
 
 def test_musicbrainz_release_fetch_returns_a_release_candidate() -> None:
+    """A release fetch gives one release candidate with label, catalog, and year."""
     adapter = MusicBrainzAdapter(
         build_memory_repository(),
         http_get_json=_returning(MB_RELEASE_PAYLOAD),
@@ -263,6 +270,7 @@ def test_musicbrainz_release_fetch_returns_a_release_candidate() -> None:
 
 
 def test_musicbrainz_unsupported_entity_type_sends_no_request() -> None:
+    """An unsupported entity type raises before any request."""
     requested: list[str] = []
 
     def record_request(url: str, _params: dict[str, str]) -> dict[str, Any]:
@@ -278,6 +286,7 @@ def test_musicbrainz_unsupported_entity_type_sends_no_request() -> None:
 
 
 def test_musicbrainz_missing_track_number_reads_as_none() -> None:
+    """A track entry without a number reads as no track number."""
     adapter = MusicBrainzAdapter(
         build_memory_repository(), http_get_json=_returning(MB_SEARCH_PAYLOAD), min_interval_sec=0.0
     )
@@ -298,6 +307,7 @@ NETWORK_ERRORS = [
 def test_musicbrainz_lookup_failure_returns_no_candidates(
     error: Exception, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """A network failure gives no candidates and logs a lookup warning."""
     adapter = MusicBrainzAdapter(
         build_memory_repository(), http_get_json=_raising(error), min_interval_sec=0.0
     )
@@ -309,6 +319,7 @@ def test_musicbrainz_lookup_failure_returns_no_candidates(
 
 @pytest.mark.parametrize("error", NETWORK_ERRORS)
 def test_discogs_lookup_failure_returns_no_candidates(error: Exception) -> None:
+    """A network failure gives no Discogs search or fetch candidates."""
     adapter = DiscogsAdapter(
         build_memory_repository(),
         user_token=DISCOGS_STUB_KEY,
@@ -321,6 +332,7 @@ def test_discogs_lookup_failure_returns_no_candidates(error: Exception) -> None:
 
 @pytest.mark.parametrize("error", NETWORK_ERRORS)
 def test_itunes_lookup_failure_returns_no_candidates(error: Exception) -> None:
+    """A network failure gives no iTunes candidates."""
     adapter = ItunesSearchAdapter(
         build_memory_repository(), http_get_json=_raising(error), limiter=RequestLimiter(0.0)
     )
@@ -329,6 +341,7 @@ def test_itunes_lookup_failure_returns_no_candidates(error: Exception) -> None:
 
 @pytest.mark.parametrize("payload", [["unexpected"], "text", 7])
 def test_itunes_non_object_response_returns_nothing_and_is_not_cached(payload: Any) -> None:
+    """A non-object response gives no candidates and stays out of the cache."""
     requested: list[str] = []
 
     def http_get_json(url: str, _params: dict[str, str]) -> Any:
@@ -344,6 +357,7 @@ def test_itunes_non_object_response_returns_nothing_and_is_not_cached(payload: A
 
 
 def test_failed_lookup_is_not_cached() -> None:
+    """A later working lookup returns candidates after a failed one."""
     repository = build_memory_repository()
     failing = MusicBrainzAdapter(
         repository,
@@ -359,6 +373,7 @@ def test_failed_lookup_is_not_cached() -> None:
 
 @pytest.mark.parametrize("error", NETWORK_ERRORS)
 def test_acoustid_lookup_failure_returns_a_warning(error: Exception) -> None:
+    """A lookup failure keeps the fingerprint and gives one warning without the key."""
     adapter = ChromaprintAcoustIDAdapter(
         build_memory_repository(),
         api_key=ACOUSTID_TEST_KEY,
@@ -374,6 +389,8 @@ def test_acoustid_lookup_failure_returns_a_warning(error: Exception) -> None:
 
 
 def test_fpcalc_failure_returns_a_warning() -> None:
+    """A failed fpcalc run gives no matches and an execution warning."""
+
     def failing_fpcalc(_path: Path) -> tuple[float, str]:
         raise subprocess.CalledProcessError(2, ["fpcalc"])
 
@@ -386,6 +403,8 @@ def test_fpcalc_failure_returns_a_warning() -> None:
 
 
 def test_fpcalc_programming_error_is_not_swallowed() -> None:
+    """A programming error in the fpcalc runner propagates."""
+
     def broken_fpcalc(_path: Path) -> tuple[float, str]:
         raise AttributeError("defect in the runner")
 
@@ -400,6 +419,7 @@ def test_fpcalc_programming_error_is_not_swallowed() -> None:
 
 
 def test_fetch_json_rejects_plain_http_without_a_request() -> None:
+    """A plain HTTP URL raises before any connection opens."""
     opened: list[Any] = []
     with pytest.raises(ValueError, match="Example URL must use https:// scheme"):
         http_json.fetch_json(
@@ -409,6 +429,8 @@ def test_fetch_json_rejects_plain_http_without_a_request() -> None:
 
 
 def test_fetch_json_reads_a_bounded_body() -> None:
+    """An HTTPS request uses the default timeout and parses the JSON object."""
+
     def open_url(_request: Any, timeout: float) -> _Response:
         assert timeout == http_json.DEFAULT_REQUEST_TIMEOUT_SEC
         return _Response(b'{"ok": true}')
