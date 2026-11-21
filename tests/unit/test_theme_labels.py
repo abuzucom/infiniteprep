@@ -33,7 +33,7 @@ def test_an_unknown_theme_shows_as_stored() -> None:
 
 def test_settings_picker_shows_labels_and_stores_identifiers(qtbot: Any) -> None:
     """The General tab picker shows labels, and a save stores the theme identifier."""
-    tab = GeneralTab(NATIVE_THEME)
+    tab = GeneralTab(DEFAULT_LIGHT_THEME)
     qtbot.addWidget(tab)
     shown = [tab.theme_combo.itemText(index) for index in range(tab.theme_combo.count())]
     stored = [tab.theme_combo.itemData(index) for index in range(tab.theme_combo.count())]
@@ -43,8 +43,8 @@ def test_settings_picker_shows_labels_and_stores_identifiers(qtbot: Any) -> None
 
     assert shown == [theme_label(theme) for theme in get_theme_choices()]
     assert stored == get_theme_choices()
-    assert tab.theme_combo.currentText() == theme_label(NATIVE_THEME)
-    assert settings.theme == NATIVE_THEME
+    assert tab.theme_combo.currentText() == theme_label(DEFAULT_LIGHT_THEME)
+    assert settings.theme == DEFAULT_LIGHT_THEME
 
 
 def test_playback_tab_stays_out_of_the_dialog() -> None:

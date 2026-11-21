@@ -62,6 +62,7 @@ UNUSED_PYTHON_PACKAGES = ["setuptools", "pkg_resources"]
 # The logo serves as the window icon and the packaged app icon (D393). PyInstaller
 # converts the PNG to .ico and .icns with Pillow.
 APP_ICON_SOURCE = src_dir / "infiniteprep" / "ui" / "app-icon.png"
+THEMES_SOURCE = src_dir / "infiniteprep" / "ui" / "themes"
 # Pillow serves only the build-time icon conversion, and the app never imports it (D393).
 # The exclusion keeps Pillow out of every bundle even if another optional import names it.
 BUILD_ONLY_PACKAGES = ["PIL"]
@@ -76,6 +77,9 @@ a = Analysis(
     datas=[
         (str(src_dir / "infiniteprep" / "db" / "schema.sql"), "infiniteprep/db"),
         (str(APP_ICON_SOURCE), "infiniteprep/ui"),
+        # The UI-R theme files that ui/theme.py hands to qt-material by path (#245).
+        (str(THEMES_SOURCE / "infiniteprep_dark.xml"), "infiniteprep/ui/themes"),
+        (str(THEMES_SOURCE / "infiniteprep_light.xml"), "infiniteprep/ui/themes"),
     ],
     hiddenimports=[
         "PySide6.QtCore",
