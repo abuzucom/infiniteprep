@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -118,33 +119,40 @@ def test_source_run_ignores_the_appimage(user_dirs: Path, downloads: Path, appdi
     assert not (downloads / APPIMAGE_DATA_DIR_NAME).exists()
 
 
+def build_relative_image_launch(_downloads: Path, appdir: Path) -> AppImageLaunch:
+    """Return a launch whose image path is relative."""
+    return AppImageLaunch(image=Path(APPIMAGE_NAME), appdir=appdir)
+
+
+def build_missing_image_launch(downloads: Path, appdir: Path) -> AppImageLaunch:
+    """Return a launch whose image file does not exist."""
+    return AppImageLaunch(image=downloads / "missing.AppImage", appdir=appdir)
+
+
+def build_folder_image_launch(downloads: Path, appdir: Path) -> AppImageLaunch:
+    """Return a launch whose image path names a folder."""
+    return AppImageLaunch(image=downloads, appdir=appdir)
+
+
+def build_relative_appdir_launch(downloads: Path, _appdir: Path) -> AppImageLaunch:
+    """Return a launch whose AppDir path is relative."""
+    return AppImageLaunch(image=downloads / APPIMAGE_NAME, appdir=Path("mount"))
+
+
 @pytest.mark.parametrize(
     "launch_factory",
     [
-        pytest.param(
-            lambda downloads, appdir: AppImageLaunch(image=Path(APPIMAGE_NAME), appdir=appdir),
-            id="relative-image",
-        ),
-        pytest.param(
-            lambda downloads, appdir: AppImageLaunch(
-                image=downloads / "missing.AppImage", appdir=appdir
-            ),
-            id="missing-image",
-        ),
-        pytest.param(
-            lambda downloads, appdir: AppImageLaunch(image=downloads, appdir=appdir),
-            id="image-is-a-folder",
-        ),
-        pytest.param(
-            lambda downloads, appdir: AppImageLaunch(
-                image=downloads / APPIMAGE_NAME, appdir=Path("mount")
-            ),
-            id="relative-appdir",
-        ),
+        pytest.param(build_relative_image_launch, id="relative-image"),
+        pytest.param(build_missing_image_launch, id="missing-image"),
+        pytest.param(build_folder_image_launch, id="image-is-a-folder"),
+        pytest.param(build_relative_appdir_launch, id="relative-appdir"),
     ],
 )
 def test_invalid_appimage_values_are_ignored(
-    user_dirs: Path, downloads: Path, appdir: Path, launch_factory
+    user_dirs: Path,
+    downloads: Path,
+    appdir: Path,
+    launch_factory: Callable[[Path, Path], AppImageLaunch],
 ) -> None:
     """A relative or missing path never picks a data folder."""
     locations = resolve_locations(
