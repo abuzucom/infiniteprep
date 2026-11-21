@@ -2,6 +2,7 @@
 
 import sqlite3
 from contextlib import closing
+from pathlib import Path
 
 import pytest
 
@@ -13,7 +14,7 @@ from infiniteprep.domain.enums import ApprovalOrigin, AudioFormat
 from infiniteprep.domain.models import ApprovedField, FieldProposal, FileAsset
 
 
-def add_track(repo, file_id, *, key="", bpm=""):
+def add_track(repo: Repository, file_id: str, *, key: str = "", bpm: str = "") -> None:
     """Add a library track with optional sortable metadata."""
     path = f"/music/{file_id}.mp3"
     repo.upsert_file_asset(
@@ -32,7 +33,8 @@ def add_track(repo, file_id, *, key="", bpm=""):
     )
 
 
-def test_migrate_populated_library(tmp_path):
+def test_migrate_populated_library(tmp_path: Path) -> None:
+    """A version 1 library with data migrates, keeps its rows, and accepts playlists."""
     library = tmp_path / "library.sqlite3"
     with closing(sqlite3.connect(library)) as conn, conn:
         m0001_initial.apply(conn)
@@ -49,7 +51,8 @@ def test_migrate_populated_library(tmp_path):
         assert repo.collections.create_playlist("Warmup").name == "Warmup"
 
 
-def test_membership_rules_and_casefolded_names():
+def test_membership_rules_and_casefolded_names() -> None:
+    """Casefolded name clashes, playlist repeats, and crate deduplication follow the rules."""
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)
         add_track(repo, "one")
@@ -72,7 +75,8 @@ def test_membership_rules_and_casefolded_names():
         assert collections.crate_tracks(crate.id) == {"one", "two"}
 
 
-def test_folder_move_preserves_collections_and_checks_descendants():
+def test_folder_move_preserves_collections_and_checks_descendants() -> None:
+    """A folder move refuses cycles and excess depth and keeps the nested collections."""
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)
         add_track(repo, "one")
@@ -100,14 +104,16 @@ def test_folder_move_preserves_collections_and_checks_descendants():
         assert collections.playlist_tracks(playlist.id) == ["one"]
 
 
-def test_import_preflight_reports_first_folder_beyond_limit():
+def test_import_preflight_reports_first_folder_beyond_limit() -> None:
+    """The import check passes eight levels and names the first folder past the limit."""
     path = [f"Level {level}" for level in range(1, 9)]
     validate_import_folder_paths([path])
     with pytest.raises(ValueError, match="First excess"):
         validate_import_folder_paths([path, [*path, "First excess", "Second excess"]])
 
 
-def test_sort_uses_the_library_metadata_precedence():
+def test_sort_uses_the_library_metadata_precedence() -> None:
+    """The playlist sort reads approved values first, then proposals, then file tags."""
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)
         add_track(repo, "approved", key="1A", bpm="100")
@@ -124,7 +130,8 @@ def test_sort_uses_the_library_metadata_precedence():
         assert repo.collections.playlist_tracks(playlist.id) == ["proposed", "tagged", "approved"]
 
 
-def test_sort_and_undo_across_restart(tmp_path):
+def test_sort_and_undo_across_restart(tmp_path: Path) -> None:
+    """A sort survives a restart with one undo that a later track edit clears."""
     library = tmp_path / "library.sqlite3"
     previous = ["blank", "fast", "no-bpm", "slow", "fast", "minor"]
     with DatabaseManager(library) as db:
