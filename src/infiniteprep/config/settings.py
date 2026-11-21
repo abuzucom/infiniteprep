@@ -11,6 +11,7 @@ import os
 import socket
 import tempfile
 import threading
+from collections.abc import Collection
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final
@@ -31,6 +32,24 @@ UNSORTED_PLACEMENT_LAST: Final[str] = "last"
 SUPPORTED_UNSORTED_PLACEMENTS: Final[tuple[str, ...]] = (
     UNSORTED_PLACEMENT_FIRST,
     UNSORTED_PLACEMENT_LAST,
+)
+# Theme identifiers name the project theme files under ui/themes (UI-R, #245).
+DARK_THEME_ID: Final[str] = "infiniteprep_dark.xml"
+LIGHT_THEME_ID: Final[str] = "infiniteprep_light.xml"
+# Settings files from before UI-R name the qt-material teal themes or the native style.
+# Those values load as the matching UI-R theme. Native left the picker, so it loads as dark.
+LEGACY_THEME_REPLACEMENTS: Final[dict[str, str]] = {
+    "dark_teal.xml": DARK_THEME_ID,
+    "light_teal.xml": LIGHT_THEME_ID,
+    "native": DARK_THEME_ID,
+}
+TEXT_SIZE_COMPACT: Final[str] = "compact"
+TEXT_SIZE_STANDARD: Final[str] = "standard"
+TEXT_SIZE_LARGE: Final[str] = "large"
+SUPPORTED_TEXT_SIZES: Final[tuple[str, ...]] = (
+    TEXT_SIZE_COMPACT,
+    TEXT_SIZE_STANDARD,
+    TEXT_SIZE_LARGE,
 )
 DEFAULT_WAVEFORM_ZOOM_SECONDS: Final[int] = 8
 SUPPORTED_WAVEFORM_ZOOM_SECONDS: Final[tuple[int, ...]] = (
@@ -181,7 +200,8 @@ class AppSettings:
     stop_batch_on_first_failure: bool = False
     # Places the rows without a value for the sorted column first or last.
     unsorted_rows_placement: str = UNSORTED_PLACEMENT_FIRST
-    theme: str = "dark_teal.xml"
+    theme: str = DARK_THEME_ID
+    text_size: str = TEXT_SIZE_STANDARD
     file_table_layout: str = ""  # Base64-encoded QHeaderView state.
     file_table_column_count: int = 0  # Column count when the layout was saved.
     detail_table_layout: str = ""  # Base64-encoded QHeaderView state.
@@ -196,18 +216,37 @@ class AppSettings:
     tag_bpm_decimals: int = 0
 
 
+def replace_legacy_theme(theme: str) -> str:
+    """Return the UI-R theme that replaces a pre-UI-R theme value, or the value unchanged."""
+    return LEGACY_THEME_REPLACEMENTS.get(theme, theme)
+
+
+# Settings that accept only a fixed set of values, with the problem a log names otherwise.
+CHOICE_SETTINGS: Final[dict[str, tuple[Collection[object], str]]] = {
+    "waveform_zoom_seconds": (
+        SUPPORTED_WAVEFORM_ZOOM_SECONDS,
+        "an unsupported waveform zoom duration",
+    ),
+    "fake_lossless_method": (
+        SUPPORTED_FAKE_LOSSLESS_METHODS,
+        "an unsupported fake-lossless detection method",
+    ),
+    "tag_key_notation": (SUPPORTED_TAG_KEY_NOTATIONS, "an unsupported written key notation"),
+    "unsorted_rows_placement": (
+        SUPPORTED_UNSORTED_PLACEMENTS,
+        "an unsupported unsorted row placement",
+    ),
+    "text_size": (SUPPORTED_TEXT_SIZES, "an unsupported text size"),
+}
+
+
 def _find_setting_value_problem(name: str, value: object, default: object) -> str | None:
     """Return why a value is invalid for a setting, or None for a valid value."""
     if type(value) is not type(default):
         return "an invalid type"
-    if name == "waveform_zoom_seconds" and value not in SUPPORTED_WAVEFORM_ZOOM_SECONDS:
-        return "an unsupported waveform zoom duration"
-    if name == "fake_lossless_method" and value not in SUPPORTED_FAKE_LOSSLESS_METHODS:
-        return "an unsupported fake-lossless detection method"
-    if name == "tag_key_notation" and value not in SUPPORTED_TAG_KEY_NOTATIONS:
-        return "an unsupported written key notation"
-    if name == "unsorted_rows_placement" and value not in SUPPORTED_UNSORTED_PLACEMENTS:
-        return "an unsupported unsorted row placement"
+    choice = CHOICE_SETTINGS.get(name)
+    if choice is not None and value not in choice[0]:
+        return choice[1]
     return _find_numeric_setting_problem(name, value)
 
 
@@ -314,6 +353,7 @@ class SettingsManager:
         merged: dict[str, object] = {}
         for name, default in defaults.items():
             merged[name] = _validated_setting_value(name, raw.get(name, default), default)
+        merged["theme"] = replace_legacy_theme(str(merged["theme"]))
         return AppSettings(**merged)
 
     def save(self, settings: AppSettings) -> None:

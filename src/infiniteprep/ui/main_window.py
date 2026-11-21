@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 
 from infiniteprep.config.settings import (
     SUPPORTED_UNSORTED_PLACEMENTS,
+    TEXT_SIZE_STANDARD,
     UNSORTED_PLACEMENT_FIRST,
     SettingsManager,
 )
@@ -961,11 +962,12 @@ class MainWindow(QMainWindow):
     def _on_theme_changed(self, text: str) -> None:
         """Apply the chosen theme and keep the picker on the theme in effect."""
         app = QApplication.instance()
-        result = switch_application_theme(app, text, self._applied_theme)
-        self._applied_theme = result.theme
-        self._set_picker_theme(result.theme)
         settings_manager = SettingsManager()
         settings = settings_manager.load()
+        text_size = getattr(settings, "text_size", TEXT_SIZE_STANDARD)
+        result = switch_application_theme(app, text, self._applied_theme, text_size)
+        self._applied_theme = result.theme
+        self._set_picker_theme(result.theme)
         settings.theme = result.theme
         settings_manager.save(settings)
 

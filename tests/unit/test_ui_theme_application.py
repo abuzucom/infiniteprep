@@ -29,6 +29,7 @@ from infiniteprep.ui.theme import (
     apply_application_theme,
     get_theme_choices,
     switch_application_theme,
+    theme_file_path,
 )
 
 
@@ -68,7 +69,10 @@ def test_apply_application_theme_reports_the_applied_theme() -> None:
 
     assert result.applied is True
     assert result.theme == DEFAULT_DARK_THEME
-    engine.apply_stylesheet.assert_called_once_with(app, theme=DEFAULT_DARK_THEME)
+    call = engine.apply_stylesheet.call_args
+    assert engine.apply_stylesheet.call_count == 1
+    assert call.args == (app,)
+    assert Path(call.kwargs["theme"]) == theme_file_path(DEFAULT_DARK_THEME)
 
 
 def test_apply_application_theme_reports_a_failure_when_the_engine_raises() -> None:
@@ -124,12 +128,10 @@ def test_switch_application_theme_reports_the_native_theme_when_both_fail() -> N
 
 
 def test_theme_choices_list_only_the_themes_the_build_can_apply(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A build without theme files offers the native theme only."""
-    package_dir = tmp_path / "qt_material"
-    (package_dir / "themes").mkdir(parents=True)
-    monkeypatch.setattr("infiniteprep.ui.theme._qt_material_package_dir", lambda: package_dir)
+    """A build without the theme package offers the native theme only."""
+    monkeypatch.setattr("infiniteprep.ui.theme._qt_material_package_dir", lambda: None)
 
     assert get_theme_choices() == [NATIVE_THEME]
 
@@ -137,11 +139,10 @@ def test_theme_choices_list_only_the_themes_the_build_can_apply(
 def test_theme_choices_include_the_system_theme_when_a_theme_file_exists(
     theme_package: Path,
 ) -> None:
-    """A build with the theme files offers them and the system theme."""
+    """A build with the theme files offers them and the system theme. Native stays out."""
     assert get_theme_choices() == [
         DEFAULT_DARK_THEME,
         DEFAULT_LIGHT_THEME,
-        NATIVE_THEME,
         SYSTEM_THEME,
     ]
 
