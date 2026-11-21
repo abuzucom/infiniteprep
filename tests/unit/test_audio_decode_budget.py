@@ -14,24 +14,19 @@ from infiniteprep.adapters.transcoder import safe_transcoder
 from infiniteprep.adapters.transcoder.safe_transcoder import SafeTranscoderAdapter
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
+from tests.fixtures.stereo_wav import STEREO_WAV_SAMPLE_RATE, write_stereo_wav
 
-SAMPLE_RATE = 8_000
+SAMPLE_RATE = STEREO_WAV_SAMPLE_RATE
 ONE_SECOND = SAMPLE_RATE
 SMALL_FRAME_CAP = 1_000
 RATE_CAP_BELOW_FIXTURE = SAMPLE_RATE - 1
-
-
-def _write_stereo_wav(path: Path, frames: int) -> Path:
-    """Write a stereo PCM WAV whose two channels hold different constant levels."""
-    sf.write(str(path), np.tile([0.1, 0.5], (frames, 1)), SAMPLE_RATE, subtype="PCM_16")
-    return path
 
 
 def test_known_length_decode_never_joins_chunks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A stream of known length fills one buffer, so the mono mix never exists twice."""
-    path = _write_stereo_wav(tmp_path / "stereo.wav", ONE_SECOND * 3)
+    path = write_stereo_wav(tmp_path / "stereo.wav", ONE_SECOND * 3)
     whole, _ = sf.read(str(path), dtype="float64", always_2d=True)
     expected = np.mean(whole, axis=1)
 
@@ -47,7 +42,7 @@ def test_known_length_decode_never_joins_chunks(
 
 def test_short_stream_returns_only_the_decoded_frames(tmp_path: Path) -> None:
     """A buffer larger than the stream shrinks to the decoded frames and owns its memory."""
-    path = _write_stereo_wav(tmp_path / "stereo.wav", ONE_SECOND)
+    path = write_stereo_wav(tmp_path / "stereo.wav", ONE_SECOND)
 
     mono = local_dsp._decode_mono_into_buffer(path, ONE_SECOND * 2)
 
@@ -59,7 +54,7 @@ def test_analyzer_decode_stops_at_the_frame_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The mono frame cap limits the decode below the duration limit."""
-    path = _write_stereo_wav(tmp_path / "stereo.wav", ONE_SECOND)
+    path = write_stereo_wav(tmp_path / "stereo.wav", ONE_SECOND)
     monkeypatch.setattr(local_dsp, "MAX_DSP_MONO_FRAMES", SMALL_FRAME_CAP)
 
     mono, _ = read_bounded_mono_pcm(path)
@@ -71,7 +66,7 @@ def test_transcoder_rejects_a_sample_rate_above_the_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The bounds check refuses a file whose sample rate exceeds the transcoder cap."""
-    path = _write_stereo_wav(tmp_path / "stereo.wav", ONE_SECOND)
+    path = write_stereo_wav(tmp_path / "stereo.wav", ONE_SECOND)
     monkeypatch.setattr(safe_transcoder, "MAX_TRANSCODE_SAMPLE_RATE_HZ", RATE_CAP_BELOW_FIXTURE)
     transcoder = SafeTranscoderAdapter(
         Repository(DatabaseManager(":memory:")), backup_dir=tmp_path / "backups"
