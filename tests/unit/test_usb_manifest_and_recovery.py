@@ -417,6 +417,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             self.assertIsNotNone(read_in_progress_manifest(mount_root))
 
     def test_leave_unchanged_preserves_marker_and_journal(self) -> None:
+        """Leave Unchanged records the choice and keeps the marker and the journal entry."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
             partition = build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),))
@@ -438,6 +439,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             self.assertEqual(len(store.load_entries()), 1)
 
     def test_resume_runs_callback_removes_marker_and_keeps_journal(self) -> None:
+        """Resume calls its handler once, removes the marker, and records the choice."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
             partition = build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),))
@@ -466,6 +468,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             self.assertEqual(persisted[0].last_recovery_action, ReconnectChoice.RESUME.value)
 
     def test_resume_and_restore_require_callback_before_marking_recovered(self) -> None:
+        """A missing or failing handler leaves the marker, the entry, and the match intact."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
             partition = build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),))
@@ -499,6 +502,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             self.assertIsNotNone(store.match_reconnected_target(candidate))
 
     def test_restore_runs_callback_removes_marker_and_keeps_journal(self) -> None:
+        """Restore calls its handler once, removes the marker, and keeps the journal entry."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
             partition = build_partition(uuid=entry.volume_uuid, mount_points=(str(mount_root),))
@@ -525,6 +529,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             self.assertEqual(len(store.load_entries()), 1)
 
     def test_recovery_rejects_unrelated_mount_or_mismatched_marker(self) -> None:
+        """A wrong mount, missing marker, or foreign marker raises before any handler runs."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
             wrong_mount = Path(tmp_dir) / "wrong_usb"
@@ -581,6 +586,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             self.assertEqual(calls, [])
 
     def test_journal_rejects_malformed_fields(self) -> None:
+        """A wrong version, field type, action, timestamp, or drive size fails to load."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             journal_path = Path(tmp_dir) / "usb_recovery_journal.json"
             store = UsbRecoveryJournalStore(journal_path)
@@ -632,6 +638,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
                     store.load_entries()
 
     def test_journal_rejects_symlink_file(self) -> None:
+        """A journal file that is a symlink fails to load."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             outside = Path(tmp_dir) / "outside.json"
             outside.write_text('{"version": 1, "entries": []}\n', encoding="utf-8")
@@ -649,9 +656,11 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
     """Verify 30-day default expiry, 1-day warning, overdue cleanup, and manual deletion."""
 
     def test_default_recovery_expiry_constant_is_30_days(self) -> None:
+        """Recovery entries expire after 30 days by default."""
         self.assertEqual(DEFAULT_RECOVERY_EXPIRY_DAYS, 30)
 
     def test_one_day_warning_and_automatic_deletion_and_overdue_launch_cleanup(self) -> None:
+        """An entry warns a day before expiry and goes at expiry or at an overdue launch."""
         start = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
         with tempfile.TemporaryDirectory() as tmp_dir:
             store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
@@ -677,6 +686,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
             self.assertEqual(store.load_entries(), [])
 
     def test_disabled_expiry_keeps_entries_and_manual_cleanup_deletes(self) -> None:
+        """Old entries survive disabled expiry until a manual cleanup removes them."""
         start = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
         with tempfile.TemporaryDirectory() as tmp_dir:
             store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
@@ -701,6 +711,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
             self.assertEqual(store.load_entries(), [])
 
     def test_expiry_and_manual_cleanup_preserve_resolved_and_record_history(self) -> None:
+        """Cleanup keeps resolved entries and records a capped history with each reason."""
         start = EXPIRY_BASELINE_UTC
         with tempfile.TemporaryDirectory() as tmp_dir:
             store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
@@ -754,6 +765,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
             self.assertEqual([item.export_id for item in store.load_entries()], ["exp-resolved"])
 
     def test_journal_store_rejects_posix_fifo_without_blocking(self) -> None:
+        """A named pipe in place of the journal fails to load without blocking."""
         if not hasattr(os, "mkfifo"):
             self.skipTest("this platform has no named pipes")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -765,6 +777,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
                 store.load_entries()
 
     def test_journal_store_rejects_symlink_parent_and_normalizes_offsets(self) -> None:
+        """The store refuses a symlinked parent folder and loads offset times as UTC."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
             outside = root / "outside"
