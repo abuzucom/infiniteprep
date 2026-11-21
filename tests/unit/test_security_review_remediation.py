@@ -36,6 +36,8 @@ from tests.fixtures.memory_repository import build_memory_repository
 SHA256_HEX_RE = re.compile(r"[0-9a-f]{64}")
 FAKE_BINARY = b"synthetic fpcalc executable bytes"
 DISCOGS_STUB_KEY = "synthetic-discogs-key"
+# discogs.SAFE_RELEASE_ID_RE accepts at most 16 digits.
+MAX_RELEASE_ID_DIGITS = 16
 
 
 def _build_fpcalc_zip(payload: bytes) -> bytes:
@@ -198,7 +200,7 @@ def test_render_filename_unknown_token_uses_default_layout() -> None:
         "123?token=x",
         "12/34",
         "",
-        "1" * 17,
+        "1" * (MAX_RELEASE_ID_DIGITS + 1),
         "12a",
         # Ids that start with zero name no Discogs release.
         "0",
