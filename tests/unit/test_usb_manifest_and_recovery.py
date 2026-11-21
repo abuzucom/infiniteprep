@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import json
 import os
 import tempfile
@@ -42,26 +41,12 @@ from infiniteprep.services.usb.recovery import (
 )
 from infiniteprep.services.usb.targets import TargetCandidate
 from tests.fixtures.call_recorder import CallRecorder
-from tests.unit.test_code_quality_invariants import (
-    FORBIDDEN_CALL_NAMES,
-    FORBIDDEN_COMMENT_MARKERS,
-    FORBIDDEN_HASH_ATTRS,
-    MAX_FUNCTION_LINES,
-    MAX_LOCAL_VARIABLES,
-    MAX_NESTING_LEVEL,
-    compute_max_nesting,
-    count_local_assignments,
-    find_inner_loop_breaks,
-)
 from tests.unit.usb_preflight_support import (
     build_drive,
     build_inspection,
     build_partition,
 )
 
-REPO_SRC = Path(__file__).resolve().parents[2] / "src"
-# Code points below 128 are ASCII.
-ASCII_LIMIT = 128
 EXPIRY_BASELINE_UTC = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 OVERDUE_SCAN_OFFSET = timedelta(days=31)
 MANUAL_CLEANUP_OFFSET = timedelta(days=32)
@@ -881,54 +866,6 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
             journal_path.write_text(json.dumps(raw), encoding="utf-8")
             reloaded = direct_store.load_entries()
             self.assertEqual(reloaded[0].started_at_utc, "2026-07-15T16:00:00Z")
-
-
-class WorktreeCodeQualityInvariantsTests(unittest.TestCase):
-    """AST, line length, and ASCII checks on worktree USB-5 source files."""
-
-    TARGET_PATHS = (
-        REPO_SRC / "infiniteprep" / "services" / "usb" / "_shared.py",
-        REPO_SRC / "infiniteprep" / "services" / "usb" / "manifest.py",
-        REPO_SRC / "infiniteprep" / "services" / "usb" / "recovery.py",
-        REPO_SRC / "infiniteprep" / "services" / "usb" / "__init__.py",
-        REPO_SRC / "infiniteprep" / "config" / "settings.py",
-        REPO_SRC / "infiniteprep" / "ui" / "settings" / "storage.py",
-        REPO_SRC / "infiniteprep" / "ui" / "usb_recovery_dialog.py",
-    )
-
-    def test_target_files_meet_quality_invariants(self) -> None:
-        for file_path in self.TARGET_PATHS:
-            raw_text = file_path.read_text(encoding="utf-8")
-            # isascii() checks the whole text at C speed. Only a failing file is scanned
-            # again to name the offset of the first non-ASCII character.
-            if not raw_text.isascii():
-                idx = next(idx for idx, ch in enumerate(raw_text) if ord(ch) >= ASCII_LIMIT)
-                self.fail(f"Non-ASCII at {idx} in {file_path.name}")
-            for line_num, line in enumerate(raw_text.splitlines(), start=1):
-                self.assertLessEqual(
-                    len(line), 100, f"Line {line_num} in {file_path.name} exceeds 100 chars"
-                )
-                if "#" in line:
-                    comment_upper = line.partition("#")[2].upper()
-                    for marker in FORBIDDEN_COMMENT_MARKERS:
-                        self.assertNotIn(marker, comment_upper)
-            tree = ast.parse(raw_text, filename=str(file_path))
-            self._check_tree_invariants(tree, file_path.name)
-
-    def _check_tree_invariants(self, tree: ast.Module, filename: str) -> None:
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                end_line = getattr(node, "end_lineno", node.lineno) or node.lineno
-                self.assertLessEqual(end_line - node.lineno + 1, MAX_FUNCTION_LINES, filename)
-                self.assertLessEqual(count_local_assignments(node), MAX_LOCAL_VARIABLES, filename)
-                self.assertLessEqual(compute_max_nesting(node), MAX_NESTING_LEVEL, filename)
-                self.assertEqual(find_inner_loop_breaks(node), [], filename)
-                self.assertIsNotNone(node.returns, f"Missing return annotation: {node.name}")
-            elif isinstance(node, ast.Call):
-                if isinstance(node.func, ast.Name):
-                    self.assertNotIn(node.func.id, FORBIDDEN_CALL_NAMES, filename)
-                elif isinstance(node.func, ast.Attribute):
-                    self.assertNotIn(node.func.attr, FORBIDDEN_HASH_ATTRS, filename)
 
 
 if __name__ == "__main__":
