@@ -15,9 +15,8 @@ from infiniteprep.adapters.catalog.discogs import DiscogsAdapter
 from infiniteprep.adapters.catalog.musicbrainz import MusicBrainzAdapter
 from infiniteprep.adapters.fingerprint.chromaprint_acoustid import ChromaprintAcoustIDAdapter
 from infiniteprep.adapters.fingerprint.fpcalc_bootstrap import FpcalcBootstrapService
-from infiniteprep.db.connection import DatabaseManager
-from infiniteprep.db.repositories import Repository
 from infiniteprep.user_agent import PROJECT_URL, USER_AGENT
+from tests.fixtures.memory_repository import build_memory_repository
 
 STUB_BODY = b"{}"
 REQUEST_URL = "https://example.invalid/api"
@@ -55,22 +54,17 @@ def sent_requests(monkeypatch: pytest.MonkeyPatch) -> list[urllib.request.Reques
     return recorded
 
 
-def _repository() -> Repository:
-    """Return a Repository on a fresh in-memory database."""
-    return Repository(DatabaseManager(":memory:"))
-
-
 def _musicbrainz_get() -> Any:
-    return MusicBrainzAdapter(_repository()).http_get_json(REQUEST_URL, {})
+    return MusicBrainzAdapter(build_memory_repository()).http_get_json(REQUEST_URL, {})
 
 
 def _discogs_get() -> Any:
-    adapter = DiscogsAdapter(_repository(), user_token=STUB_CREDENTIAL)
+    adapter = DiscogsAdapter(build_memory_repository(), user_token=STUB_CREDENTIAL)
     return adapter.http_get_json(REQUEST_URL, {})
 
 
 def _acoustid_get() -> Any:
-    adapter = ChromaprintAcoustIDAdapter(_repository(), api_key="test-key")
+    adapter = ChromaprintAcoustIDAdapter(build_memory_repository(), api_key="test-key")
     return adapter.http_get_json(REQUEST_URL, {})
 
 

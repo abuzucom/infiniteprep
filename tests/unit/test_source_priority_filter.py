@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 
-from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import ApprovalOrigin, AudioFormat, EntityType, ProposalReviewStatus
 from infiniteprep.domain.models import (
@@ -16,13 +15,9 @@ from infiniteprep.domain.models import (
 )
 from infiniteprep.domain.source_priority import FIELD_PRIORITY, outranks, priority_rank
 from infiniteprep.services.reconciliation import ReconciliationService
+from tests.fixtures.memory_repository import build_memory_repository
 
 FILE_ID = "file-1"
-
-
-def _repository() -> Repository:
-    """Return a Repository on a fresh in-memory database."""
-    return Repository(DatabaseManager(":memory:"))
 
 
 def _asset() -> FileAsset:
@@ -75,7 +70,7 @@ def test_the_priority_table_orders_the_sources_per_field() -> None:
 
 def test_a_higher_ranked_proposal_suppresses_the_lower_ranked_one() -> None:
     """The Discogs genre and year keep the field and the iTunes values never appear."""
-    repository = _repository()
+    repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
     repository.upsert_candidate_match(_candidate("discogs", "1", genre="Electronic", year="1995"))
     repository.upsert_candidate_match(_candidate("itunes", "2", genre="Dance", year="1994"))
@@ -90,7 +85,7 @@ def test_a_higher_ranked_proposal_suppresses_the_lower_ranked_one() -> None:
 
 def test_the_itunes_proposal_stays_when_no_higher_ranked_source_supplied_the_field() -> None:
     """Without another source the iTunes value reaches the proposal table."""
-    repository = _repository()
+    repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
     repository.upsert_candidate_match(_candidate("itunes", "2", genre="Dance", year="1994"))
 
@@ -102,7 +97,7 @@ def test_the_itunes_proposal_stays_when_no_higher_ranked_source_supplied_the_fie
 
 def test_an_approved_user_value_suppresses_every_provider_proposal() -> None:
     """A value the owner set outranks every provider for that field."""
-    repository = _repository()
+    repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
     repository.upsert_approved_field(
         ApprovedField(
@@ -124,7 +119,7 @@ def test_an_approved_user_value_suppresses_every_provider_proposal() -> None:
 
 def test_an_approved_value_from_a_higher_ranked_source_suppresses_the_lower_ranked_one() -> None:
     """An accepted Discogs genre keeps the field and the iTunes genre never appears."""
-    repository = _repository()
+    repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
     repository.upsert_approved_field(
         ApprovedField(
@@ -146,7 +141,7 @@ def test_an_approved_value_from_a_higher_ranked_source_suppresses_the_lower_rank
 
 def test_the_superseded_proposal_is_marked_in_the_database() -> None:
     """A stored iTunes proposal turns superseded when a higher ranked source arrives."""
-    repository = _repository()
+    repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
     repository.upsert_candidate_match(_candidate("itunes", "2", genre="Dance"))
     _reconcile(repository)
@@ -162,7 +157,7 @@ def test_the_superseded_proposal_is_marked_in_the_database() -> None:
 
 def test_a_stored_proposal_from_a_source_that_disappeared_turns_superseded() -> None:
     """A stored iTunes proposal turns superseded when a Discogs candidate holds the field."""
-    repository = _repository()
+    repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
     repository.upsert_field_proposal(
         FieldProposal(
@@ -186,7 +181,7 @@ def test_a_stored_proposal_from_a_source_that_disappeared_turns_superseded() -> 
 
 def test_an_approved_provider_supersedes_a_stored_lower_ranked_proposal() -> None:
     """An approved Discogs genre turns a stored iTunes proposal superseded."""
-    repository = _repository()
+    repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
     repository.upsert_field_proposal(
         FieldProposal(
@@ -220,7 +215,7 @@ def test_an_approved_provider_supersedes_a_stored_lower_ranked_proposal() -> Non
 
 def test_an_owner_value_supersedes_every_stored_proposal_for_the_field() -> None:
     """A value the owner set turns every stored proposal for the field superseded."""
-    repository = _repository()
+    repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
     repository.upsert_field_proposal(
         FieldProposal(
@@ -254,7 +249,7 @@ def test_an_owner_value_supersedes_every_stored_proposal_for_the_field() -> None
 
 def test_a_field_without_an_order_keeps_every_provider_proposal() -> None:
     """A field outside the priority table keeps the current behavior."""
-    repository = _repository()
+    repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
     repository.upsert_candidate_match(_candidate("discogs", "1", label="Tribal America"))
     repository.upsert_candidate_match(_candidate("musicbrainz", "2", label="Other Label"))
@@ -269,7 +264,7 @@ def test_a_field_without_an_order_keeps_every_provider_proposal() -> None:
 def test_the_lowest_ranked_source_loses_the_field(field_name: str) -> None:
     """Each ranked field names one winner and drops the lower ranked sources."""
     order = FIELD_PRIORITY[field_name]
-    repository = _repository()
+    repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
     for index, provider in enumerate(order):
         repository.upsert_candidate_match(

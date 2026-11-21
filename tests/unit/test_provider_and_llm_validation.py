@@ -24,9 +24,9 @@ from infiniteprep.adapters.provider_fields import (
     provider_number,
     provider_text,
 )
-from infiniteprep.db.connection import DatabaseManager
-from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.ports import MetadataSearchQuery
+from tests.fixtures.fake_http import FakeResponse
+from tests.fixtures.memory_repository import build_memory_repository
 
 ALLOWED = [
     {"id": "cand-1", "value": "Dreamscape Mix"},
@@ -38,11 +38,6 @@ SAMPLE_FINGERPRINT = "AQAA_TEST"
 TAGS_TOO_LARGE = b"{" + b" " * 64
 # A structurally fake key. The fake transport never sends it anywhere.
 DISCOGS_STUB_KEY = "synthetic"
-
-
-def _repository() -> Repository:
-    """Return a repository over an empty in-memory database."""
-    return Repository(DatabaseManager(":memory:"))
 
 
 def _llm_reply(content: str) -> Any:
@@ -201,7 +196,7 @@ def test_discogs_search_survives_malformed_fields() -> None:
         ]
     }
     adapter = DiscogsAdapter(
-        _repository(),
+        build_memory_repository(),
         user_token=DISCOGS_STUB_KEY,
         http_get_json=lambda _url, _params: payload,
         min_interval_sec=0.0,
@@ -229,7 +224,7 @@ def test_discogs_never_caches_a_response_that_is_not_an_object() -> None:
         return ["unexpected"]
 
     adapter = DiscogsAdapter(
-        _repository(),
+        build_memory_repository(),
         user_token=DISCOGS_STUB_KEY,
         http_get_json=array_response,
         min_interval_sec=0.0,
@@ -245,7 +240,7 @@ def test_musicbrainz_caps_long_text_and_ignores_a_text_length() -> None:
     """A long title stops at the cap, and a length given as text reads as no duration."""
     payload = {"recordings": [{"id": "rec-1", "title": LONG_TEXT, "length": "480000"}]}
     adapter = MusicBrainzAdapter(
-        _repository(), http_get_json=lambda _url, _params: payload, min_interval_sec=0.0
+        build_memory_repository(), http_get_json=lambda _url, _params: payload, min_interval_sec=0.0
     )
 
     candidates = adapter.search(MetadataSearchQuery(title="The Dream"))
@@ -270,7 +265,7 @@ def test_acoustid_rejects_an_out_of_range_score_and_bad_list_items(tmp_path: Pat
         ]
     }
     adapter = ChromaprintAcoustIDAdapter(
-        repository=_repository(),
+        repository=build_memory_repository(),
         api_key="key",
         fpcalc_runner=lambda _path: (SAMPLE_DURATION_SEC, SAMPLE_FINGERPRINT),
         http_get_json=lambda _url, _params: payload,
@@ -282,24 +277,6 @@ def test_acoustid_rejects_an_out_of_range_score_and_bad_list_items(tmp_path: Pat
     assert result.matches[0].confidence == 0.0
     assert result.matches[0].artist == "3"
     assert result.matches[0].title == "The Dream"
-
-
-class _FakeResponse:
-    """Stands in for a urlopen response and serves fixed bytes."""
-
-    def __init__(self, body: bytes) -> None:
-        """Store the body that read returns."""
-        self._body = body
-
-    def __enter__(self) -> _FakeResponse:
-        return self
-
-    def __exit__(self, *_exc: object) -> None:
-        return None
-
-    def read(self, size: int = -1) -> bytes:
-        """Return at most size bytes of the body."""
-        return self._body if size < 0 else self._body[:size]
 
 
 @pytest.mark.parametrize(
@@ -315,7 +292,7 @@ def test_ollama_model_list_reads_only_valid_names(
 ) -> None:
     """The tag probe keeps valid names and returns nothing for a malformed body."""
     monkeypatch.setattr(
-        ollama_bootstrap.urllib.request, "urlopen", lambda *_a, **_k: _FakeResponse(body)
+        ollama_bootstrap.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse(body)
     )
 
     assert OllamaBootstrapService().list_installed_models() == expected
@@ -327,7 +304,7 @@ def test_ollama_model_list_refuses_a_body_above_the_cap(monkeypatch: pytest.Monk
     monkeypatch.setattr(
         ollama_bootstrap.urllib.request,
         "urlopen",
-        lambda *_a, **_k: _FakeResponse(TAGS_TOO_LARGE),
+        lambda *_a, **_k: FakeResponse(TAGS_TOO_LARGE),
     )
 
     assert OllamaBootstrapService().list_installed_models() == []

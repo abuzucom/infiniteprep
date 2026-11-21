@@ -30,10 +30,9 @@ from infiniteprep.config.credentials import (
     CredentialStoreError,
     forget_all_credentials,
 )
-from infiniteprep.db.connection import DatabaseManager
-from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType
 from infiniteprep.domain.ports import MetadataSearchQuery
+from tests.fixtures.memory_repository import build_memory_repository
 
 DISCOGS_STUB_KEY = "synthetic-discogs-key"
 ACOUSTID_TEST_KEY = "synthetic-acoustid-key"
@@ -88,11 +87,6 @@ ITUNES_PAYLOAD: dict[str, Any] = {
 }
 
 
-def _repository() -> Repository:
-    """Return a Repository backed by an in-memory SQLite database."""
-    return Repository(DatabaseManager(":memory:"))
-
-
 def _returning(payload: dict[str, Any]) -> Any:
     """Return an http_get_json stand-in that answers every request with payload."""
 
@@ -130,7 +124,7 @@ def _raising(error: Exception) -> Any:
 
 def test_musicbrainz_candidate_ids_differ_per_file() -> None:
     adapter = MusicBrainzAdapter(
-        _repository(), http_get_json=_returning(MB_SEARCH_PAYLOAD), min_interval_sec=0.0
+        build_memory_repository(), http_get_json=_returning(MB_SEARCH_PAYLOAD), min_interval_sec=0.0
     )
     first = adapter.search(QUERY, file_id=FIRST_FILE_ID)
     second = adapter.search(QUERY, file_id=SECOND_FILE_ID)
@@ -142,7 +136,7 @@ def test_musicbrainz_candidate_ids_differ_per_file() -> None:
 def test_discogs_candidate_ids_differ_per_file() -> None:
     payload = {"results": [{"id": 249504, "title": "Deep Dish - Junk Science", "year": "1998"}]}
     adapter = DiscogsAdapter(
-        _repository(),
+        build_memory_repository(),
         user_token=DISCOGS_STUB_KEY,
         http_get_json=_returning(payload),
         min_interval_sec=0.0,
@@ -155,7 +149,9 @@ def test_discogs_candidate_ids_differ_per_file() -> None:
 
 def test_itunes_candidate_ids_differ_per_file() -> None:
     adapter = ItunesSearchAdapter(
-        _repository(), http_get_json=_returning(ITUNES_PAYLOAD), limiter=RequestLimiter(0.0)
+        build_memory_repository(),
+        http_get_json=_returning(ITUNES_PAYLOAD),
+        limiter=RequestLimiter(0.0),
     )
     first = adapter.search(QUERY, file_id=FIRST_FILE_ID)
     second = adapter.search(QUERY, file_id=SECOND_FILE_ID)
@@ -168,7 +164,7 @@ def test_itunes_candidate_ids_differ_per_file() -> None:
 
 def test_discogs_release_tracks_keep_distinct_entity_ids_and_drop_year_zero() -> None:
     adapter = DiscogsAdapter(
-        _repository(),
+        build_memory_repository(),
         user_token=DISCOGS_STUB_KEY,
         http_get_json=_returning(DISCOGS_RELEASE_PAYLOAD),
         min_interval_sec=0.0,
@@ -193,7 +189,7 @@ def test_discogs_unpositioned_entry_never_collides_with_a_numbered_track() -> No
         ],
     }
     adapter = DiscogsAdapter(
-        _repository(),
+        build_memory_repository(),
         user_token=DISCOGS_STUB_KEY,
         http_get_json=_returning(payload),
         min_interval_sec=0.0,
@@ -221,7 +217,7 @@ def test_discogs_suffixed_key_never_matches_another_position(positions: list[str
         ],
     }
     adapter = DiscogsAdapter(
-        _repository(),
+        build_memory_repository(),
         user_token=DISCOGS_STUB_KEY,
         http_get_json=_returning(payload),
         min_interval_sec=0.0,
@@ -236,7 +232,9 @@ def test_discogs_suffixed_key_never_matches_another_position(positions: list[str
 
 def test_musicbrainz_release_fetch_returns_a_release_candidate() -> None:
     adapter = MusicBrainzAdapter(
-        _repository(), http_get_json=_returning(MB_RELEASE_PAYLOAD), min_interval_sec=0.0
+        build_memory_repository(),
+        http_get_json=_returning(MB_RELEASE_PAYLOAD),
+        min_interval_sec=0.0,
     )
     candidates = adapter.fetch("rel-9", EntityType.RELEASE, file_id=FIRST_FILE_ID)
     assert len(candidates) == 1
@@ -257,7 +255,9 @@ def test_musicbrainz_unsupported_entity_type_sends_no_request() -> None:
         requested.append(url)
         return {}
 
-    adapter = MusicBrainzAdapter(_repository(), http_get_json=record_request, min_interval_sec=0.0)
+    adapter = MusicBrainzAdapter(
+        build_memory_repository(), http_get_json=record_request, min_interval_sec=0.0
+    )
     with pytest.raises(ValueError, match="does not support"):
         adapter.fetch("rel-9", cast(EntityType, "label"))
     assert requested == []
@@ -265,7 +265,7 @@ def test_musicbrainz_unsupported_entity_type_sends_no_request() -> None:
 
 def test_musicbrainz_missing_track_number_reads_as_none() -> None:
     adapter = MusicBrainzAdapter(
-        _repository(), http_get_json=_returning(MB_SEARCH_PAYLOAD), min_interval_sec=0.0
+        build_memory_repository(), http_get_json=_returning(MB_SEARCH_PAYLOAD), min_interval_sec=0.0
     )
     candidates = adapter.search(QUERY, file_id=FIRST_FILE_ID)
     assert candidates[0].release_details.track_number is None
@@ -284,7 +284,9 @@ NETWORK_ERRORS = [
 def test_musicbrainz_lookup_failure_returns_no_candidates(
     error: Exception, caplog: pytest.LogCaptureFixture
 ) -> None:
-    adapter = MusicBrainzAdapter(_repository(), http_get_json=_raising(error), min_interval_sec=0.0)
+    adapter = MusicBrainzAdapter(
+        build_memory_repository(), http_get_json=_raising(error), min_interval_sec=0.0
+    )
     with caplog.at_level(logging.WARNING, logger=http_json.__name__):
         assert adapter.search(QUERY, file_id=FIRST_FILE_ID) == []
         assert adapter.fetch("rel-9", EntityType.RELEASE, file_id=FIRST_FILE_ID) == []
@@ -294,7 +296,7 @@ def test_musicbrainz_lookup_failure_returns_no_candidates(
 @pytest.mark.parametrize("error", NETWORK_ERRORS)
 def test_discogs_lookup_failure_returns_no_candidates(error: Exception) -> None:
     adapter = DiscogsAdapter(
-        _repository(),
+        build_memory_repository(),
         user_token=DISCOGS_STUB_KEY,
         http_get_json=_raising(error),
         min_interval_sec=0.0,
@@ -306,7 +308,7 @@ def test_discogs_lookup_failure_returns_no_candidates(error: Exception) -> None:
 @pytest.mark.parametrize("error", NETWORK_ERRORS)
 def test_itunes_lookup_failure_returns_no_candidates(error: Exception) -> None:
     adapter = ItunesSearchAdapter(
-        _repository(), http_get_json=_raising(error), limiter=RequestLimiter(0.0)
+        build_memory_repository(), http_get_json=_raising(error), limiter=RequestLimiter(0.0)
     )
     assert adapter.search(QUERY, file_id=FIRST_FILE_ID) == []
 
@@ -320,7 +322,7 @@ def test_itunes_non_object_response_returns_nothing_and_is_not_cached(payload: A
         return payload
 
     adapter = ItunesSearchAdapter(
-        _repository(), http_get_json=http_get_json, limiter=RequestLimiter(0.0)
+        build_memory_repository(), http_get_json=http_get_json, limiter=RequestLimiter(0.0)
     )
     assert adapter.search(QUERY, file_id=FIRST_FILE_ID) == []
     assert adapter.search(QUERY, file_id=FIRST_FILE_ID) == []
@@ -328,7 +330,7 @@ def test_itunes_non_object_response_returns_nothing_and_is_not_cached(payload: A
 
 
 def test_failed_lookup_is_not_cached() -> None:
-    repository = _repository()
+    repository = build_memory_repository()
     failing = MusicBrainzAdapter(
         repository,
         http_get_json=_raising(urllib.error.URLError("offline")),
@@ -344,7 +346,7 @@ def test_failed_lookup_is_not_cached() -> None:
 @pytest.mark.parametrize("error", NETWORK_ERRORS)
 def test_acoustid_lookup_failure_returns_a_warning(error: Exception) -> None:
     adapter = ChromaprintAcoustIDAdapter(
-        _repository(),
+        build_memory_repository(),
         api_key=ACOUSTID_TEST_KEY,
         fpcalc_runner=lambda _path: (240.0, "AQADtEmUJEkS"),
         http_get_json=_raising(error),
@@ -362,7 +364,7 @@ def test_fpcalc_failure_returns_a_warning() -> None:
         raise subprocess.CalledProcessError(2, ["fpcalc"])
 
     adapter = ChromaprintAcoustIDAdapter(
-        _repository(), api_key=ACOUSTID_TEST_KEY, fpcalc_runner=failing_fpcalc
+        build_memory_repository(), api_key=ACOUSTID_TEST_KEY, fpcalc_runner=failing_fpcalc
     )
     result = adapter.identify(Path("track.wav"), file_id=FIRST_FILE_ID)
     assert result.matches == []
@@ -374,7 +376,7 @@ def test_fpcalc_programming_error_is_not_swallowed() -> None:
         raise AttributeError("defect in the runner")
 
     adapter = ChromaprintAcoustIDAdapter(
-        _repository(), api_key=ACOUSTID_TEST_KEY, fpcalc_runner=broken_fpcalc
+        build_memory_repository(), api_key=ACOUSTID_TEST_KEY, fpcalc_runner=broken_fpcalc
     )
     with pytest.raises(AttributeError):
         adapter.identify(Path("track.wav"), file_id=FIRST_FILE_ID)
@@ -424,7 +426,7 @@ def test_musicbrainz_array_response_returns_no_candidates(
         "open_without_redirects",
         lambda *_a, **_k: _Response(body),
     )
-    adapter = MusicBrainzAdapter(_repository(), min_interval_sec=0.0)
+    adapter = MusicBrainzAdapter(build_memory_repository(), min_interval_sec=0.0)
     assert adapter.search(QUERY, file_id=FIRST_FILE_ID) == []
 
 
