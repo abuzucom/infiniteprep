@@ -44,6 +44,18 @@ Other runtime dependencies
 - Roboto fonts, inside qt-material: Apache-2.0. The license text ships beside the fonts.
 - Jinja2 3.1.6 and MarkupSafe 3.0.4: BSD-3-Clause.
 
+Icons
+- InfinitePrep bundles unchanged SVG files from two icon sets. Each
+  set's LICENSE file ships beside its icons in infiniteprep/ui/icons.
+- Tabler Icons v3.50.0 (21 icons): MIT.
+  Copyright (c) 2020-2026 Pawel Kuna.
+- Lucide 1.70.0 (33 icons): ISC.
+  Copyright (c) 2026 Lucide Icons and Contributors.
+- Feather, inside Lucide: MIT. Copyright (c) 2013-present Cole Bemis.
+  Covers the Lucide icons check, database, loader, square, x, circle-x
+  (Feather x-circle), and triangle-exclamation-point (Feather
+  alert-triangle).
+
 Optional separate download
 - fpcalc 1.5.1 (Chromaprint): LGPL-2.1-or-later, statically linked with
   an FFmpeg 4.4.1 build configured without GPL or nonfree components.

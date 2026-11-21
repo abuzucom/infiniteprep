@@ -17,6 +17,10 @@ _internal/infiniteprep/db/schema.sql
 _internal/infiniteprep/ui/app-icon.png
 _internal/infiniteprep/ui/themes/infiniteprep_dark.xml
 _internal/infiniteprep/ui/themes/infiniteprep_light.xml
+_internal/infiniteprep/ui/icons/tabler/*.svg
+_internal/infiniteprep/ui/icons/tabler/LICENSE
+_internal/infiniteprep/ui/icons/lucide/*.svg
+_internal/infiniteprep/ui/icons/lucide/LICENSE
 
 # Python 3.12 runtime and standard library extensions
 _internal/libpython3.12.so.1.0
