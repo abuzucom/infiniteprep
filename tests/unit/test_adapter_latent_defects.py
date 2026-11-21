@@ -443,6 +443,7 @@ def test_fetch_json_reads_a_bounded_body() -> None:
 
 @pytest.mark.parametrize("body", [b'[{"id": "x"}]', b'[{"a": 1, "b": 2}]', b"[1]", b'"text"'])
 def test_fetch_json_rejects_a_body_that_is_not_an_object(body: bytes) -> None:
+    """An array or string body raises a not-an-object error."""
     with pytest.raises(ValueError, match="not a JSON object"):
         http_json.fetch_json(
             "https://example.invalid/x",
@@ -457,6 +458,7 @@ def test_fetch_json_rejects_a_body_that_is_not_an_object(body: bytes) -> None:
 def test_musicbrainz_array_response_returns_no_candidates(
     body: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A MusicBrainz array response gives no candidates."""
     monkeypatch.setattr(
         musicbrainz_module.http_openers, "open_without_redirects", _responding(body)
     )
@@ -476,12 +478,14 @@ def test_musicbrainz_array_response_returns_no_candidates(
 def test_candidate_ids_never_collide_across_part_boundaries(
     first: tuple[str, str], second: tuple[str, str]
 ) -> None:
+    """Parts that join to the same text still give different candidate ids."""
     assert http_json.build_candidate_id("mb-rel", *first) != http_json.build_candidate_id(
         "mb-rel", *second
     )
 
 
 def test_itunes_request_limiter_is_the_shared_limiter() -> None:
+    """The iTunes limiter is the shared limiter with a positive default interval."""
     limiter = RequestLimiter()
     assert isinstance(limiter, http_json.RequestLimiter)
     assert limiter.min_interval_sec > 0.0
@@ -491,12 +495,14 @@ def test_itunes_request_limiter_is_the_shared_limiter() -> None:
 
 
 def test_beatport_with_token_reports_unavailable() -> None:
+    """The Beatport stub reports unavailable with a reason even with a token."""
     ready, reason = BeatportStubAdapter(oauth_token=BEATPORT_STUB_KEY).is_available()
     assert ready is False
     assert reason
 
 
 def test_acrcloud_with_credentials_reports_unavailable_and_warns() -> None:
+    """The ACRCloud stub reports unavailable and returns that reason as its warning."""
     adapter = ACRCloudOptInAdapter(
         enabled_by_user=True, access_key=ACRCLOUD_STUB_KEY, access_secret=ACRCLOUD_STUB_VALUE
     )
@@ -510,6 +516,7 @@ def test_acrcloud_with_credentials_reports_unavailable_and_warns() -> None:
 
 
 def test_validator_rejects_a_value_from_another_candidate() -> None:
+    """A value that belongs to a different candidate fails validation with a reason."""
     candidates = [{"id": "c1", "value": "House"}, {"id": "c2", "value": "Techno"}]
     valid, reason = ClosedWorldValidator().validate_response(
         {"selected_candidate_id": "c1", "proposed_value": "Techno"}, candidates
@@ -519,6 +526,7 @@ def test_validator_rejects_a_value_from_another_candidate() -> None:
 
 
 def test_validator_accepts_the_value_of_the_selected_candidate() -> None:
+    """The selected candidate value passes despite case and surrounding spaces."""
     candidates = [{"id": "c1", "value": "House"}, {"id": "c2", "value": "Techno"}]
     valid, reason = ClosedWorldValidator().validate_response(
         {"selected_candidate_id": "c2", "proposed_value": " techno "}, candidates
@@ -538,6 +546,7 @@ def test_validator_accepts_the_value_of_the_selected_candidate() -> None:
     ],
 )
 def test_ollama_tags_url_follows_the_base_url(base_url: str, expected: str) -> None:
+    """The tags URL keeps the host and port and drops any v1 path."""
     assert build_tags_url(base_url) == expected
     assert OllamaBootstrapService(base_url=base_url).tags_url == expected
 
@@ -546,17 +555,20 @@ def test_ollama_tags_url_follows_the_base_url(base_url: str, expected: str) -> N
 def test_ollama_malformed_tags_response_lists_no_models(
     body: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A malformed tags response lists no models."""
     monkeypatch.setattr(ollama_module.urllib.request, "urlopen", _responding(body))
     assert OllamaBootstrapService().list_installed_models() == []
 
 
 def test_ollama_lists_model_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The model list keeps the entries that carry a name."""
     body = b'{"models": [{"name": "qwen2.5:3b"}, {"size": 1}]}'
     monkeypatch.setattr(ollama_module.urllib.request, "urlopen", _responding(body))
     assert OllamaBootstrapService().list_installed_models() == ["qwen2.5:3b"]
 
 
 def test_ollama_refuses_a_remote_plain_http_server(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A remote plain HTTP server lists no models and opens no connection."""
     opened = CallRecorder()
     monkeypatch.setattr(ollama_module.urllib.request, "urlopen", opened)
     service = OllamaBootstrapService(base_url="http://203.0.113.5:11434")
@@ -585,6 +597,7 @@ class _PartlyFailingStore(CredentialStore):
 def test_forget_all_credentials_continues_past_a_failed_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """One failed delete still tries every key and returns the failure exit code."""
     for env_name in ENV_VAR_MAP.values():
         monkeypatch.delenv(env_name, raising=False)
     first_key = next(iter(ENV_VAR_MAP))
@@ -600,6 +613,7 @@ def test_forget_all_credentials_continues_past_a_failed_key(
 def test_forget_all_credentials_returns_zero_when_every_delete_succeeds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Every delete succeeding returns zero and leaves no stored key."""
     for env_name in ENV_VAR_MAP.values():
         monkeypatch.delenv(env_name, raising=False)
     store = CredentialStore(use_memory_backend=True)
