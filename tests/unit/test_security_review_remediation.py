@@ -30,6 +30,7 @@ from infiniteprep.adapters.metadata_io.id3v2 import decode_txxx, frame_key
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.domain.enums import FieldName
 from tests.fixtures.audio_factory import create_mp3_fixture
+from tests.fixtures.call_recorder import CallRecorder
 from tests.fixtures.memory_repository import build_memory_repository
 
 SHA256_HEX_RE = re.compile(r"[0-9a-f]{64}")
@@ -69,10 +70,10 @@ def test_archive_install_rejects_missing_digest(tmp_path: Path, missing_digest: 
 def test_install_fpcalc_verifies_pinned_digest_by_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply="Windows"))
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
     bootstrap = FpcalcBootstrapService(
-        install_dir=tmp_path / "bin", downloader=lambda _url: archive_bytes
+        install_dir=tmp_path / "bin", downloader=CallRecorder(reply=archive_bytes)
     )
     with pytest.raises(ValueError, match="SHA-256 mismatch"):
         bootstrap.install_fpcalc(user_consented=True)
@@ -83,12 +84,12 @@ def test_install_fpcalc_rejects_download_that_misses_caller_digest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
-    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply="Windows"))
     monkeypatch.setitem(
         fpcalc_module.OFFICIAL_FPCALC_SHA256, "windows", hashlib.sha256(archive_bytes).hexdigest()
     )
     bootstrap = FpcalcBootstrapService(
-        install_dir=tmp_path / "bin", downloader=lambda _url: archive_bytes
+        install_dir=tmp_path / "bin", downloader=CallRecorder(reply=archive_bytes)
     )
     with pytest.raises(ValueError, match="SHA-256 mismatch"):
         bootstrap.install_fpcalc(user_consented=True, expected_sha256="0" * 64)
@@ -99,7 +100,7 @@ def test_install_fpcalc_rejects_download_that_misses_caller_digest(
 def test_install_fpcalc_refuses_platform_without_pinned_archive(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, system_name: str
 ) -> None:
-    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: system_name)
+    monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply=system_name))
     downloads: list[str] = []
 
     def record_download(url: str) -> bytes:
@@ -304,10 +305,10 @@ def test_install_fpcalc_accepts_caller_digest_that_matches_pin(
 ) -> None:
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
     archive_digest = hashlib.sha256(archive_bytes).hexdigest()
-    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply="Windows"))
     monkeypatch.setitem(fpcalc_module.OFFICIAL_FPCALC_SHA256, "windows", archive_digest)
     bootstrap = FpcalcBootstrapService(
-        install_dir=tmp_path / "bin", downloader=lambda _url: archive_bytes
+        install_dir=tmp_path / "bin", downloader=CallRecorder(reply=archive_bytes)
     )
     installed = bootstrap.install_fpcalc(
         user_consented=True, expected_sha256=archive_digest.upper()
@@ -378,7 +379,7 @@ def _oversized_json(limit: int) -> bytes:
 def _patch_urlopen(monkeypatch: pytest.MonkeyPatch, module: Any, limit: int) -> _OversizedResponse:
     """Route the module's no-redirect opener to an oversized fake response."""
     response = _OversizedResponse(_oversized_json(limit))
-    monkeypatch.setattr(module.http_openers, "open_without_redirects", lambda *_a, **_k: response)
+    monkeypatch.setattr(module.http_openers, "open_without_redirects", CallRecorder(reply=response))
     return response
 
 
@@ -459,7 +460,7 @@ def test_discogs_fetch_unavailable_returns_empty_for_any_id() -> None:
 def test_install_fpcalc_rejects_caller_digest_before_download(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply="Windows"))
     downloads: list[str] = []
 
     def record_download(url: str) -> bytes:
@@ -505,7 +506,7 @@ def test_tar_entry_at_cap_installs_whole_binary(
     payload = b"y" * 64
     archive_bytes = _build_fpcalc_tar(payload)
     monkeypatch.setattr(fpcalc_module, "MAX_FPCALC_BINARY_BYTES", len(payload))
-    monkeypatch.setattr(fpcalc_module.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply="Darwin"))
     bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin")
     installed = bootstrap.install_from_archive_bytes(
         archive_bytes=archive_bytes,

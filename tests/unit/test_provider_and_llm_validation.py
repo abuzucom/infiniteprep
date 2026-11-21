@@ -25,6 +25,7 @@ from infiniteprep.adapters.provider_fields import (
     provider_text,
 )
 from infiniteprep.domain.ports import MetadataSearchQuery
+from tests.fixtures.call_recorder import CallRecorder
 from tests.fixtures.fake_http import FakeResponse
 from tests.fixtures.memory_repository import build_memory_repository
 
@@ -198,7 +199,7 @@ def test_discogs_search_survives_malformed_fields() -> None:
     adapter = DiscogsAdapter(
         build_memory_repository(),
         user_token=DISCOGS_STUB_KEY,
-        http_get_json=lambda _url, _params: payload,
+        http_get_json=CallRecorder(reply=payload),
         min_interval_sec=0.0,
     )
 
@@ -240,7 +241,7 @@ def test_musicbrainz_caps_long_text_and_ignores_a_text_length() -> None:
     """A long title stops at the cap, and a length given as text reads as no duration."""
     payload = {"recordings": [{"id": "rec-1", "title": LONG_TEXT, "length": "480000"}]}
     adapter = MusicBrainzAdapter(
-        build_memory_repository(), http_get_json=lambda _url, _params: payload, min_interval_sec=0.0
+        build_memory_repository(), http_get_json=CallRecorder(reply=payload), min_interval_sec=0.0
     )
 
     candidates = adapter.search(MetadataSearchQuery(title="The Dream"))
@@ -267,8 +268,8 @@ def test_acoustid_rejects_an_out_of_range_score_and_bad_list_items(tmp_path: Pat
     adapter = ChromaprintAcoustIDAdapter(
         repository=build_memory_repository(),
         api_key="key",
-        fpcalc_runner=lambda _path: (SAMPLE_DURATION_SEC, SAMPLE_FINGERPRINT),
-        http_get_json=lambda _url, _params: payload,
+        fpcalc_runner=CallRecorder(reply=(SAMPLE_DURATION_SEC, SAMPLE_FINGERPRINT)),
+        http_get_json=CallRecorder(reply=payload),
     )
 
     result = adapter.identify(tmp_path / "track.wav")
@@ -292,7 +293,7 @@ def test_ollama_model_list_reads_only_valid_names(
 ) -> None:
     """The tag probe keeps valid names and returns nothing for a malformed body."""
     monkeypatch.setattr(
-        ollama_bootstrap.urllib.request, "urlopen", lambda *_a, **_k: FakeResponse(body)
+        ollama_bootstrap.urllib.request, "urlopen", CallRecorder(reply=FakeResponse(body))
     )
 
     assert OllamaBootstrapService().list_installed_models() == expected
@@ -304,7 +305,7 @@ def test_ollama_model_list_refuses_a_body_above_the_cap(monkeypatch: pytest.Monk
     monkeypatch.setattr(
         ollama_bootstrap.urllib.request,
         "urlopen",
-        lambda *_a, **_k: FakeResponse(TAGS_TOO_LARGE),
+        CallRecorder(reply=FakeResponse(TAGS_TOO_LARGE)),
     )
 
     assert OllamaBootstrapService().list_installed_models() == []
