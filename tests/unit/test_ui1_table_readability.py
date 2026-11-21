@@ -257,11 +257,11 @@ def test_field_column_shows_readable_names_over_unchanged_keys(shown_panel: Deta
         for row in range(table.rowCount())
     ]
 
-    assert shown == [FIELD_LABELS[field] for field in FieldName]
+    assert shown == [FIELD_LABELS[field.value] for field in FieldName]
     assert keys == [field.value for field in FieldName]
-    assert FIELD_LABELS[FieldName.MIX_NAME] == "Mix name"
-    assert FIELD_LABELS[FieldName.CATALOG_NUMBER] == "Catalog number"
-    assert FIELD_LABELS[FieldName.BPM] == "BPM"
+    assert FIELD_LABELS[FieldName.MIX_NAME.value] == "Mix name"
+    assert FIELD_LABELS[FieldName.CATALOG_NUMBER.value] == "Catalog number"
+    assert FIELD_LABELS[FieldName.BPM.value] == "BPM"
 
 
 def test_detail_value_columns_share_the_spare_width(shown_panel: DetailPanel) -> None:
