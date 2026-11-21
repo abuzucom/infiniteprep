@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- InfinitePrep light theme. The values match LIGHT_PALETTE in ui/tokens.py. -->
+<!-- The secondary light and dark roles hold the line and surface colors directly, -->
+<!-- so the theme applies without the qt-material invert_secondary swap. -->
+<resources>
+  <color name="primaryColor">#0369a1</color>
+  <color name="primaryLightColor">#0284c7</color>
+  <color name="secondaryColor">#ffffff</color>
+  <color name="secondaryLightColor">#d5dbea</color>
+  <color name="secondaryDarkColor">#f4f6fb</color>
+  <color name="primaryTextColor">#ffffff</color>
+  <color name="secondaryTextColor">#111831</color>
+</resources>

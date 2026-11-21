@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- InfinitePrep dark theme. The values match DARK_PALETTE in ui/tokens.py. -->
+<!-- qt-material paints focus, selection, and progress in primaryColor (logo sky blue). -->
+<resources>
+  <color name="primaryColor">#38bdf8</color>
+  <color name="primaryLightColor">#7dd3fc</color>
+  <color name="secondaryColor">#070b1c</color>
+  <color name="secondaryLightColor">#232c52</color>
+  <color name="secondaryDarkColor">#0e1430</color>
+  <color name="primaryTextColor">#070b1c</color>
+  <color name="secondaryTextColor">#e8ecf8</color>
+</resources>

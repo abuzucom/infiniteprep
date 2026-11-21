@@ -5,7 +5,29 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.80.8] (2026-11-21)
+## [0.81.1] (2026-11-21)
+
+### Added
+
+- UI-R visual system (UI-2, #342).
+  - Two new themes, Dark and Light, built from the logo colors. Every text color reaches 4.5:1 and every graphic color 3:1 in both themes.
+  - Each Open Key number has its own key color. Minor keys use a darker shade of the same hue. Key cells use black or white text, whichever reads better.
+  - A Text Size setting on the General tab picks Compact, Standard, or Large. Spacing and button sizes follow the chosen size.
+- 54 icons from Tabler Icons v3.50.0 and Lucide 1.70.0, copied unchanged from the pinned releases. NOTICE names both sets, and each set's license ships beside its icons.
+
+### Changed
+
+- The theme pickers offer Dark, Light, and Match System. Native left the pickers and applies only when the theme package cannot load.
+- Settings from an older version that name Dark Teal, Light Teal, or Native load as Dark or Light.
+- The project orientation notes that the agent prose rules do not govern on-screen text.
+- Unit tests share the repeated helpers through `tests/fixtures/`.
+  - `memory_keyring.py` holds the keyring fakes. `tests/conftest.py` holds `restore_keyring`.
+  - `storage_fallback.py` holds the storage prompt recorder, the per-user folder redirects, and the fallback list reader.
+  - `sqlite_version.py`, `fake_http.py`, `memory_repository.py`, `id3v2_render.py`, and `stereo_wav.py` hold the version reader, the response fake, the in-memory repository, the v2.3 render helpers, and the stereo WAV writer.
+  - Two window tests import the existing `MemorySettingsManager`.
+- Unit tests replace recorder and stand-in lambdas with the callable `CallRecorder` in `tests/fixtures/call_recorder.py` or with named functions. `qt_dialogs.py` and `waveform_stub.py` name the argument positions the recorders keep.
+- Two Discogs release id tests merge into one parametrized test with all nine ids. A named constant sets the overlong id length. A short stream decode test that repeated another line for line is gone. The metadata read test derives its expected fields from the written tags.
+- The version advances from 0.81.0 to 0.81.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 
@@ -18,17 +40,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The detail panel field table fits its Field, Source & Score, and Actions columns. Existing Tag, Top Proposal, and Approved / Edit share the spare width equally.
 - The Field column shows readable names such as "Mix name" and "Catalog number". Stored field keys stay unchanged.
 - The Key Notation box shows Standard, Camelot, and Open Key. The stored notation values stay unchanged.
-
-### Changed
-
-- Unit tests share the repeated helpers through `tests/fixtures/`.
-  - `memory_keyring.py` holds the keyring fakes. `tests/conftest.py` holds `restore_keyring`.
-  - `storage_fallback.py` holds the storage prompt recorder, the per-user folder redirects, and the fallback list reader.
-  - `sqlite_version.py`, `fake_http.py`, `memory_repository.py`, `id3v2_render.py`, and `stereo_wav.py` hold the version reader, the response fake, the in-memory repository, the v2.3 render helpers, and the stereo WAV writer.
-  - Two window tests import the existing `MemorySettingsManager`.
-- Unit tests replace recorder and stand-in lambdas with the callable `CallRecorder` in `tests/fixtures/call_recorder.py` or with named functions. `qt_dialogs.py` and `waveform_stub.py` name the argument positions the recorders keep.
-- Two Discogs release id tests merge into one parametrized test with all nine ids. A named constant sets the overlong id length. A short stream decode test that repeated another line for line is gone. The metadata read test derives its expected fields from the written tags.
-- The version advances from 0.80.6 to 0.80.8 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ## [0.80.6] (2026-11-20)
 

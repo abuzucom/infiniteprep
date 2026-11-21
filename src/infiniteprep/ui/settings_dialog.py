@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 from infiniteprep import storage_paths
 from infiniteprep.config.credentials import CredentialStore
 from infiniteprep.config.settings import (
+    TEXT_SIZE_STANDARD,
     UNSORTED_PLACEMENT_FIRST,
     AppSettings,
     SettingsManager,
@@ -170,7 +171,8 @@ class SettingsDialog(QDialog):
             tab.apply_to(self.current_settings)
         app = QApplication.instance()
         chosen_theme = getattr(self.current_settings, "theme", DEFAULT_DARK_THEME)
-        result = switch_application_theme(app, chosen_theme, previous_theme)
+        text_size = getattr(self.current_settings, "text_size", TEXT_SIZE_STANDARD)
+        result = switch_application_theme(app, chosen_theme, previous_theme, text_size)
         self.current_settings.theme = result.theme
         self.general_tab.set_theme(result.theme)
         self.settings_mgr.save(self.current_settings)

@@ -7,6 +7,9 @@ from typing import Final
 from PySide6.QtWidgets import QCheckBox, QComboBox, QWidget
 
 from infiniteprep.config.settings import (
+    TEXT_SIZE_COMPACT,
+    TEXT_SIZE_LARGE,
+    TEXT_SIZE_STANDARD,
     UNSORTED_PLACEMENT_FIRST,
     UNSORTED_PLACEMENT_LAST,
     AppSettings,
@@ -19,6 +22,11 @@ from infiniteprep.ui.theme import fill_theme_picker, get_theme_choices, select_t
 UNSORTED_PLACEMENT_LABELS: Final[tuple[tuple[str, str], ...]] = (
     ("First", UNSORTED_PLACEMENT_FIRST),
     ("Last", UNSORTED_PLACEMENT_LAST),
+)
+TEXT_SIZE_LABELS: Final[tuple[tuple[str, str], ...]] = (
+    ("Compact", TEXT_SIZE_COMPACT),
+    ("Standard", TEXT_SIZE_STANDARD),
+    ("Large", TEXT_SIZE_LARGE),
 )
 
 
@@ -46,6 +54,7 @@ class GeneralTab(FormSettingsTab):
         fill_theme_picker(self.theme_combo, get_theme_choices())
         select_theme(self.theme_combo, theme)
         self.form.addRow("UI Theme:", self.theme_combo)
+        self._add_text_size_control((settings or AppSettings()).text_size)
         self.unsorted_rows_placement_combo = QComboBox(self)
         for label, value in UNSORTED_PLACEMENT_LABELS:
             self.unsorted_rows_placement_combo.addItem(label, value)
@@ -55,6 +64,17 @@ class GeneralTab(FormSettingsTab):
         self.unsorted_rows_placement_combo.setCurrentIndex(placement_index)
         self.form.addRow("Unsorted Rows:", self.unsorted_rows_placement_combo)
         self._add_tag_output_controls(settings or AppSettings())
+
+    def _add_text_size_control(self, text_size: str) -> None:
+        """Add the text size preset picker. An unknown value shows Standard."""
+        self.text_size_combo = QComboBox(self)
+        for label, value in TEXT_SIZE_LABELS:
+            self.text_size_combo.addItem(label, value)
+        size_index = self.text_size_combo.findData(text_size)
+        if size_index < 0:
+            size_index = self.text_size_combo.findData(TEXT_SIZE_STANDARD)
+        self.text_size_combo.setCurrentIndex(size_index)
+        self.form.addRow("Text Size:", self.text_size_combo)
 
     def _add_tag_output_controls(self, settings: AppSettings) -> None:
         """Add a tag format independent of the key notation used in the library."""
@@ -87,6 +107,7 @@ class GeneralTab(FormSettingsTab):
     def apply_to(self, settings: AppSettings) -> None:
         """Copy theme, sorting, and tag output preferences into settings."""
         settings.theme = str(self.theme_combo.currentData())
+        settings.text_size = str(self.text_size_combo.currentData())
         settings.unsorted_rows_placement = str(self.unsorted_rows_placement_combo.currentData())
         settings.tag_key_notation = self.tag_key_notation_combo.currentData()
         settings.tag_key_leading_zero = self.tag_key_leading_zero_checkbox.isChecked()

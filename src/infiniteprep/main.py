@@ -205,7 +205,7 @@ def apply_saved_theme(app: QApplication) -> None:
     """Apply the stored theme and store the theme in effect when it cannot apply."""
     settings_manager = SettingsManager()
     settings = settings_manager.load()
-    result = switch_application_theme(app, settings.theme, NATIVE_THEME)
+    result = switch_application_theme(app, settings.theme, NATIVE_THEME, settings.text_size)
     if result.theme == settings.theme:
         return
     settings.theme = result.theme
