@@ -125,6 +125,22 @@ def test_spare_width_goes_two_to_one_to_the_named_columns(
     assert widths[WARNINGS_COLUMN] < widths[FILENAME_COLUMN]
 
 
+@pytest.mark.parametrize("width", WINDOW_WIDTHS)
+def test_columns_fill_the_viewport_without_overflow(
+    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager, width: int
+) -> None:
+    """The weighted shares replace the old widths, so the columns sum to the viewport width.
+
+    Each weighted share rounds down, which leaves at most one pixel per weighted column.
+    """
+    window = open_window(qtbot, tmp_path, width)
+    total = sum(section_widths(window.file_table))
+    viewport_width = window.file_table.viewport().width()
+    weighted_count = len(LARGE_SHARE_COLUMNS) + len(SMALL_SHARE_COLUMNS)
+
+    assert viewport_width - weighted_count <= total <= viewport_width
+
+
 def test_wider_window_gives_the_extra_width_to_the_named_columns(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
