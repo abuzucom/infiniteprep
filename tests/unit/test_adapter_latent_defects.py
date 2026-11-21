@@ -32,6 +32,7 @@ from infiniteprep.config.credentials import (
 )
 from infiniteprep.domain.enums import EntityType
 from infiniteprep.domain.ports import MetadataSearchQuery
+from tests.fixtures.call_recorder import CallRecorder
 from tests.fixtures.memory_repository import build_memory_repository
 
 DISCOGS_STUB_KEY = "synthetic-discogs-key"
@@ -117,6 +118,19 @@ def _raising(error: Exception) -> Any:
         raise copy.copy(error)
 
     return http_get_json
+
+
+def _responding(body: bytes) -> Any:
+    """Return a urlopen stand-in that answers every request with a fresh response of body.
+
+    Each response closes when its context exits. A fresh one per call keeps a
+    second request readable.
+    """
+
+    def open_response(*_args: object, **_kwargs: object) -> _Response:
+        return _Response(body)
+
+    return open_response
 
 
 # Candidate ids hold the file id.
@@ -413,7 +427,7 @@ def test_fetch_json_rejects_a_body_that_is_not_an_object(body: bytes) -> None:
             {},
             {},
             provider="Example",
-            open_url=lambda _request, timeout: _Response(body),
+            open_url=_responding(body),
         )
 
 
@@ -422,9 +436,7 @@ def test_musicbrainz_array_response_returns_no_candidates(
     body: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        musicbrainz_module.http_openers,
-        "open_without_redirects",
-        lambda *_a, **_k: _Response(body),
+        musicbrainz_module.http_openers, "open_without_redirects", _responding(body)
     )
     adapter = MusicBrainzAdapter(build_memory_repository(), min_interval_sec=0.0)
     assert adapter.search(QUERY, file_id=FIRST_FILE_ID) == []
@@ -512,19 +524,19 @@ def test_ollama_tags_url_follows_the_base_url(base_url: str, expected: str) -> N
 def test_ollama_malformed_tags_response_lists_no_models(
     body: bytes, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(ollama_module.urllib.request, "urlopen", lambda *_a, **_k: _Response(body))
+    monkeypatch.setattr(ollama_module.urllib.request, "urlopen", _responding(body))
     assert OllamaBootstrapService().list_installed_models() == []
 
 
 def test_ollama_lists_model_names(monkeypatch: pytest.MonkeyPatch) -> None:
     body = b'{"models": [{"name": "qwen2.5:3b"}, {"size": 1}]}'
-    monkeypatch.setattr(ollama_module.urllib.request, "urlopen", lambda *_a, **_k: _Response(body))
+    monkeypatch.setattr(ollama_module.urllib.request, "urlopen", _responding(body))
     assert OllamaBootstrapService().list_installed_models() == ["qwen2.5:3b"]
 
 
 def test_ollama_refuses_a_remote_plain_http_server(monkeypatch: pytest.MonkeyPatch) -> None:
-    opened: list[Any] = []
-    monkeypatch.setattr(ollama_module.urllib.request, "urlopen", lambda *a, **_k: opened.append(a))
+    opened = CallRecorder()
+    monkeypatch.setattr(ollama_module.urllib.request, "urlopen", opened)
     service = OllamaBootstrapService(base_url="http://203.0.113.5:11434")
     assert service.list_installed_models() == []
     assert opened == []
