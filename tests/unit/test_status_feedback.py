@@ -28,7 +28,9 @@ from infiniteprep.ui.main_window import (
 )
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
 from tests.fixtures.memory_settings import MemorySettingsManager
+from tests.fixtures.qt_dialogs import MESSAGE_ICON_INDEX, MESSAGE_TEXT_INDEX, MESSAGE_TITLE_INDEX
 from tests.fixtures.waveform_stub import keep_waveform_pool_idle
 
 STATUS_COLUMN: int = TABLE_COLUMNS.index("Review Status")
@@ -41,10 +43,13 @@ BATCH_TIMEOUT_MS: int = 10_000
 def announcements(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Record every announcement message instead of sending it to the platform."""
     spoken: list[str] = []
+
+    def record_announcement(event: Any) -> None:
+        """Keep the message text of one accessibility announcement."""
+        spoken.append(event.message())
+
     monkeypatch.setattr(
-        accessible_names_module.QAccessible,
-        "updateAccessibility",
-        lambda event: spoken.append(event.message()),
+        accessible_names_module.QAccessible, "updateAccessibility", record_announcement
     )
     return spoken
 
@@ -52,13 +57,9 @@ def announcements(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 @pytest.fixture
 def messages(monkeypatch: pytest.MonkeyPatch) -> list[tuple[QMessageBox.Icon, str, str]]:
     """Record main window messages instead of opening a blocking box."""
-    shown: list[tuple[QMessageBox.Icon, str, str]] = []
+    shown = CallRecorder(MESSAGE_ICON_INDEX, MESSAGE_TITLE_INDEX, MESSAGE_TEXT_INDEX)
     monkeypatch.setattr(main_window_module, "SettingsManager", MemorySettingsManager)
-    monkeypatch.setattr(
-        main_window_module,
-        "show_plain_message",
-        lambda _parent, icon, title, text: shown.append((icon, title, text)),
-    )
+    monkeypatch.setattr(main_window_module, "show_plain_message", shown)
     return shown
 
 
@@ -114,7 +115,8 @@ def test_toolbar_actions_explain_an_empty_library(
     qtbot: Any, tmp_path: Path, messages: list[tuple[QMessageBox.Icon, str, str]]
 ) -> None:
     """Every toolbar action on the visible files says why it did nothing on an empty table."""
-    calls: list[object] = []
+    # The recorder keeps the two export callback arguments as one pair.
+    calls = CallRecorder()
     window = build_window(
         qtbot,
         tmp_path,
@@ -122,7 +124,7 @@ def test_toolbar_actions_explain_an_empty_library(
         on_analyze_batch=calls.append,
         on_open_write_dialog=calls.append,
         on_transcode_batch=calls.append,
-        on_export_playlist=lambda ids, destination: calls.append((ids, destination)),
+        on_export_playlist=calls,
     )
     # Identify & Analyze and Preview & Apply Writes keep no button attribute, so their
     # handlers run directly. The other three run through their buttons.

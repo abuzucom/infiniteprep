@@ -5,7 +5,6 @@ from __future__ import annotations
 import sqlite3
 import threading
 from collections.abc import Iterator
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +16,6 @@ from infiniteprep.adapters.metadata_io.metadata_tag_adapter import (
     MetadataTagAdapter,
     TechnicalAndTagMetadata,
 )
-from infiniteprep.config.settings import AppSettings
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.services.import_service import (
@@ -35,27 +33,13 @@ from infiniteprep.ui.folder_import import (
 )
 from infiniteprep.ui.main_window import CLOSE_CANCEL, CLOSE_STAY, MainWindow
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.memory_settings import MemorySettingsManager
 
 TRACK_COUNT = 2
 GATE_TIMEOUT_SEC = 10.0
 SIGNAL_TIMEOUT_MS = 10_000
 TIMER_INTERVAL_MS = 10
 STUCK_TEST_TIMEOUT_MS = 100
-
-
-class MemorySettingsManager:
-    """Keep application settings in memory for window tests."""
-
-    def __init__(self) -> None:
-        self.settings = AppSettings()
-
-    def load(self) -> AppSettings:
-        """Return a separate settings value for each load."""
-        return replace(self.settings)
-
-    def save(self, settings: AppSettings) -> None:
-        """Retain a copy of the last saved settings value."""
-        self.settings = replace(settings)
 
 
 class GatedTagAdapter(MetadataTagAdapter):

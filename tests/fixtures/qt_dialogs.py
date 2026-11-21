@@ -9,6 +9,13 @@ from PySide6.QtWidgets import QMessageBox
 
 from infiniteprep.ui import action_handlers
 
+# Positional argument indexes of ask_plain_question(parent, title, text).
+QUESTION_TEXT_INDEX = 2
+# Positional argument indexes of show_plain_message(parent, icon, title, text).
+MESSAGE_ICON_INDEX = 1
+MESSAGE_TITLE_INDEX = 2
+MESSAGE_TEXT_INDEX = 3
+
 
 class DialogRecorder:
     """Replaces QMessageBox static calls, records each call, and returns a fixed answer."""

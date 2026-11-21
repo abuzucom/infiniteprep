@@ -15,9 +15,15 @@ from infiniteprep.domain.models import AnalysisResult
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.job_orchestrator import JobOrchestrator
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
 
 TRACK_NAMES = ("a_first.wav", "b_broken.wav", "c_last.wav")
 BROKEN_NAME = "b_broken.wav"
+
+
+def select_progress_name(done: int, total: int, path: str) -> tuple[int, int, str]:
+    """Return one progress report with the file name in place of the full path."""
+    return done, total, Path(path).name
 
 
 class AnalyzerDefectError(Exception):
@@ -90,10 +96,14 @@ def test_cancel_stops_before_the_next_file_and_keeps_finished_files(analyze_part
     repo, orchestrator, file_ids = analyze_parts
     reconciled: list[str] = []
 
+    def cancel_after_first_reconcile() -> bool:
+        """Ask to stop once one file has finished its post-processing."""
+        return bool(reconciled)
+
     summary = orchestrator.process_files_continuing(
         file_ids,
         post_process=reconciled.append,
-        should_cancel=lambda: bool(reconciled),
+        should_cancel=cancel_after_first_reconcile,
     )
 
     assert summary.completed_files == 1
@@ -107,14 +117,10 @@ def test_cancel_stops_before_the_next_file_and_keeps_finished_files(analyze_part
 def test_progress_and_post_process_cover_each_file(analyze_parts: Any) -> None:
     """progress names each file before it runs. post_process skips the failed file."""
     repo, orchestrator, file_ids = analyze_parts
-    seen: list[tuple[int, int, str]] = []
+    seen = CallRecorder(record=select_progress_name)
     reconciled: list[str] = []
 
-    orchestrator.process_files_continuing(
-        file_ids,
-        post_process=reconciled.append,
-        progress=lambda done, total, path: seen.append((done, total, Path(path).name)),
-    )
+    orchestrator.process_files_continuing(file_ids, post_process=reconciled.append, progress=seen)
 
     assert seen == [(1, 3, TRACK_NAMES[0]), (2, 3, TRACK_NAMES[1]), (3, 3, TRACK_NAMES[2])]
     assert reconciled == [file_ids[0], file_ids[2]]

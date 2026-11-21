@@ -138,11 +138,8 @@ def test_each_bundle_allowlist_names_the_theme_payload(
 def test_the_theme_packages_stay_pinned_to_the_approved_versions() -> None:
     """The theme engine and its template dependencies keep their approved pins."""
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    declared = {
-        name.split("==")[0]: name.split("==")[1]
-        for name in pyproject["project"]["dependencies"]
-        if "==" in name
-    }
+    pinned = (name.partition("==") for name in pyproject["project"]["dependencies"])
+    declared = {package: version for package, separator, version in pinned if separator}
     lock_text = (REPO_ROOT / "requirements-lock.txt").read_text(encoding="utf-8")
 
     for package, version in APPROVED_THEME_PACKAGES.items():

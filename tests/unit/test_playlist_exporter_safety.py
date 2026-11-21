@@ -42,7 +42,7 @@ def test_track_with_a_line_break_in_its_path_is_left_out_and_reported(tmp_path: 
     assert report.written_count == 1
     assert report.skipped_file_ids == [file_ids[1]]
     lines = destination.read_text(encoding="utf-8").splitlines()
-    assert lines.count("#EXTINF:1,Injected.wav") == 0
+    assert "#EXTINF:1,Injected.wav" not in lines
     assert sum(line.startswith("#EXTINF") for line in lines) == 1
     assert str((tmp_path / "crate" / "safe.wav").resolve()) in lines
 

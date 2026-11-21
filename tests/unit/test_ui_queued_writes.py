@@ -25,10 +25,12 @@ from infiniteprep.ui import write_plan_dialog as write_plan_dialog_module
 from infiniteprep.ui.main_window import MainWindow
 from infiniteprep.ui.write_plan_dialog import WritePlanDialog
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
 from tests.fixtures.memory_settings import MemorySettingsManager
 
 TRACK_COUNT = 2
 SIGNAL_TIMEOUT_MS = 10_000
+WARNING_TEXT_INDEX = 2
 
 WriteParts = tuple[MainWindow, Repository, WriteService, list[str]]
 
@@ -85,9 +87,9 @@ def test_dialog_keeps_plans_back_while_a_recovery_is_pending(
     """A pending recovery shows the warning, submits nothing, and leaves the dialog open."""
     _window, _repository, write_svc, file_ids = write_parts
     submitted: list[list[FileWritePlan]] = []
-    warnings: list[str] = []
-    # The real QMessageBox.warning blocks on a modal box, so a recorder replaces it.
-    recorder = SimpleNamespace(warning=lambda _parent, _title, text: warnings.append(text))
+    # QMessageBox.warning(parent, title, text) blocks on a modal box. A recorder replaces it.
+    warnings = CallRecorder(WARNING_TEXT_INDEX)
+    recorder = SimpleNamespace(warning=warnings)
     monkeypatch.setattr(write_plan_dialog_module, "QMessageBox", recorder)
     dialog = WritePlanDialog(write_svc, file_ids, submit_plans=submitted.append)
     qtbot.addWidget(dialog)

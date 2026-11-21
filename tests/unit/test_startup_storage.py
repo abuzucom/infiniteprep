@@ -24,16 +24,15 @@ from infiniteprep.storage_paths import (
     StorageRegistry,
 )
 from infiniteprep.ui.storage_prompt import STORAGE_ERROR_TITLE, build_storage_error_box
+from tests.fixtures.storage_fallback import redirect_user_dirs_by_name
 
 EXE_NAME = "InfinitePrep.exe"
-PER_USER_DIR_FUNCTIONS = ("user_data_dir", "user_config_dir", "user_cache_dir")
 
 
 @pytest.fixture
 def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Isolate the per-user folders and the registry, and record shown errors."""
-    for name in PER_USER_DIR_FUNCTIONS:
-        monkeypatch.setattr(storage_paths.platformdirs, name, lambda *_, n=name: str(tmp_path / n))
+    redirect_user_dirs_by_name(tmp_path, monkeypatch)
     registry = StorageRegistry()
     monkeypatch.setattr(storage_paths, "STORAGE_REGISTRY", registry)
     app_folder = tmp_path / "InfinitePrep"

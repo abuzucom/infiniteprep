@@ -26,20 +26,33 @@ OGG_CRC_SLICE = slice(22, 26)
 ADTS_HEADER_SIZE = 7
 
 
+def _frequency_bins(signal: np.ndarray, sample_rate: int) -> np.ndarray:
+    """Return the rfft bin frequencies of signal. A sample rate below one raises ValueError."""
+    if sample_rate <= 0:
+        raise ValueError(f"sample_rate must be positive, got {sample_rate}. Pass the signal rate.")
+    return np.fft.rfftfreq(len(signal), 1.0 / sample_rate)
+
+
 def _spectrum_peaks(signal: np.ndarray, sample_rate: int, count: int) -> list[float]:
     """Return the count strongest frequencies of signal, in ascending order."""
     magnitudes = np.abs(np.fft.rfft(signal))
-    freqs = np.fft.rfftfreq(len(signal), 1.0 / sample_rate)
+    freqs = _frequency_bins(signal, sample_rate)
     strongest = np.argsort(magnitudes)[-count:]
     return sorted(float(freqs[index]) for index in strongest)
 
 
 def _band_energy_fraction(signal: np.ndarray, sample_rate: int, low: float, high: float) -> float:
-    """Return the share of spectral energy between low and high hertz."""
+    """Return the share of spectral energy between low and high hertz.
+
+    A silent signal has no energy to share and raises ValueError.
+    """
     power = np.abs(np.fft.rfft(signal)) ** 2
-    freqs = np.fft.rfftfreq(len(signal), 1.0 / sample_rate)
+    freqs = _frequency_bins(signal, sample_rate)
+    total = power.sum()
+    if total <= 0:
+        raise ValueError("The signal is silent. Generate a signal with energy before measuring it.")
     inside = power[(freqs >= low) & (freqs <= high)].sum()
-    return float(inside / power.sum())
+    return float(inside / total)
 
 
 def _ogg_crc(page: bytes) -> int:

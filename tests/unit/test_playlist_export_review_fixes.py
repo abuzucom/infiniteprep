@@ -17,6 +17,10 @@ from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.action_handlers import build_skipped_tracks_text
 from infiniteprep.ui.main_window import MainWindow
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
+
+# Positional argument index of on_export_playlist(file_ids, destination).
+EXPORT_DESTINATION_INDEX = 1
 
 
 def import_tracks(tmp_path: Path, count: int) -> tuple[Repository, ImportService, list[str]]:
@@ -97,12 +101,12 @@ def test_export_button_appends_the_suffix_only_when_missing(
 ) -> None:
     """An uppercase .M3U8 stays, and any other suffix keeps its name with .m3u8 appended."""
     repo, importer, _ = import_tracks(tmp_path, 1)
-    destinations: list[Path] = []
+    destinations = CallRecorder(EXPORT_DESTINATION_INDEX)
     window = MainWindow(
         repository=repo,
         import_service=importer,
         review_service=ReviewService(repo),
-        on_export_playlist=lambda _fids, dest: destinations.append(dest),
+        on_export_playlist=destinations,
     )
     qtbot.addWidget(window)
     chosen = str(tmp_path / chosen_name)

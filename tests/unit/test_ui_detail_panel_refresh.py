@@ -141,12 +141,15 @@ def _rendered_tooltip(tooltip: str) -> str:
 def _other_tag_cells(panel: DetailPanel) -> list[tuple[str, str, str]]:
     """Return (key, cell text, rendered tooltip text) for each Other Tags row."""
     table = panel.other_tags_table
-    cells = []
-    for row in range(table.rowCount()):
-        value_item = table.item(row, COLUMN_OTHER_VALUE)
-        key_text = table.item(row, COLUMN_OTHER_KEY).text()
-        cells.append((key_text, value_item.text(), _rendered_tooltip(value_item.toolTip())))
-    return cells
+    value_items = [table.item(row, COLUMN_OTHER_VALUE) for row in range(table.rowCount())]
+    return [
+        (
+            table.item(row, COLUMN_OTHER_KEY).text(),
+            value_item.text(),
+            _rendered_tooltip(value_item.toolTip()),
+        )
+        for row, value_item in enumerate(value_items)
+    ]
 
 
 def test_other_tags_show_sorted_without_internal_keys(panel_parts: Any) -> None:

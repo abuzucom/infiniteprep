@@ -71,6 +71,7 @@ def test_band_dominance(
 
 
 def test_cache_content_and_eviction(tmp_path: Path) -> None:
+    """A cache hit keeps its archive, a new tone adds one, and a zero budget clears both."""
     source = write_tone(tmp_path / "tone.wav", 60)
     cache = tmp_path / "cache"
     first = analyze_waveform(source, cache)
@@ -90,6 +91,7 @@ def test_cache_content_and_eviction(tmp_path: Path) -> None:
 
 
 def test_overview_preserves_peaks(analyzed_tones: dict[int, SpectrumWaveform]) -> None:
+    """A downsampled overview keeps the peak and the duration and rejects zero columns."""
     waveform = analyzed_tones[MID_TONE_HZ]
     overview = downsample_waveform(waveform, 17)
     assert len(overview.overall) == 17
@@ -100,6 +102,7 @@ def test_overview_preserves_peaks(analyzed_tones: dict[int, SpectrumWaveform]) -
 
 
 def test_silence_and_antiphase(tmp_path: Path) -> None:
+    """Antiphase stereo keeps its low band level, and silence gives an all-zero overview."""
     source = write_tone(tmp_path / "tone.wav", 60)
     samples, rate = sf.read(source)
     sf.write(source, np.column_stack((samples, -samples)), rate, subtype="FLOAT")

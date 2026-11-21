@@ -22,16 +22,12 @@ from infiniteprep.db.migrations.backup import (
 from infiniteprep.private_files import STAGING_DIR_PREFIX, private_staging_dir
 from infiniteprep.startup_storage import DATABASE_FILE_NAME, OpenedStorage, open_storage
 from infiniteprep.storage_paths import FallbackAnswer, StorageRegistry
+from tests.fixtures.storage_fallback import redirect_user_dirs_by_name
 
 OWNER_ONLY_DIR: Final[int] = 0o700
 WORLD_READABLE_FILE: Final[int] = 0o644
 OUTSIDE_TEXT: Final[bytes] = b"a file outside the app folder\n"
 EXE_NAME: Final[str] = "InfinitePrep.exe"
-PER_USER_DIR_FUNCTIONS: Final[tuple[str, ...]] = (
-    "user_data_dir",
-    "user_config_dir",
-    "user_cache_dir",
-)
 
 # Windows ignores POSIX mode bits, and a symbolic link there needs a privilege.
 posix_only = pytest.mark.skipif(os.name == "nt", reason="POSIX modes and links only.")
@@ -150,8 +146,7 @@ def test_restore_copy_is_staged_inside_an_owner_only_folder(
 @pytest.fixture
 def startup_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     """Isolate the per-user folders and the registry, and record shown errors."""
-    for name in PER_USER_DIR_FUNCTIONS:
-        monkeypatch.setattr(storage_paths.platformdirs, name, lambda *_, n=name: str(tmp_path / n))
+    redirect_user_dirs_by_name(tmp_path, monkeypatch)
     monkeypatch.setattr(storage_paths, "STORAGE_REGISTRY", StorageRegistry())
     app_folder = tmp_path / "InfinitePrep"
     app_folder.mkdir()

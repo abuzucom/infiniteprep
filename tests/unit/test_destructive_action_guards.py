@@ -27,6 +27,8 @@ from infiniteprep.ui.settings.storage import StorageTab
 from infiniteprep.ui.usb_preflight_dialog import UsbPreflightDialog
 from infiniteprep.ui.usb_recovery_dialog import UsbRecoveryDialog
 from infiniteprep.ui.write_plan_dialog import NO_SAFE_PLANS_TEXT, WritePlanDialog
+from tests.fixtures.call_recorder import CallRecorder
+from tests.fixtures.qt_dialogs import MESSAGE_ICON_INDEX, MESSAGE_TEXT_INDEX, QUESTION_TEXT_INDEX
 from tests.unit.usb_preflight_support import (
     build_drive,
     build_inspection,
@@ -118,18 +120,11 @@ def test_declined_journal_cleanup_keeps_every_entry(
     qtbot: Any, journal_store: UsbRecoveryJournalStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """No to the cleanup question removes nothing and reports nothing."""
-    questions: list[str] = []
-    messages: list[str] = []
-    monkeypatch.setattr(
-        storage_module,
-        "ask_plain_question",
-        lambda _parent, _title, text: questions.append(text) or False,
-    )
-    monkeypatch.setattr(
-        storage_module,
-        "show_plain_message",
-        lambda _parent, _icon, _title, text: messages.append(text),
-    )
+    # The question recorder keeps each question text and answers No.
+    questions = CallRecorder(QUESTION_TEXT_INDEX, reply=False)
+    messages = CallRecorder(MESSAGE_TEXT_INDEX)
+    monkeypatch.setattr(storage_module, "ask_plain_question", questions)
+    monkeypatch.setattr(storage_module, "show_plain_message", messages)
     tab = StorageTab(AppSettings(), journal_store=journal_store)
     qtbot.addWidget(tab)
 
@@ -144,13 +139,9 @@ def test_confirmed_journal_cleanup_reports_the_removed_count(
     qtbot: Any, journal_store: UsbRecoveryJournalStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Yes to the cleanup question removes the entries and reports the count in a message."""
-    messages: list[tuple[QMessageBox.Icon, str]] = []
-    monkeypatch.setattr(storage_module, "ask_plain_question", lambda _parent, _title, _text: True)
-    monkeypatch.setattr(
-        storage_module,
-        "show_plain_message",
-        lambda _parent, icon, _title, text: messages.append((icon, text)),
-    )
+    messages = CallRecorder(MESSAGE_ICON_INDEX, MESSAGE_TEXT_INDEX)
+    monkeypatch.setattr(storage_module, "ask_plain_question", CallRecorder(reply=True))
+    monkeypatch.setattr(storage_module, "show_plain_message", messages)
     tab = StorageTab(AppSettings(), journal_store=journal_store)
     qtbot.addWidget(tab)
 

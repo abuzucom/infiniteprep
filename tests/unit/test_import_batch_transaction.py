@@ -17,6 +17,7 @@ from infiniteprep.domain.enums import GroupingBasis, SourceType
 from infiniteprep.domain.models import SourceGroup
 from infiniteprep.services.import_service import ImportOutcome, ImportService
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
 
 TRACK_COUNT = 3
 SHORT_DURATION_SEC = 0.5
@@ -56,11 +57,9 @@ def test_batch_imports_every_file_and_reports_progress(
 ) -> None:
     """Each file gets one progress call before it imports, and the batch commits at the end."""
     tracks = make_tracks(tmp_path / "crate")
-    calls: list[tuple[int, int, str]] = []
+    calls = CallRecorder()
 
-    report = ImportService(repository).import_paths(
-        [tmp_path / "crate"], progress=lambda done, total, path: calls.append((done, total, path))
-    )
+    report = ImportService(repository).import_paths([tmp_path / "crate"], progress=calls)
 
     assert report.outcome is ImportOutcome.COMMITTED
     assert report.scanned_count == TRACK_COUNT
@@ -94,11 +93,13 @@ def test_other_connections_see_nothing_until_the_batch_commits(
 def test_cancel_rolls_back_the_whole_batch(repository: Repository, tmp_path: Path) -> None:
     """Cancel after the first file stops before the next file and keeps nothing."""
     make_tracks(tmp_path / "crate")
-    checks: list[int] = []
+    check_count = 0
 
     def cancel_after_first_file() -> bool:
-        checks.append(1)
-        return len(checks) > 1
+        """Answer no on the first check and yes on every later one."""
+        nonlocal check_count
+        check_count += 1
+        return check_count > 1
 
     report = ImportService(repository).import_paths(
         [tmp_path / "crate"], should_cancel=cancel_after_first_file
@@ -190,11 +191,13 @@ def test_an_unexpected_error_rolls_back_and_propagates(
 ) -> None:
     """An error outside the per-file scope rolls the batch back and reaches the caller."""
     make_tracks(tmp_path / "crate")
-    checks: list[int] = []
+    check_count = 0
 
     def fail_on_second_check() -> bool:
-        checks.append(1)
-        if len(checks) > 1:
+        """Answer no on the first check and raise on the second."""
+        nonlocal check_count
+        check_count += 1
+        if check_count > 1:
             raise RuntimeError("cancel check failed")
         return False
 

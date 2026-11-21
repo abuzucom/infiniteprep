@@ -17,7 +17,7 @@ from infiniteprep.services.usb.manifest import (
     write_in_progress_manifest,
 )
 from infiniteprep.services.usb.recovery import JOURNAL_FILE_NAME, UsbRecoveryJournalStore
-from tests.unit.test_usb_manifest_and_recovery import _build_journal_entry, _build_manifest
+from tests.unit.usb_manifest_support import build_journal_entry, build_manifest
 
 # Far past the interpreter recursion limit, so the JSON parser cannot descend this deep.
 NESTING_DEPTH = 200_000
@@ -52,7 +52,7 @@ def marker_path(mount_root: Path) -> Path:
 
 def marker_payload(mount_root: Path) -> Any:
     """Write a valid in-progress marker and return its parsed JSON."""
-    manifest = _build_manifest(state=MANIFEST_STATE_IN_PROGRESS, completed_at_utc=None)
+    manifest = build_manifest(state=MANIFEST_STATE_IN_PROGRESS, completed_at_utc=None)
     write_in_progress_manifest(mount_root, manifest)
     return json.loads(marker_path(mount_root).read_text(encoding="utf-8"))
 
@@ -60,7 +60,7 @@ def marker_payload(mount_root: Path) -> Any:
 def journal_payload(tmp_path: Path) -> Any:
     """Save a valid one-entry recovery journal and return its parsed JSON."""
     store = UsbRecoveryJournalStore(tmp_path / JOURNAL_FILE_NAME)
-    store.save_entries([_build_journal_entry(str(tmp_path / "stick"))])
+    store.save_entries([build_journal_entry(str(tmp_path / "stick"))])
     return json.loads((tmp_path / JOURNAL_FILE_NAME).read_text(encoding="utf-8"))
 
 
@@ -160,8 +160,8 @@ def test_journal_accepts_posix_and_windows_mount_points(tmp_path: Path) -> None:
     store = UsbRecoveryJournalStore(tmp_path / JOURNAL_FILE_NAME)
     store.save_entries(
         [
-            _build_journal_entry("/media/dj/STICK"),
-            _build_journal_entry("D:\\USB", export_id="exp-002"),
+            build_journal_entry("/media/dj/STICK"),
+            build_journal_entry("D:\\USB", export_id="exp-002"),
         ]
     )
 

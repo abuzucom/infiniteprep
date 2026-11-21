@@ -2,33 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from typing import Any
 
 import pytest
 
-from infiniteprep.config.settings import AppSettings
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui import main_window as main_window_module
 from infiniteprep.ui.main_window import MainWindow
-
-
-class MemorySettingsManager:
-    """Keep application settings in memory for window lifecycle tests."""
-
-    def __init__(self) -> None:
-        self.settings = AppSettings()
-
-    def load(self) -> AppSettings:
-        """Return a separate settings value for a new settings operation."""
-        return replace(self.settings)
-
-    def save(self, settings: AppSettings) -> None:
-        """Retain a copy of the last settings value."""
-        self.settings = replace(settings)
+from tests.fixtures.memory_settings import MemorySettingsManager
 
 
 def test_file_and_detail_column_widths_persist_between_windows(

@@ -33,7 +33,11 @@ from infiniteprep.ui.action_handlers import run_transcode_with_confirmation
 from infiniteprep.ui.batch_queue import format_batch_result
 from infiniteprep.ui.main_window import MainWindow
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
 from tests.fixtures.qt_dialogs import DialogRecorder
+
+# Positional argument index of progress(done, total, path).
+PROGRESS_DONE_INDEX = 0
 
 SMALL_LIBRARY = 2
 LARGE_LIBRARY = 6
@@ -257,15 +261,19 @@ def test_transcode_stops_before_the_next_file_on_cancel(tmp_path: Path) -> None:
     """A cancel request ends the batch before the next file and keeps the finished one."""
     repo, _importer, file_ids = build_library(tmp_path, SMALL_LIBRARY)
     transcoder = SafeTranscoderAdapter(repo, backup_dir=tmp_path / "backups")
-    seen: list[int] = []
+    seen = CallRecorder(PROGRESS_DONE_INDEX)
+
+    def cancel_after_first_file() -> bool:
+        """Ask to stop once one file has reported progress."""
+        return bool(seen)
 
     summary = transcode_files(
         transcoder,
         file_ids,
         preset=TranscodePreset.XDJ_LOSSLESS_AUTO,
         mode=TranscodeMode.SIBLING_EXPORT,
-        should_cancel=lambda: len(seen) >= 1,
-        progress=lambda done, _total, _path: seen.append(done),
+        should_cancel=cancel_after_first_file,
+        progress=seen,
     )
 
     assert summary.stopped_early is True

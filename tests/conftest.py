@@ -110,3 +110,16 @@ def isolate_storage_registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     )
     monkeypatch.setattr(storage_paths, "STORAGE_REGISTRY", registry)
     yield
+
+
+@pytest.fixture
+def restore_keyring() -> Iterator[None]:
+    """Put back the original keyring backend after the test.
+
+    The keyring package loads only when a test requests this fixture. The
+    lint-and-style job runs without keyring installed.
+    """
+    keyring = importlib.import_module("keyring")
+    original = keyring.get_keyring()
+    yield
+    keyring.set_keyring(original)

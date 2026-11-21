@@ -22,6 +22,8 @@ from infiniteprep.services.write_service import WriteService
 from infiniteprep.ui import recovery_dialog as recovery_module
 from infiniteprep.ui.recovery_dialog import COLUMN_KEEP, COLUMN_RESTORE, RecoveryDialog
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
+from tests.fixtures.qt_dialogs import MESSAGE_ICON_INDEX, MESSAGE_TEXT_INDEX, QUESTION_TEXT_INDEX
 
 CORRUPT_BYTES = b"half-written"
 CORRUPT_HASH = hashlib.sha256(CORRUPT_BYTES).hexdigest()
@@ -79,7 +81,7 @@ def test_keep_button_marks_the_write_finished(
     """Clicking Mark as finished and answering Yes keeps the file and completes the record."""
     repo, write_svc, source, _ = interrupted
     # The real Yes/No box blocks on exec, so a recorder answers Yes.
-    monkeypatch.setattr(recovery_module, "ask_plain_question", lambda *_args: True)
+    monkeypatch.setattr(recovery_module, "ask_plain_question", CallRecorder(reply=True))
     dialog = RecoveryDialog(write_svc)
     qtbot.addWidget(dialog)
     operation_id = dialog.records[0].operation_id
@@ -98,12 +100,9 @@ def test_declining_mark_as_finished_keeps_the_write_pending(
 ) -> None:
     """No to the keep prompt leaves the interrupted write listed and unresolved."""
     repo, write_svc, _source, _hash = interrupted
-    questions: list[str] = []
-    monkeypatch.setattr(
-        recovery_module,
-        "ask_plain_question",
-        lambda _parent, _title, text: questions.append(text) or False,
-    )
+    # The question recorder keeps each question text and answers No.
+    questions = CallRecorder(QUESTION_TEXT_INDEX, reply=False)
+    monkeypatch.setattr(recovery_module, "ask_plain_question", questions)
     dialog = RecoveryDialog(write_svc)
     qtbot.addWidget(dialog)
     operation_id = dialog.records[0].operation_id
@@ -123,14 +122,8 @@ def test_a_failed_restore_warns_and_keeps_the_row(
 ) -> None:
     """A tampered backup shows a plain-text warning, and the write stays listed."""
     repo, write_svc, _, _ = interrupted
-    warnings: list[str] = []
-    monkeypatch.setattr(
-        recovery_module,
-        "show_plain_message",
-        lambda _parent, icon, _title, text: (
-            warnings.append(text) if icon == QMessageBox.Icon.Warning else None
-        ),
-    )
+    messages = CallRecorder(MESSAGE_ICON_INDEX, MESSAGE_TEXT_INDEX)
+    monkeypatch.setattr(recovery_module, "show_plain_message", messages)
     dialog = RecoveryDialog(write_svc)
     qtbot.addWidget(dialog)
     record = repo.get_change_record(dialog.records[0].operation_id)
@@ -139,6 +132,7 @@ def test_a_failed_restore_warns_and_keeps_the_row(
 
     dialog.table.cellWidget(0, COLUMN_RESTORE).click()
 
+    warnings = [text for icon, text in messages if icon == QMessageBox.Icon.Warning]
     assert len(warnings) == 1
     assert warnings[0].startswith("Restore failed")
     assert dialog.table.rowCount() == 1
