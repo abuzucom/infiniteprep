@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-from infiniteprep import storage_paths
 from infiniteprep.storage_paths import (
     APPIMAGE_DATA_DIR_NAME,
-    FALLBACK_LIST_NAME,
     PORTABLE_DATA_DIR_NAME,
     PORTABLE_MARKER_NAME,
     AppImageLaunch,
@@ -19,35 +16,21 @@ from infiniteprep.storage_paths import (
     appimage_launch_from_environment,
     resolve_locations,
 )
+from tests.fixtures.storage_fallback import (
+    RecordingConfirm,
+    build_never_asked_confirm,
+    read_fallback_list,
+    redirect_user_dirs,
+)
 
 APPIMAGE_NAME = "InfinitePrep-0.39.0-x86_64.AppImage"
 EXE_NAME = "InfinitePrep"
 
 
-class RecordingConfirm:
-    """Return a fixed answer and record each folder it was asked about."""
-
-    def __init__(self, answer: FallbackAnswer) -> None:
-        self.answer = answer
-        self.asked: list[Path] = []
-
-    def __call__(self, folder: Path) -> FallbackAnswer:
-        self.asked.append(folder)
-        return self.answer
-
-
 @pytest.fixture
 def user_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point the per-user folders at a temp tree and return its root."""
-    root = tmp_path / "user"
-    monkeypatch.setattr(storage_paths.platformdirs, "user_data_dir", lambda *_: str(root / "data"))
-    monkeypatch.setattr(
-        storage_paths.platformdirs, "user_config_dir", lambda *_: str(root / "config")
-    )
-    monkeypatch.setattr(
-        storage_paths.platformdirs, "user_cache_dir", lambda *_: str(root / "cache")
-    )
-    return root
+    return redirect_user_dirs(tmp_path, monkeypatch)
 
 
 @pytest.fixture
@@ -78,20 +61,9 @@ def _launch(downloads: Path, appdir: Path) -> AppImageLaunch:
     return AppImageLaunch(image=downloads / APPIMAGE_NAME, appdir=appdir)
 
 
-def _fallback_list(user_dirs: Path) -> list[str]:
-    """Return the remembered folders, or an empty list when the file is absent."""
-    path = user_dirs / "config" / FALLBACK_LIST_NAME
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
-
-
 def _block_data_folder(downloads: Path) -> None:
     """Make the data folder impossible to create by putting a file in its place."""
     (downloads / APPIMAGE_DATA_DIR_NAME).write_bytes(b"not a folder")
-
-
-def _never_asked() -> RecordingConfirm:
-    """Return a prompt that would quit, so a test fails loudly if it is shown."""
-    return RecordingConfirm(FallbackAnswer(use_per_user=False, remember=False))
 
 
 def test_environment_needs_both_values() -> None:
@@ -110,7 +82,7 @@ def test_appimage_keeps_database_and_settings_beside_the_file(
     user_dirs: Path, downloads: Path, appdir: Path
 ) -> None:
     """The folder beside the .AppImage holds the database and settings only (D281, D282)."""
-    confirm = _never_asked()
+    confirm = build_never_asked_confirm()
 
     locations = resolve_locations(
         _executable(appdir),
@@ -137,7 +109,7 @@ def test_source_run_ignores_the_appimage(user_dirs: Path, downloads: Path, appdi
     locations = resolve_locations(
         _executable(appdir),
         frozen=False,
-        confirm_fallback=_never_asked(),
+        confirm_fallback=build_never_asked_confirm(),
         appimage=_launch(downloads, appdir),
     )
 
@@ -178,7 +150,7 @@ def test_invalid_appimage_values_are_ignored(
     locations = resolve_locations(
         _executable(appdir),
         frozen=True,
-        confirm_fallback=_never_asked(),
+        confirm_fallback=build_never_asked_confirm(),
         appimage=launch_factory(downloads, appdir),
     )
 
@@ -201,7 +173,7 @@ def test_inherited_appimage_values_are_ignored(
     locations = resolve_locations(
         tarball / EXE_NAME,
         frozen=True,
-        confirm_fallback=_never_asked(),
+        confirm_fallback=build_never_asked_confirm(),
         appimage=_launch(downloads, appdir),
     )
 
@@ -222,7 +194,7 @@ def test_tarball_marker_still_works_with_inherited_values(
     locations = resolve_locations(
         tarball / EXE_NAME,
         frozen=True,
-        confirm_fallback=_never_asked(),
+        confirm_fallback=build_never_asked_confirm(),
         appimage=_launch(downloads, appdir),
     )
 
@@ -238,7 +210,7 @@ def test_appimage_wins_over_a_marker(user_dirs: Path, downloads: Path, appdir: P
     locations = resolve_locations(
         _executable(appdir),
         frozen=True,
-        confirm_fallback=_never_asked(),
+        confirm_fallback=build_never_asked_confirm(),
         appimage=_launch(downloads, appdir),
     )
 
@@ -265,7 +237,7 @@ def test_unwritable_folder_with_remember_saves_the_choice(
     assert locations.mode is StorageMode.PER_USER_FALLBACK
     assert locations.data_dir == user_dirs / "data"
     assert confirm.asked == [downloads.resolve()]
-    assert _fallback_list(user_dirs) == [str(downloads.resolve())]
+    assert read_fallback_list(user_dirs) == [str(downloads.resolve())]
 
 
 def test_unwritable_folder_quit_returns_none(
@@ -283,7 +255,7 @@ def test_unwritable_folder_quit_returns_none(
     )
 
     assert locations is None
-    assert _fallback_list(user_dirs) == []
+    assert read_fallback_list(user_dirs) == []
 
 
 def test_unwritable_folder_without_remember_asks_again(
@@ -305,7 +277,7 @@ def test_unwritable_folder_without_remember_asks_again(
     assert second is not None
     assert first.mode is StorageMode.PER_USER_FALLBACK
     assert len(confirm.asked) == 2
-    assert _fallback_list(user_dirs) == []
+    assert read_fallback_list(user_dirs) == []
 
 
 def test_writable_again_forgets_the_remembered_choice(
@@ -321,9 +293,12 @@ def test_writable_again_forgets_the_remembered_choice(
     (downloads / APPIMAGE_DATA_DIR_NAME).unlink()
 
     locations = resolve_locations(
-        _executable(appdir), frozen=True, confirm_fallback=_never_asked(), appimage=launch
+        _executable(appdir),
+        frozen=True,
+        confirm_fallback=build_never_asked_confirm(),
+        appimage=launch,
     )
 
     assert locations is not None
     assert locations.mode is StorageMode.PORTABLE
-    assert _fallback_list(user_dirs) == []
+    assert read_fallback_list(user_dirs) == []

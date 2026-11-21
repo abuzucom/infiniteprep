@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-from infiniteprep import storage_paths
 from infiniteprep.storage_paths import (
-    FALLBACK_LIST_NAME,
     MACOS_DATA_DIR_NAME,
     PORTABLE_DATA_DIR_NAME,
     PORTABLE_MARKER_NAME,
@@ -17,35 +14,21 @@ from infiniteprep.storage_paths import (
     StorageMode,
     resolve_locations,
 )
+from tests.fixtures.storage_fallback import (
+    RecordingConfirm,
+    build_never_asked_confirm,
+    read_fallback_list,
+    redirect_user_dirs,
+)
 
 APP_NAME = "InfinitePrep.app"
 EXE_NAME = "InfinitePrep"
 
 
-class RecordingConfirm:
-    """Return a fixed answer and record each folder it was asked about."""
-
-    def __init__(self, answer: FallbackAnswer) -> None:
-        self.answer = answer
-        self.asked: list[Path] = []
-
-    def __call__(self, folder: Path) -> FallbackAnswer:
-        self.asked.append(folder)
-        return self.answer
-
-
 @pytest.fixture
 def user_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point the per-user folders at a temp tree and return its root."""
-    root = tmp_path / "user"
-    monkeypatch.setattr(storage_paths.platformdirs, "user_data_dir", lambda *_: str(root / "data"))
-    monkeypatch.setattr(
-        storage_paths.platformdirs, "user_config_dir", lambda *_: str(root / "config")
-    )
-    monkeypatch.setattr(
-        storage_paths.platformdirs, "user_cache_dir", lambda *_: str(root / "cache")
-    )
-    return root
+    return redirect_user_dirs(tmp_path, monkeypatch)
 
 
 @pytest.fixture
@@ -73,21 +56,10 @@ def _block_data_folder(folder: Path) -> None:
     (folder / MACOS_DATA_DIR_NAME).write_bytes(b"not a folder")
 
 
-def _fallback_list(user_dirs: Path) -> list[str]:
-    """Return the remembered folders, or an empty list when the file is absent."""
-    path = user_dirs / "config" / FALLBACK_LIST_NAME
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
-
-
-def _never_asked() -> RecordingConfirm:
-    """Return a prompt that would quit, so a test fails loudly if it is shown."""
-    return RecordingConfirm(FallbackAnswer(use_per_user=False, remember=False))
-
-
 def test_marker_next_to_the_app_keeps_data_beside_it(user_dirs: Path, applications: Path) -> None:
     """The database and settings go in InfinitePrep-Data next to the .app (D289, D291)."""
     _add_marker(applications)
-    confirm = _never_asked()
+    confirm = build_never_asked_confirm()
 
     locations = resolve_locations(_executable(applications), frozen=True, confirm_fallback=confirm)
 
@@ -107,7 +79,7 @@ def test_marker_next_to_the_app_keeps_data_beside_it(user_dirs: Path, applicatio
 def test_no_marker_stays_per_user(user_dirs: Path, applications: Path) -> None:
     """Without the marker the app uses the per-user folders (D289)."""
     locations = resolve_locations(
-        _executable(applications), frozen=True, confirm_fallback=_never_asked()
+        _executable(applications), frozen=True, confirm_fallback=build_never_asked_confirm()
     )
 
     assert locations is not None
@@ -121,7 +93,7 @@ def test_source_run_ignores_the_marker(user_dirs: Path, applications: Path) -> N
     _add_marker(applications)
 
     locations = resolve_locations(
-        _executable(applications), frozen=False, confirm_fallback=_never_asked()
+        _executable(applications), frozen=False, confirm_fallback=build_never_asked_confirm()
     )
 
     assert locations is not None
@@ -135,7 +107,7 @@ def test_marker_inside_the_bundle_is_ignored(user_dirs: Path, applications: Path
     (macos_dir / PORTABLE_MARKER_NAME).write_bytes(b"")
 
     locations = resolve_locations(
-        _executable(applications), frozen=True, confirm_fallback=_never_asked()
+        _executable(applications), frozen=True, confirm_fallback=build_never_asked_confirm()
     )
 
     assert locations is not None
@@ -149,7 +121,7 @@ def test_translocated_copy_stays_per_user(user_dirs: Path, tmp_path: Path) -> No
     macos_dir = translocated / APP_NAME / "Contents" / "MacOS"
     macos_dir.mkdir(parents=True)
     (macos_dir / EXE_NAME).write_bytes(b"")
-    confirm = _never_asked()
+    confirm = build_never_asked_confirm()
 
     locations = resolve_locations(macos_dir / EXE_NAME, frozen=True, confirm_fallback=confirm)
 
@@ -165,7 +137,9 @@ def test_bundle_lookalike_uses_the_executable_folder(user_dirs: Path, tmp_path: 
     (folder / EXE_NAME).write_bytes(b"")
     (folder / PORTABLE_MARKER_NAME).write_bytes(b"")
 
-    locations = resolve_locations(folder / EXE_NAME, frozen=True, confirm_fallback=_never_asked())
+    locations = resolve_locations(
+        folder / EXE_NAME, frozen=True, confirm_fallback=build_never_asked_confirm()
+    )
 
     assert locations is not None
     assert locations.mode is StorageMode.PORTABLE
@@ -186,7 +160,7 @@ def test_unwritable_folder_with_remember_saves_the_choice(
     assert locations.mode is StorageMode.PER_USER_FALLBACK
     assert locations.data_dir == user_dirs / "data"
     assert confirm.asked == [applications.resolve()]
-    assert _fallback_list(user_dirs) == [str(applications.resolve())]
+    assert read_fallback_list(user_dirs) == [str(applications.resolve())]
 
 
 def test_unwritable_folder_without_remember_asks_again(user_dirs: Path, applications: Path) -> None:
@@ -202,7 +176,7 @@ def test_unwritable_folder_without_remember_asks_again(user_dirs: Path, applicat
     assert second is not None
     assert first.mode is StorageMode.PER_USER_FALLBACK
     assert len(confirm.asked) == 2
-    assert _fallback_list(user_dirs) == []
+    assert read_fallback_list(user_dirs) == []
 
 
 def test_unwritable_folder_quit_returns_none(user_dirs: Path, applications: Path) -> None:
@@ -214,7 +188,7 @@ def test_unwritable_folder_quit_returns_none(user_dirs: Path, applications: Path
     locations = resolve_locations(_executable(applications), frozen=True, confirm_fallback=confirm)
 
     assert locations is None
-    assert _fallback_list(user_dirs) == []
+    assert read_fallback_list(user_dirs) == []
 
 
 def test_writable_again_forgets_the_remembered_choice(user_dirs: Path, applications: Path) -> None:
@@ -226,9 +200,9 @@ def test_writable_again_forgets_the_remembered_choice(user_dirs: Path, applicati
     (applications / MACOS_DATA_DIR_NAME).unlink()
 
     locations = resolve_locations(
-        _executable(applications), frozen=True, confirm_fallback=_never_asked()
+        _executable(applications), frozen=True, confirm_fallback=build_never_asked_confirm()
     )
 
     assert locations is not None
     assert locations.mode is StorageMode.PORTABLE
-    assert _fallback_list(user_dirs) == []
+    assert read_fallback_list(user_dirs) == []

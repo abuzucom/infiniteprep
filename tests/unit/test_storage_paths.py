@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-from infiniteprep import storage_paths
 from infiniteprep.storage_paths import (
     FALLBACK_LIST_NAME,
     PORTABLE_DATA_DIR_NAME,
@@ -18,34 +16,19 @@ from infiniteprep.storage_paths import (
     StorageRegistry,
     resolve_locations,
 )
+from tests.fixtures.storage_fallback import (
+    RecordingConfirm,
+    read_fallback_list,
+    redirect_user_dirs,
+)
 
 EXE_NAME = "InfinitePrep.exe"
-
-
-class RecordingConfirm:
-    """Return a fixed answer and record each folder it was asked about."""
-
-    def __init__(self, answer: FallbackAnswer) -> None:
-        self.answer = answer
-        self.asked: list[Path] = []
-
-    def __call__(self, folder: Path) -> FallbackAnswer:
-        self.asked.append(folder)
-        return self.answer
 
 
 @pytest.fixture
 def user_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Point the per-user folders at a temp tree and return its root."""
-    root = tmp_path / "user"
-    monkeypatch.setattr(storage_paths.platformdirs, "user_data_dir", lambda *_: str(root / "data"))
-    monkeypatch.setattr(
-        storage_paths.platformdirs, "user_config_dir", lambda *_: str(root / "config")
-    )
-    monkeypatch.setattr(
-        storage_paths.platformdirs, "user_cache_dir", lambda *_: str(root / "cache")
-    )
-    return root
+    return redirect_user_dirs(tmp_path, monkeypatch)
 
 
 @pytest.fixture
@@ -61,12 +44,6 @@ def app_folder(tmp_path: Path) -> Path:
 def _block_data_folder(app_folder: Path) -> None:
     """Make the Data folder impossible to create by putting a file in its place."""
     (app_folder / PORTABLE_DATA_DIR_NAME).write_bytes(b"not a folder")
-
-
-def _fallback_list(user_dirs: Path) -> list[str]:
-    """Return the remembered folders, or an empty list when the file is absent."""
-    path = user_dirs / "config" / FALLBACK_LIST_NAME
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
 
 
 def test_source_run_ignores_the_marker(user_dirs: Path, app_folder: Path) -> None:
@@ -127,7 +104,7 @@ def test_unwritable_folder_with_remember_saves_the_choice(
     assert locations.mode is StorageMode.PER_USER_FALLBACK
     assert locations.data_dir == user_dirs / "data"
     assert confirm.asked == [app_folder.resolve()]
-    assert _fallback_list(user_dirs) == [str(app_folder.resolve())]
+    assert read_fallback_list(user_dirs) == [str(app_folder.resolve())]
 
 
 def test_unwritable_folder_without_remember_asks_again(user_dirs: Path, app_folder: Path) -> None:
@@ -142,7 +119,7 @@ def test_unwritable_folder_without_remember_asks_again(user_dirs: Path, app_fold
     assert second is not None
     assert first.mode is StorageMode.PER_USER_FALLBACK
     assert len(confirm.asked) == 2
-    assert _fallback_list(user_dirs) == []
+    assert read_fallback_list(user_dirs) == []
 
 
 def test_quit_returns_none_and_remembers_nothing(user_dirs: Path, app_folder: Path) -> None:
@@ -153,7 +130,7 @@ def test_quit_returns_none_and_remembers_nothing(user_dirs: Path, app_folder: Pa
     locations = resolve_locations(app_folder / EXE_NAME, frozen=True, confirm_fallback=confirm)
 
     assert locations is None
-    assert _fallback_list(user_dirs) == []
+    assert read_fallback_list(user_dirs) == []
 
 
 def test_remembered_folder_skips_the_prompt(user_dirs: Path, app_folder: Path) -> None:
@@ -181,7 +158,7 @@ def test_writable_again_forgets_the_remembered_choice(user_dirs: Path, app_folde
 
     assert locations is not None
     assert locations.mode is StorageMode.PORTABLE
-    assert _fallback_list(user_dirs) == []
+    assert read_fallback_list(user_dirs) == []
     assert not (user_dirs / "config" / FALLBACK_LIST_NAME).exists()
 
 
