@@ -5,9 +5,16 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.81.0] (2026-11-21)
+## [0.82.0] (2026-11-21)
 
 ### Added
+
+- The main window follows the UI-R layout (UI-2, #342).
+  - A workflow bar shows Import, Analyze, Review, Apply, and Export with a track count each. The first stage with waiting tracks carries its action as the main button. Transcode, History, and Settings sit at the right end.
+  - Alt+1 to Alt+5 run the five stages.
+  - A sidebar holds the stages, the library filters (All tracks, Needs review, Has warnings, Ready to write), the source folders with track counts, and the planned playlists and crates.
+  - From 1600 px the sidebar stays open. Below 1600 px it opens from a button beside the search field, and the bar keeps only the current stage's label. Below 1280 px the detail panel moves under the table.
+  - The window opens no smaller than 960 x 600 and remembers its size and position. A window saved on a monitor that is gone moves back onto a screen.
 
 - UI-R visual system (UI-2, #342).
   - Two new themes, Dark and Light, built from the logo colors. Every text color reaches 4.5:1 and every graphic color 3:1 in both themes.
@@ -17,6 +24,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The sidebar filters replace the review status dropdown.
+- The Key Notation picker moved to the row above the table. The theme picker left the main window and stays in Settings.
 - The theme pickers offer Dark, Light, and Match System. Native left the pickers and applies only when the theme package cannot load.
 - Settings from an older version that name Dark Teal, Light Teal, or Native load as Dark or Light.
 - The project orientation notes that the agent prose rules do not govern on-screen text.

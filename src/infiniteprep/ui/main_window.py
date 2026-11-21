@@ -4,16 +4,25 @@ from __future__ import annotations
 
 import base64
 import binascii
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from PySide6.QtCore import QByteArray, QMimeData, QPoint, Qt, QTimer, Signal
-from PySide6.QtGui import QCloseEvent, QDrag, QKeyEvent, QKeySequence, QMouseEvent, QShortcut
+from PySide6.QtCore import QByteArray, QMimeData, QPoint, QSize, Qt, QTimer, Signal
+from PySide6.QtGui import (
+    QCloseEvent,
+    QDrag,
+    QGuiApplication,
+    QKeyEvent,
+    QKeySequence,
+    QMouseEvent,
+    QResizeEvent,
+    QShortcut,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QApplication,
     QComboBox,
     QFileDialog,
     QHBoxLayout,
@@ -27,14 +36,13 @@ from PySide6.QtWidgets import (
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
-    QToolBar,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from infiniteprep.config.settings import (
     SUPPORTED_UNSORTED_PLACEMENTS,
-    TEXT_SIZE_STANDARD,
     UNSORTED_PLACEMENT_FIRST,
     SettingsManager,
 )
@@ -66,6 +74,9 @@ from infiniteprep.ui.batch_queue_dock import BatchQueueDock
 from infiniteprep.ui.column_sizing import WeightedColumnSizer
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.folder_import import FolderImportController, ImportReportDialog
+from infiniteprep.ui.icon_loader import themed_icon
+from infiniteprep.ui.library_sidebar import LibrarySidebar
+from infiniteprep.ui.stylesheet import BUTTON_VARIANT_PROPERTY, ICON_BUTTON_VARIANT
 from infiniteprep.ui.table_sort import (
     FILENAME_COLUMN,
     SORT_COLUMN_COUNT,
@@ -73,15 +84,24 @@ from infiniteprep.ui.table_sort import (
     parse_bpm_value,
     sort_rows,
 )
-from infiniteprep.ui.theme import (
-    DEFAULT_DARK_THEME,
-    NATIVE_THEME,
-    fill_theme_picker,
-    get_theme_choices,
-    select_theme,
-    switch_application_theme,
-)
+from infiniteprep.ui.theme import DEFAULT_DARK_THEME, THEME_PALETTES, resolve_theme
 from infiniteprep.ui.time_format import split_time_seconds
+from infiniteprep.ui.tokens import DARK_PALETTE, Palette
+from infiniteprep.ui.workflow import (
+    DETAIL_PANEL_WIDTH,
+    MINIMUM_WINDOW_HEIGHT,
+    MINIMUM_WINDOW_WIDTH,
+    SIDEBAR_WIDTH,
+    LayoutMode,
+    LibraryFilter,
+    WorkflowStage,
+    count_stages,
+    find_current_stage,
+    find_layout_mode,
+    fit_window_on_screens,
+    matches_library_filter,
+)
+from infiniteprep.ui.workflow_bar import WorkflowBar, stage_shortcut
 
 TABLE_COLUMNS: Final[tuple[str, ...]] = (
     "Filename",
@@ -119,8 +139,6 @@ KEY_NOTATION_LABELS: Final[dict[KeyDisplayNotation, str]] = {
     KeyDisplayNotation.OPEN_KEY: "Open Key",
 }
 WARNING_LINE_SEPARATOR: Final[str] = "\n"
-ALL_FILES_FILTER: Final[str] = "All Files"
-HAS_WARNINGS_FILTER: Final[str] = "Has Warnings (XDJ-RX3 / Rip)"
 # Words that stay lower case inside a status label, as in "Ready to Write".
 STATUS_LABEL_MINOR_WORDS: Final[frozenset[str]] = frozenset({"to", "for"})
 
@@ -155,15 +173,12 @@ def format_status_cell(value: str) -> str:
     return format_status_label(status)
 
 
-# One filter entry per review status. The pipeline sets statuses such as no_match and
-# ready_for_review, so a fixed short list left those files reachable only through All Files.
+# The status cell label of each review status value.
 STATUS_FILTER_VALUES: Final[dict[str, str]] = {
     format_status_label(status): status.value for status in ReviewStatus
 }
 # Milliseconds after the last column resize before the layout saves.
 LAYOUT_SAVE_DELAY_MS: Final[int] = 300
-SEARCH_INPUT_STRETCH: Final[int] = 3
-STATUS_FILTER_STRETCH: Final[int] = 1
 NO_VISIBLE_FILES_TEXT: Final[str] = (
     "No files are visible. Import a folder, or clear the filter and the status choice."
 )
@@ -177,31 +192,22 @@ SORT_ASCENDING_TEXT: Final[str] = "Ascending"
 SORT_DESCENDING_TEXT: Final[str] = "Descending"
 # Screen readers announce these names. Placeholder text vanishes once a field holds text.
 SEARCH_INPUT_NAME: Final[str] = "Filter library"
-STATUS_FILTER_NAME: Final[str] = "Filter by review status"
 SORT_COLUMN_NAME: Final[str] = "Sort library by"
 SORT_DIRECTION_NAME: Final[str] = "Sort direction"
 KEY_NOTATION_NAME: Final[str] = "Key notation"
-THEME_PICKER_NAME: Final[str] = "Theme"
 FILE_TABLE_NAME: Final[str] = "Library"
-# Toolbar labels in Qt mnemonic form. A single ampersand marks the Alt key and stays
-# hidden. A doubled ampersand shows one ampersand. Screen readers read the shown text.
-IMPORT_BUTTON_LABEL: Final[str] = "&Import Folder"
-ANALYZE_BUTTON_LABEL: Final[str] = "Identify && &Analyze All"
-BULK_APPROVE_BUTTON_LABEL: Final[str] = "&Bulk Approve Non-Conflicting"
-WRITE_BUTTON_LABEL: Final[str] = "&Preview && Apply Writes"
-TRANSCODE_BUTTON_LABEL: Final[str] = "&Transcode to XDJ"
-EXPORT_BUTTON_LABEL: Final[str] = "&Export Playlist (.m3u8)"
-JOURNAL_BUTTON_LABEL: Final[str] = "Change &Journal && Restore"
-SETTINGS_BUTTON_LABEL: Final[str] = "&Settings && Providers"
-KEY_NOTATION_LABEL: Final[str] = " &Key Notation: "
-THEME_LABEL: Final[str] = " T&heme: "
+SIDEBAR_TOGGLE_NAME: Final[str] = "Show sidebar"
+SIDEBAR_TOGGLE_ICON: Final[str] = "folder"
+SIDEBAR_TOGGLE_ICON_SIZE: Final[int] = 20
+# A mnemonic label: the single ampersand marks the Alt key that focuses the picker.
+KEY_NOTATION_LABEL: Final[str] = "&Key Notation:"
 SETTINGS_SHORTCUT: Final[str] = "Ctrl+,"
 # Space stays with the focused button or field, so Play/Pause takes Ctrl+P.
 PLAY_PAUSE_SHORTCUT: Final[str] = "Ctrl+P"
 MEDIA_PLAY_PAUSE_SHORTCUT: Final[str] = "Media Play/Pause"
 PLAY_BUTTON_TOOLTIP_TEMPLATE: Final[str] = "Play or pause the preview ({shortcut})"
-SPLITTER_TOP_HEIGHT: Final[int] = 380
-SPLITTER_BOTTOM_HEIGHT: Final[int] = 420
+# Below the table, the detail panel starts at this height. Splitters reset each launch.
+DETAIL_PANEL_HEIGHT: Final[int] = 420
 PLAYLIST_SUFFIX: Final[str] = ".m3u8"
 CLOSE_WAIT: Final[str] = "wait"
 CLOSE_CANCEL: Final[str] = "cancel"
@@ -360,13 +366,15 @@ class MainWindow(QMainWindow):
         self._init_sort_state()
 
         self.setWindowTitle("InfinitePrep - DJ Music Metadata & Audio Preparation")
+        self.setMinimumSize(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
         self.resize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
 
         self.search_input = QLineEdit(self)
-        self.status_filter_combo = QComboBox(self)
         self.key_notation_combo = QComboBox(self)
-        self.theme_combo = QComboBox(self)
-        self._applied_theme = NATIVE_THEME
+        self.workflow_bar = WorkflowBar(self)
+        self.sidebar = LibrarySidebar(self)
+        self.layout_mode: LayoutMode | None = None
+        self._library_folders: list[tuple[Path, int]] = []
         self.file_table = LibraryTableWidget(self)
         self.file_table.setColumnCount(len(TABLE_COLUMNS))
         self.detail_panel = DetailPanel(
@@ -376,11 +384,14 @@ class MainWindow(QMainWindow):
             parent=self,
             enable_audio_backend=enable_audio_backend,
         )
-        self._setup_toolbar()
+        self._setup_workflow_bar()
         self._setup_central_widget()
         self._setup_batch_queue()
         self._restore_table_layouts()
+        self._apply_theme_palette()
         self.refresh_file_table()
+        self._restore_window_geometry()
+        self._apply_layout_mode(find_layout_mode(self.width()))
 
     def _setup_batch_queue(self) -> None:
         """Create the batch queue, its dock panel, and the import controller it drives."""
@@ -400,30 +411,30 @@ class MainWindow(QMainWindow):
         self.batch_queue.idle.connect(self._on_queue_idle)
         self.batch_dock.result_requested.connect(self.show_batch_result)
 
-    def _setup_toolbar(self) -> None:
-        """Build top action toolbar with import, bulk approve, key notation, and dialogs."""
-        toolbar = QToolBar("Main Actions", self)
-        self.addToolBar(toolbar)
+    def _setup_workflow_bar(self) -> None:
+        """Connect the workflow bar and the sidebar to the stage actions and tools.
 
-        self._add_toolbar_button(toolbar, IMPORT_BUTTON_LABEL, self._prompt_import_folder)
-        self._add_toolbar_button(toolbar, ANALYZE_BUTTON_LABEL, self._trigger_analyze_all)
-        self.bulk_btn = self._add_toolbar_button(
-            toolbar, BULK_APPROVE_BUTTON_LABEL, self._trigger_bulk_approve
-        )
-        self._add_toolbar_button(toolbar, WRITE_BUTTON_LABEL, self._trigger_open_write_dialog)
-        self.transcode_btn = self._add_toolbar_button(
-            toolbar, TRANSCODE_BUTTON_LABEL, self._trigger_transcode_batch
-        )
-        self.export_playlist_btn = self._add_toolbar_button(
-            toolbar, EXPORT_BUTTON_LABEL, self._trigger_export_playlist
-        )
-        self.journal_btn = self._add_toolbar_button(
-            toolbar, JOURNAL_BUTTON_LABEL, self._trigger_open_journal
-        )
-        self._add_toolbar_button(toolbar, SETTINGS_BUTTON_LABEL, self._trigger_open_settings)
-
-        toolbar.addSeparator()
-        self._add_picker_label(toolbar, KEY_NOTATION_LABEL, self.key_notation_combo)
+        The earlier toolbar names stay on the buttons that now run those actions, so
+        the batch locks and the callers keep working.
+        """
+        self._stage_actions: dict[WorkflowStage, Callable[[], None]] = {
+            WorkflowStage.IMPORT: self._prompt_import_folder,
+            WorkflowStage.ANALYZE: self._trigger_analyze_all,
+            WorkflowStage.REVIEW: self._trigger_bulk_approve,
+            WorkflowStage.APPLY: self._trigger_open_write_dialog,
+            WorkflowStage.EXPORT: self._trigger_export_playlist,
+        }
+        bar = self.workflow_bar
+        bar.stage_triggered.connect(self._on_stage_triggered)
+        bar.transcode_requested.connect(self._trigger_transcode_batch)
+        bar.history_requested.connect(self._trigger_open_journal)
+        bar.settings_requested.connect(self._trigger_open_settings)
+        self.sidebar.stage_triggered.connect(self._on_stage_triggered)
+        self.sidebar.filter_changed.connect(self._on_library_filter_changed)
+        self.bulk_btn = bar.stage_buttons[WorkflowStage.REVIEW]
+        self.export_playlist_btn = bar.stage_buttons[WorkflowStage.EXPORT]
+        self.transcode_btn = bar.transcode_btn
+        self.journal_btn = bar.history_btn
         for notation in KeyDisplayNotation:
             self.key_notation_combo.addItem(KEY_NOTATION_LABELS[notation], notation.value)
         self.key_notation_combo.setCurrentIndex(
@@ -431,34 +442,17 @@ class MainWindow(QMainWindow):
         )
         self.key_notation_combo.currentIndexChanged.connect(self._on_key_notation_picked)
         name_combo_box(self.key_notation_combo, KEY_NOTATION_NAME)
-        toolbar.addWidget(self.key_notation_combo)
-
-        toolbar.addSeparator()
-        self._add_picker_label(toolbar, THEME_LABEL, self.theme_combo)
-        fill_theme_picker(self.theme_combo, get_theme_choices())
-        current_theme = getattr(SettingsManager().load(), "theme", DEFAULT_DARK_THEME)
-        self._applied_theme = self._selectable_theme(current_theme)
-        select_theme(self.theme_combo, self._applied_theme)
-        self.theme_combo.currentIndexChanged.connect(self._on_theme_picked)
-        name_combo_box(self.theme_combo, THEME_PICKER_NAME)
-        toolbar.addWidget(self.theme_combo)
-        # The shortcuts sit beside the toolbar actions they mirror.
         self._setup_shortcuts()
 
-    def _add_toolbar_button(
-        self, toolbar: QToolBar, label: str, handler: Callable[[], None]
-    ) -> QPushButton:
-        """Add one toolbar push button with a mnemonic label and return it."""
-        button = QPushButton(label, self)
-        button.clicked.connect(handler)
-        toolbar.addWidget(button)
-        return button
+    def _on_stage_triggered(self, stage_value: str) -> None:
+        """Run the action of the stage that a bar, sidebar, or primary button names."""
+        self._stage_actions[WorkflowStage(stage_value)]()
 
-    def _add_picker_label(self, toolbar: QToolBar, label: str, picker: QComboBox) -> None:
-        """Add a mnemonic label whose Alt key moves focus to the picker after it."""
-        picker_label = QLabel(label, self)
-        picker_label.setBuddy(picker)
-        toolbar.addWidget(picker_label)
+    def _on_library_filter_changed(self, _filter_value: str) -> None:
+        """Show the tracks of the new filter and close the sidebar drawer."""
+        if self.layout_mode is not LayoutMode.WIDE:
+            self.sidebar.hide()
+        self.refresh_file_table()
 
     def _setup_shortcuts(self) -> None:
         """Bind window-wide keys for Import, Settings, and preview Play/Pause."""
@@ -469,6 +463,13 @@ class MainWindow(QMainWindow):
         self.settings_shortcut = QShortcut(QKeySequence(SETTINGS_SHORTCUT), self)
         self.settings_shortcut.setContext(context)
         self.settings_shortcut.activated.connect(self._trigger_open_settings)
+        # Alt and the stage number run that stage, as the number on the bar shows (owner).
+        self.stage_shortcuts: dict[WorkflowStage, QShortcut] = {}
+        for stage in WorkflowStage:
+            shortcut = QShortcut(stage_shortcut(stage), self)
+            shortcut.setContext(context)
+            shortcut.activated.connect(lambda chosen=stage: self._on_stage_triggered(chosen.value))
+            self.stage_shortcuts[stage] = shortcut
         # Both keys press the player button, so a new selection loads before it plays.
         play_button = self.detail_panel.audio_player.play_btn
         self.play_pause_shortcut = QShortcut(QKeySequence(PLAY_PAUSE_SHORTCUT), self)
@@ -479,33 +480,51 @@ class MainWindow(QMainWindow):
         shown_key = self.play_pause_shortcut.key().toString(QKeySequence.SequenceFormat.NativeText)
         play_button.setToolTip(PLAY_BUTTON_TOOLTIP_TEMPLATE.format(shortcut=shown_key))
 
-    def _selectable_theme(self, theme: str) -> str:
-        """Return the theme to show, falling back to a theme the picker offers."""
-        choices = get_theme_choices()
-        if theme in choices:
-            return theme
-        return choices[0] if choices else NATIVE_THEME
-
     def _setup_central_widget(self) -> None:
-        """Build filter bar, file table, and vertical/horizontal splitter with DetailPanel."""
+        """Build the workflow bar, the sidebar, the filter row, the table, and the panel."""
         central = QWidget(self)
         root_layout = QVBoxLayout(central)
+        root_layout.addWidget(self.workflow_bar)
+        content = QWidget(central)
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.addLayout(self._build_filter_row())
+        self._setup_file_table()
+        self.detail_splitter = QSplitter(Qt.Orientation.Horizontal, content)
+        self.detail_splitter.addWidget(self.file_table)
+        self.detail_splitter.addWidget(self.detail_panel)
+        content_layout.addWidget(self.detail_splitter)
+        self.body_splitter = QSplitter(Qt.Orientation.Horizontal, central)
+        self.body_splitter.addWidget(self.sidebar)
+        self.body_splitter.addWidget(content)
+        root_layout.addWidget(self.body_splitter)
+        self.setCentralWidget(central)
 
+    def _build_filter_row(self) -> QHBoxLayout:
+        """Return the row above the table: sidebar toggle, search, key notation, and sort."""
         filter_bar = QHBoxLayout()
+        toggle = QToolButton(self)
+        toggle.setProperty(BUTTON_VARIANT_PROPERTY, ICON_BUTTON_VARIANT)
+        toggle.setIconSize(QSize(SIDEBAR_TOGGLE_ICON_SIZE, SIDEBAR_TOGGLE_ICON_SIZE))
+        toggle.setToolTip(SIDEBAR_TOGGLE_NAME)
+        toggle.setAccessibleName(SIDEBAR_TOGGLE_NAME)
+        toggle.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        toggle.clicked.connect(self._toggle_sidebar_drawer)
+        filter_bar.addWidget(toggle)
+        self.sidebar_toggle_btn = toggle
         self.search_input.setPlaceholderText("Filter by filename, artist, title, or label...")
         self.search_input.textChanged.connect(self.refresh_file_table)
         self.search_input.setAccessibleName(SEARCH_INPUT_NAME)
-        filter_bar.addWidget(self.search_input, stretch=SEARCH_INPUT_STRETCH)
-
-        self.status_filter_combo.addItems(
-            [ALL_FILES_FILTER, HAS_WARNINGS_FILTER, *STATUS_FILTER_VALUES]
-        )
-        self.status_filter_combo.currentTextChanged.connect(self.refresh_file_table)
-        name_combo_box(self.status_filter_combo, STATUS_FILTER_NAME)
-        filter_bar.addWidget(self.status_filter_combo, stretch=STATUS_FILTER_STRETCH)
+        filter_bar.addWidget(self.search_input, stretch=1)
+        key_label = QLabel(KEY_NOTATION_LABEL, self)
+        key_label.setBuddy(self.key_notation_combo)
+        filter_bar.addWidget(key_label)
+        filter_bar.addWidget(self.key_notation_combo)
         self._add_sort_controls(filter_bar)
-        root_layout.addLayout(filter_bar)
+        return filter_bar
 
+    def _setup_file_table(self) -> None:
+        """Set the headers, sizing, sorting, selection, and actions of the library table."""
         self.file_table.setHorizontalHeaderLabels(list(TABLE_COLUMNS))
         # A fitted column can be narrower than its header, which then elides.
         for column_index, header_text in enumerate(TABLE_COLUMNS):
@@ -531,12 +550,70 @@ class MainWindow(QMainWindow):
         self.file_table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.file_table.customContextMenuRequested.connect(self._on_library_context_menu)
 
-        splitter = QSplitter(Qt.Orientation.Vertical, self)
-        splitter.addWidget(self.file_table)
-        splitter.addWidget(self.detail_panel)
-        splitter.setSizes([SPLITTER_TOP_HEIGHT, SPLITTER_BOTTOM_HEIGHT])
-        root_layout.addWidget(splitter)
-        self.setCentralWidget(central)
+    def _apply_layout_mode(self, mode: LayoutMode) -> None:
+        """Arrange the bar, the sidebar, and the detail panel for a window width band.
+
+        From 1600 px the sidebar stays open and the bar shows every label. Below that
+        the sidebar opens as a drawer from the toggle button. Below 1280 px the detail
+        panel moves under the table. Each change resets the splitters.
+        """
+        if mode is self.layout_mode:
+            return
+        self.layout_mode = mode
+        wide = mode is LayoutMode.WIDE
+        self.workflow_bar.set_compact(not wide)
+        self.sidebar_toggle_btn.setVisible(not wide)
+        if wide:
+            self.body_splitter.insertWidget(0, self.sidebar)
+            self.sidebar.show()
+        else:
+            self.sidebar.setParent(self.centralWidget())
+            self.sidebar.hide()
+        orientation = (
+            Qt.Orientation.Vertical if mode is LayoutMode.NARROW else Qt.Orientation.Horizontal
+        )
+        self.detail_splitter.setOrientation(orientation)
+        # The splitters learn their new size only after this resize event, so the reset
+        # waits for the layout pass. The table takes the stretch, so the panel keeps its size.
+        if wide:
+            self.body_splitter.setStretchFactor(0, 0)
+            self.body_splitter.setStretchFactor(1, 1)
+        self.detail_splitter.setStretchFactor(0, 1)
+        self.detail_splitter.setStretchFactor(1, 0)
+        QTimer.singleShot(0, self._reset_splitter_sizes)
+
+    def _reset_splitter_sizes(self) -> None:
+        """Give the sidebar and the detail panel their starting sizes for the layout."""
+        if self.layout_mode is LayoutMode.WIDE:
+            content_width = max(0, self.body_splitter.width() - SIDEBAR_WIDTH)
+            self.body_splitter.setSizes([SIDEBAR_WIDTH, content_width])
+        if self.detail_splitter.orientation() == Qt.Orientation.Vertical:
+            table_height = max(0, self.detail_splitter.height() - DETAIL_PANEL_HEIGHT)
+            self.detail_splitter.setSizes([table_height, DETAIL_PANEL_HEIGHT])
+            return
+        table_width = max(0, self.detail_splitter.width() - DETAIL_PANEL_WIDTH)
+        self.detail_splitter.setSizes([table_width, DETAIL_PANEL_WIDTH])
+
+    def _toggle_sidebar_drawer(self) -> None:
+        """Open the sidebar over the content as a drawer, or close an open drawer."""
+        if not self.sidebar.isHidden():
+            self.sidebar.hide()
+            return
+        self._place_sidebar_drawer()
+        self.sidebar.show()
+        self.sidebar.raise_()
+
+    def _place_sidebar_drawer(self) -> None:
+        """Put the drawer at the left edge of the content, from top to bottom."""
+        area = self.body_splitter.geometry()
+        self.sidebar.setGeometry(area.x(), area.y(), SIDEBAR_WIDTH, area.height())
+
+    def resizeEvent(self, event: QResizeEvent) -> None:
+        """Switch the layout when the window width crosses a breakpoint."""
+        super().resizeEvent(event)
+        self._apply_layout_mode(find_layout_mode(self.width()))
+        if self.layout_mode is not LayoutMode.WIDE and not self.sidebar.isHidden():
+            self._place_sidebar_drawer()
 
     def _restore_table_layouts(self) -> None:
         """Restore saved file and detail column layouts when column counts match."""
@@ -612,6 +689,7 @@ class MainWindow(QMainWindow):
         """Reload all FileAssets from Repository and populate the filtered table."""
         all_files = self.repo.list_files()
         snapshot = load_library_snapshot(self.repo)
+        self._show_library_counts(all_files)
         filtered = [
             file_asset
             for file_asset in all_files
@@ -647,6 +725,50 @@ class MainWindow(QMainWindow):
             self._refreshing_table = False
         self._sync_detail_panel_with_selection()
 
+    def _show_library_counts(self, all_files: list[FileAsset]) -> None:
+        """Show the stage counts, the current stage, and the source folders.
+
+        The counts cover the whole library, whatever filter or search applies.
+        """
+        counts = count_stages(str(asset.review_status) for asset in all_files)
+        current = find_current_stage(counts)
+        self.workflow_bar.set_counts(counts, current)
+        self.sidebar.set_counts(counts, current)
+        folder_counts = Counter(Path(asset.current_path).parent for asset in all_files)
+        folders = sorted(folder_counts.items(), key=lambda entry: str(entry[0]).casefold())
+        if folders != self._library_folders:
+            self._library_folders = folders
+            self.sidebar.set_folders(folders)
+
+    def _apply_theme_palette(self) -> None:
+        """Draw the bar, sidebar, and toggle icons in the colors of the stored theme."""
+        stored_theme = getattr(SettingsManager().load(), "theme", DEFAULT_DARK_THEME)
+        palette: Palette = THEME_PALETTES.get(resolve_theme(stored_theme), DARK_PALETTE)
+        self.workflow_bar.set_palette(palette)
+        self.sidebar.set_palette(palette)
+        self.sidebar_toggle_btn.setIcon(themed_icon(SIDEBAR_TOGGLE_ICON, palette.text))
+
+    def _restore_window_geometry(self) -> None:
+        """Restore the saved window size and position, on a screen that still exists."""
+        encoded = getattr(SettingsManager().load(), "window_geometry", "")
+        if not encoded or not isinstance(encoded, str):
+            return
+        try:
+            state = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError):
+            return
+        if not self.restoreGeometry(QByteArray(state)):
+            return
+        screens = [screen.availableGeometry() for screen in QGuiApplication.screens()]
+        self.setGeometry(fit_window_on_screens(self.geometry(), screens))
+
+    def _save_window_geometry(self) -> None:
+        """Save the window size and position for the next launch."""
+        settings_manager = SettingsManager()
+        settings = settings_manager.load()
+        settings.window_geometry = base64.b64encode(bytes(self.saveGeometry())).decode("ascii")
+        settings_manager.save(settings)
+
     def _init_sort_state(self) -> None:
         """Set the starting sort column, direction, selection, and placement."""
         self._sort_column: int = FILENAME_COLUMN
@@ -666,13 +788,10 @@ class MainWindow(QMainWindow):
     def reload_settings(self) -> None:
         """Read the stored preferences again and repaint the table.
 
-        The Settings dialog applies a theme itself. The toolbar picker follows the stored
-        theme, so a later toolbar choice compares against the theme in effect.
+        The Settings dialog applies a theme itself. The icons follow the stored theme.
         """
         self._unsorted_placement = self._read_unsorted_placement()
-        stored_theme = getattr(SettingsManager().load(), "theme", DEFAULT_DARK_THEME)
-        self._applied_theme = self._selectable_theme(stored_theme)
-        self._set_picker_theme(self._applied_theme)
+        self._apply_theme_palette()
         self.refresh_file_table()
 
     def _add_sort_controls(self, filter_bar: QHBoxLayout) -> None:
@@ -748,12 +867,13 @@ class MainWindow(QMainWindow):
         return warnings
 
     def _matches_status_filter(self, asset: FileAsset, snapshot: LibrarySnapshot) -> bool:
-        """Return True if asset matches the status filter dropdown."""
-        status_choice = self.status_filter_combo.currentText()
-        if status_choice == HAS_WARNINGS_FILTER:
-            return bool(self._asset_warnings(asset, snapshot))
-        status_value = STATUS_FILTER_VALUES.get(status_choice)
-        return status_value is None or str(asset.review_status) == status_value
+        """Return True if the asset passes the library filter checked in the sidebar."""
+        chosen: LibraryFilter = self.sidebar.current_filter()
+        # Only the Has warnings filter reads the warnings, so other filters skip the work.
+        has_warnings = chosen is LibraryFilter.HAS_WARNINGS and bool(
+            self._asset_warnings(asset, snapshot)
+        )
+        return matches_library_filter(chosen, str(asset.review_status), has_warnings)
 
     def _populate_table_row(self, row_index: int, row: LibraryRow) -> None:
         """Render one library row and store its file ID on the first cell."""
@@ -953,30 +1073,6 @@ class MainWindow(QMainWindow):
         self.detail_panel.set_key_notation(self.current_key_notation)
         self.refresh_file_table()
 
-    def _on_theme_picked(self, index: int) -> None:
-        """Apply the theme whose label the picker shows. The item data holds its identifier."""
-        theme = self.theme_combo.itemData(index)
-        if isinstance(theme, str):
-            self._on_theme_changed(theme)
-
-    def _on_theme_changed(self, text: str) -> None:
-        """Apply the chosen theme and keep the picker on the theme in effect."""
-        app = QApplication.instance()
-        settings_manager = SettingsManager()
-        settings = settings_manager.load()
-        text_size = getattr(settings, "text_size", TEXT_SIZE_STANDARD)
-        result = switch_application_theme(app, text, self._applied_theme, text_size)
-        self._applied_theme = result.theme
-        self._set_picker_theme(result.theme)
-        settings.theme = result.theme
-        settings_manager.save(settings)
-
-    def _set_picker_theme(self, theme: str) -> None:
-        """Point the picker at the given theme without firing the change signal."""
-        self.theme_combo.blockSignals(True)
-        select_theme(self.theme_combo, theme)
-        self.theme_combo.blockSignals(False)
-
     def _prompt_import_folder(self) -> None:
         """Open a folder picker and import the chosen folder in the background."""
         chosen = QFileDialog.getExistingDirectory(self, "Select Music Folder to Import")
@@ -1011,8 +1107,10 @@ class MainWindow(QMainWindow):
         queue is idle. Browsing, playback, filtering, and playlist export stay on.
         """
         idle = not self.batch_queue.is_busy()
+        # Review runs Approve all matches, so its bar, primary, and sidebar buttons wait.
+        self.workflow_bar.set_stages_locked(set() if idle else {WorkflowStage.REVIEW})
         for widget in (
-            self.bulk_btn,
+            self.sidebar.stage_buttons[WorkflowStage.REVIEW],
             self.transcode_btn,
             self.journal_btn,
             self.detail_panel.fields_table,
@@ -1079,6 +1177,7 @@ class MainWindow(QMainWindow):
         """
         if not self.batch_queue.is_busy():
             self.flush_layout_save()
+            self._save_window_geometry()
             # A child widget gets no closeEvent of its own. Closing the panel cancels
             # its analysis so no late result writes after the window closes.
             self.detail_panel.close()
