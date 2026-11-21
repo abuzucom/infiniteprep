@@ -92,9 +92,11 @@ def test_theme_selectors_use_shared_default_for_legacy_settings(
     settings_values.pop("theme")
     manager = MagicMock(spec=SettingsManager)
     manager.load.return_value = SimpleNamespace(**settings_values)
-    module_name = f"infiniteprep.ui.{window_kind}_window"
-    if window_kind == "settings":
-        module_name = "infiniteprep.ui.settings_dialog"
+    module_name = (
+        "infiniteprep.ui.settings_dialog"
+        if window_kind == "settings"
+        else f"infiniteprep.ui.{window_kind}_window"
+    )
     monkeypatch.setattr(f"{module_name}.DEFAULT_DARK_THEME", DEFAULT_LIGHT_THEME, raising=False)
     if window_kind == "main":
         monkeypatch.setattr(f"{module_name}.SettingsManager", lambda: manager)
