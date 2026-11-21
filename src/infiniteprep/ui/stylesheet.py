@@ -31,6 +31,8 @@ TEXT_ROLE_PROPERTY: Final[str] = "textRole"
 CAPTION_TEXT_ROLE: Final[str] = "caption"
 SECTION_HEADING_TEXT_ROLE: Final[str] = "sectionHeading"
 DIALOG_TITLE_TEXT_ROLE: Final[str] = "dialogTitle"
+# The workflow bar and sidebar set this dynamic property on the current stage.
+CURRENT_STAGE_PROPERTY: Final[str] = "currentStage"
 # Index of the 8 px step in the spacing scale. Buttons use it as side padding.
 BUTTON_PADDING_STEP: Final[int] = 1
 
@@ -72,6 +74,8 @@ def _button_rules(palette: Palette, preset: str) -> list[str]:
         f"{{ background-color: {palette.surface}; }}",
         f"QPushButton:focus, QToolButton:focus {{ border: {FOCUS_RING_WIDTH}px solid "
         f"{palette.highlight}; }}",
+        f'QToolButton[{CURRENT_STAGE_PROPERTY}="true"] '
+        f"{{ color: {palette.highlight}; font-weight: 600; }}",
     ]
 
 

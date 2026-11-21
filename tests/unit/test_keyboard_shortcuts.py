@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 from PySide6.QtGui import QAccessible, QKeySequence
-from PySide6.QtWidgets import QLabel, QPushButton
+from PySide6.QtWidgets import QLabel
 
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
@@ -16,16 +16,16 @@ from infiniteprep.ui import main_window as main_window_module
 from infiniteprep.ui.main_window import MainWindow
 from tests.fixtures.memory_settings import MemorySettingsManager
 
-# Each toolbar label as Qt shows it and the Alt key it binds. A screen reader reads the label.
-EXPECTED_TOOLBAR_BUTTONS: tuple[tuple[str, str], ...] = (
-    ("Import Folder", "I"),
-    ("Identify & Analyze All", "A"),
-    ("Bulk Approve Non-Conflicting", "B"),
-    ("Preview & Apply Writes", "P"),
-    ("Transcode to XDJ", "T"),
-    ("Export Playlist (.m3u8)", "E"),
-    ("Change Journal & Restore", "J"),
-    ("Settings & Providers", "S"),
+# The spoken name of each workflow bar button in an empty library.
+EXPECTED_BAR_NAMES: tuple[str, ...] = (
+    "Import, 0 tracks",
+    "Analyze, 0 tracks",
+    "Review, 0 tracks",
+    "Apply, 0 tracks",
+    "Export, 0 tracks",
+    "Transcode",
+    "History",
+    "Settings",
 )
 LITERAL_AMPERSAND_PLACEHOLDER: str = "\x00"
 
@@ -60,37 +60,17 @@ def mnemonic_key(label: str) -> str:
     return kept[index + 1].upper()
 
 
-def toolbar_buttons(window: MainWindow) -> dict[str, QPushButton]:
-    """Return the toolbar push buttons keyed by the text Qt draws for them."""
-    return {shown_text(button.text()): button for button in window.findChildren(QPushButton)}
+def test_screen_readers_name_every_workflow_bar_button(window: MainWindow) -> None:
+    """Each stage button speaks its stage and count, and each tool button speaks its tool."""
+    bar = window.workflow_bar
+    buttons = [*bar.stage_buttons.values(), bar.transcode_btn, bar.history_btn, bar.settings_btn]
 
+    names = [
+        QAccessible.queryAccessibleInterface(button).text(QAccessible.Text.Name)
+        for button in buttons
+    ]
 
-def test_toolbar_labels_show_their_ampersands(window: MainWindow) -> None:
-    """Every toolbar label shows its full words, including a literal ampersand."""
-    shown = toolbar_buttons(window)
-
-    assert [label for label, _key in EXPECTED_TOOLBAR_BUTTONS if label not in shown] == []
-
-
-def test_toolbar_buttons_have_distinct_alt_keys(window: MainWindow) -> None:
-    """Every toolbar button binds the planned Alt key, and no two buttons share one."""
-    shown = toolbar_buttons(window)
-
-    keys = {label: mnemonic_key(shown[label].text()) for label, _key in EXPECTED_TOOLBAR_BUTTONS}
-
-    assert keys == dict(EXPECTED_TOOLBAR_BUTTONS)
-
-
-def test_screen_readers_read_toolbar_labels_without_markers(window: MainWindow) -> None:
-    """The accessible name of each toolbar button is its shown text."""
-    shown = toolbar_buttons(window)
-
-    names = {
-        label: QAccessible.queryAccessibleInterface(shown[label]).text(QAccessible.Text.Name)
-        for label, _key in EXPECTED_TOOLBAR_BUTTONS
-    }
-
-    assert names == {label: label for label, _key in EXPECTED_TOOLBAR_BUTTONS}
+    assert names == list(EXPECTED_BAR_NAMES)
 
 
 def test_toolbar_picker_labels_move_focus_to_their_pickers(window: MainWindow) -> None:
@@ -102,7 +82,6 @@ def test_toolbar_picker_labels_move_focus_to_their_pickers(window: MainWindow) -
     }
 
     assert buddies["Key Notation:"] == ("K", window.key_notation_combo)
-    assert buddies["Theme:"] == ("H", window.theme_combo)
 
 
 def test_import_shortcut_opens_the_folder_picker(

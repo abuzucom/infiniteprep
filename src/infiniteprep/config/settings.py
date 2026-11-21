@@ -206,6 +206,7 @@ class AppSettings:
     file_table_column_count: int = 0  # Column count when the layout was saved.
     detail_table_layout: str = ""  # Base64-encoded QHeaderView state.
     detail_table_column_count: int = 0  # Column count when the layout was saved.
+    window_geometry: str = ""  # Base64-encoded QWidget geometry of the main window.
     waveform_zoom_seconds: int = DEFAULT_WAVEFORM_ZOOM_SECONDS
     usb_reserve_percent: float = 0.0  # Percent of the estimated export size.
     usb_reserve_bytes: int = 0
