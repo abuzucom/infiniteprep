@@ -280,10 +280,8 @@ def test_detail_value_columns_share_the_spare_width(shown_panel: DetailPanel) ->
 def test_actions_column_is_no_wider_than_its_buttons(shown_panel: DetailPanel) -> None:
     """The Actions column fits its buttons, and each button keeps its natural width."""
     table = shown_panel.fields_table
-    widest_row = max(
-        table.cellWidget(row, COLUMN_ACTIONS).sizeHint().width() for row in range(table.rowCount())
-    )
+    fitted = table.sizeHintForColumn(COLUMN_ACTIONS)
 
-    assert table.horizontalHeader().sectionSize(COLUMN_ACTIONS) <= widest_row
+    assert table.horizontalHeader().sectionSize(COLUMN_ACTIONS) == fitted
     for button in table.cellWidget(0, COLUMN_ACTIONS).findChildren(QPushButton):
         assert button.width() <= button.sizeHint().width()
