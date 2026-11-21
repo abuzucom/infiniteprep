@@ -62,6 +62,7 @@ from infiniteprep.ui.batch_queue import (
     format_batch_row,
 )
 from infiniteprep.ui.batch_queue_dock import BatchQueueDock
+from infiniteprep.ui.column_sizing import WeightedColumnSizer
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.folder_import import FolderImportController, ImportReportDialog
 from infiniteprep.ui.table_sort import (
@@ -98,6 +99,25 @@ MAIN_WINDOW_WIDTH: Final[int] = 1360
 MAIN_WINDOW_HEIGHT: Final[int] = 820
 if len(TABLE_COLUMNS) != SORT_COLUMN_COUNT:
     raise RuntimeError("The library table columns and the sort kinds must stay aligned.")
+WARNINGS_COLUMN: Final[int] = TABLE_COLUMNS.index("Hardware / Rip Warnings")
+# Filename, Artist, and Title take two parts of the spare width each. Mix / Version and
+# Label / Cat# take one part each. Every other column fits its cells (owner, UI-1).
+LIBRARY_COLUMN_WEIGHTS: Final[dict[int, int]] = {
+    TABLE_COLUMNS.index("Filename"): 2,
+    TABLE_COLUMNS.index("Artist (Cur -> Prop)"): 2,
+    TABLE_COLUMNS.index("Title (Cur -> Prop)"): 2,
+    TABLE_COLUMNS.index("Mix / Version"): 1,
+    TABLE_COLUMNS.index("Label / Cat#"): 1,
+}
+# Below this share a weighted column stops shrinking and the table scrolls sideways.
+LIBRARY_MIN_SHARE_PX: Final[int] = 80
+# The Key Notation box shows these names. Its item data keeps the stored notation value.
+KEY_NOTATION_LABELS: Final[dict[KeyDisplayNotation, str]] = {
+    KeyDisplayNotation.STANDARD: "Standard",
+    KeyDisplayNotation.CAMELOT: "Camelot",
+    KeyDisplayNotation.OPEN_KEY: "Open Key",
+}
+WARNING_LINE_SEPARATOR: Final[str] = "\n"
 ALL_FILES_FILTER: Final[str] = "All Files"
 HAS_WARNINGS_FILTER: Final[str] = "Has Warnings (XDJ-RX3 / Rip)"
 # Words that stay lower case inside a status label, as in "Ready to Write".
@@ -111,6 +131,15 @@ def format_status_label(status: ReviewStatus) -> str:
         word if index and word in STATUS_LABEL_MINOR_WORDS else word.capitalize()
         for index, word in enumerate(words)
     )
+
+
+def format_warning_summary(warnings: list[str]) -> str:
+    """Return the warnings cell text: a count such as "2 warnings", or nothing for none."""
+    count = len(warnings)
+    if count == 0:
+        return ""
+    noun = "warning" if count == 1 else "warnings"
+    return f"{count} {noun}"
 
 
 def format_status_cell(value: str) -> str:
@@ -395,9 +424,11 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         self._add_picker_label(toolbar, KEY_NOTATION_LABEL, self.key_notation_combo)
         for notation in KeyDisplayNotation:
-            self.key_notation_combo.addItem(notation.value)
-        self.key_notation_combo.setCurrentText(self.current_key_notation.value)
-        self.key_notation_combo.currentTextChanged.connect(self._on_key_notation_changed)
+            self.key_notation_combo.addItem(KEY_NOTATION_LABELS[notation], notation.value)
+        self.key_notation_combo.setCurrentIndex(
+            self.key_notation_combo.findData(self.current_key_notation.value)
+        )
+        self.key_notation_combo.currentIndexChanged.connect(self._on_key_notation_picked)
         name_combo_box(self.key_notation_combo, KEY_NOTATION_NAME)
         toolbar.addWidget(self.key_notation_combo)
 
@@ -460,9 +491,7 @@ class MainWindow(QMainWindow):
         root_layout = QVBoxLayout(central)
 
         filter_bar = QHBoxLayout()
-        self.search_input.setPlaceholderText(
-            "Filter by filename, artist, title, label, or warning..."
-        )
+        self.search_input.setPlaceholderText("Filter by filename, artist, title, or label...")
         self.search_input.textChanged.connect(self.refresh_file_table)
         self.search_input.setAccessibleName(SEARCH_INPUT_NAME)
         filter_bar.addWidget(self.search_input, stretch=SEARCH_INPUT_STRETCH)
@@ -477,12 +506,16 @@ class MainWindow(QMainWindow):
         root_layout.addLayout(filter_bar)
 
         self.file_table.setHorizontalHeaderLabels(list(TABLE_COLUMNS))
+        # A fitted column can be narrower than its header, which then elides.
+        for column_index, header_text in enumerate(TABLE_COLUMNS):
+            self.file_table.horizontalHeaderItem(column_index).setToolTip(header_text)
         self.file_table.setAccessibleName(FILE_TABLE_NAME)
         # The cells show computed values. An edit in a cell changed nothing and was lost.
         self.file_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.file_sizer = WeightedColumnSizer(
+            self.file_table, LIBRARY_COLUMN_WEIGHTS, LIBRARY_MIN_SHARE_PX
+        )
         file_header = self.file_table.horizontalHeader()
-        file_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        file_header.setStretchLastSection(True)
         file_header.setSectionsClickable(True)
         self.file_table.setSortingEnabled(False)
         file_header.setSortIndicatorShown(True)
@@ -512,11 +545,13 @@ class MainWindow(QMainWindow):
                 self.file_table.horizontalHeader(),
                 settings.file_table_layout,
                 settings.file_table_column_count,
+                self.file_sizer,
             ),
             (
                 self.detail_panel.fields_table.horizontalHeader(),
                 settings.detail_table_layout,
                 settings.detail_table_column_count,
+                self.detail_panel.fields_sizer,
             ),
         )
         # A column drag emits sectionResized for each pixel. One save runs after the drag
@@ -525,9 +560,11 @@ class MainWindow(QMainWindow):
         self._layout_save_timer.setSingleShot(True)
         self._layout_save_timer.setInterval(LAYOUT_SAVE_DELAY_MS)
         self._layout_save_timer.timeout.connect(self._save_table_layouts)
-        for header, encoded_state, saved_column_count in headers:
-            if saved_column_count == header.count() and encoded_state:
-                self._restore_header_state(header, encoded_state)
+        for header, encoded_state, saved_column_count, sizer in headers:
+            saved_layout_fits = saved_column_count == header.count() and bool(encoded_state)
+            # A saved layout keeps every width as saved (owner, UI-1).
+            if saved_layout_fits and self._restore_header_state(header, encoded_state):
+                sizer.keep_restored_widths()
             header.sectionResized.connect(self._schedule_layout_save)
 
     def _schedule_layout_save(self, *_args: int) -> None:
@@ -541,15 +578,18 @@ class MainWindow(QMainWindow):
             self._save_table_layouts()
 
     @staticmethod
-    def _restore_header_state(header: QHeaderView, encoded_state: str) -> None:
-        """Restore one header from a validated base64-encoded Qt state."""
+    def _restore_header_state(header: QHeaderView, encoded_state: str) -> bool:
+        """Restore one header from a validated base64-encoded Qt state.
+
+        Return True when Qt accepted the state.
+        """
         if not isinstance(encoded_state, str):
-            return
+            return False
         try:
             state = base64.b64decode(encoded_state, validate=True)
         except (binascii.Error, ValueError):
-            return
-        header.restoreState(QByteArray(state))
+            return False
+        return bool(header.restoreState(QByteArray(state)))
 
     def _save_table_layouts(self) -> None:
         """Persist file and detail header states after a user resizes a column."""
@@ -600,6 +640,7 @@ class MainWindow(QMainWindow):
             for row_index, row in enumerate(ordered):
                 self._populate_table_row(row_index, row)
             self.file_table.blockSignals(False)
+            self.file_sizer.refit()
             self._restore_selected_file()
         finally:
             self._refreshing_table = False
@@ -719,6 +760,8 @@ class MainWindow(QMainWindow):
             item = QTableWidgetItem(text)
             if column_index == 0:
                 item.setData(Qt.ItemDataRole.UserRole, row.file_id)
+            if column_index == WARNINGS_COLUMN and row.warning_details:
+                item.setToolTip(row.warning_details)
             self.file_table.setItem(row_index, column_index, item)
 
     def _build_library_row(self, asset: FileAsset, snapshot: LibrarySnapshot) -> LibraryRow:
@@ -738,6 +781,7 @@ class MainWindow(QMainWindow):
             bpm=parse_bpm_value(raw_bpm),
             key=parse_key_string(raw_key),
             review_status=str(asset.review_status),
+            warning_details=WARNING_LINE_SEPARATOR.join(warnings),
         )
 
     def _build_table_row_cells(
@@ -768,7 +812,7 @@ class MainWindow(QMainWindow):
             self._effective_val(standard_tags, approved, top_by_field, FieldName.BPM.value),
             self._format_key_cell(raw_key),
             format_status_cell(str(asset.review_status)),
-            "; ".join(warnings) if warnings else "OK",
+            format_warning_summary(warnings),
         ]
 
     def _summary_pair(
@@ -892,6 +936,12 @@ class MainWindow(QMainWindow):
     def _exec_context_menu(self, menu: QMenu, position: QPoint) -> None:
         """Show the context menu at the pointer position."""
         menu.exec(self.file_table.viewport().mapToGlobal(position))
+
+    def _on_key_notation_picked(self, index: int) -> None:
+        """Apply the notation whose name the box shows. The item data holds its value."""
+        value = self.key_notation_combo.itemData(index)
+        if isinstance(value, str):
+            self._on_key_notation_changed(value)
 
     def _on_key_notation_changed(self, text: str) -> None:
         """Update key notation across table and DetailPanel."""

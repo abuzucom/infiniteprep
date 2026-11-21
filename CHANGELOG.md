@@ -5,6 +5,20 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.80.7] (2026-11-21)
+
+### Fixed
+
+- The library table gives its spare width to the columns that need it (UI-1, #244).
+  - Filename, Artist, and Title take two parts of the spare width each. Mix / Version and Label / Cat# take one part each. The other columns fit the cell contents.
+  - No column stretches to fill the table. A saved layout from an older version loads without the last-column stretch.
+  - A dragged column keeps its width. A saved layout keeps every width as saved.
+  - Each header shows its full name in a tooltip.
+  - The warnings column shows a count such as "2 warnings". The full warnings show in the cell tooltip. The search box no longer matches warning text.
+- The detail panel field table fits its Field, Source & Score, and Actions columns. Existing Tag, Top Proposal, and Approved / Edit share the spare width equally.
+- The Field column shows readable names such as "Mix name" and "Catalog number". Stored field keys stay unchanged.
+- The Key Notation box shows Standard, Camelot, and Open Key. The stored notation values stay unchanged.
+
 ## [0.80.6] (2026-11-20)
 
 ### Fixed

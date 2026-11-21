@@ -245,7 +245,8 @@ def test_pyside6_main_window_and_needle_drop_audio_preview(qtbot, tmp_path: Path
     assert window.detail_panel.current_file_id == file_asset.id
 
     # Switch key notation in toolbar
-    window.key_notation_combo.setCurrentText(KeyDisplayNotation.OPEN_KEY.value)
+    combo = window.key_notation_combo
+    combo.setCurrentIndex(combo.findData(KeyDisplayNotation.OPEN_KEY.value))
     assert window.current_key_notation == KeyDisplayNotation.OPEN_KEY
 
     # Verify needle-drop preview widget loads waveform envelope and jumps to 50% Drop
