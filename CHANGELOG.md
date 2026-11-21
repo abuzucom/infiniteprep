@@ -5,7 +5,21 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.80.7] (2026-11-21)
+## [0.81.0] (2026-11-21)
+
+### Added
+
+- UI-R visual system (UI-2, #342).
+  - Two new themes, Dark and Light, built from the logo colors. Every text color reaches 4.5:1 and every graphic color 3:1 in both themes.
+  - Each Open Key number has its own key color. Minor keys use a darker shade of the same hue. Key cells use black or white text, whichever reads better.
+  - A Text Size setting on the General tab picks Compact, Standard, or Large. Spacing and button sizes follow the chosen size.
+- 54 icons from Tabler Icons v3.50.0 and Lucide 1.70.0, copied unchanged from the pinned releases. NOTICE names both sets, and each set's license ships beside its icons.
+
+### Changed
+
+- The theme pickers offer Dark, Light, and Match System. Native left the pickers and applies only when the theme package cannot load.
+- Settings from an older version that name Dark Teal, Light Teal, or Native load as Dark or Light.
+- The project orientation notes that the agent prose rules do not govern on-screen text.
 
 ### Fixed
 
