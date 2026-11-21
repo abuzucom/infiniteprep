@@ -351,7 +351,6 @@ class TestUsbLinuxInspection(unittest.TestCase):
 
         # Verify Free Space Correlation
         space = report.space_for_mount("/media/user/DJ_SET_1")
-        self.assertIsNotNone(space)
         self.assertEqual(
             space,
             SpaceInfo(

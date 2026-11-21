@@ -75,7 +75,6 @@ class MyTagsDigestTests(unittest.TestCase):
         digest_b = compute_my_tags_digest(vocab_b, assign_b)
 
         self.assertEqual(digest_a, digest_b)
-        self.assertEqual(len(digest_a), 64)
         self.assertRegex(digest_a, r"^[0-9a-f]{64}$")
 
     def test_digest_changes_when_tag_data_or_assignment_changes(self) -> None:
@@ -643,7 +642,6 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             store = UsbRecoveryJournalStore(Path(tmp_dir) / "usb_recovery_journal.json")
             entry = build_journal_entry("/media/dj/STICK")
-            entry.started_at_utc = "2026-10-01T12:00:00Z"
             store.save_entries([entry])
 
             warn_scan = store.evaluate_expiry(start + timedelta(days=29, hours=1))
