@@ -32,18 +32,15 @@ STAGED_SUFFIX = ".restore.tmp"
 def library(tmp_path: Path) -> Path:
     """Leave a newer library with a version-0 backup that holds one source group."""
     db_path = tmp_path / LIBRARY_NAME
-    conn = sqlite3.connect(db_path)
-    try:
-        MIGRATIONS[0].apply(conn)
-        conn.execute(
+    with closing(sqlite3.connect(db_path)) as connection:
+        MIGRATIONS[0].apply(connection)
+        connection.execute(
             "INSERT INTO source_groups (id, user_label, grouping_basis, original_folder) "
             "VALUES (?, ?, ?, ?)",
             ("group-1", "Crate", "folder", "/music/crate"),
         )
-        conn.execute("PRAGMA user_version = 0")
-        conn.commit()
-    finally:
-        conn.close()
+        connection.execute("PRAGMA user_version = 0")
+        connection.commit()
     DatabaseManager(db_path).close()
     with closing(sqlite3.connect(db_path)) as newer, newer:
         newer.execute(f"PRAGMA user_version = {LATEST_VERSION + 1}")
