@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -33,6 +34,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -44,6 +46,7 @@ from PySide6.QtWidgets import (
 from infiniteprep.config.settings import (
     SUPPORTED_UNSORTED_PLACEMENTS,
     UNSORTED_PLACEMENT_FIRST,
+    AppSettings,
     SettingsManager,
 )
 from infiniteprep.db.repositories import Repository
@@ -495,7 +498,13 @@ class MainWindow(QMainWindow):
         self._setup_file_table()
         self.detail_splitter = QSplitter(Qt.Orientation.Horizontal, content)
         self.detail_splitter.addWidget(self.file_table)
-        self.detail_splitter.addWidget(self.detail_panel)
+        # The panel's contents need more than 480 px. The scroll area lets the splitter
+        # hold the panel at its set size, and the contents scroll inside it.
+        self.detail_scroll = QScrollArea(content)
+        self.detail_scroll.setWidgetResizable(True)
+        self.detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.detail_scroll.setWidget(self.detail_panel)
+        self.detail_splitter.addWidget(self.detail_scroll)
         content_layout.addWidget(self.detail_splitter)
         self.body_splitter = QSplitter(Qt.Orientation.Horizontal, central)
         self.body_splitter.addWidget(self.sidebar)
@@ -676,6 +685,22 @@ class MainWindow(QMainWindow):
         """Persist file and detail header states after a user resizes a column."""
         settings_manager = SettingsManager()
         settings = settings_manager.load()
+        self._copy_table_layouts(settings)
+        settings_manager.save(settings)
+
+    def _save_close_state(self) -> None:
+        """Save the window geometry and any pending column layout in one write."""
+        layout_pending = self._layout_save_timer.isActive()
+        self._layout_save_timer.stop()
+        settings_manager = SettingsManager()
+        settings = settings_manager.load()
+        if layout_pending:
+            self._copy_table_layouts(settings)
+        settings.window_geometry = base64.b64encode(bytes(self.saveGeometry())).decode("ascii")
+        settings_manager.save(settings)
+
+    def _copy_table_layouts(self, settings: AppSettings) -> None:
+        """Copy the file and detail header states into a settings value."""
         file_header = self.file_table.horizontalHeader()
         detail_header = self.detail_panel.fields_table.horizontalHeader()
         settings.file_table_layout = base64.b64encode(bytes(file_header.saveState())).decode(
@@ -686,7 +711,6 @@ class MainWindow(QMainWindow):
             "ascii"
         )
         settings.detail_table_column_count = detail_header.count()
-        settings_manager.save(settings)
 
     def refresh_file_table(self) -> None:
         """Reload all FileAssets from Repository and populate the filtered table."""
@@ -764,13 +788,6 @@ class MainWindow(QMainWindow):
             return
         screens = [screen.availableGeometry() for screen in QGuiApplication.screens()]
         self.setGeometry(fit_window_on_screens(self.geometry(), screens))
-
-    def _save_window_geometry(self) -> None:
-        """Save the window size and position for the next launch."""
-        settings_manager = SettingsManager()
-        settings = settings_manager.load()
-        settings.window_geometry = base64.b64encode(bytes(self.saveGeometry())).decode("ascii")
-        settings_manager.save(settings)
 
     def _init_sort_state(self) -> None:
         """Set the starting sort column, direction, selection, and placement."""
@@ -1179,8 +1196,7 @@ class MainWindow(QMainWindow):
         close requests during that wait ask nothing.
         """
         if not self.batch_queue.is_busy():
-            self.flush_layout_save()
-            self._save_window_geometry()
+            self._save_close_state()
             # A child widget gets no closeEvent of its own. Closing the panel cancels
             # its analysis so no late result writes after the window closes.
             self.detail_panel.close()
