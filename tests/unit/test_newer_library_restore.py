@@ -32,18 +32,13 @@ from infiniteprep.ui.storage_prompt import (
     RESTORE_LABEL,
     build_restore_prompt,
 )
+from tests.fixtures.sqlite_version import read_user_version
 
 EXE_NAME = "InfinitePrep.exe"
 PER_USER_DIR_FUNCTIONS = ("user_data_dir", "user_config_dir", "user_cache_dir")
 RESTORE_TIME = datetime(2026, 11, 15, 9, 30, 5, tzinfo=UTC)
 NEWER_ONLY_TABLE = "newer_only"
 SIDE_FILE_SUFFIXES = ("-wal", "-shm")
-
-
-def _version_of(db_path: Path) -> int:
-    """Read user_version through a separate connection."""
-    with closing(sqlite3.connect(db_path)) as conn, conn:
-        return int(conn.execute("PRAGMA user_version").fetchone()[0])
 
 
 def _make_migrated_library(db_path: Path) -> None:
@@ -77,8 +72,8 @@ def test_restore_puts_backup_in_place_and_keeps_newer_copy(library: Path) -> Non
 
     assert kept == newer_copy_path_for(library, RESTORE_TIME)
     assert kept.name == f"{DATABASE_FILE_NAME}.newer-20261115T093005Z"
-    assert _version_of(kept) == LATEST_VERSION + 1
-    assert _version_of(library) == 0
+    assert read_user_version(kept) == LATEST_VERSION + 1
+    assert read_user_version(library) == 0
     with closing(sqlite3.connect(library)) as conn, conn:
         assert conn.execute("SELECT id FROM legacy").fetchone()[0] == 1
 
@@ -102,7 +97,7 @@ def test_restored_library_opens_and_migrates(library: Path) -> None:
     with DatabaseManager(library):
         pass
 
-    assert _version_of(library) == LATEST_VERSION
+    assert read_user_version(library) == LATEST_VERSION
     assert backup_path_for(library).is_file()
 
 
@@ -115,7 +110,7 @@ def test_restore_without_backup_changes_nothing(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
         restore_pre_migration_backup(db_path, now=RESTORE_TIME)
 
-    assert _version_of(db_path) == LATEST_VERSION + 1
+    assert read_user_version(db_path) == LATEST_VERSION + 1
     assert not newer_copy_path_for(db_path, RESTORE_TIME).exists()
 
 
@@ -127,7 +122,7 @@ def test_restore_rejects_backup_that_disagrees_with_sidecar(library: Path) -> No
     with pytest.raises(BackupVerificationError):
         restore_pre_migration_backup(library, now=RESTORE_TIME)
 
-    assert _version_of(library) == LATEST_VERSION + 1
+    assert read_user_version(library) == LATEST_VERSION + 1
     assert backup_path_for(library).is_file()
 
 
@@ -139,7 +134,7 @@ def test_restore_refuses_to_overwrite_an_existing_copy(library: Path) -> None:
         restore_pre_migration_backup(library, now=RESTORE_TIME)
 
     assert newer_copy_path_for(library, RESTORE_TIME).read_bytes() == b"earlier copy"
-    assert _version_of(library) == LATEST_VERSION + 1
+    assert read_user_version(library) == LATEST_VERSION + 1
 
 
 @pytest.fixture
@@ -183,7 +178,7 @@ def test_open_storage_restores_on_confirmation(env: dict[str, Any]) -> None:
     assert str(backup_path_for(env["db"])) in message
     assert f"{DATABASE_FILE_NAME}.newer-" in message
     assert env["errors"] == []
-    assert _version_of(env["db"]) == LATEST_VERSION
+    assert read_user_version(env["db"]) == LATEST_VERSION
     kept = list(env["db"].parent.glob(f"{DATABASE_FILE_NAME}.newer-*"))
     assert len(kept) == 1
     assert kept[0].name in message
@@ -193,7 +188,7 @@ def test_open_storage_quits_when_restore_declined(env: dict[str, Any]) -> None:
     """Declining Restore leaves every file alone. The start ends."""
     assert _open(env, restore=False) == QUIT_EXIT_CODE
 
-    assert _version_of(env["db"]) == LATEST_VERSION + 1
+    assert read_user_version(env["db"]) == LATEST_VERSION + 1
     assert backup_path_for(env["db"]).is_file()
     assert env["errors"] == []
 

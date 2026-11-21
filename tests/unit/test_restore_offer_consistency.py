@@ -17,17 +17,12 @@ from infiniteprep.db.migrations.backup import (
     write_backup_record,
 )
 from infiniteprep.db.migrations.runner import NewerLibraryError
+from tests.fixtures.sqlite_version import read_user_version
 
 LIBRARY_NAME = "infiniteprep.sqlite3"
 RESTORE_TIME = datetime(2026, 11, 15, 11, 0, 0, tzinfo=UTC)
 # A caller at version 0 knows only libraries from before numbered migrations.
 PRE_MIGRATION_VERSION = 0
-
-
-def _version_of(db_path: Path) -> int:
-    """Read user_version through a separate connection."""
-    with sqlite3.connect(db_path) as conn:
-        return int(conn.execute("PRAGMA user_version").fetchone()[0])
 
 
 def _write_newer_library(db_path: Path) -> None:
@@ -89,7 +84,7 @@ def test_restore_refuses_a_backup_newer_than_the_app(tmp_path: Path) -> None:
     with pytest.raises(BackupVerificationError):
         restore_pre_migration_backup(db_path, now=RESTORE_TIME)
 
-    assert _version_of(db_path) == newer + 1
+    assert read_user_version(db_path) == newer + 1
     assert list(tmp_path.glob(f"{LIBRARY_NAME}.newer-*")) == []
 
 
@@ -102,4 +97,4 @@ def test_restore_honors_a_lower_known_version(tmp_path: Path) -> None:
     with pytest.raises(BackupVerificationError):
         restore_pre_migration_backup(db_path, now=RESTORE_TIME, known_version=PRE_MIGRATION_VERSION)
 
-    assert _version_of(db_path) == LATEST_VERSION + 1
+    assert read_user_version(db_path) == LATEST_VERSION + 1

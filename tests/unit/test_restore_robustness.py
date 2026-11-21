@@ -19,18 +19,13 @@ from infiniteprep.db.migrations.backup import (
     newer_copy_path_for,
     restore_pre_migration_backup,
 )
+from tests.fixtures.sqlite_version import read_user_version
 
 LIBRARY_NAME = "infiniteprep.sqlite3"
 RESTORE_TIME = datetime(2026, 11, 15, 10, 0, 0, tzinfo=UTC)
 SIDE_FILE_SUFFIXES = ("-wal", "-shm")
 SIDE_FILE_BYTES = b"side file"
 STAGED_SUFFIX = ".restore.tmp"
-
-
-def _version_of(db_path: Path) -> int:
-    """Read user_version through a separate connection."""
-    with closing(sqlite3.connect(db_path)) as conn, conn:
-        return int(conn.execute("PRAGMA user_version").fetchone()[0])
 
 
 @pytest.fixture
@@ -70,7 +65,7 @@ def _assert_library_untouched(db_path: Path) -> None:
         assert Path(f"{db_path}{suffix}").read_bytes() == SIDE_FILE_BYTES
     assert list(db_path.parent.glob(f"{LIBRARY_NAME}.newer-*")) == []
     assert not db_path.with_name(db_path.name + STAGED_SUFFIX).exists()
-    assert _version_of(db_path) == LATEST_VERSION + 1
+    assert read_user_version(db_path) == LATEST_VERSION + 1
 
 
 def test_restore_rejects_backup_with_changed_rows(library: Path) -> None:
@@ -81,7 +76,7 @@ def test_restore_rejects_backup_with_changed_rows(library: Path) -> None:
     with pytest.raises(BackupVerificationError):
         restore_pre_migration_backup(library, now=RESTORE_TIME)
 
-    assert _version_of(library) == LATEST_VERSION + 1
+    assert read_user_version(library) == LATEST_VERSION + 1
 
 
 def test_failed_library_rename_puts_side_files_back(
@@ -107,7 +102,7 @@ def test_failed_library_rename_puts_side_files_back(
     monkeypatch.setattr(backup_module.os, "replace", real_replace)
     kept = restore_pre_migration_backup(library, now=RESTORE_TIME)
     assert kept == newer_copy_path_for(library, RESTORE_TIME)
-    assert _version_of(library) == 0
+    assert read_user_version(library) == 0
 
 
 def test_failed_staging_copy_leaves_no_partial_file(
@@ -135,6 +130,6 @@ def test_stale_staging_file_from_a_crash_is_replaced(library: Path) -> None:
 
     restore_pre_migration_backup(library, now=RESTORE_TIME)
 
-    assert _version_of(library) == 0
+    assert read_user_version(library) == 0
     with closing(sqlite3.connect(library)) as conn, conn:
         assert conn.execute("SELECT COUNT(*) FROM source_groups").fetchone()[0] == 1
