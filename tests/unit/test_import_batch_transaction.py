@@ -17,6 +17,7 @@ from infiniteprep.domain.enums import GroupingBasis, SourceType
 from infiniteprep.domain.models import SourceGroup
 from infiniteprep.services.import_service import ImportOutcome, ImportService
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
 
 TRACK_COUNT = 3
 SHORT_DURATION_SEC = 0.5
@@ -56,11 +57,9 @@ def test_batch_imports_every_file_and_reports_progress(
 ) -> None:
     """Each file gets one progress call before it imports, and the batch commits at the end."""
     tracks = make_tracks(tmp_path / "crate")
-    calls: list[tuple[int, int, str]] = []
+    calls = CallRecorder()
 
-    report = ImportService(repository).import_paths(
-        [tmp_path / "crate"], progress=lambda done, total, path: calls.append((done, total, path))
-    )
+    report = ImportService(repository).import_paths([tmp_path / "crate"], progress=calls)
 
     assert report.outcome is ImportOutcome.COMMITTED
     assert report.scanned_count == TRACK_COUNT
