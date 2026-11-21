@@ -219,7 +219,8 @@ def test_key_column_sorts_by_open_key_number(qtbot: Any, tmp_path: Path) -> None
             TrackSpec("b.wav", tags={"key": "1d"}),
         ],
     )
-    window.key_notation_combo.setCurrentText(KeyDisplayNotation.OPEN_KEY.value)
+    combo = window.key_notation_combo
+    combo.setCurrentIndex(combo.findData(KeyDisplayNotation.OPEN_KEY.value))
 
     click_header(window, KEY_COLUMN)
 
@@ -237,7 +238,8 @@ def test_key_column_sorts_by_pitch_class_in_standard_notation(qtbot: Any, tmp_pa
             TrackSpec("b.wav", tags={"key": "F#"}),
         ],
     )
-    window.key_notation_combo.setCurrentText(KeyDisplayNotation.STANDARD.value)
+    combo = window.key_notation_combo
+    combo.setCurrentIndex(combo.findData(KeyDisplayNotation.STANDARD.value))
 
     click_header(window, KEY_COLUMN)
 
