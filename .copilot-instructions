@@ -1324,3 +1324,12 @@ Do not touch without active-human approval:
 - `scripts/check_pr_review_response.py` follows the foucault copy.
 
 Ruff skips the copied gate files. The agents lint covers those files.
+
+Application copy:
+
+- The `AGENTS.md` prose requirements govern code, code comments,
+  documentation, and agent interaction with the human.
+- They do not govern application or website copy.
+- On-screen strings under `src/infiniteprep/ui/` use plain UX copy:
+  short labels, plain verbs, and second person where it helps.
+- Owner ruling, 2026-11-21, recorded in UI-R (#245).
