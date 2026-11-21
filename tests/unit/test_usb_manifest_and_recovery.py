@@ -41,6 +41,7 @@ from infiniteprep.services.usb.recovery import (
     UsbRecoveryJournalStore,
 )
 from infiniteprep.services.usb.targets import TargetCandidate
+from tests.fixtures.call_recorder import CallRecorder
 from tests.unit.test_code_quality_invariants import (
     FORBIDDEN_CALL_NAMES,
     FORBIDDEN_COMMENT_MARKERS,
@@ -66,6 +67,11 @@ OVERDUE_SCAN_OFFSET = timedelta(days=31)
 MANUAL_CLEANUP_OFFSET = timedelta(days=32)
 BULK_CLEANUP_OFFSET = timedelta(days=33)
 BULK_HISTORY_OVERFLOW_COUNT = 10
+
+
+def select_export_id_and_path(item: UsbJournalEntry, path: Path) -> tuple[str, Path]:
+    """Return the export id and the mount root that one recovery callback received."""
+    return item.export_id, path
 
 
 def _sample_vocabulary() -> list[ManifestTagEntry]:
@@ -528,13 +534,13 @@ class UsbReconnectChoiceTests(unittest.TestCase):
                 TargetCandidate(name="sdb", inspection=inspection, error=None)
             )
             assert match is not None
-            calls: list[tuple[str, Path]] = []
+            calls = CallRecorder(record=select_export_id_and_path)
 
             updated = store.apply_reconnect_choice(
                 match,
                 ReconnectChoice.RESUME,
                 mount_root,
-                resume_callback=lambda item, path: calls.append((item.export_id, path)),
+                resume_callback=calls,
             )
 
             self.assertEqual(calls, [(entry.export_id, mount_root)])
@@ -589,13 +595,13 @@ class UsbReconnectChoiceTests(unittest.TestCase):
                 TargetCandidate(name="sdb", inspection=inspection, error=None)
             )
             assert match is not None
-            calls: list[tuple[str, Path]] = []
+            calls = CallRecorder(record=select_export_id_and_path)
 
             updated = store.apply_reconnect_choice(
                 match,
                 ReconnectChoice.RESTORE,
                 mount_root,
-                restore_callback=lambda item, path: calls.append((item.export_id, path)),
+                restore_callback=calls,
             )
 
             self.assertEqual(calls, [(entry.export_id, mount_root)])
@@ -622,14 +628,14 @@ class UsbReconnectChoiceTests(unittest.TestCase):
                 TargetCandidate(name="sdb", inspection=inspection, error=None)
             )
             assert match is not None
-            calls: list[tuple[str, Path]] = []
+            calls = CallRecorder(record=select_export_id_and_path)
 
             with self.assertRaises(ValueError):
                 store.apply_reconnect_choice(
                     match,
                     ReconnectChoice.RESUME,
                     wrong_mount,
-                    resume_callback=lambda item, path: calls.append((item.export_id, path)),
+                    resume_callback=calls,
                 )
             self.assertEqual(calls, [])
             self.assertIsNotNone(read_in_progress_manifest(wrong_mount))
@@ -640,7 +646,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
                     match,
                     ReconnectChoice.RESTORE,
                     mount_root,
-                    restore_callback=lambda item, path: calls.append((item.export_id, path)),
+                    restore_callback=calls,
                 )
             write_in_progress_manifest(
                 mount_root,
@@ -655,7 +661,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
                     match,
                     ReconnectChoice.RESTORE,
                     mount_root,
-                    restore_callback=lambda item, path: calls.append((item.export_id, path)),
+                    restore_callback=calls,
                 )
             self.assertEqual(calls, [])
 
