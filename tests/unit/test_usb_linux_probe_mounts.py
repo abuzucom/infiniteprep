@@ -53,12 +53,15 @@ class EscapedMountPathTests(unittest.TestCase):
     """The kernel writes a space in a mount path as an octal escape."""
 
     def test_writable_mount_with_a_space_is_healthy(self) -> None:
+        """Read-write options on a spaced mount path give a healthy result."""
         self.assertIs(probe_health("rw,relatime"), FilesystemHealth.HEALTHY)
 
     def test_read_only_mount_with_a_space_is_an_error(self) -> None:
+        """Read-only options on a spaced mount path give an error result."""
         self.assertIs(probe_health("ro,relatime"), FilesystemHealth.ERRORS)
 
     def test_short_mount_table_line_is_skipped(self) -> None:
+        """A mount table line without options leaves the partition health unknown."""
         partition = build_partition(mount_points=(SPACED_MOUNT_PATH,), filesystem_health=None)
         probe = LinuxPreflightProbe(run_fixed_commands, lambda: "/dev/sdb1 incomplete\n")
         result = probe.probe(build_inspection(partitions=(partition,)))

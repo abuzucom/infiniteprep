@@ -228,6 +228,7 @@ def test_discogs_fetch_rejects_unsafe_or_zero_led_release_id(entity_id: str) -> 
 
 
 def test_discogs_fetch_accepts_numeric_release_id() -> None:
+    """A plain numeric release id reaches the Discogs releases endpoint."""
     requested: list[str] = []
 
     def record_request(url: str, _params: dict[str, str]) -> dict[str, Any]:

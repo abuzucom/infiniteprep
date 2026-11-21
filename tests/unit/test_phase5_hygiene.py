@@ -32,15 +32,18 @@ PREVIOUS_STUCK_TEXT = (
     ],
 )
 def test_stuck_import_text_names_the_timeout(timeout_ms: int, expected: str) -> None:
+    """The stuck import text names the timeout in whole minutes or seconds."""
     assert expected in stuck_import_text(timeout_ms)
 
 
 def test_default_stuck_text_keeps_its_wording() -> None:
+    """The default timeout gives the same stuck text as the earlier fixed wording."""
     assert stuck_import_text(STUCK_FILE_TIMEOUT_MS) == PREVIOUS_STUCK_TEXT
     assert STUCK_TEXT == PREVIOUS_STUCK_TEXT
 
 
 def test_space_entries_keep_the_first_entry_per_mount_in_order() -> None:
+    """A repeated mount drops its later space entry and the order stays the same."""
     first = SpaceInfo(total_bytes=100, used_bytes=50, available_bytes=50)
     second = SpaceInfo(total_bytes=200, used_bytes=120, available_bytes=80)
     repeat = SpaceInfo(total_bytes=999, used_bytes=998, available_bytes=1)
@@ -55,4 +58,5 @@ def test_space_entries_keep_the_first_entry_per_mount_in_order() -> None:
 def test_split_time_seconds_counts_hours_from_minutes(
     total_seconds: int, expected: tuple[int, int, int]
 ) -> None:
+    """Whole seconds split into hours, minutes, and seconds."""
     assert split_time_seconds(total_seconds) == expected
