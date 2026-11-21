@@ -39,12 +39,10 @@ def declared_runtime_packages() -> frozenset[str]:
 
 def approved_runtime_packages() -> frozenset[str]:
     """Return the import names listed in the checked-in runtime allowlist."""
-    lines = ALLOWLIST_PATH.read_text(encoding="utf-8").splitlines()
-    entries = [
-        line.strip()
-        for line in lines
-        if line.strip() and not line.strip().startswith(COMMENT_PREFIX)
-    ]
+    stripped_lines = (
+        line.strip() for line in ALLOWLIST_PATH.read_text(encoding="utf-8").splitlines()
+    )
+    entries = [line for line in stripped_lines if line and not line.startswith(COMMENT_PREFIX)]
     return frozenset(normalize_package_name(entry) for entry in entries)
 
 
