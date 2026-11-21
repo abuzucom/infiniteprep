@@ -125,6 +125,9 @@ MINIMUM_WINDOW_WIDTH: Final[int] = 960
 MINIMUM_WINDOW_HEIGHT: Final[int] = 600
 SIDEBAR_WIDTH: Final[int] = 200
 DETAIL_PANEL_WIDTH: Final[int] = 480
+# A restored window stays where it was only while this much of its top strip shows.
+GRAB_STRIP_HEIGHT: Final[int] = 32
+MIN_GRAB_WIDTH: Final[int] = 120
 
 
 def find_layout_mode(window_width: int) -> LayoutMode:
@@ -136,14 +139,28 @@ def find_layout_mode(window_width: int) -> LayoutMode:
     return LayoutMode.NARROW
 
 
-def fit_window_on_screens(window: QRect, screens: list[QRect]) -> QRect:
-    """Return the window geometry moved onto a screen when no screen shows it.
+def shows_grab_strip(window: QRect, screen: QRect) -> bool:
+    """Return True when a screen shows enough of the window's top strip to drag it.
 
-    A window that overlaps any available screen area keeps its geometry. Otherwise it
-    moves to the center of the first screen, shrunk to fit that screen. A monitor
-    that is gone at launch therefore never leaves the window out of reach.
+    The strip stands in for the title bar just above the window's client area. The
+    whole strip height and at least 120 px of its width, or the whole width of a
+    narrower window, must sit on the screen.
     """
-    if not screens or any(window.intersects(screen) for screen in screens):
+    strip = QRect(window.x(), window.y(), window.width(), GRAB_STRIP_HEIGHT)
+    visible = strip.intersected(screen)
+    needed_width = min(MIN_GRAB_WIDTH, window.width())
+    return visible.height() == GRAB_STRIP_HEIGHT and visible.width() >= needed_width
+
+
+def fit_window_on_screens(window: QRect, screens: list[QRect]) -> QRect:
+    """Return the window geometry moved onto a screen when no screen shows its top.
+
+    A window whose top strip a screen shows keeps its geometry. Otherwise it moves to
+    the center of the first screen, shrunk to fit that screen. A monitor that is gone
+    at launch, or a corner that barely touches a screen, therefore never leaves the
+    window out of reach.
+    """
+    if not screens or any(shows_grab_strip(window, screen) for screen in screens):
         return QRect(window)
     target = screens[0]
     width = min(window.width(), target.width())

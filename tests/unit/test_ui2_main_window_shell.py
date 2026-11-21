@@ -181,6 +181,27 @@ def test_a_window_on_a_missing_monitor_moves_back_on_screen() -> None:
     assert moved.height() == saved.height()
 
 
+def test_a_window_that_barely_touches_a_screen_moves_back() -> None:
+    """A window that overlaps a screen only at one corner moves to the screen center.
+
+    The security review of this PR found that a one-pixel overlap kept the window
+    almost entirely off screen.
+    """
+    saved = QRect(SCREEN.right(), SCREEN.bottom(), 1200, 800)
+
+    moved = fit_window_on_screens(saved, [SCREEN])
+
+    assert moved.center() == SCREEN.center()
+    assert SCREEN.contains(moved)
+
+
+def test_a_window_with_its_top_strip_on_screen_stays_put() -> None:
+    """A window whose top 120 px of strip a screen shows keeps its position."""
+    saved = QRect(SCREEN.right() - 200, 100, 1200, 800)
+
+    assert fit_window_on_screens(saved, [SCREEN]) == saved
+
+
 def test_stage_text_drops_the_label_when_compact() -> None:
     """A compact stage button shows its number and count, and its name stays spoken."""
     assert format_stage_text(WorkflowStage.REVIEW, 4, show_label=True) == "3  Review  4"
