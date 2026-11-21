@@ -17,6 +17,7 @@ from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.action_handlers import export_playlist_with_feedback
 from infiniteprep.ui.main_window import MainWindow
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
 from tests.fixtures.qt_dialogs import DialogRecorder
 
 
@@ -40,12 +41,12 @@ def test_export_button_appends_m3u8_and_passes_visible_files(
 ) -> None:
     """A destination without the suffix gains .m3u8, and the visible IDs reach the callback."""
     repo, importer, file_ids = crate
-    export_calls: list[tuple[list[str], Path]] = []
+    export_calls = CallRecorder()
     window = MainWindow(
         repository=repo,
         import_service=importer,
         review_service=ReviewService(repo),
-        on_export_playlist=lambda fids, dest: export_calls.append((fids, dest)),
+        on_export_playlist=export_calls,
     )
     qtbot.addWidget(window)
     chosen = str(tmp_path / "exports" / "friday_set")
@@ -62,12 +63,12 @@ def test_cancelled_save_dialog_exports_nothing(
 ) -> None:
     """Closing the save dialog without a path makes no export call."""
     repo, importer, _ = crate
-    export_calls: list[tuple[list[str], Path]] = []
+    export_calls = CallRecorder()
     window = MainWindow(
         repository=repo,
         import_service=importer,
         review_service=ReviewService(repo),
-        on_export_playlist=lambda fids, dest: export_calls.append((fids, dest)),
+        on_export_playlist=export_calls,
     )
     qtbot.addWidget(window)
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_args: ("", ""))

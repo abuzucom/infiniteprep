@@ -115,7 +115,8 @@ def test_toolbar_actions_explain_an_empty_library(
     qtbot: Any, tmp_path: Path, messages: list[tuple[QMessageBox.Icon, str, str]]
 ) -> None:
     """Every toolbar action on the visible files says why it did nothing on an empty table."""
-    calls: list[object] = []
+    # The recorder keeps the two export callback arguments as one pair.
+    calls = CallRecorder()
     window = build_window(
         qtbot,
         tmp_path,
@@ -123,7 +124,7 @@ def test_toolbar_actions_explain_an_empty_library(
         on_analyze_batch=calls.append,
         on_open_write_dialog=calls.append,
         on_transcode_batch=calls.append,
-        on_export_playlist=lambda ids, destination: calls.append((ids, destination)),
+        on_export_playlist=calls,
     )
     # Identify & Analyze and Preview & Apply Writes keep no button attribute, so their
     # handlers run directly. The other three run through their buttons.

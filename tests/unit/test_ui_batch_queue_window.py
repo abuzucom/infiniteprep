@@ -193,7 +193,7 @@ def test_an_idle_window_closes_without_a_prompt(
 ) -> None:
     """With no batch running or waiting, close asks nothing."""
     window, _repository, _jobs, _folder = window_parts
-    # A wrongly shown prompt answers Keep Working, so the window would stay open.
+    # A wrongly shown prompt answers Keep Working. The window would then stay open.
     prompts = CallRecorder(reply=CLOSE_STAY)
     monkeypatch.setattr(window, "ask_close_during_import", prompts)
     window.show()
