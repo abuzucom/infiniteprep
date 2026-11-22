@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.81.2] (2026-11-22)
+## [0.81.3] (2026-11-22)
 
 ### Changed
 
@@ -14,7 +14,16 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Ruff joins the signatures that now fit on one line.
   - The copied gate tests listed in the ruff `extend-exclude` keep the upstream names.
   - Nine UI test files that #347 also changes keep the old names until that pull request lands.
-- The version advances from 0.81.1 to 0.81.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.81.1 to 0.81.3 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
+### Fixed
+
+- The USB recovery launch scan sends its notices to any passed callback, including a falsy one such as an empty recording list. Before, an empty recorder fell through to the real notice dialog. The dialog waited for a click and hung the test suite on every platform.
+- Every injected function and callback counts as passed unless it is `None`. Before, a falsy stand-in fell back to the real default, and ten tests reached the network or skipped the callback.
+  - The Discogs, iTunes, MusicBrainz, AcoustID, and Ollama adapters keep an injected request function.
+  - The fpcalc installer keeps an injected downloader.
+  - The Linux, macOS, and Windows drive tools keep an injected command runner or info reader. The USB target list keeps a passed inspector and probe.
+  - The main window toolbar actions and the detail panel change callback run a falsy callback.
 
 ## [0.81.1] (2026-11-21)
 
