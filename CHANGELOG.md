@@ -24,6 +24,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Each file row opens to list every field that changes, with the current and the new value.
   - Each file shows Ready, Ready (some tag data will be lost), or Skipped. The reasons sit in the status tooltip.
   - The save button names the number of files it saves.
+- Settings lists the sections on the left with an icon each, and shows the chosen section on the right (UI-2, #342).
+  - Each section states when its changes take effect.
+  - The Identification note and the USB reserve note state that the app stores these values for later. Analysis and USB export read neither yet.
 
 - The main window follows the UI-R layout (UI-2, #342).
   - A workflow bar shows Import, Analyze, Review, Apply, and Export with a track count each. The first stage with waiting tracks carries its action as the main button. Transcode, History, and Settings sit at the right end.

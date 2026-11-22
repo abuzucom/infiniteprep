@@ -15,6 +15,10 @@ class SettingsTab(QWidget):
     TITLE: ClassVar[str] = ""
     # A tab with SHOWN False stays out of the dialog. Its apply_to still runs on save.
     SHOWN: ClassVar[bool] = True
+    # The bundled icon beside the section title in the section list.
+    ICON: ClassVar[str] = ""
+    # The note under the section title on when a change takes effect.
+    TAKES_EFFECT: ClassVar[str] = ""
 
     def apply_to(self, settings: AppSettings) -> None:
         """Copy this tab's input values into settings. A tab without settings changes nothing."""

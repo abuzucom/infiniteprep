@@ -13,6 +13,8 @@ class TranscodeTab(FormSettingsTab):
     """Settings tab for the transcode mode, the preset, and playlist path style."""
 
     TITLE = "Transcode"
+    ICON = "arrows-exchange"
+    TAKES_EFFECT = "Changes apply to your next transcode and your next playlist export."
 
     def __init__(self, settings: AppSettings, parent: QWidget | None = None) -> None:
         """Initialize the tab from the stored settings."""

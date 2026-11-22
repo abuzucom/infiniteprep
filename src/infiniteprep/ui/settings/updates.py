@@ -9,6 +9,7 @@ class UpdatesTab(PlaceholderTab):
     """Settings tab for application updates."""
 
     TITLE = "Updates"
+    ICON = "cloud-download"
 
 
 TAB_CLASS = UpdatesTab

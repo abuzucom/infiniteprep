@@ -47,6 +47,12 @@ class StorageTab(FormSettingsTab):
     """
 
     TITLE = "Storage"
+    ICON = "hard-drive"
+    TAKES_EFFECT = (
+        "USB recovery cleanup changes apply the next time InfinitePrep starts. "
+        "The USB reserve is saved for USB export, which isn't available yet. "
+        "The delete buttons act right away."
+    )
 
     def __init__(
         self,
