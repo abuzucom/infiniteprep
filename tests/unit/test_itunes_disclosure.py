@@ -12,7 +12,7 @@ from infiniteprep.config.settings import AppSettings
 from infiniteprep.ui.settings.identification import IdentificationTab
 
 
-def test_the_disclosure_names_the_host_and_the_query_data() -> None:
+def test_disclosure_names_host_and_query_data() -> None:
     """The disclosure text names the host and the data every lookup sends."""
     assert ITUNES_SEARCH_HOST == "itunes.apple.com"
     assert ITUNES_SEARCH_HOST in DISCLOSURE_TEXT

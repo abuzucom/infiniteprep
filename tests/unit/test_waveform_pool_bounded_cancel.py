@@ -19,9 +19,7 @@ STUCK_READ_MAX_SECONDS = 10.0
 GENERATION = 1
 
 
-def test_bounded_cancel_returns_before_a_stuck_worker_finishes(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_cancel_returns_before_stuck_worker(qtbot: Any, tmp_path: Path, monkeypatch: Any) -> None:
     """The caller regains control, and the cancelled worker emits nothing later."""
     started = threading.Event()
     release = threading.Event()

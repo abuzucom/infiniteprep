@@ -63,7 +63,7 @@ class InPlaceTranscodeAssetRefreshTests(unittest.TestCase):
         self.assertEqual(asset.file_size, source.stat().st_size)
         self.assertEqual(Path(asset.current_path), source)
 
-    def test_extension_change_moves_the_record_to_the_new_file(self) -> None:
+    def test_extension_change_moves_record(self) -> None:
         """A FLAC to WAV transcode points the record at the new WAV and its hash."""
         source = create_flac_fixture(self.root / "crate" / "track.flac", duration_sec=1.0)
         file_id = self.import_file(source)
@@ -82,7 +82,7 @@ class InPlaceTranscodeAssetRefreshTests(unittest.TestCase):
         self.assertEqual(asset.format, AudioFormat.WAV)
         self.assertEqual(asset.content_hash, compute_sha256(result.output_path))
 
-    def test_blank_manual_value_keeps_the_original_tag_on_the_output(self) -> None:
+    def test_blank_manual_value_keeps_original_tag(self) -> None:
         """A blank manual artist leaves the original artist tag on the transcoded file."""
         source = create_wav_fixture(
             self.root / "crate" / "tagged.wav",

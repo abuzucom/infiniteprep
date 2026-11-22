@@ -36,9 +36,7 @@ def _suspect_result() -> FakeLosslessResult:
     )
 
 
-def test_closing_the_main_window_drops_late_detail_results(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_close_drops_late_detail_results(qtbot: Any, tmp_path: Path, monkeypatch: Any) -> None:
     """A result queued before the window closes never reaches the detail panel."""
     repository = Repository(DatabaseManager(":memory:"))
     window = MainWindow(

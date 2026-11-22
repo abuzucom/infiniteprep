@@ -79,7 +79,7 @@ def test_utf16_text_and_repeated_data_atoms_decode() -> None:
     assert result["\xa9gen"] == ("House", "Techno")
 
 
-def test_aac_properties_come_from_mvhd_and_the_sample_entry() -> None:
+def test_aac_properties_from_mvhd_and_entry() -> None:
     """Duration, channels, sample rate, and the esds average bitrate are reported."""
     info = read_mp4(m4a_file(mvhd(RATE_44K, RATE_44K * SECONDS), aac_track(320_000)))
     assert info.duration == pytest.approx(SECONDS)
@@ -109,7 +109,7 @@ def test_alac_properties_come_from_the_alac_config() -> None:
     assert info.bitrate == 4_000_000
 
 
-def test_bitrate_falls_back_to_sample_sizes_over_duration() -> None:
+def test_bitrate_falls_back_to_sample_sizes() -> None:
     """With no esds average bitrate, bitrate is the sample size total over the duration."""
     sizes = [FALLBACK_SAMPLE_SIZE] * FALLBACK_SAMPLE_COUNT
     info = read_mp4(m4a_file(mvhd(RATE_44K, RATE_44K * FALLBACK_SECONDS), aac_track(0, sizes)))
@@ -117,7 +117,7 @@ def test_bitrate_falls_back_to_sample_sizes_over_duration() -> None:
 
 
 @pytest.mark.parametrize("entry_type", [b"drms", b"drmi", b"enca"])
-def test_protected_sample_entry_marks_the_file_encrypted(entry_type: bytes) -> None:
+def test_protected_entry_marks_file_encrypted(entry_type: bytes) -> None:
     """FairPlay and common-encryption sample entries set encrypted."""
     entry = audio_entry(entry_type, 2, RATE_44K)
     info = read_mp4(m4a_file(mvhd(RATE_44K, RATE_44K), trak(b"soun", entry)))
@@ -140,7 +140,7 @@ def test_large_and_open_ended_atoms_are_walked() -> None:
     assert read_mp4(data).duration == pytest.approx(2)
 
 
-def test_meta_without_version_and_flags_still_yields_tags() -> None:
+def test_meta_without_header_yields_tags() -> None:
     """A QuickTime-style meta atom with no version and flags still exposes its ilst."""
     tags = udta(item(b"\xa9nam", data_atom(1, b"QT")), full_meta=False)
     assert tag_map(m4a_file(mvhd(RATE_44K, RATE_44K), aac_track(), tags)) == {"\xa9nam": ("QT",)}

@@ -79,9 +79,7 @@ def test_environment_needs_both_values() -> None:
     assert appimage_launch_from_environment({"APPIMAGE": "", "APPDIR": "/run/mount_a"}) is None
 
 
-def test_appimage_keeps_database_and_settings_beside_the_file(
-    user_dirs: Path, downloads: Path, appdir: Path
-) -> None:
+def test_appimage_keeps_data_beside_file(user_dirs: Path, downloads: Path, appdir: Path) -> None:
     """The folder beside the .AppImage holds the database and settings only (D281, D282)."""
     confirm = build_never_asked_confirm()
 
@@ -190,7 +188,7 @@ def test_inherited_appimage_values_are_ignored(
     assert not (downloads / APPIMAGE_DATA_DIR_NAME).exists()
 
 
-def test_tarball_marker_still_works_with_inherited_values(
+def test_tarball_marker_works_with_inherited(
     user_dirs: Path, downloads: Path, appdir: Path, tmp_path: Path
 ) -> None:
     """The tar.gz marker keeps working when ignored AppImage values are present (D279)."""
@@ -227,9 +225,7 @@ def test_appimage_wins_over_a_marker(user_dirs: Path, downloads: Path, appdir: P
     assert not (_executable(appdir).parent / PORTABLE_DATA_DIR_NAME).exists()
 
 
-def test_unwritable_folder_with_remember_saves_the_choice(
-    user_dirs: Path, downloads: Path, appdir: Path
-) -> None:
+def test_unwritable_remember_saves_choice(user_dirs: Path, downloads: Path, appdir: Path) -> None:
     """An unwritable folder gets the D258 prompt, keyed by the AppImage's folder (D280)."""
     _block_data_folder(downloads)
     confirm = RecordingConfirm(FallbackAnswer(use_per_user=True, remember=True))

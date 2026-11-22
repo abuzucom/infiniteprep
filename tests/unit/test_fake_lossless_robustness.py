@@ -64,7 +64,7 @@ def _stored_fake_lossless_results(repository: Repository, file_id: str) -> list[
     ]
 
 
-def test_smoothing_keeps_a_flat_profile_flat_at_both_edges() -> None:
+def test_smoothing_keeps_flat_edges_flat() -> None:
     """Smoothing a constant dB profile returns the same level in every bin."""
     freqs = _profile_freqs()
     flat = np.full(len(freqs), STOPBAND_DB)
@@ -88,7 +88,7 @@ def test_spectral_cutoff_ignores_the_nyquist_edge_bin() -> None:
     assert abs(cutoff_hz - PASSBAND_EDGE_HZ) < CUTOFF_TOLERANCE_HZ
 
 
-def test_expected_detection_failure_emits_a_failure_signal(tmp_path: Path) -> None:
+def test_detection_failure_emits_signal(tmp_path: Path) -> None:
     """An unreadable source reports a fake-lossless failure instead of silence."""
     task = _AnalysisTask(FILE_ID, GENERATION, tmp_path / "missing.flac", threading.Event())
     failures = CallRecorder()
@@ -114,9 +114,7 @@ def test_unexpected_detection_error_propagates(tmp_path: Path, monkeypatch: Any)
         task._run_fake_lossless()
 
 
-def test_pool_drops_results_that_arrive_after_cancellation(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_pool_drops_results_after_cancel(qtbot: Any, tmp_path: Path, monkeypatch: Any) -> None:
     """A queued result delivered after cancel_all never reaches listeners."""
     pool = WaveformAnalysisPool()
     monkeypatch.setattr(pool._pool, "start", CallRecorder())
@@ -131,7 +129,7 @@ def test_pool_drops_results_that_arrive_after_cancellation(
     assert delivered == [(FILE_ID, GENERATION)]
 
 
-def test_detection_failure_replaces_a_stale_stored_warning(qtbot: Any, tmp_path: Path) -> None:
+def test_failure_replaces_stale_warning(qtbot: Any, tmp_path: Path) -> None:
     """A failed re-analysis clears the previously stored fake-lossless warning."""
     source = create_wav_fixture(tmp_path / "track.wav")
     repository = Repository(DatabaseManager(":memory:"))

@@ -58,7 +58,7 @@ def test_clean_tag_gets_no_dropped_data_warning(tmp_path: Path) -> None:
     assert plan.is_safe_to_apply
 
 
-def test_unreadable_id3_frame_warns_and_still_allows_the_write(tmp_path: Path) -> None:
+def test_unreadable_frame_warns_but_writes(tmp_path: Path) -> None:
     """An encrypted frame shows in the preview. The write stays allowed."""
     source = create_mp3_fixture(tmp_path / "encrypted.mp3")
     frames = v23_frame("TIT2", UTF16_ENCODING + utf16("Old")) + v23_frame(

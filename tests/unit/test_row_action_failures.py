@@ -68,7 +68,7 @@ def artist_button(panel: DetailPanel, text: str) -> QPushButton:
     return next(button for button in actions.findChildren(QPushButton) if button.text() == text)
 
 
-def test_a_failed_save_keeps_typed_text_through_the_next_refresh(
+def test_failed_save_keeps_typed_text(
     panel_and_file: tuple[DetailPanel, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A save that raises leaves no marker behind. The next refresh keeps the typed text."""
@@ -100,7 +100,7 @@ def test_a_refused_accept_keeps_the_typed_text(
     assert artist_edit(panel).text() == TYPED_ARTIST
 
 
-def test_a_successful_accept_replaces_the_typed_text_with_the_accepted_value(
+def test_successful_accept_replaces_text(
     panel_and_file: tuple[DetailPanel, str],
 ) -> None:
     """An accepted proposal replaces the row's typed text. Other rows keep theirs."""
@@ -127,7 +127,7 @@ def test_a_successful_accept_replaces_the_typed_text_with_the_accepted_value(
     assert refreshed_title.text() == TYPED_TITLE
 
 
-def test_lock_without_an_approved_value_explains_itself(
+def test_lock_without_value_explains_why(
     panel_and_file: tuple[DetailPanel, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Lock on a field with no approved value says what to do and changes nothing."""

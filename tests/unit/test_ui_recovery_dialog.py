@@ -58,7 +58,7 @@ def interrupted(
     return repo, write_svc, source, original_hash
 
 
-def test_restore_button_returns_the_original_and_closes_the_dialog(qtbot, interrupted: Any) -> None:
+def test_restore_button_restores_and_closes(qtbot, interrupted: Any) -> None:
     """Clicking Restore from backup recovers the file, and the empty dialog accepts."""
     repo, write_svc, source, original_hash = interrupted
     dialog = RecoveryDialog(write_svc)
@@ -95,7 +95,7 @@ def test_keep_button_marks_the_write_finished(
     assert write_svc.list_interrupted_operations() == []
 
 
-def test_declining_mark_as_finished_keeps_the_write_pending(
+def test_declined_finish_keeps_write_pending(
     qtbot, interrupted: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """No to the keep prompt leaves the interrupted write listed and unresolved."""

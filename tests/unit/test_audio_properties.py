@@ -72,7 +72,7 @@ def streaminfo(sample_rate: int, channels: int, bits: int, total: int) -> bytes:
     return struct.pack(">HH", 4096, 4096) + bytes(6) + struct.pack(">Q", packed) + bytes(16)
 
 
-def test_cbr_mp3_duration_comes_from_audio_bytes_over_bitrate() -> None:
+def test_cbr_mp3_duration_uses_bitrate() -> None:
     """An MP3 without a VBR header uses audio bytes x 8 over the first frame bitrate."""
     data = mpeg_frames(MPEG1_STEREO_HEADER, MPEG1_FRAME_BYTES)
     props = read_mp3_properties(data)
@@ -82,7 +82,7 @@ def test_cbr_mp3_duration_comes_from_audio_bytes_over_bitrate() -> None:
     assert props.bits_per_sample is None
 
 
-def test_leading_id3_and_trailing_id3v1_are_not_counted_as_audio() -> None:
+def test_id3_tags_not_counted_as_audio() -> None:
     """The ID3v2 tag before the frames and the ID3v1 tag after them do not lengthen the track."""
     audio = mpeg_frames(MPEG1_STEREO_HEADER, MPEG1_FRAME_BYTES)
     tag = tag_bytes(3, v23_frame("TIT2", b"\x01" + utf16("Song")))
@@ -96,7 +96,7 @@ def test_mono_mpeg1_header_reports_one_channel() -> None:
     assert props.channels == 1
 
 
-def test_mpeg2_layer3_uses_its_own_rate_and_bitrate_tables() -> None:
+def test_mpeg2_layer3_uses_own_tables() -> None:
     """An MPEG-2 Layer III header reads 22.05 kHz and 64 kbps from the MPEG-2 tables."""
     props = read_mp3_properties(mpeg_frames(MPEG2_HEADER, MPEG2_FRAME_BYTES))
     assert (props.sample_rate, props.bitrate) == (RATE_22K, MPEG2_BITRATE)
@@ -105,7 +105,7 @@ def test_mpeg2_layer3_uses_its_own_rate_and_bitrate_tables() -> None:
 
 
 @pytest.mark.parametrize("marker", [b"Xing", b"Info"])
-def test_xing_or_info_frame_count_sets_duration_and_bitrate(marker: bytes) -> None:
+def test_xing_or_info_count_sets_duration(marker: bytes) -> None:
     """A Xing or Info header with frame and byte counts gives exact VBR timing."""
     header = marker + struct.pack(">III", 3, VBR_FRAMES, VBR_BYTES)
     audio = mpeg_frames(MPEG1_STEREO_HEADER, MPEG1_FRAME_BYTES)
@@ -130,7 +130,7 @@ def test_false_sync_before_the_audio_is_skipped() -> None:
     assert props.bitrate == MPEG1_BITRATE
 
 
-def test_mp3_shorter_than_an_id3v1_tag_keeps_its_whole_length() -> None:
+def test_mp3_shorter_than_id3v1_keeps_length() -> None:
     """A file under 128 bytes holds no ID3v1 tag, even when "TAG" appears inside a frame."""
     frame = bytearray(MPEG25_MONO_HEADER + bytes(MPEG25_FRAME_BYTES - len(MPEG25_MONO_HEADER)))
     # A negative slice start of 72 - 128 reads from byte 16 of a 72-byte file.
@@ -158,7 +158,7 @@ def test_wav_properties_come_from_fmt_and_data_chunks() -> None:
     assert stream.tag_body is None
 
 
-def test_wav_id3_chunk_body_is_returned_without_the_audio() -> None:
+def test_wav_id3_chunk_excludes_audio() -> None:
     """The id3 chunk body comes back as the tag bytes, whatever its position."""
     tag = tag_bytes(3, v23_frame("TIT2", b"\x01" + utf16("Song")))
     for chunk_id in (b"id3 ", b"ID3 "):
@@ -170,7 +170,7 @@ def test_wav_id3_chunk_body_is_returned_without_the_audio() -> None:
         assert read_wav_stream(data).tag_body == tag
 
 
-def test_wav_data_chunk_longer_than_the_file_is_clamped() -> None:
+def test_wav_oversized_data_chunk_is_clamped() -> None:
     """A data chunk size past the end, as in a truncated recording, counts only real bytes."""
     payload = b"WAVE" + riff_chunk(b"fmt ", WAV_FMT_BODY)
     payload += b"data" + struct.pack("<I", 0xFFFFFFF0) + PCM_SAMPLES
@@ -206,7 +206,7 @@ def test_aiff_properties_come_from_the_comm_chunk(form_type: bytes) -> None:
 
 # Exponent fields 0x401F (2 ** 32, one past 32 bits), 0x4FFF, and 0x7FFE (the largest finite).
 @pytest.mark.parametrize("exponent_field", [0x401F, 0x4FFF, 0x7FFE])
-def test_aiff_rate_beyond_32_bits_raises_instead_of_overflowing(exponent_field: int) -> None:
+def test_aiff_rate_over_32_bits_raises(exponent_field: int) -> None:
     """A COMM rate whose exponent puts it past 32 bits raises AudioPropertiesError.
 
     A float conversion of the largest exponents would raise OverflowError, which callers
@@ -236,7 +236,7 @@ def test_flac_properties_come_from_streaminfo() -> None:
     assert props.bitrate == len(audio) * BITS_PER_BYTE // FLAC_SECONDS
 
 
-def test_flac_comment_body_is_returned_and_a_leading_id3_tag_is_skipped() -> None:
+def test_flac_comment_returned_id3_skipped() -> None:
     """The first Vorbis comment body comes back, and a leading ID3v2 tag does not stop the read."""
     info = streaminfo(RATE_44K, 2, 16, FLAC_TOTAL_SAMPLES)
     comment = vorbis_body("vendor", "TITLE=Song")

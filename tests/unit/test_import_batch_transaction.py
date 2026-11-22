@@ -69,9 +69,7 @@ def test_batch_imports_every_file_and_reports_progress(
     assert len(repository.list_files()) == TRACK_COUNT
 
 
-def test_other_connections_see_nothing_until_the_batch_commits(
-    repository: Repository, tmp_path: Path
-) -> None:
+def test_batch_hidden_until_commit(repository: Repository, tmp_path: Path) -> None:
     """A reader on another thread counts no imported rows while the batch is still open."""
     make_tracks(tmp_path / "crate")
     counts_seen_elsewhere: list[int] = []
@@ -111,9 +109,7 @@ def test_cancel_rolls_back_the_whole_batch(repository: Repository, tmp_path: Pat
     assert repository.list_source_groups() == []
 
 
-def test_a_file_that_fails_is_skipped_and_the_rest_commit(
-    repository: Repository, tmp_path: Path
-) -> None:
+def test_failed_file_skipped_rest_commit(repository: Repository, tmp_path: Path) -> None:
     """A file removed after the scan fails alone, and the other files still import."""
     tracks = make_tracks(tmp_path / "crate")
     vanishing = tracks[1].resolve()
@@ -148,7 +144,7 @@ def test_any_error_in_one_file_skips_only_that_file(repository: Repository, tmp_
 
 
 @pytest.mark.parametrize("interrupt", [KeyboardInterrupt(), SystemExit(1)])
-def test_an_interrupt_in_one_file_rolls_back_the_whole_batch(
+def test_interrupt_rolls_back_whole_batch(
     repository: Repository, tmp_path: Path, interrupt: BaseException
 ) -> None:
     """KeyboardInterrupt and SystemExit are not Exception. They escape the per-file handler."""
@@ -219,7 +215,7 @@ def test_a_second_batch_on_the_same_thread_is_refused(repository: Repository) ->
         pass
 
 
-def test_a_savepoint_that_cannot_roll_back_aborts_the_batch(repository: Repository) -> None:
+def test_savepoint_rollback_error_aborts_batch(repository: Repository) -> None:
     """When an item's rollback fails, the whole batch rolls back and no partial item stays."""
     group = SourceGroup(
         id="group-1",

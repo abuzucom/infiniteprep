@@ -47,7 +47,7 @@ def test_discard_keeps_a_file_edited_in_place(tmp_path: Path) -> None:
     assert discard_leftovers(tmp_path) == []
 
 
-def test_discard_deletes_a_file_with_the_expected_content(tmp_path: Path) -> None:
+def test_discard_deletes_matching_file(tmp_path: Path) -> None:
     """Same identity and the expected digest delete the file."""
     target = tmp_path / "renamed.wav"
     target.write_bytes(WRITTEN_BYTES)
@@ -59,9 +59,7 @@ def test_discard_deletes_a_file_with_the_expected_content(tmp_path: Path) -> Non
     assert list(tmp_path.iterdir()) == []
 
 
-def test_restore_keeps_a_renamed_file_edited_in_place_during_the_restore(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_restore_keeps_edited_renamed_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """An in-place edit after the restore began keeps the renamed file and its new bytes."""
     repo = Repository(DatabaseManager(":memory:"))
     source = create_wav_fixture(

@@ -41,9 +41,7 @@ def test_plain_message_sets_the_plain_text_format(qtbot, shown_boxes: list) -> N
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Windows file names cannot hold angle brackets.")
-def test_export_success_dialog_keeps_markup_in_the_destination_literal(
-    qtbot, tmp_path: Path, shown_boxes: list
-) -> None:
+def test_export_dialog_keeps_markup_literal(qtbot, tmp_path: Path, shown_boxes: list) -> None:
     """A destination name holding HTML tags reaches the dialog as literal plain text."""
     repo = Repository(DatabaseManager(":memory:"))
     track = create_wav_fixture(tmp_path / "crate" / "track.wav", duration_sec=1.0)

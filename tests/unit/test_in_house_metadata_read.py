@@ -46,9 +46,7 @@ def adapter() -> MetadataTagAdapter:
     return MetadataTagAdapter()
 
 
-def test_mp3_tags_timing_and_traktor_frame_read_from_in_house_codecs(
-    adapter: MetadataTagAdapter, tmp_path: Path
-) -> None:
+def test_mp3_reads_tags_timing_and_traktor(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
     """An MP3 reads its mapped fields, CBR timing, and a PRIV:TRAKTOR4 summary with a digest."""
     path = create_mp3_fixture(tmp_path / "track.mp3", tags=TAGS, include_traktor_frame=True)
     meta = adapter.read_metadata(path)
@@ -65,9 +63,7 @@ def test_mp3_tags_timing_and_traktor_frame_read_from_in_house_codecs(
     assert meta.warnings == []
 
 
-def test_mp3_comment_and_custom_frames_keep_readable_keys(
-    adapter: MetadataTagAdapter, tmp_path: Path
-) -> None:
+def test_mp3_comment_and_custom_frame_keys(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
     """COMM decodes its text under COMM:<description>:<language>, and unknown TXXX stays raw."""
     comment = v23_frame("COMM", b"\x01eng" + utf16("") + b"\x00\x00" + utf16("Opener"))
     note = b"\x01" + utf16("CUSTOM_DJ_NOTE") + b"\x00\x00" + utf16("warmup")
@@ -140,9 +136,7 @@ def test_m4a_reads_properties_and_keeps_items_raw(
     assert meta.standard_tags == {}
 
 
-def test_ogg_reads_properties_and_keeps_the_xdj_warning(
-    adapter: MetadataTagAdapter, tmp_path: Path
-) -> None:
+def test_ogg_reads_properties_and_xdj_warning(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
     """Ogg Vorbis reads its stream properties and still warns that the XDJ-RX3 cannot play it."""
     path = create_ogg_fixture(tmp_path / "track.ogg")
     meta = adapter.read_metadata(path)

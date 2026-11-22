@@ -42,7 +42,7 @@ def runner_jobs() -> list[tuple[str, dict[str, Any]]]:
 class WorkflowTimeoutTest(unittest.TestCase):
     """A hung step ends at a stated limit instead of the six hour runner default."""
 
-    def test_each_timeout_is_a_whole_minute_count_below_the_default(self) -> None:
+    def test_timeout_is_minutes_below_default(self) -> None:
         """Every runner job states a positive whole-minute timeout below the default.
 
         A missing key reads as None and fails the integer check. YAML true reads as

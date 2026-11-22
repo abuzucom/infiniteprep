@@ -65,7 +65,7 @@ def test_render_round_trips_utf8_values() -> None:
     assert parse_vorbis_comment(render_vorbis_comment(comment)) == comment
 
 
-def test_smaller_comment_fills_padding_so_audio_does_not_move() -> None:
+def test_small_comment_keeps_audio_in_place() -> None:
     """When the new comment fits in the old comment plus padding, the file size stays."""
     source = flac_file(
         flac_block(VORBIS_COMMENT, OLD_COMMENT),
@@ -78,7 +78,7 @@ def test_smaller_comment_fills_padding_so_audio_does_not_move() -> None:
     assert get_field_values(read_flac_comment(written), "TITLE") == ["New"]
 
 
-def test_comment_larger_than_padding_moves_audio_intact() -> None:
+def test_large_comment_moves_audio_intact() -> None:
     """A comment that outgrows the space gets default padding, and the audio stays intact."""
     source = flac_file(flac_block(VORBIS_COMMENT, OLD_COMMENT, last=True))
     long_title = "A much longer title " * 30
@@ -112,7 +112,7 @@ def test_other_blocks_keep_their_bytes_and_order() -> None:
     assert types[:4] == [STREAMINFO, APPLICATION, SEEKTABLE, PICTURE]
 
 
-def test_missing_comment_block_is_added_after_streaminfo() -> None:
+def test_adds_comment_after_streaminfo() -> None:
     """A FLAC without a Vorbis comment gains one right after STREAMINFO."""
     source = flac_file(flac_block(SEEKTABLE, bytes(18), last=True))
     written = write_flac_comment(source, VorbisComment("v", (("TITLE", "New"),)))

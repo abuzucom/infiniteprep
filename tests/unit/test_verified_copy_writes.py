@@ -76,9 +76,7 @@ def test_a_failed_tag_write_never_touches_the_original(
     assert sorted(p.name for p in source.parent.iterdir()) == ["track.wav"]
 
 
-def test_a_copy_that_fails_verification_is_not_swapped_in(
-    library: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_unverified_copy_is_not_swapped_in(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """A copy whose tags do not read back raises, and the original stays in place."""
     _, write_svc, file_id, source, original_hash = library
     monkeypatch.setattr(write_svc.tag_adapter, "_write_tags_by_format", lambda _p, _t: None)

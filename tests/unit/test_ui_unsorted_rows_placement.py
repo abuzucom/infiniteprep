@@ -50,7 +50,7 @@ def test_update_refuses_an_unknown_placement(tmp_path: Path) -> None:
     assert manager.load().unsorted_rows_placement == UNSORTED_PLACEMENT_FIRST
 
 
-def test_a_stored_unknown_placement_falls_back_to_the_default(tmp_path: Path) -> None:
+def test_bad_stored_placement_uses_default(tmp_path: Path) -> None:
     """A settings file with an unknown placement loads with the default value."""
     path = tmp_path / "settings.json"
     path.write_text(json.dumps({"unsorted_rows_placement": "middle"}), encoding="utf-8")

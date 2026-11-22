@@ -5,6 +5,17 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.81.2] (2026-11-22)
+
+### Changed
+
+- Test function names stay at 50 characters or fewer, `test_` included.
+  - 582 tests under `tests/unit/`, `tests/integration/`, `tests/e2e/`, and `tests/` take shorter names. Only the `def` lines change.
+  - Ruff joins the signatures that now fit on one line.
+  - The copied gate tests listed in the ruff `extend-exclude` keep the upstream names.
+  - Nine UI test files that #347 also changes keep the old names until that pull request lands.
+- The version advances from 0.81.1 to 0.81.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
 ## [0.81.1] (2026-11-21)
 
 ### Added

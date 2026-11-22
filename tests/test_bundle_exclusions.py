@@ -36,7 +36,7 @@ def _entry(destination: str, typecode: str = "BINARY") -> tuple[str, str, str]:
 class Gpl3ExclusionTest(unittest.TestCase):
     """Qt Virtual Keyboard and GNU Readline leave every bundle (D302)."""
 
-    def test_virtual_keyboard_files_are_dropped_on_every_os(self) -> None:
+    def test_virtual_keyboard_dropped_everywhere(self) -> None:
         """Libraries, frameworks, plugins, and symlinks for Virtual Keyboard all go."""
         for destination in (
             "libQt6VirtualKeyboard.so.6",
@@ -123,7 +123,7 @@ class LibraryPruningTest(unittest.TestCase):
         """Return the libraries the given source links against."""
         return self.links[source]
 
-    def test_orphaned_chain_is_removed_until_nothing_changes(self) -> None:
+    def test_orphan_chain_removed_until_stable(self) -> None:
         """GTK goes first, then cairo, which only GTK needed. The used chain stays."""
         entries = [_entry(destination.removeprefix("/build/")) for destination in self.links]
 
@@ -184,7 +184,7 @@ class SpecAndWorkflowTest(unittest.TestCase):
         [step] = [step for step in self.steps if step.get("name") == name]
         return step
 
-    def test_spec_excludes_readline_and_applies_every_filter(self) -> None:
+    def test_spec_excludes_readline_runs_filters(self) -> None:
         """The spec loads the filters by exact path, excludes readline, and runs each filter."""
         self.assertNotIn("sys.path.insert", self.spec)
         self.assertIn('spec_from_file_location("bundle_filters", filters_path)', self.spec)
@@ -201,7 +201,7 @@ class SpecAndWorkflowTest(unittest.TestCase):
         prune = self.spec.index("prune_unneeded_libraries(a.binaries")
         self.assertLess(prune, self.spec.index("PYZ("))
 
-    def test_linux_app_starts_on_x11_after_the_offscreen_check(self) -> None:
+    def test_linux_starts_on_x11_after_offscreen(self) -> None:
         """Xvfb is installed, and the X11 start runs on Linux after the smoke check."""
         names = [step.get("name") for step in self.steps]
         self.assertIn("xvfb", self._step("Install Linux Qt headless system libraries")["run"])

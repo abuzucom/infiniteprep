@@ -103,7 +103,7 @@ class MissingVersionFileTest(unittest.TestCase):
 class EmptyVersionTest(unittest.TestCase):
     """An empty version never matches a tag."""
 
-    def test_bare_prefix_tag_fails_when_no_file_states_a_version(self) -> None:
+    def test_bare_tag_fails_without_file_version(self) -> None:
         """The tag v fails even when all three files state no version."""
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -123,7 +123,7 @@ class EmptyVersionTest(unittest.TestCase):
 class ChangelogEndTest(unittest.TestCase):
     """A heading on the last line without a newline does not crash."""
 
-    def test_last_heading_without_newline_gives_an_empty_body(self) -> None:
+    def test_last_heading_no_newline_empty_body(self) -> None:
         """The section body is empty instead of raising ValueError."""
         changelog = f"# Changelog\n\n## [{VERSION}] (2026-11-09)"
         self.assertEqual(RELEASE.extract_changelog_section(VERSION, changelog).strip(), "")

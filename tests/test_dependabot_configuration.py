@@ -87,7 +87,7 @@ class DependabotConfigurationTest(unittest.TestCase):
             for name, group in groups.items():
                 self.assertNotIn("major", group.get("update-types", []), name)
 
-    def test_commit_messages_use_the_repository_subject_format(self) -> None:
+    def test_commit_messages_use_subject_format(self) -> None:
         for entry in updates():
             message = entry.get("commit-message")
             self.assertIsInstance(message, dict, str(entry.get("package-ecosystem")))

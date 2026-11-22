@@ -20,7 +20,7 @@ PLAYHEAD_COLOR = "#f59e0b"
 BACKGROUND_COLOR = "#181c24"
 
 
-def test_zoom_paint_survives_near_zero_analyzed_duration(qtbot: Any) -> None:
+def test_zoom_paints_with_near_zero_duration(qtbot: Any) -> None:
     """A denormal analyzed duration cannot overflow the zoom sample index."""
     values = np.ones(SAMPLE_COUNT, dtype=np.float32)
     bar = WaveformOverviewBar()

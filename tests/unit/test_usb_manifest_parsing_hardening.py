@@ -89,7 +89,7 @@ def test_deeply_nested_journal_raises_value_error(tmp_path: Path) -> None:
         load_journal_text(tmp_path, DEEPLY_NESTED_JSON)
 
 
-def test_out_of_range_marker_timestamp_raises_value_error(tmp_path: Path) -> None:
+def test_out_of_range_marker_time_raises(tmp_path: Path) -> None:
     """A timestamp that overflows on conversion to UTC fails with ValueError."""
     payload = marker_payload(tmp_path)
     payload["started_at_utc"] = OUT_OF_RANGE_TIMESTAMP
@@ -98,7 +98,7 @@ def test_out_of_range_marker_timestamp_raises_value_error(tmp_path: Path) -> Non
         read_marker_text(tmp_path, json.dumps(payload))
 
 
-def test_out_of_range_journal_timestamp_raises_value_error(tmp_path: Path) -> None:
+def test_out_of_range_journal_time_raises(tmp_path: Path) -> None:
     """A journal entry timestamp that overflows on conversion fails with ValueError."""
     payload = journal_payload(tmp_path)
     payload["entries"][0]["started_at_utc"] = OUT_OF_RANGE_TIMESTAMP
@@ -108,9 +108,7 @@ def test_out_of_range_journal_timestamp_raises_value_error(tmp_path: Path) -> No
 
 
 @pytest.mark.parametrize("relative_path", [*UNSAFE_RELATIVE_PATHS, ""])
-def test_marker_omission_with_an_unsafe_track_path_is_refused(
-    tmp_path: Path, relative_path: str
-) -> None:
+def test_marker_refuses_unsafe_track_path(tmp_path: Path, relative_path: str) -> None:
     """An omission track path must stay below the drive root."""
     payload = marker_payload(tmp_path)
     payload["omissions"][0]["track"]["relative_path"] = relative_path
@@ -120,9 +118,7 @@ def test_marker_omission_with_an_unsafe_track_path_is_refused(
 
 
 @pytest.mark.parametrize("relative_path", [*UNSAFE_RELATIVE_PATHS, ""])
-def test_journal_entry_with_an_unsafe_track_path_is_refused(
-    tmp_path: Path, relative_path: str
-) -> None:
+def test_journal_refuses_unsafe_track_path(tmp_path: Path, relative_path: str) -> None:
     """Each journal track path must stay below the drive root."""
     payload = journal_payload(tmp_path)
     payload["entries"][0]["track_paths"] = ["crate/a.aiff", relative_path]
@@ -132,9 +128,7 @@ def test_journal_entry_with_an_unsafe_track_path_is_refused(
 
 
 @pytest.mark.parametrize("backup_path", UNSAFE_RELATIVE_PATHS)
-def test_journal_entry_with_an_unsafe_backup_path_is_refused(
-    tmp_path: Path, backup_path: str
-) -> None:
+def test_journal_refuses_unsafe_backup_path(tmp_path: Path, backup_path: str) -> None:
     """A backup path must stay below the backup root. An empty value means no backup."""
     payload = journal_payload(tmp_path)
     payload["entries"][0]["backup_path"] = backup_path
@@ -144,9 +138,7 @@ def test_journal_entry_with_an_unsafe_backup_path_is_refused(
 
 
 @pytest.mark.parametrize("mount_point", UNSAFE_MOUNT_POINTS)
-def test_journal_entry_with_an_unsafe_mount_point_is_refused(
-    tmp_path: Path, mount_point: str
-) -> None:
+def test_journal_refuses_unsafe_mount_point(tmp_path: Path, mount_point: str) -> None:
     """A journal mount point must be an absolute path without traversal or control text."""
     payload = journal_payload(tmp_path)
     payload["entries"][0]["mount_point"] = mount_point
@@ -155,7 +147,7 @@ def test_journal_entry_with_an_unsafe_mount_point_is_refused(
         load_journal_text(tmp_path, json.dumps(payload))
 
 
-def test_journal_accepts_posix_and_windows_mount_points(tmp_path: Path) -> None:
+def test_journal_accepts_both_mount_styles(tmp_path: Path) -> None:
     """Valid absolute mount points from either platform load unchanged."""
     store = UsbRecoveryJournalStore(tmp_path / JOURNAL_FILE_NAME)
     store.save_entries(

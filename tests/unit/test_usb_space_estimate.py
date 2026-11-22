@@ -55,13 +55,13 @@ class EstimateExportBytesTests(unittest.TestCase):
     def test_empty_plan_needs_no_space(self) -> None:
         self.assertEqual(estimate_export_bytes(()), 0)
 
-    def test_one_byte_file_takes_data_and_directory_clusters(self) -> None:
+    def test_one_byte_file_data_and_dir_clusters(self) -> None:
         self.assertEqual(estimate_export_bytes((1,)), SMALL_FILE_CLUSTERS * CLUSTER)
 
     def test_exact_cluster_file_is_not_rounded_further(self) -> None:
         self.assertEqual(estimate_export_bytes((CLUSTER,)), SMALL_FILE_CLUSTERS * CLUSTER)
 
-    def test_file_one_byte_over_a_cluster_takes_two_data_clusters(self) -> None:
+    def test_one_byte_over_needs_two_data_clusters(self) -> None:
         self.assertEqual(estimate_export_bytes((CLUSTER + 1,)), SPILLED_FILE_CLUSTERS * CLUSTER)
 
     def test_empty_file_still_takes_a_directory_cluster(self) -> None:

@@ -66,7 +66,7 @@ def library(tmp_path: Path) -> Path:
     return db_path
 
 
-def test_restore_puts_backup_in_place_and_keeps_newer_copy(library: Path) -> None:
+def test_restore_swaps_in_backup_keeps_newer(library: Path) -> None:
     """Restore keeps the newer library under a timestamped name and installs the backup."""
     kept = restore_pre_migration_backup(library, now=RESTORE_TIME)
 
@@ -114,7 +114,7 @@ def test_restore_without_backup_changes_nothing(tmp_path: Path) -> None:
     assert not newer_copy_path_for(db_path, RESTORE_TIME).exists()
 
 
-def test_restore_rejects_backup_that_disagrees_with_sidecar(library: Path) -> None:
+def test_restore_rejects_mismatched_backup(library: Path) -> None:
     """A backup whose version differs from its sidecar is never installed."""
     with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         conn.execute("PRAGMA user_version = 7")
@@ -212,7 +212,7 @@ def test_open_storage_without_backup_shows_error(env: dict[str, Any]) -> None:
     assert "newer version of InfinitePrep" in message
 
 
-def test_restore_prompt_is_plain_text_with_quit_default(qtbot: Any) -> None:
+def test_restore_prompt_plain_text_quit_default(qtbot: Any) -> None:
     """The prompt shows paths literally, and Quit is the default button."""
     message = "Backup at <b>/music</b>/infiniteprep.sqlite3.pre-migration-backup"
     prompt = build_restore_prompt(message)

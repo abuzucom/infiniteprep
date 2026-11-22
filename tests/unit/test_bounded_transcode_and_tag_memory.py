@@ -103,7 +103,7 @@ def test_frame_count_of_a_stream_rewinds_the_source(tmp_path: Path) -> None:
     assert position == 0
 
 
-def test_written_transcode_matches_the_whole_file_result(tmp_path: Path) -> None:
+def test_transcode_matches_whole_file_result(tmp_path: Path) -> None:
     """The block writer produces the same 24-bit audio as the clipped whole-file resample."""
     signal = _random_signal(96_000) * 2.0
     path = _write_float_wav(tmp_path / "source.wav", signal, 96_000)
@@ -191,7 +191,7 @@ def test_ogg_reader_rejects_an_empty_file(tmp_path: Path) -> None:
         read_ogg(path)
 
 
-def test_similarity_compares_only_the_leading_characters() -> None:
+def test_similarity_uses_leading_chars_only() -> None:
     """Text past the similarity cap takes no part in the score."""
     shared = "a" * MAX_SIMILARITY_CHARS
 

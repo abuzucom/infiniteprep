@@ -34,7 +34,7 @@ def path_lines(playlist: Path) -> list[str]:
     return [line for line in lines if not line.startswith("#")]
 
 
-def test_relative_export_writes_paths_from_the_playlist_folder(tmp_path: Path) -> None:
+def test_relative_paths_from_playlist_folder(tmp_path: Path) -> None:
     """Tracks beside, below, and above the playlist folder get relative POSIX lines."""
     repo, file_ids = import_tracks(
         [
@@ -61,7 +61,7 @@ def test_default_export_keeps_absolute_paths(tmp_path: Path) -> None:
     assert path_lines(destination) == [str(track.resolve())]
 
 
-def test_relative_line_starting_with_hash_gets_a_dot_slash_prefix(tmp_path: Path) -> None:
+def test_hash_line_gets_dot_slash_prefix(tmp_path: Path) -> None:
     """A file name that starts with # cannot turn into a comment or directive line."""
     repo, file_ids = import_tracks([tmp_path / "crate" / "#1 hit.wav"])
     destination = tmp_path / "crate" / "set.m3u8"
@@ -73,9 +73,7 @@ def test_relative_line_starting_with_hash_gets_a_dot_slash_prefix(tmp_path: Path
     assert not any(line.startswith("#1") for line in lines)
 
 
-def test_track_on_another_drive_falls_back_to_the_absolute_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_other_drive_uses_absolute_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """When relpath cannot cross drives, the line stays absolute."""
     track = tmp_path / "crate" / "beside.wav"
     repo, file_ids = import_tracks([track])
@@ -91,7 +89,7 @@ def test_track_on_another_drive_falls_back_to_the_absolute_path(
     assert path_lines(destination) == [str(track.resolve())]
 
 
-def test_relative_paths_default_on_and_older_settings_files_load(tmp_path: Path) -> None:
+def test_relative_default_on_old_settings_load(tmp_path: Path) -> None:
     """New settings default to relative paths, and a file without the key loads that default."""
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(json.dumps({"transcode_mode": "sibling_export"}), encoding="utf-8")
@@ -100,7 +98,7 @@ def test_relative_paths_default_on_and_older_settings_files_load(tmp_path: Path)
     assert SettingsManager(settings_path).load().playlist_relative_paths is True
 
 
-def test_settings_dialog_saves_the_relative_paths_checkbox(qtbot, tmp_path: Path) -> None:
+def test_settings_saves_relative_checkbox(qtbot, tmp_path: Path) -> None:
     """Unchecking the box and saving stores absolute-path mode."""
     manager = SettingsManager(tmp_path / "settings.json")
     dialog = SettingsDialog(manager, CredentialStore(use_memory_backend=True))

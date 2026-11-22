@@ -28,7 +28,7 @@ def test_operation_status_has_an_in_progress_value() -> None:
     assert OperationStatus("in_progress") is OperationStatus.IN_PROGRESS
 
 
-def test_in_place_transcode_replaces_the_file_and_completes_its_journal_record(
+def test_in_place_transcode_completes_journal(
     tmp_path: Path,
 ) -> None:
     """An in-place transcode writes a verified backup, replaces the source, and completes."""

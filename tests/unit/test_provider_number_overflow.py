@@ -14,7 +14,7 @@ from infiniteprep.domain.ports import MetadataSearchQuery
 HUGE_INTEGER = 10**400
 
 
-def test_provider_number_returns_none_for_an_integer_past_the_float_range() -> None:
+def test_provider_number_none_past_float_max() -> None:
     """float() raises OverflowError for this integer. The check returns None instead."""
     assert provider_number(HUGE_INTEGER) is None
 

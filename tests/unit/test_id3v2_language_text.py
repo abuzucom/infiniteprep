@@ -8,7 +8,7 @@ from infiniteprep.adapters.metadata_io.id3v2 import Id3FormatError, Id3Frame, de
 from tests.fixtures.id3v2_bytes import utf16
 
 
-def test_utf16_comment_text_follows_language_and_description() -> None:
+def test_utf16_comment_text_after_description() -> None:
     """The text after the language code and the terminated description comes back."""
     body = b"\x01eng" + utf16("Note") + b"\x00\x00" + utf16("Played at sunrise")
     assert decode_language_text(Id3Frame("COMM", body)) == ["Played at sunrise"]

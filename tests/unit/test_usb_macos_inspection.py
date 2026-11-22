@@ -1245,13 +1245,13 @@ class TestUsbMacosInspection(unittest.TestCase):
         with self.assertRaises(InspectionParseError):
             MacOSDriveInspector(command_runner=runner).inspect_all()
 
-    def test_missing_all_disks_and_partitions_raises_parse_error(self) -> None:
+    def test_missing_all_disks_key_raises(self) -> None:
         """A list reply without AllDisksAndPartitions raises InspectionParseError."""
         runner = FakeRunner(list_plist=MISSING_KEY_LIST_PLIST, info_by_device={})
         with self.assertRaises(InspectionParseError):
             MacOSDriveInspector(command_runner=runner).inspect_all()
 
-    def test_all_disks_and_partitions_not_list_raises_parse_error(self) -> None:
+    def test_all_disks_not_list_raises(self) -> None:
         """A non-list AllDisksAndPartitions value raises InspectionParseError."""
         runner = FakeRunner(list_plist=NOT_A_LIST_LIST_PLIST, info_by_device={})
         with self.assertRaises(InspectionParseError):
@@ -1263,7 +1263,7 @@ class TestUsbMacosInspection(unittest.TestCase):
         with self.assertRaises(InspectionParseError):
             MacOSDriveInspector(command_runner=runner).inspect_all()
 
-    def test_partition_entry_not_mapping_raises_parse_error(self) -> None:
+    def test_partition_entry_not_mapping_raises(self) -> None:
         """A non-mapping partition entry raises InspectionParseError."""
         runner = FakeRunner(
             list_plist=PARTITION_ENTRY_NOT_MAPPING_LIST_PLIST,
@@ -1334,7 +1334,7 @@ class TestUsbMacosInspection(unittest.TestCase):
         self.assertEqual(by_name.drive.name, "disk2")
         self.assertEqual(by_path.drive.name, "disk2")
 
-    def test_inspect_device_partition_identifier_returns_drive(self) -> None:
+    def test_inspect_partition_id_returns_drive(self) -> None:
         """inspect_device resolves a partition identifier to its owning drive."""
         inspector = MacOSDriveInspector(command_runner=fat32_stick_runner())
         by_partition = inspector.inspect_device("/dev/disk2s1")
@@ -1353,7 +1353,7 @@ class TestUsbMacosInspection(unittest.TestCase):
             with self.assertRaises(CommandExecutionError):
                 inspector.inspect_device(unsafe)
 
-    def test_unmounted_volume_has_no_space_and_no_info_call(self) -> None:
+    def test_unmounted_volume_skips_space_info(self) -> None:
         """Unmounted volumes produce no space record and no info invocation."""
         runner = system_disk_runner()
         inspections = MacOSDriveInspector(command_runner=runner).inspect_all()
@@ -1385,7 +1385,7 @@ class TestUsbMacosInspection(unittest.TestCase):
             SpaceInfo(total_bytes=100, used_bytes=0, available_bytes=900),
         )
 
-    def test_untrusted_metadata_truncated_and_mount_traversal_filtered(self) -> None:
+    def test_untrusted_metadata_is_sanitized(self) -> None:
         """Overlong labels are truncated and traversal mount points are filtered."""
         runner = FakeRunner(
             list_plist=TRAVERSAL_LIST_PLIST,

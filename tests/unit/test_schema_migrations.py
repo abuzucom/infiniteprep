@@ -140,7 +140,7 @@ def test_in_memory_library_reaches_latest() -> None:
     assert tables >= SCHEMA_TABLES
 
 
-def test_existing_version_zero_library_keeps_data_and_gets_backup(library: Path) -> None:
+def test_v0_library_keeps_data_and_backup(library: Path) -> None:
     """A pre-D349 library reaches version 1 unchanged and leaves a verified version-0 backup."""
     library.parent.mkdir(parents=True)
     _create_version_zero_library(library)
@@ -227,7 +227,7 @@ def test_newer_library_is_refused_untouched(library: Path) -> None:
     assert backup_path_for(library).is_file()
 
 
-def test_newer_library_without_usable_backup_offers_none(library: Path) -> None:
+def test_newer_library_no_backup_offers_none(library: Path) -> None:
     """A backup that is itself newer than the app is never offered."""
     library.parent.mkdir(parents=True)
     newer_version = LATEST_VERSION + 2

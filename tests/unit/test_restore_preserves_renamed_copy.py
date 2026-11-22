@@ -59,7 +59,7 @@ def renamed_crash(
     return write_svc, operation_id, source, plan.destination_path, original_hash
 
 
-def test_interrupted_restore_keeps_a_copy_of_the_renamed_file(renamed_crash: Any) -> None:
+def test_interrupted_restore_copies_renamed(renamed_crash: Any) -> None:
     """An unfinished write proves nothing about the renamed file, so it stays and is copied."""
     write_svc, operation_id, source, renamed, original_hash = renamed_crash
     renamed_bytes = renamed.read_bytes()
@@ -71,7 +71,7 @@ def test_interrupted_restore_keeps_a_copy_of_the_renamed_file(renamed_crash: Any
     assert renamed_bytes in backup_contents(write_svc.backup_dir)
 
 
-def test_file_that_replaced_the_rename_before_the_restore_survives_in_the_backups(
+def test_replacement_kept_in_backups(
     renamed_crash: Any,
 ) -> None:
     """A file put at the renamed path after the crash keeps a verified copy in the backups."""

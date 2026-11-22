@@ -10,7 +10,7 @@ ORIGINAL_PEAKS = [0.2, 0.8]
 MUTATED_PEAK = 0.5
 
 
-def test_caller_mutation_does_not_change_the_fallback_envelope(qtbot: Any) -> None:
+def test_caller_edit_keeps_fallback_envelope(qtbot: Any) -> None:
     """A later change to the passed list leaves the stored overview intact."""
     bar = WaveformOverviewBar()
     qtbot.addWidget(bar)

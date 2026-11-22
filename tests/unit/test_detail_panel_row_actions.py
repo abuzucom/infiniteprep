@@ -80,7 +80,7 @@ def test_every_row_control_has_a_distinct_name(panel: DetailPanel) -> None:
     assert len(set(names)) == len(names)
 
 
-def test_space_on_save_keeps_focus_on_the_same_save_button(qtbot: Any, panel: DetailPanel) -> None:
+def test_space_on_save_keeps_focus(qtbot: Any, panel: DetailPanel) -> None:
     """After Save rebuilds the rows, focus sits on the new Save button of the same row."""
     save = row_button(panel, ARTIST_ROW, "Save")
     save.setFocus()

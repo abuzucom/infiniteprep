@@ -40,7 +40,7 @@ from tests.fixtures.audio_factory import (
 )
 
 
-def test_repository_crud_idempotency_and_lock_enforcement(tmp_path: Path) -> None:
+def test_repo_crud_idempotency_and_locking(tmp_path: Path) -> None:
     """Verify SQLite persistence, natural-key idempotency, and locked field protection."""
     db_file = tmp_path / "test_infiniteprep.sqlite3"
     db = DatabaseManager(db_file)
@@ -189,7 +189,7 @@ def _verify_analysis_and_lock_persistence(
     assert len(repo.list_change_records(file_id)) == 1
 
 
-def test_import_service_is_non_destructive_and_detects_xdj_rx3_warnings(tmp_path: Path) -> None:
+def test_import_non_destructive_xdj_warnings(tmp_path: Path) -> None:
     """Verify import leaves files 100% unmodified and flags XDJ-RX3 / duplicate / damaged files."""
     db = DatabaseManager(":memory:")
     repo = Repository(db)
