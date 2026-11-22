@@ -170,7 +170,9 @@ class ItunesSearchAdapter:
     ) -> None:
         """Initialize ItunesSearchAdapter with the Repository cache and the country."""
         self.repo = repository
-        self.http_get_json = http_get_json or self._default_http_get_json
+        self.http_get_json = (
+            http_get_json if http_get_json is not None else self._default_http_get_json
+        )
         self.country = country
         self.limiter = limiter or REQUEST_LIMITER
 

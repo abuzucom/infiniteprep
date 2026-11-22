@@ -68,7 +68,9 @@ class OllamaOpenAIReasoningAdapter:
         self.model = model
         self.api_key = api_key
         self.validator = validator or ClosedWorldValidator()
-        self.http_post_json = http_post_json or self._default_http_post_json
+        self.http_post_json = (
+            http_post_json if http_post_json is not None else self._default_http_post_json
+        )
 
     def is_available(self) -> tuple[bool, str | None]:
         """Validate endpoint URL against SSRF and DNS rebinding rules before allowing requests."""

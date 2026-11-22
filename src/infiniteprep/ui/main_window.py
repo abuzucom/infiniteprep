@@ -1310,7 +1310,7 @@ class MainWindow(QMainWindow):
                 lambda should_cancel, progress: runner(file_ids, should_cancel, progress),
             )
             return
-        if self.on_analyze_batch:
+        if self.on_analyze_batch is not None:
             self.on_analyze_batch(file_ids)
             self.refresh_file_table()
 
@@ -1342,18 +1342,18 @@ class MainWindow(QMainWindow):
 
     def _trigger_open_write_dialog(self) -> None:
         """Open write preview and execution dialog if callback is registered."""
-        if self.on_open_write_dialog and self._has_visible_files(WRITE_TITLE):
+        if self.on_open_write_dialog is not None and self._has_visible_files(WRITE_TITLE):
             self.on_open_write_dialog(list(self.visible_file_ids))
 
     def _trigger_transcode_batch(self) -> None:
         """Invoke the batch transcode callback on visible files and refresh the table."""
-        if self.on_transcode_batch and self._has_visible_files(TRANSCODE_TITLE):
+        if self.on_transcode_batch is not None and self._has_visible_files(TRANSCODE_TITLE):
             self.on_transcode_batch(list(self.visible_file_ids))
             self.refresh_file_table()
 
     def _trigger_export_playlist(self) -> None:
         """Ask for a .m3u8 destination and invoke the playlist export callback."""
-        if not self.on_export_playlist or not self._has_visible_files(EXPORT_TITLE):
+        if self.on_export_playlist is None or not self._has_visible_files(EXPORT_TITLE):
             return
         chosen, _ = QFileDialog.getSaveFileName(
             self, "Export Playlist", "crate.m3u8", "M3U8 Playlist (*.m3u8)"
@@ -1368,10 +1368,10 @@ class MainWindow(QMainWindow):
 
     def _trigger_open_journal(self) -> None:
         """Open change journal and restore dialog if callback is registered."""
-        if self.on_open_journal_dialog:
+        if self.on_open_journal_dialog is not None:
             self.on_open_journal_dialog()
 
     def _trigger_open_settings(self) -> None:
         """Open provider and setup settings dialog if callback is registered."""
-        if self.on_open_settings_dialog:
+        if self.on_open_settings_dialog is not None:
             self.on_open_settings_dialog()

@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.82.0] (2026-11-21)
+## [0.82.0] (2026-11-22)
 
 ### Added
 
@@ -23,6 +23,26 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The Warnings column shows a warning icon beside the count.
   - Key cells take the Open Key color of their key. Minor keys use the darker shade.
   - Rows are 24 px tall at the Standard text size.
+
+### Changed
+
+- The sidebar filters replace the review status dropdown.
+- The Key Notation picker moved to the row above the table. The theme picker left the main window and stays in Settings.
+- The version advances from 0.81.1 to 0.82.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
+### Fixed
+
+- The USB recovery launch scan sends its notices to any passed callback, including a falsy one such as an empty recording list. Before, an empty recorder fell through to the real notice dialog. The dialog waited for a click and hung the test suite on every platform.
+- Every injected function and callback counts as passed unless it is `None`. Before, a falsy stand-in fell back to the real default, and ten tests reached the network or skipped the callback.
+  - The Discogs, iTunes, MusicBrainz, AcoustID, and Ollama adapters keep an injected request function.
+  - The fpcalc installer keeps an injected downloader.
+  - The Linux, macOS, and Windows drive tools keep an injected command runner or info reader. The USB target list keeps a passed inspector and probe.
+  - The main window toolbar actions and the detail panel change callback run a falsy callback.
+
+## [0.81.1] (2026-11-21)
+
+### Added
+
 - UI-R visual system (UI-2, #342).
   - Two new themes, Dark and Light, built from the logo colors. Every text color reaches 4.5:1 and every graphic color 3:1 in both themes.
   - Each Open Key number has its own key color. Minor keys use a darker shade of the same hue. Key cells use black or white text, whichever reads better.
@@ -31,8 +51,6 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- The sidebar filters replace the review status dropdown.
-- The Key Notation picker moved to the row above the table. The theme picker left the main window and stays in Settings.
 - The theme pickers offer Dark, Light, and Match System. Native left the pickers and applies only when the theme package cannot load.
 - Settings from an older version that name Dark Teal, Light Teal, or Native load as Dark or Light.
 - The project orientation notes that the agent prose rules do not govern on-screen text.
