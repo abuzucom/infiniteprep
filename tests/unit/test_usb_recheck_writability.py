@@ -44,23 +44,27 @@ class FreshPathWritabilityTests(unittest.TestCase):
         return tuple(reason.code for reason in result.abort_reasons)
 
     def test_unchanged_path_is_checked_once(self) -> None:
+        """An unchanged writable mount passes after one writability check."""
         check = RecordingWritabilityCheck(writable=True)
         self.assertEqual(self.recheck_with_mounts((MOUNT_PATH,), check), ())
         self.assertEqual(check.paths, [MOUNT_PATH])
 
     def test_changed_unwritable_path_reports_both_reasons(self) -> None:
+        """A moved unwritable mount aborts for the path change and for writability."""
         check = RecordingWritabilityCheck(writable=False)
         codes = self.recheck_with_mounts((OTHER_MOUNT_PATH,), check)
         self.assertEqual(codes[:2], (AbortCode.MOUNT_PATH_CHANGED, AbortCode.NOT_WRITABLE))
         self.assertEqual(check.paths, [OTHER_MOUNT_PATH])
 
     def test_changed_writable_path_has_no_reason(self) -> None:
+        """A moved writable mount aborts for the path change alone."""
         check = RecordingWritabilityCheck(writable=True)
         codes = self.recheck_with_mounts((OTHER_MOUNT_PATH,), check)
         self.assertIn(AbortCode.MOUNT_PATH_CHANGED, codes)
         self.assertNotIn(AbortCode.NOT_WRITABLE, codes)
 
     def test_unmounted_is_unwritable_without_check(self) -> None:
+        """A target with no mount aborts as unwritable and runs no path check."""
         check = RecordingWritabilityCheck(writable=True)
         codes = self.recheck_with_mounts((), check)
         self.assertEqual(codes[:2], (AbortCode.MOUNT_PATH_CHANGED, AbortCode.NOT_WRITABLE))

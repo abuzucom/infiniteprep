@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from tests.fixtures.id3v2_render import build_v24_utf8_frame, render_v24_frames
 
 
@@ -29,7 +31,8 @@ def test_out_of_range_time_keeps_a_valid_date() -> None:
     assert values == {"TYER": ["2021"], "TDAT": ["1405"]}
 
 
-def test_zero_month_or_day_is_not_written() -> None:
-    """Month 00 is outside 1 to 12, so no TDAT frame appears."""
-    values = render_v24_frames(build_v24_utf8_frame("TDRC", "2021-00-14"))
+@pytest.mark.parametrize("timestamp", ["2021-00-14", "2021-05-00"])
+def test_zero_month_or_day_is_not_written(timestamp: str) -> None:
+    """A month or day of 00 forms no calendar date. The year converts without a TDAT frame."""
+    values = render_v24_frames(build_v24_utf8_frame("TDRC", timestamp))
     assert values == {"TYER": ["2021"]}

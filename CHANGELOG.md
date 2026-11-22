@@ -28,12 +28,17 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The sidebar filters replace the review status dropdown.
 - The Key Notation picker moved to the row above the table. The theme picker left the main window and stays in Settings.
+- Every unit test under `tests/unit/` states its behavior in a one-line docstring. The playlist storage tests and the `add_track` helper carry type hints.
+- New unit tests cover gaps in existing checks.
+  - The ID3v2 date check covers a zero day as well as a zero month.
+  - The Discogs cache serves a repeat search inside the 6-hour TTL and fetches again after it.
+  - Reconciliation Rules 1, 2, and 5 each have a dedicated test. The full reconcile test no longer claims all 10 rules, because the source names only these three. The three rule tests carry names under 50 characters.
 - Test function names stay at 50 characters or fewer, `test_` included.
   - 582 tests under `tests/unit/`, `tests/integration/`, `tests/e2e/`, and `tests/` take shorter names. Only the `def` lines change.
   - Ruff joins the signatures that now fit on one line.
   - The copied gate tests listed in the ruff `extend-exclude` keep the upstream names.
   - Nine UI test files that #347 also changes keep the old names until that pull request lands.
-- The version advances from 0.81.3 to 0.82.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.81.4 to 0.82.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 

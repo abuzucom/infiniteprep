@@ -52,6 +52,7 @@ def _build_fpcalc_zip(payload: bytes) -> bytes:
 
 
 def test_pinned_fpcalc_digests_cover_every_release_url() -> None:
+    """Every pinned release URL has a well-formed SHA-256 digest."""
     assert set(fpcalc_module.OFFICIAL_FPCALC_SHA256) == set(fpcalc_module.OFFICIAL_FPCALC_URLS)
     for digest in fpcalc_module.OFFICIAL_FPCALC_SHA256.values():
         assert SHA256_HEX_RE.fullmatch(digest)
@@ -59,6 +60,7 @@ def test_pinned_fpcalc_digests_cover_every_release_url() -> None:
 
 @pytest.mark.parametrize("missing_digest", [None, ""])
 def test_archive_install_rejects_missing_digest(tmp_path: Path, missing_digest: str | None) -> None:
+    """An archive install without a digest raises and creates no install folder."""
     bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin")
     with pytest.raises(ValueError, match="SHA-256"):
         bootstrap.install_from_archive_bytes(
@@ -70,6 +72,7 @@ def test_archive_install_rejects_missing_digest(tmp_path: Path, missing_digest: 
 
 
 def test_fpcalc_checks_pinned_digest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A download that misses the pinned digest raises and installs nothing."""
     monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply="Windows"))
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
     bootstrap = FpcalcBootstrapService(
@@ -81,6 +84,7 @@ def test_fpcalc_checks_pinned_digest(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 
 def test_fpcalc_rejects_digest_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A caller digest that differs from the download raises and installs nothing."""
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
     monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply="Windows"))
     monkeypatch.setitem(
@@ -98,6 +102,7 @@ def test_fpcalc_rejects_digest_mismatch(tmp_path: Path, monkeypatch: pytest.Monk
 def test_fpcalc_refuses_unpinned_platform(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, system_name: str
 ) -> None:
+    """A platform without a pinned archive points to the package manager and downloads nothing."""
     monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply=system_name))
     downloads: list[str] = []
 
@@ -113,10 +118,12 @@ def test_fpcalc_refuses_unpinned_platform(
 
 
 def test_pinned_fpcalc_platforms_are_windows_and_macos() -> None:
+    """Pinned fpcalc archives exist for Windows and macOS only."""
     assert set(fpcalc_module.OFFICIAL_FPCALC_SHA256) == {"windows", "darwin"}
 
 
 def test_archive_accepts_matching_digest(tmp_path: Path) -> None:
+    """An archive with a matching digest installs the binary unchanged."""
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
     bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin")
     installed = bootstrap.install_from_archive_bytes(
@@ -130,6 +137,7 @@ def test_archive_accepts_matching_digest(tmp_path: Path) -> None:
 def test_zip_entry_read_stays_within_binary_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A ZIP entry larger than the binary cap raises a size error."""
     payload = b"x" * 64
     archive_bytes = _build_fpcalc_zip(payload)
     monkeypatch.setattr(fpcalc_module, "MAX_FPCALC_BINARY_BYTES", len(payload) - 1)
@@ -157,6 +165,7 @@ def test_zip_entry_read_stays_within_binary_cap(
     ],
 )
 def test_render_filename_ignores_format_syntax(template: str) -> None:
+    """Attribute, index, and positional format fields never reach Python formatting."""
     rendered = MetadataTagAdapter().render_filename(
         Path("track.mp3"),
         {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
@@ -168,6 +177,7 @@ def test_render_filename_ignores_format_syntax(template: str) -> None:
 
 
 def test_render_filename_substitutes_known_tokens() -> None:
+    """Known tokens take the field values."""
     rendered = MetadataTagAdapter().render_filename(
         Path("track.mp3"),
         {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
@@ -177,6 +187,7 @@ def test_render_filename_substitutes_known_tokens() -> None:
 
 
 def test_render_filename_unknown_token() -> None:
+    """An unknown token falls back to the artist and title layout."""
     rendered = MetadataTagAdapter().render_filename(
         Path("track.mp3"),
         {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
@@ -248,6 +259,7 @@ def test_discogs_fetch_accepts_numeric_release_id() -> None:
     "model_name", ["-rf", "--insecure", "qwen2.5:", ":3b", "qwen 2.5:3b", "qwen2.5:3b;ls", ""]
 )
 def test_pull_model_rejects_unsafe_model_name(model_name: str) -> None:
+    """Option-like, empty, spaced, or shell-shaped names raise before any command runs."""
     commands: list[list[str]] = []
     service = OllamaBootstrapService(runner=_command_recorder(commands))
     with pytest.raises(ValueError, match="model name"):
@@ -256,6 +268,7 @@ def test_pull_model_rejects_unsafe_model_name(model_name: str) -> None:
 
 
 def test_pull_model_runs_recommended_model() -> None:
+    """The recommended model pulls with one fixed ollama command."""
     commands: list[list[str]] = []
     service = OllamaBootstrapService(runner=_command_recorder(commands))
     assert service.pull_model("qwen2.5:3b", user_consented=True) == "pulled"
@@ -278,6 +291,7 @@ def test_pull_model_runs_recommended_model() -> None:
     ],
 )
 def test_pull_model_rejects_unsafe_name_segments(model_name: str) -> None:
+    """Empty, hidden, dotted, option-like, or extra segments raise before any command runs."""
     commands: list[list[str]] = []
     service = OllamaBootstrapService(runner=_command_recorder(commands))
     with pytest.raises(ValueError, match="model name"):
@@ -290,6 +304,7 @@ def test_pull_model_rejects_unsafe_name_segments(model_name: str) -> None:
     ["library/qwen2.5:3b", "hf.co/user/model-name:q4_K_M", "llama3.2-vision:11b"],
 )
 def test_pull_model_accepts_namespaced_names(model_name: str) -> None:
+    """Namespaced and host-prefixed model names pull unchanged."""
     commands: list[list[str]] = []
     service = OllamaBootstrapService(runner=_command_recorder(commands))
     service.pull_model(model_name, user_consented=True)
@@ -302,6 +317,7 @@ def test_pull_model_accepts_namespaced_names(model_name: str) -> None:
 def test_fpcalc_accepts_caller_digest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recwarn: pytest.WarningsRecorder
 ) -> None:
+    """An uppercase caller digest that matches the pin installs with no deprecation warning."""
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
     archive_digest = hashlib.sha256(archive_bytes).hexdigest()
     monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply="Windows"))
@@ -317,6 +333,7 @@ def test_fpcalc_accepts_caller_digest(
 
 
 def test_render_filename_logs_template_fallback(caplog: pytest.LogCaptureFixture) -> None:
+    """A misspelled token falls back to the default layout and logs a template warning."""
     with caplog.at_level(logging.WARNING, logger=metadata_tag_adapter_module.__name__):
         rendered = MetadataTagAdapter().render_filename(
             Path("track.mp3"),
@@ -328,6 +345,7 @@ def test_render_filename_logs_template_fallback(caplog: pytest.LogCaptureFixture
 
 
 def test_render_filename_valid_template_logs_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    """A valid template renders without any log record."""
     with caplog.at_level(logging.WARNING, logger=metadata_tag_adapter_module.__name__):
         MetadataTagAdapter().render_filename(
             Path("track.mp3"),
@@ -383,6 +401,7 @@ def _patch_urlopen(monkeypatch: pytest.MonkeyPatch, module: Any, limit: int) -> 
 
 
 def test_discogs_http_read_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The Discogs reader reads one byte past the cap and rejects the oversized body."""
     limit = discogs_module.MAX_API_RESPONSE_BYTES
     response = _patch_urlopen(monkeypatch, discogs_module, limit)
     adapter = DiscogsAdapter(repository=build_memory_repository(), user_token=DISCOGS_STUB_KEY)
@@ -392,6 +411,7 @@ def test_discogs_http_read_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_musicbrainz_http_read_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The MusicBrainz reader reads one byte past the cap and rejects the oversized body."""
     limit = musicbrainz_module.MAX_API_RESPONSE_BYTES
     response = _patch_urlopen(monkeypatch, musicbrainz_module, limit)
     adapter = MusicBrainzAdapter(repository=build_memory_repository())
@@ -401,6 +421,7 @@ def test_musicbrainz_http_read_is_bounded(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 def test_acoustid_http_read_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The AcoustID reader reads one byte past the cap and rejects the oversized body."""
     limit = acoustid_module.MAX_API_RESPONSE_BYTES
     response = _patch_urlopen(monkeypatch, acoustid_module, limit)
     adapter = ChromaprintAcoustIDAdapter(repository=build_memory_repository(), api_key="synthetic")
@@ -413,6 +434,7 @@ def test_acoustid_http_read_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_repeated_mp3_writes_keep_one_txxx_frame(tmp_path: Path) -> None:
+    """A second catalog number write replaces the TXXX frame instead of adding one."""
     mp3_path = create_mp3_fixture(tmp_path / "track.mp3")
     adapter = MetadataTagAdapter()
     adapter._write_mp3_tags(mp3_path, {FieldName.CATALOG_NUMBER: "TRIUK014"})
@@ -428,6 +450,7 @@ def test_repeated_mp3_writes_keep_one_txxx_frame(tmp_path: Path) -> None:
 
 
 def test_render_filename_keeps_escaped_braces(caplog: pytest.LogCaptureFixture) -> None:
+    """Doubled braces render as literal braces with no fallback warning."""
     with caplog.at_level(logging.WARNING, logger=metadata_tag_adapter_module.__name__):
         rendered = MetadataTagAdapter().render_filename(
             Path("track.mp3"),
@@ -440,6 +463,7 @@ def test_render_filename_keeps_escaped_braces(caplog: pytest.LogCaptureFixture) 
 
 @pytest.mark.parametrize("template", ["{artist} {", "{artist} }", "{{artist}", "{}"])
 def test_render_filename_unbalanced_braces_use_default(template: str) -> None:
+    """Unbalanced or empty braces fall back to the default layout."""
     rendered = MetadataTagAdapter().render_filename(
         Path("track.mp3"),
         {FieldName.ARTIST: "Deep Dish", FieldName.TITLE: "The Dream"},
@@ -449,6 +473,7 @@ def test_render_filename_unbalanced_braces_use_default(template: str) -> None:
 
 
 def test_discogs_unavailable_returns_empty() -> None:
+    """Without a token the adapter reports unavailable and fetches nothing for any id."""
     adapter = DiscogsAdapter(
         repository=build_memory_repository(), user_token=None, min_interval_sec=0.0
     )
@@ -457,6 +482,7 @@ def test_discogs_unavailable_returns_empty() -> None:
 
 
 def test_fpcalc_rejects_bad_digest_early(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A caller digest that differs from the pin raises before any download."""
     monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply="Windows"))
     downloads: list[str] = []
 
@@ -484,6 +510,7 @@ def _build_fpcalc_tar(payload: bytes) -> bytes:
 def test_tar_entry_read_stays_within_binary_cap(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A TAR entry larger than the binary cap raises and leaves no fpcalc file."""
     payload = b"x" * 64
     archive_bytes = _build_fpcalc_tar(payload)
     monkeypatch.setattr(fpcalc_module, "MAX_FPCALC_BINARY_BYTES", len(payload) - 1)
@@ -500,6 +527,7 @@ def test_tar_entry_read_stays_within_binary_cap(
 def test_tar_entry_at_cap_installs_whole_binary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A TAR entry exactly at the binary cap installs whole."""
     payload = b"y" * 64
     archive_bytes = _build_fpcalc_tar(payload)
     monkeypatch.setattr(fpcalc_module, "MAX_FPCALC_BINARY_BYTES", len(payload))
@@ -515,6 +543,7 @@ def test_tar_entry_at_cap_installs_whole_binary(
 
 @pytest.mark.parametrize("bad_digest", [" ", "0", "g" * 64, "a" * 63, "a" * 65])
 def test_archive_install_rejects_malformed_digest(tmp_path: Path, bad_digest: str) -> None:
+    """A digest that is not 64 hex digits raises and creates no install folder."""
     bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin")
     with pytest.raises(ValueError, match="64 hexadecimal"):
         bootstrap.install_from_archive_bytes(
@@ -527,6 +556,7 @@ def test_archive_install_rejects_malformed_digest(tmp_path: Path, bad_digest: st
 
 @pytest.mark.parametrize("model_name", ["a/x..:b", "a..b:c", "model:v1..2"])
 def test_pull_model_rejects_consecutive_dots(model_name: str) -> None:
+    """A name with two dots in a row raises before any command runs."""
     commands: list[list[str]] = []
     service = OllamaBootstrapService(runner=_command_recorder(commands))
     with pytest.raises(ValueError, match="model name"):

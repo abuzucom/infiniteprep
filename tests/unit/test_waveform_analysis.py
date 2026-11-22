@@ -61,6 +61,7 @@ def analyzed_tones(tmp_path_factory: pytest.TempPathFactory) -> dict[int, Spectr
 def test_band_dominance(
     analyzed_tones: dict[int, SpectrumWaveform], frequency: int, band: str
 ) -> None:
+    """Each tone dominates its band fivefold and gives a normalized read-only waveform."""
     waveform = analyzed_tones[frequency]
     dominant = getattr(waveform, band)[10:].mean()
     for other in {"low", "mid", "high"} - {band}:
