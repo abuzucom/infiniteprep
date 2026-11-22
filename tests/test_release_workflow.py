@@ -69,7 +69,7 @@ class ReleaseWorkflowTest(unittest.TestCase):
         )
         self.assertNotIn("permissions", job)
 
-    def test_bundle_waits_for_the_tag_check_but_runs_by_hand(self) -> None:
+    def test_bundle_follows_tag_check_or_manual(self) -> None:
         """bundle needs check-tag, runs when it is skipped, and stops when it fails."""
         bundle = self.jobs["bundle"]
         self.assertEqual(bundle["needs"], "check-tag")
@@ -98,7 +98,7 @@ class ReleaseWorkflowTest(unittest.TestCase):
             if step.get("uses", "").startswith("actions/checkout@"):
                 self.assertIs(step["with"]["persist-credentials"], False)
 
-    def test_release_gathers_every_package_and_writes_checksums(self) -> None:
+    def test_release_gathers_packages_checksums(self) -> None:
         """All three package artifacts download, then the checksums and notes are written."""
         download = self._step("release", "Download package artifacts")["run"]
         for artifact in PACKAGE_ARTIFACTS:
@@ -108,7 +108,7 @@ class ReleaseWorkflowTest(unittest.TestCase):
         self.assertIn("release.py checksums", written)
         self.assertIn('release.py notes "${GITHUB_REF_NAME#v}"', written)
 
-    def test_upload_fills_drafts_and_checks_existing_hashes(self) -> None:
+    def test_upload_fills_drafts_checks_hashes(self) -> None:
         """The upload creates a draft, refuses a published release, and compares hashes."""
         run = self._step("release", "Upload to draft release")["run"]
         for fragment in (

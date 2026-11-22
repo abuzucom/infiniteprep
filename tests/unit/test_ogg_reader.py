@@ -177,7 +177,7 @@ def test_damage_non_ogg_magic_raises_ogg_format_error() -> None:
         read_ogg(b"RIFF\x00\x00\x00\x00WAVEfmt ")
 
 
-def test_damage_unsupported_version_raises_ogg_format_error() -> None:
+def test_damage_unsupported_version_raises() -> None:
     """Raise OggFormatError when page version is not 0."""
     id_pkt = make_vorbis_id_header()
     bad_page = make_ogg_page(
@@ -191,13 +191,13 @@ def test_damage_unsupported_version_raises_ogg_format_error() -> None:
         read_ogg(bad_page)
 
 
-def test_damage_truncated_header_raises_ogg_format_error() -> None:
+def test_damage_truncated_header_raises() -> None:
     """Raise OggFormatError when page header is shorter than 27 bytes."""
     with pytest.raises(OggFormatError, match="Truncated Ogg page header"):
         read_ogg(b"OggS\x00\x00\x00\x00")
 
 
-def test_damage_truncated_lacing_table_raises_ogg_format_error() -> None:
+def test_damage_truncated_lacing_table_raises() -> None:
     """Raise OggFormatError when segment table runs past end of data."""
     raw = (
         b"OggS\x00\x00"
@@ -225,7 +225,7 @@ def test_damage_truncated_body_raises_ogg_format_error() -> None:
         read_ogg(truncated)
 
 
-def test_damage_unrecognized_codec_magic_raises_ogg_format_error() -> None:
+def test_damage_unrecognized_codec_magic_raises() -> None:
     """Raise OggFormatError when stream is neither Vorbis nor Opus."""
     unknown_pkt = b"UNKNOWN_CODEC_PACKET_HEADER"
     p1 = make_ogg_page(
@@ -252,7 +252,7 @@ def test_damage_unrecognized_codec_magic_raises_ogg_format_error() -> None:
         read_ogg(p1 + p2 + p3)
 
 
-def test_damage_continuation_mismatch_raises_ogg_format_error() -> None:
+def test_damage_continuation_mismatch_raises() -> None:
     """Raise OggFormatError when continuation flag is set without pending packet fragment."""
     id_pkt = make_vorbis_id_header()
     p1 = make_ogg_page(
@@ -274,7 +274,7 @@ def test_damage_continuation_mismatch_raises_ogg_format_error() -> None:
         read_ogg(p1 + p2)
 
 
-def test_damage_vorbis_zero_sample_rate_raises_ogg_format_error() -> None:
+def test_damage_vorbis_zero_sample_rate_raises() -> None:
     """Raise OggFormatError when Vorbis sample rate is zero."""
     raw = make_synthetic_vorbis_ogg(sample_rate=0)
     with pytest.raises(OggFormatError, match="Vorbis sample rate must be greater than zero"):

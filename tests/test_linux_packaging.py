@@ -57,7 +57,7 @@ class LinuxPackagingWorkflowTest(unittest.TestCase):
         [step] = [step for step in self.steps if step.get("name") == name]
         return step
 
-    def test_linux_steps_run_only_on_linux_after_the_notices(self) -> None:
+    def test_linux_only_steps_follow_notices(self) -> None:
         """Each Linux step runs only on Linux, after LICENSE and NOTICE join the bundle."""
         names = [step.get("name") for step in self.steps]
         notices_index = names.index("Add license notices to bundle")
@@ -78,7 +78,7 @@ class LinuxPackagingWorkflowTest(unittest.TestCase):
         self.assertLess(run.index("sha256sum --check"), run.index("chmod +x"))
         self.assertNotIn("plugin-qt", run)
 
-    def test_appimage_uses_the_pinned_runtime_without_the_qt_plugin(self) -> None:
+    def test_appimage_pinned_runtime_no_qt_plugin(self) -> None:
         """The build points at the pinned runtime and fails on a download (D284, D285)."""
         run = self._step("Build Linux AppImage")["run"]
         self.assertIn('LDAI_RUNTIME_FILE="$tools/runtime-x86_64"', run)
@@ -88,7 +88,7 @@ class LinuxPackagingWorkflowTest(unittest.TestCase):
         self.assertIn("packaging/linux/infiniteprep.desktop", run)
         self.assertIn(APPIMAGE, run)
 
-    def test_appimage_paths_do_not_depend_on_the_current_folder(self) -> None:
+    def test_appimage_paths_ignore_working_dir(self) -> None:
         """The AppImage output and desktop file come from GITHUB_WORKSPACE, not $PWD."""
         for name in ("Build Linux AppImage", "Test Linux packages"):
             run = self._step(name)["run"]

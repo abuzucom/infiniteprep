@@ -40,7 +40,7 @@ def plant_link(tmp_path: Path, name: str) -> tuple[Path, Path]:
 
 
 @posix_only
-def test_ensure_private_file_leaves_a_link_target_mode_alone(tmp_path: Path) -> None:
+def test_ensure_private_skips_link_target(tmp_path: Path) -> None:
     """A link at the library name never passes the chmod on to its target."""
     link, outside = plant_link(tmp_path, "library.db")
 
@@ -51,7 +51,7 @@ def test_ensure_private_file_leaves_a_link_target_mode_alone(tmp_path: Path) -> 
 
 
 @posix_only
-def test_ensure_private_file_still_tightens_a_regular_file(tmp_path: Path) -> None:
+def test_ensure_private_tightens_regular_file(tmp_path: Path) -> None:
     """A regular file at the name loses its group and other bits."""
     library = tmp_path / "library.db"
     library.write_bytes(LIBRARY_TEXT)
@@ -63,7 +63,7 @@ def test_ensure_private_file_still_tightens_a_regular_file(tmp_path: Path) -> No
 
 
 @posix_only
-def test_create_new_private_file_refuses_a_planted_link(tmp_path: Path) -> None:
+def test_create_private_refuses_planted_link(tmp_path: Path) -> None:
     """A link at a new file name raises and its target keeps its bytes and mode."""
     link, outside = plant_link(tmp_path, "library.db.restore.tmp")
 
@@ -88,7 +88,7 @@ def test_backup_copy_refuses_a_planted_link(tmp_path: Path) -> None:
     assert outside.read_bytes() == OUTSIDE_TEXT
 
 
-def test_create_new_private_file_makes_an_empty_owner_only_file(tmp_path: Path) -> None:
+def test_create_private_is_empty_owner_only(tmp_path: Path) -> None:
     """A free name receives a new empty file. POSIX gives it mode 0600."""
     target = tmp_path / "staged.db"
 

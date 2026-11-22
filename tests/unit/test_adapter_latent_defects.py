@@ -176,7 +176,7 @@ def test_itunes_candidate_ids_differ_per_file() -> None:
 # Discogs release normalization.
 
 
-def test_discogs_release_tracks_keep_distinct_entity_ids_and_drop_year_zero() -> None:
+def test_discogs_release_ids_and_year_zero() -> None:
     adapter = DiscogsAdapter(
         build_memory_repository(),
         user_token=DISCOGS_STUB_KEY,
@@ -192,7 +192,7 @@ def test_discogs_release_tracks_keep_distinct_entity_ids_and_drop_year_zero() ->
     assert all(c.release_details.year is None for c in candidates)
 
 
-def test_discogs_unpositioned_entry_never_collides_with_a_numbered_track() -> None:
+def test_discogs_unpositioned_entry_no_clash() -> None:
     payload = {
         "id": 249504,
         "tracklist": [
@@ -223,7 +223,7 @@ def test_discogs_unpositioned_entry_never_collides_with_a_numbered_track() -> No
         ["1", "", "#2", "1#2", "1"],
     ],
 )
-def test_discogs_suffixed_key_never_matches_another_position(positions: list[str]) -> None:
+def test_discogs_suffixed_key_stays_unique(positions: list[str]) -> None:
     payload = {
         "id": 249504,
         "tracklist": [
@@ -244,7 +244,7 @@ def test_discogs_suffixed_key_never_matches_another_position(positions: list[str
 # MusicBrainz release lookup.
 
 
-def test_musicbrainz_release_fetch_returns_a_release_candidate() -> None:
+def test_musicbrainz_fetch_returns_release() -> None:
     adapter = MusicBrainzAdapter(
         build_memory_repository(),
         http_get_json=_returning(MB_RELEASE_PAYLOAD),
@@ -262,7 +262,7 @@ def test_musicbrainz_release_fetch_returns_a_release_candidate() -> None:
     assert release.release_details.track_number is None
 
 
-def test_musicbrainz_unsupported_entity_type_sends_no_request() -> None:
+def test_musicbrainz_bad_type_no_request() -> None:
     requested: list[str] = []
 
     def record_request(url: str, _params: dict[str, str]) -> dict[str, Any]:
@@ -277,7 +277,7 @@ def test_musicbrainz_unsupported_entity_type_sends_no_request() -> None:
     assert requested == []
 
 
-def test_musicbrainz_missing_track_number_reads_as_none() -> None:
+def test_musicbrainz_no_track_number_is_none() -> None:
     adapter = MusicBrainzAdapter(
         build_memory_repository(), http_get_json=_returning(MB_SEARCH_PAYLOAD), min_interval_sec=0.0
     )
@@ -295,7 +295,7 @@ NETWORK_ERRORS = [
 
 
 @pytest.mark.parametrize("error", NETWORK_ERRORS)
-def test_musicbrainz_lookup_failure_returns_no_candidates(
+def test_musicbrainz_lookup_failure_is_empty(
     error: Exception, caplog: pytest.LogCaptureFixture
 ) -> None:
     adapter = MusicBrainzAdapter(
@@ -328,7 +328,7 @@ def test_itunes_lookup_failure_returns_no_candidates(error: Exception) -> None:
 
 
 @pytest.mark.parametrize("payload", [["unexpected"], "text", 7])
-def test_itunes_non_object_response_returns_nothing_and_is_not_cached(payload: Any) -> None:
+def test_itunes_non_object_reply_not_cached(payload: Any) -> None:
     requested: list[str] = []
 
     def http_get_json(url: str, _params: dict[str, str]) -> Any:
@@ -399,7 +399,7 @@ def test_fpcalc_programming_error_is_not_swallowed() -> None:
 # Shared HTTP helper.
 
 
-def test_fetch_json_rejects_plain_http_without_a_request() -> None:
+def test_fetch_json_rejects_http_before_send() -> None:
     opened: list[Any] = []
     with pytest.raises(ValueError, match="Example URL must use https:// scheme"):
         http_json.fetch_json(
@@ -420,7 +420,7 @@ def test_fetch_json_reads_a_bounded_body() -> None:
 
 
 @pytest.mark.parametrize("body", [b'[{"id": "x"}]', b'[{"a": 1, "b": 2}]', b"[1]", b'"text"'])
-def test_fetch_json_rejects_a_body_that_is_not_an_object(body: bytes) -> None:
+def test_fetch_json_rejects_non_object_body(body: bytes) -> None:
     with pytest.raises(ValueError, match="not a JSON object"):
         http_json.fetch_json(
             "https://example.invalid/x",
@@ -432,9 +432,7 @@ def test_fetch_json_rejects_a_body_that_is_not_an_object(body: bytes) -> None:
 
 
 @pytest.mark.parametrize("body", [b'[{"id": "x"}]', b"[1]"])
-def test_musicbrainz_array_response_returns_no_candidates(
-    body: bytes, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_musicbrainz_array_reply_is_empty(body: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         musicbrainz_module.http_openers, "open_without_redirects", _responding(body)
     )
@@ -451,9 +449,7 @@ def test_musicbrainz_array_response_returns_no_candidates(
         (("a%3Ab", "c"), ("a:b", "c")),
     ],
 )
-def test_candidate_ids_never_collide_across_part_boundaries(
-    first: tuple[str, str], second: tuple[str, str]
-) -> None:
+def test_candidate_ids_unique_across_parts(first: tuple[str, str], second: tuple[str, str]) -> None:
     assert http_json.build_candidate_id("mb-rel", *first) != http_json.build_candidate_id(
         "mb-rel", *second
     )
@@ -474,7 +470,7 @@ def test_beatport_with_token_reports_unavailable() -> None:
     assert reason
 
 
-def test_acrcloud_with_credentials_reports_unavailable_and_warns() -> None:
+def test_acrcloud_unavailable_and_warns() -> None:
     adapter = ACRCloudOptInAdapter(
         enabled_by_user=True, access_key=ACRCLOUD_STUB_KEY, access_secret=ACRCLOUD_STUB_VALUE
     )
@@ -487,7 +483,7 @@ def test_acrcloud_with_credentials_reports_unavailable_and_warns() -> None:
 # LLM validator pairs the value with the selected candidate.
 
 
-def test_validator_rejects_a_value_from_another_candidate() -> None:
+def test_validator_rejects_foreign_value() -> None:
     candidates = [{"id": "c1", "value": "House"}, {"id": "c2", "value": "Techno"}]
     valid, reason = ClosedWorldValidator().validate_response(
         {"selected_candidate_id": "c1", "proposed_value": "Techno"}, candidates
@@ -496,7 +492,7 @@ def test_validator_rejects_a_value_from_another_candidate() -> None:
     assert reason
 
 
-def test_validator_accepts_the_value_of_the_selected_candidate() -> None:
+def test_validator_accepts_selected_value() -> None:
     candidates = [{"id": "c1", "value": "House"}, {"id": "c2", "value": "Techno"}]
     valid, reason = ClosedWorldValidator().validate_response(
         {"selected_candidate_id": "c2", "proposed_value": " techno "}, candidates
@@ -521,9 +517,7 @@ def test_ollama_tags_url_follows_the_base_url(base_url: str, expected: str) -> N
 
 
 @pytest.mark.parametrize("body", [b"[]", b'"text"', b'{"models": "none"}', b'{"models": [1]}'])
-def test_ollama_malformed_tags_response_lists_no_models(
-    body: bytes, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_ollama_malformed_tags_no_models(body: bytes, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ollama_module.urllib.request, "urlopen", _responding(body))
     assert OllamaBootstrapService().list_installed_models() == []
 
@@ -560,7 +554,7 @@ class _PartlyFailingStore(CredentialStore):
         super().delete_secret(key_name)
 
 
-def test_forget_all_credentials_continues_past_a_failed_key(
+def test_forget_all_continues_after_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for env_name in ENV_VAR_MAP.values():
@@ -575,7 +569,7 @@ def test_forget_all_credentials_continues_past_a_failed_key(
     assert remaining == [first_key]
 
 
-def test_forget_all_credentials_returns_zero_when_every_delete_succeeds(
+def test_forget_all_returns_zero_on_success(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for env_name in ENV_VAR_MAP.values():

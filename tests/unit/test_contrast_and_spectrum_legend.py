@@ -63,14 +63,14 @@ def test_contrast_ratio_spans_one_to_twenty_one() -> None:
 
 
 @pytest.mark.parametrize("background", LIGHT_BACKGROUNDS + DARK_BACKGROUNDS)
-def test_warning_color_reaches_text_contrast_on_every_theme(background: str) -> None:
+def test_warning_color_contrast_all_themes(background: str) -> None:
     """The chosen warning amber reaches 4.5:1 on light and dark theme backgrounds."""
     surface = QColor(background)
 
     assert contrast_ratio(warning_text_color(surface), surface) >= TEXT_CONTRAST_MINIMUM
 
 
-def test_warning_label_reaches_text_contrast_on_the_native_theme(qtbot: Any) -> None:
+def test_warning_label_contrast_native_theme(qtbot: Any) -> None:
     """The warnings label text reaches 4.5:1 on its own background in the default theme."""
     repository = Repository(DatabaseManager(":memory:"))
     panel = DetailPanel(repository, ReviewService(repository))
@@ -97,7 +97,7 @@ def test_waveform_marks_reach_graphic_contrast(color: str) -> None:
 
 
 @pytest.mark.parametrize("band", tuple(SPECTRUM_BAND_COLORS))
-def test_translucent_spectrum_bands_reach_graphic_contrast(band: str) -> None:
+def test_spectrum_bands_graphic_contrast(band: str) -> None:
     """Each band, drawn at the overlay alpha, reaches 3:1 on the waveform background."""
     background = QColor(WAVEFORM_BACKGROUND_COLOR)
     color = QColor(SPECTRUM_BAND_COLORS[band])
@@ -106,7 +106,7 @@ def test_translucent_spectrum_bands_reach_graphic_contrast(band: str) -> None:
     assert contrast_ratio(blend_over(color, background), background) >= GRAPHIC_CONTRAST_MINIMUM
 
 
-def test_spectrum_legend_names_each_band_in_zoom_view_only(qtbot: Any) -> None:
+def test_legend_names_bands_in_zoom_only(qtbot: Any) -> None:
     """The zoom view shows a legend that names every band. The overview hides it."""
     player = AudioPreviewWidget()
     qtbot.addWidget(player)

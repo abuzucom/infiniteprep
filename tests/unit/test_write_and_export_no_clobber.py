@@ -83,7 +83,7 @@ def crash_before_rename(write_svc: WriteService, plan: FileWritePlan, monkeypatc
     return write_svc.list_interrupted_operations()[0].operation_id
 
 
-def test_rollback_after_a_refused_rename_keeps_the_existing_file(tagged_library: Any) -> None:
+def test_refused_rename_rollback_keeps_file(tagged_library: Any) -> None:
     """The rename refuses a file that appeared after the preview, and rollback leaves it."""
     _, write_svc, file_id, source, original_hash = tagged_library
     plan = build_rename_plan(write_svc, file_id)
@@ -96,7 +96,7 @@ def test_rollback_after_a_refused_rename_keeps_the_existing_file(tagged_library:
     assert compute_sha256(source) == original_hash
 
 
-def test_rename_refuses_a_file_that_the_existence_check_missed(
+def test_rename_refuses_file_missed_by_check(
     tagged_library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A file that appears between the check and the rename is kept, not replaced.
@@ -121,7 +121,7 @@ def test_rename_refuses_a_file_that_the_existence_check_missed(
     assert compute_sha256(source) == original_hash
 
 
-def test_restore_after_a_crash_before_the_rename_keeps_the_existing_file(
+def test_restore_after_crash_keeps_existing(
     tagged_library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Recovery restores the source and leaves the file at the planned name alone."""
@@ -136,7 +136,7 @@ def test_restore_after_a_crash_before_the_rename_keeps_the_existing_file(
     assert compute_sha256(source) == original_hash
 
 
-def test_mark_finished_after_a_crash_before_the_rename_keeps_the_source(
+def test_mark_finished_after_crash_keeps_source(
     tagged_library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The record and the asset point at the source, not at the file at the planned name."""
@@ -154,7 +154,7 @@ def test_mark_finished_after_a_crash_before_the_rename_keeps_the_source(
     assert plan.destination_path.read_bytes() == UNRELATED_BYTES
 
 
-def test_sibling_export_refuses_an_existing_output_file(tmp_path: Path) -> None:
+def test_sibling_export_refuses_existing_file(tmp_path: Path) -> None:
     """A file at the sibling name stays unchanged, and no temporary file is left behind."""
     repo = Repository(DatabaseManager(":memory:"))
     source = create_wav_fixture(tmp_path / "crate" / "track.wav", duration_sec=0.5)
@@ -182,7 +182,7 @@ def test_sibling_export_refuses_an_existing_output_file(tmp_path: Path) -> None:
         (TranscodeMode.IN_PLACE_BACKED_UP, "track.wav"),
     ],
 )
-def test_transcode_refuses_an_output_file_that_appears_during_the_encode(
+def test_transcode_refuses_late_output_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: TranscodeMode, output_name: str
 ) -> None:
     """The finished output never replaces a file that appeared after the output name check."""
@@ -213,7 +213,7 @@ def test_transcode_refuses_an_output_file_that_appears_during_the_encode(
 @pytest.mark.skipif(
     sys.platform != "linux", reason="Only Linux file systems accept a file name that is not UTF-8."
 )
-def test_failed_playlist_write_keeps_the_previous_playlist(tmp_path: Path) -> None:
+def test_failed_write_keeps_old_playlist(tmp_path: Path) -> None:
     """A track path that UTF-8 cannot encode fails the export and keeps the old playlist."""
     repo = Repository(DatabaseManager(":memory:"))
     source = create_wav_fixture(tmp_path / "crate" / "track.wav", duration_sec=0.5)

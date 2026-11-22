@@ -51,7 +51,7 @@ def adapter() -> MetadataTagAdapter:
         (create_aiff_fixture, ".aiff"),
     ],
 )
-def test_id3_writes_read_back_and_keep_the_traktor_frame(
+def test_id3_round_trip_keeps_traktor_frame(
     adapter: MetadataTagAdapter, tmp_path: Path, factory: Callable[..., Path], suffix: str
 ) -> None:
     """MP3, WAV, and AIFF writes read back every field and keep PRIV:TRAKTOR4 and custom TXXX."""
@@ -92,9 +92,7 @@ def test_wav_write_still_adds_list_info(adapter: MetadataTagAdapter, tmp_path: P
     assert b"Shades of Jae\x00" in data[info_at:]
 
 
-def test_full_date_round_trips_through_tyer_tdat_and_time(
-    adapter: MetadataTagAdapter, tmp_path: Path
-) -> None:
+def test_full_date_round_trips_tyer_tdat_time(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
     """A YEAR with month, day, and time writes as TYER, TDAT, and TIME and reads back whole."""
     path = create_mp3_fixture(tmp_path / "dated.mp3")
     adapter._write_tags_by_format(path, {FieldName.YEAR: FULL_DATE})
@@ -161,7 +159,7 @@ def test_new_flac_comment_names_infiniteprep_as_vendor(
         (create_flac_fixture, ".flac"),
     ],
 )
-def test_files_past_the_rewrite_limit_are_refused_unchanged(
+def test_oversize_file_refused_unchanged(
     adapter: MetadataTagAdapter,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

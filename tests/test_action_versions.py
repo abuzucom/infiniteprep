@@ -78,12 +78,12 @@ class ActionVersionCheckerTest(unittest.TestCase):
         tags = {"actions/checkout": {"a" * 40: ["v7.0.1"]}}
         self.assertEqual(self.checker.find_violations(pins, tags, {}), [])
 
-    def test_a_moving_major_tag_does_not_count_as_a_release(self):
+    def test_moving_major_tag_is_not_a_release(self):
         pins = [self.pin(comment="# v7")]
         tags = {"actions/checkout": {"a" * 40: ["v7"]}}
         self.assertEqual(len(self.checker.find_violations(pins, tags, {})), 1)
 
-    def test_a_reusable_workflow_uses_the_upstream_changelog(self):
+    def test_reusable_workflow_uses_changelog(self):
         pins = [
             self.pin(
                 owner="abuzucom",
@@ -96,7 +96,7 @@ class ActionVersionCheckerTest(unittest.TestCase):
         releases = {("abuzucom/foucault", "b" * 40): "3.6.1"}
         self.assertEqual(self.checker.find_violations(pins, {}, releases), [])
 
-    def test_a_reusable_workflow_with_another_version_fails(self):
+    def test_reusable_workflow_bad_version_fails(self):
         pins = [
             self.pin(
                 owner="abuzucom",
@@ -136,7 +136,7 @@ class ActionVersionCheckerTest(unittest.TestCase):
         parsed = self.checker.parse_reference("actions/checkout@" + "a" * 40)
         self.assertEqual(parsed, ("actions", "checkout", ""))
 
-    def test_a_sub_path_action_reference_parses_to_its_repository(self):
+    def test_sub_path_action_parses_to_repo(self):
         """An action in a repository subfolder pins the tags of that repository."""
         parsed = self.checker.parse_reference("github/codeql-action/upload-sarif@" + "c" * 40)
         self.assertEqual(parsed, ("github", "codeql-action", ""))

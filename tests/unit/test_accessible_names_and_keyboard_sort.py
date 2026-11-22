@@ -100,7 +100,7 @@ def test_every_dialog_focus_target_has_a_name(qtbot: Any) -> None:
     assert [unnamed_focus_targets(dialog) for dialog in dialogs] == [[], [], []]
 
 
-def test_double_click_never_opens_a_library_cell_editor(
+def test_double_click_opens_no_cell_editor(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """A double-click selects a library row and opens no editor for its computed value."""
@@ -136,7 +136,7 @@ def test_dialog_tables_are_read_only_and_leave_on_tab(qtbot: Any) -> None:
     assert [table.tabKeyNavigation() for table in tables] == [False, False, False]
 
 
-def test_space_on_the_direction_button_reverses_the_sort(
+def test_space_on_direction_reverses_sort(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """Space on the sort direction button reverses the library order with no mouse."""

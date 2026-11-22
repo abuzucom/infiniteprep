@@ -104,9 +104,7 @@ def test_update_script_refuses_a_dirty_tree(
 
 
 @needs_bash
-def test_update_script_refuses_a_branch_other_than_main(
-    tmp_path: Path, repo_templates: dict[str, Path]
-) -> None:
+def test_update_script_requires_main(tmp_path: Path, repo_templates: dict[str, Path]) -> None:
     """A checkout on another branch stops the run unless --no-pull is given."""
     repo = make_repo(tmp_path, repo_templates, branch="feature")
     script = repo / "scripts" / "dev" / "update_and_check.sh"
@@ -119,9 +117,7 @@ def test_update_script_refuses_a_branch_other_than_main(
 
 
 @needs_bash
-def test_update_script_dry_run_lists_the_steps_and_changes_nothing(
-    tmp_path: Path, repo_templates: dict[str, Path]
-) -> None:
+def test_update_dry_run_changes_nothing(tmp_path: Path, repo_templates: dict[str, Path]) -> None:
     """A dry run on a clean main prints every step and leaves the checkout untouched."""
     repo = make_repo(tmp_path, repo_templates)
     result = run_bash(repo / "scripts" / "dev" / "update_and_check.sh", "--dry-run")
@@ -144,7 +140,7 @@ def test_update_script_rejects_unknown_options(
 
 
 @needs_bash
-def test_copy_script_copies_at_most_per_format_and_leaves_sources(
+def test_copy_caps_per_format_keeps_sources(
     tmp_path: Path, repo_templates: dict[str, Path]
 ) -> None:
     """The copy helper takes at most PER_FORMAT files of each format and never edits sources."""
@@ -176,9 +172,7 @@ def test_copy_script_rejects_a_missing_folder(
 
 
 @needs_bash
-def test_copy_script_treats_a_dash_named_folder_as_a_path(
-    tmp_path: Path, repo_templates: dict[str, Path]
-) -> None:
+def test_copy_takes_dash_folder_as_path(tmp_path: Path, repo_templates: dict[str, Path]) -> None:
     """A source folder named like a find option is copied from, never run as an option."""
     repo = make_repo(tmp_path, repo_templates)
     work = tmp_path / "work"
@@ -200,7 +194,7 @@ def test_copy_script_treats_a_dash_named_folder_as_a_path(
 
 @needs_bash
 @pytest.mark.parametrize("per_format", ["0", "1001", "x"])
-def test_copy_script_rejects_a_count_outside_one_to_a_thousand(
+def test_copy_rejects_out_of_range_count(
     tmp_path: Path, repo_templates: dict[str, Path], per_format: str
 ) -> None:
     """PER_FORMAT outside 1 to 1000 stops the helper before it creates anything."""

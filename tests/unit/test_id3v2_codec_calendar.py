@@ -46,7 +46,7 @@ def test_invalid_seconds_write_no_time() -> None:
 
 
 @pytest.mark.parametrize("suffix", ["Z", "+02:00", "-0530"])
-def test_utc_designator_or_offset_keeps_wall_clock_time(suffix: str) -> None:
+def test_utc_or_offset_keeps_wall_clock(suffix: str) -> None:
     """A trailing Z or offset parses, and TIME keeps the written hour and minutes."""
     values = render_v24_timestamp(f"2021-05-14T10:30{suffix}")
     assert values == {"TYER": ["2021"], "TDAT": ["1405"], "TIME": ["1030"]}

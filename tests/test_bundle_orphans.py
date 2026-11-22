@@ -53,7 +53,7 @@ class OrphanedQtFileTest(unittest.TestCase):
             ),
         )
 
-    def test_linux_keeps_what_the_playback_plugin_and_qt_load(self) -> None:
+    def test_linux_keeps_playback_and_qt_files(self) -> None:
         """The FFmpeg plugin loads QML and Quick on Linux, and QtMultimedia loads Concurrent."""
         self._assert_kept(
             "linux",
@@ -72,7 +72,7 @@ class OrphanedQtFileTest(unittest.TestCase):
             ),
         )
 
-    def test_python_platform_names_with_a_suffix_map_to_linux(self) -> None:
+    def test_suffixed_platform_maps_to_linux(self) -> None:
         """A sys.platform value such as linux2 uses the Linux list."""
         self.assertTrue(FILTERS.is_orphaned_qt_component("libQt6Pdf.so.6", "linux2"))
 
@@ -166,7 +166,7 @@ class SpecOrphanWiringTest(unittest.TestCase):
         """Read the spec once."""
         cls.spec = SPEC_PATH.read_text(encoding="utf-8")
 
-    def test_orphan_filter_runs_on_binaries_and_datas_before_the_prune(self) -> None:
+    def test_orphan_filter_runs_before_prune(self) -> None:
         """Both collection lists pass through the filter, and the Linux prune comes after."""
         binaries = self.spec.index("drop_entries(a.binaries, is_orphan_on_this_platform)")
         datas = self.spec.index("drop_entries(a.datas, is_orphan_on_this_platform)")

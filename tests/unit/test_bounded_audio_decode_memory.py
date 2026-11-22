@@ -52,7 +52,7 @@ def _transcoder(tmp_path: Path) -> SafeTranscoderAdapter:
     )
 
 
-def test_analyzer_decode_matches_the_mean_of_all_channels(tmp_path: Path) -> None:
+def test_analyzer_decode_averages_channels(tmp_path: Path) -> None:
     """The block decode returns the same mono mix as a whole-file decode."""
     path = _write_wav(tmp_path / "stereo.wav", channels=2, frames=ONE_SECOND * 3)
     whole, _ = sf.read(str(path), dtype="float64", always_2d=True)
@@ -72,7 +72,7 @@ def test_analyzer_decode_stops_at_the_duration_limit(tmp_path: Path) -> None:
     assert mono.size == ONE_SECOND
 
 
-def test_analyzer_rejects_a_channel_count_above_the_cap(tmp_path: Path) -> None:
+def test_analyzer_rejects_excess_channels(tmp_path: Path) -> None:
     """A header that declares more channels than the cap raises before any decode."""
     path = _write_wav(tmp_path / "wide.wav", channels=MAX_DSP_CHANNELS + 1)
 
@@ -80,7 +80,7 @@ def test_analyzer_rejects_a_channel_count_above_the_cap(tmp_path: Path) -> None:
         read_bounded_mono_pcm(path)
 
 
-def test_analyzer_reports_a_rejected_file_as_a_decode_failure(tmp_path: Path) -> None:
+def test_analyzer_reports_rejected_file(tmp_path: Path) -> None:
     """The analyzer returns a failure result with a warning for a rejected file."""
     path = _write_wav(tmp_path / "wide.wav", channels=MAX_DSP_CHANNELS + 1)
 
@@ -90,9 +90,7 @@ def test_analyzer_reports_a_rejected_file_as_a_decode_failure(tmp_path: Path) ->
     assert "Audio decode failed" in result.warnings[0]
 
 
-def test_analyzer_reports_an_out_of_memory_decode_as_a_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_analyzer_reports_out_of_memory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A decode that runs out of memory yields a failure result, not an exception."""
     path = _write_wav(tmp_path / "stereo.wav", channels=2)
 
@@ -107,7 +105,7 @@ def test_analyzer_reports_an_out_of_memory_decode_as_a_failure(
     assert "Audio decode failed" in result.warnings[0]
 
 
-def test_tempo_of_a_long_click_track_resolves_inside_the_time_limit() -> None:
+def test_long_track_tempo_within_time_limit() -> None:
     """Ten minutes of clicks at 120 BPM resolve to 120.0 well inside the time limit."""
     mono = np.zeros(CLICK_TRACK_RATE * CLICK_TRACK_SECONDS, dtype=np.float64)
     mono[::CLICK_PERIOD_SAMPLES] = 1.0
@@ -120,7 +118,7 @@ def test_tempo_of_a_long_click_track_resolves_inside_the_time_limit() -> None:
     assert elapsed < TEMPO_TIME_LIMIT_SECONDS
 
 
-def test_transcoder_rejects_a_channel_count_above_the_cap(tmp_path: Path) -> None:
+def test_transcoder_rejects_excess_channels(tmp_path: Path) -> None:
     """The bounds check refuses a file that declares more channels than the cap."""
     path = _write_wav(tmp_path / "wide.wav", channels=MAX_TRANSCODE_CHANNELS + 1)
 
@@ -128,7 +126,7 @@ def test_transcoder_rejects_a_channel_count_above_the_cap(tmp_path: Path) -> Non
         _transcoder(tmp_path)._verify_audio_bounds(path)
 
 
-def test_transcoder_rejects_a_decoded_size_above_the_budget(
+def test_transcoder_rejects_oversized_decode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The bounds check refuses a file whose frames times channels exceed the sample budget."""
@@ -139,7 +137,7 @@ def test_transcoder_rejects_a_decoded_size_above_the_budget(
         _transcoder(tmp_path)._verify_audio_bounds(path)
 
 
-def test_transcoder_accepts_a_stereo_file_inside_every_cap(tmp_path: Path) -> None:
+def test_transcoder_accepts_stereo_file(tmp_path: Path) -> None:
     """A short stereo file passes the bounds check."""
     path = _write_wav(tmp_path / "stereo.wav", channels=2)
 
@@ -164,7 +162,7 @@ class _MemoryStarvedTranscoder:
         return TranscodeResult(file_id, self._output_path, self._output_path, SAMPLE_RATE, "PCM_16")
 
 
-def test_batch_records_an_out_of_memory_file_and_continues(tmp_path: Path) -> None:
+def test_batch_continues_after_out_of_memory(tmp_path: Path) -> None:
     """The batch lists the out-of-memory file as a failure and still converts the next file."""
     transcoder = _MemoryStarvedTranscoder(tmp_path / "out.wav")
 

@@ -48,7 +48,7 @@ def make_table_library(db_path: Path) -> None:
 
 
 @posix_only
-def test_new_library_and_its_new_folders_are_owner_only(tmp_path: Path) -> None:
+def test_new_library_and_folders_owner_only(tmp_path: Path) -> None:
     """A fresh library, its WAL file, and each folder the app creates allow only the owner."""
     db_path = tmp_path / "created" / "nested" / "library.db"
 
@@ -67,7 +67,7 @@ def test_new_library_and_its_new_folders_are_owner_only(tmp_path: Path) -> None:
 
 
 @posix_only
-def test_existing_world_readable_library_becomes_owner_only(tmp_path: Path) -> None:
+def test_world_readable_library_tightened(tmp_path: Path) -> None:
     """A library from an earlier version loses its group and other read bits on open."""
     db_path = tmp_path / "library.db"
     make_table_library(db_path)
@@ -79,7 +79,7 @@ def test_existing_world_readable_library_becomes_owner_only(tmp_path: Path) -> N
 
 
 @posix_only
-def test_migration_backup_and_restored_library_are_owner_only(tmp_path: Path) -> None:
+def test_backup_and_restore_are_owner_only(tmp_path: Path) -> None:
     """The pre-migration backup and the library a restore installs allow only the owner."""
     db_path = tmp_path / "library.db"
     make_table_library(db_path)
@@ -150,9 +150,7 @@ def install(bootstrap: FpcalcBootstrapService, archive: bytes) -> Path:
     )
 
 
-def test_interrupted_fpcalc_install_keeps_the_working_binary(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_interrupted_install_keeps_binary(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A write that fails halfway leaves the old fpcalc whole and no partial file behind."""
     bin_dir = tmp_path / "bin"
     bootstrap = FpcalcBootstrapService(install_dir=bin_dir)
@@ -173,7 +171,7 @@ def test_interrupted_fpcalc_install_keeps_the_working_binary(
     assert sorted(path.name for path in bin_dir.iterdir()) == [installed.name]
 
 
-def test_fpcalc_install_replaces_the_binary_and_leaves_no_staged_file(tmp_path: Path) -> None:
+def test_fpcalc_install_replaces_cleanly(tmp_path: Path) -> None:
     """A finished install puts the new bytes under the fpcalc name and nothing else."""
     bin_dir = tmp_path / "bin"
     bootstrap = FpcalcBootstrapService(install_dir=bin_dir)

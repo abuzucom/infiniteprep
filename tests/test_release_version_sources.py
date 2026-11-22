@@ -45,7 +45,7 @@ def write_version_files(root: Path, init: str, pyproject: str, changelog: str) -
 class UnparsablePyprojectTest(unittest.TestCase):
     """A pyproject.toml that does not parse gets its own problem line."""
 
-    def test_parse_failure_is_not_reported_as_a_missing_version(self) -> None:
+    def test_parse_failure_not_called_missing(self) -> None:
         """The line names the parse failure instead of an empty version."""
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -56,7 +56,7 @@ class UnparsablePyprojectTest(unittest.TestCase):
         self.assertIn(PARSE_FAILURE_TEXT, problems[0])
         self.assertNotIn(NO_VERSION_TEXT, problems[0])
 
-    def test_read_versions_keeps_an_empty_version_for_a_parse_failure(self) -> None:
+    def test_parse_failure_keeps_empty_version(self) -> None:
         """read_versions still maps an unparsable pyproject.toml to an empty version."""
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -70,7 +70,7 @@ class UnparsablePyprojectTest(unittest.TestCase):
 class NonFileVersionSourceTest(unittest.TestCase):
     """A version source that is not a regular file is reported before any read."""
 
-    def test_directory_in_place_of_a_version_file_gives_a_problem_line(self) -> None:
+    def test_version_dir_gives_problem_line(self) -> None:
         """A directory named CHANGELOG.md yields the missing line, not a traceback."""
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

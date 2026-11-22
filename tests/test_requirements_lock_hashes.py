@@ -125,7 +125,7 @@ def run_pip_install(
 class ApplicationLockHashesTest(unittest.TestCase):
     """Keep the application lockfile pinned to artifact digests."""
 
-    def test_every_application_pin_carries_artifact_digests(self) -> None:
+    def test_app_pins_carry_digests(self) -> None:
         """Each pinned package names the digests of the artifacts it may install."""
         entries = read_lock_entries(LOCKFILE)
         self.assertTrue(entries)
@@ -145,7 +145,7 @@ class ApplicationLockHashesTest(unittest.TestCase):
         self.assertEqual(len(entries), len(raw_requirements))
         self.assertEqual(sum(len(entry.digests) for entry in entries), len(raw_hashes))
 
-    def test_the_upgraded_package_pins_its_release_with_digests(self) -> None:
+    def test_upgraded_package_pins_digests(self) -> None:
         """The upgraded application dependency names its release and its digests."""
         entries = {entry.name: entry for entry in read_lock_entries(LOCKFILE)}
         upgraded = entries[UPGRADED_PACKAGE]
@@ -162,18 +162,18 @@ class ApplicationLockHashesTest(unittest.TestCase):
         for name in set(application) & set(sbom):
             self.assertEqual(application[name], sbom[name], f"{name} differs between the lockfiles")
 
-    def test_ci_installs_the_application_lock_in_hash_checking_mode(self) -> None:
+    def test_ci_hash_checks_app_lock(self) -> None:
         """The CI jobs verify the artifact digests of the application lockfile."""
         ci_text = CI_WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("pip install --require-hashes -r requirements-lock.txt", ci_text)
         self.assertIn("pip install --require-hashes --constraint requirements-lock.txt", ci_text)
 
-    def test_the_bundle_job_installs_the_application_lock_in_hash_checking_mode(self) -> None:
+    def test_bundle_hash_checks_app_lock(self) -> None:
         """The bundle job verifies the artifact digests of the application lockfile."""
         bundle_text = BUNDLE_WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("pip install --require-hashes -r requirements-lock.txt", bundle_text)
 
-    def test_the_bundle_job_installs_the_sbom_lock_in_hash_checking_mode(self) -> None:
+    def test_bundle_hash_checks_sbom_lock(self) -> None:
         """The bundle job verifies the artifact digests of the SBOM lockfile."""
         bundle = yaml.safe_load(BUNDLE_WORKFLOW.read_text(encoding="utf-8"))
         steps = bundle["jobs"]["bundle"]["steps"]
@@ -200,7 +200,7 @@ class PipHashEnforcementTest(unittest.TestCase):
         path.write_text(f"sample==1.0 \\\n    --hash=sha256:{digest}\n", encoding="utf-8")
         return path
 
-    def test_pip_rejects_an_artifact_whose_digest_is_not_committed(self) -> None:
+    def test_pip_rejects_uncommitted_digest(self) -> None:
         """A substituted artifact fails the install under hash-checking mode.
 
         The check runs pip against a local wheel, so it needs no network
@@ -212,7 +212,7 @@ class PipHashEnforcementTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn(HASH_MISMATCH_TEXT, result.stdout + result.stderr)
 
-    def test_pip_accepts_an_artifact_whose_digest_is_committed(self) -> None:
+    def test_pip_accepts_committed_digest(self) -> None:
         """The committed digest lets the matching artifact install."""
         requirement = self._requirement(self.digest)
         result = run_pip_install(requirement, self.wheels, self.directory / "target")

@@ -27,7 +27,7 @@ UNREADABLE_SOURCE_MESSAGE = (
 )
 
 
-def test_analysis_task_skips_analysis_when_already_cancelled(monkeypatch: Any) -> None:
+def test_cancelled_task_skips_analysis(monkeypatch: Any) -> None:
     """A task canceled before it starts never calls the analyzer."""
     cancel_event = threading.Event()
     cancel_event.set()
@@ -48,9 +48,7 @@ def test_analysis_task_skips_analysis_when_already_cancelled(monkeypatch: Any) -
     assert failed == []
 
 
-def test_worker_logs_unexpected_failure_and_emits_safe_message(
-    qtbot: Any, monkeypatch: Any, caplog: Any
-) -> None:
+def test_worker_logs_failure_and_emits_message(qtbot: Any, monkeypatch: Any, caplog: Any) -> None:
     """Unexpected details reach logs without exposing exception text to the UI."""
     private_detail = "private path /library/secret.wav"
 
@@ -71,7 +69,7 @@ def test_worker_logs_unexpected_failure_and_emits_safe_message(
     assert private_detail not in failures[0]
 
 
-def test_worker_emits_safe_message_for_file_access_failure(qtbot: Any, monkeypatch: Any) -> None:
+def test_access_failure_emits_safe_message(qtbot: Any, monkeypatch: Any) -> None:
     """Filesystem details remain in logs while the UI gets a recovery hint."""
 
     def fail_analysis(_path: Path, *, cancel_event: threading.Event) -> str:

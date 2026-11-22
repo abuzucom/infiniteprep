@@ -35,7 +35,7 @@ class UnavailablePlayer:
         self.deleted = True
 
 
-def test_real_backend_is_available_and_the_version_is_written(qapp: Any, tmp_path: Path) -> None:
+def test_real_backend_writes_version(qapp: Any, tmp_path: Path) -> None:
     """With the installed PySide6, a real QMediaPlayer has a backend, and the check passes."""
     player = QMediaPlayer()
     assert player.isAvailable()
@@ -48,7 +48,7 @@ def test_real_backend_is_available_and_the_version_is_written(qapp: Any, tmp_pat
     assert result_file.read_text(encoding="utf-8") == __version__
 
 
-def test_missing_backend_fails_before_any_file_is_written(
+def test_missing_backend_fails_before_write(
     qapp: Any, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Without a backend the check returns the backend error, writes nothing, and logs why."""

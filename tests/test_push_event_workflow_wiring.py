@@ -60,7 +60,7 @@ class SyncCheckEventPathTest(unittest.TestCase):
         self.assertEqual(commands.count(SUITE_COMMANDS[0]), 2)
         self.assertEqual(commands.count(SUITE_COMMANDS[1]), 1)
 
-    def test_windows_suite_step_removes_the_event_path_in_pwsh(self) -> None:
+    def test_windows_step_removes_event_path(self) -> None:
         windows_steps = [step for job, step in self.suite_steps if job == "tests-windows"]
         self.assertEqual(len(windows_steps), 1)
         shell = str(windows_steps[0].get("shell", ""))
@@ -89,7 +89,7 @@ class SecurityReviewPushGuardTest(unittest.TestCase):
         workflow = load_workflow(SECURITY_CALLER)
         self.assertEqual(workflow["jobs"]["resolve-pr"].get("if"), PULL_REQUEST_GUARD)
 
-    def test_review_jobs_still_require_a_resolved_pull_request(self) -> None:
+    def test_review_jobs_need_resolved_pr(self) -> None:
         jobs = load_workflow(SECURITY_CALLER)["jobs"]
         for job_name in ("review", "fork-review", "fork-review-skipped"):
             self.assertIn("needs.resolve-pr.result == 'success'", jobs[job_name]["if"])

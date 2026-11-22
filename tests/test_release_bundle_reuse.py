@@ -50,7 +50,7 @@ class BundleReuseHardeningTest(unittest.TestCase):
         self.assertLess(download, verify)
         self.assertLess(verify, copy)
 
-    def test_verification_binds_bundle_package_and_repository(self) -> None:
+    def test_verify_binds_bundle_package_repo(self) -> None:
         """The verify command names the package, the downloaded bundle, and the repository."""
         [line] = [line for line in self.script.splitlines() if VERIFY_COMMAND in line]
         self.assertIn('"${bundle%.sigstore.json}"', line)

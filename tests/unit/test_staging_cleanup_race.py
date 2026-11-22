@@ -21,7 +21,7 @@ posix_only = pytest.mark.skipif(os.name == "nt", reason="POSIX links and dir_fd 
 
 
 @posix_only
-def test_cleanup_spares_a_link_swapped_in_after_the_link_check(
+def test_cleanup_spares_late_swapped_link(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A link that passes the link check still never leads the cleanup into its target."""
@@ -56,7 +56,7 @@ def test_cleanup_spares_a_link_swapped_in_after_the_link_check(
 
 
 @posix_only
-def test_cleanup_removes_every_staged_file_and_the_folder(tmp_path: Path) -> None:
+def test_cleanup_removes_files_and_folder(tmp_path: Path) -> None:
     """The descriptor cleanup removes each staged file and then the folder."""
     with private_staging_dir(tmp_path) as staging:
         (staging / "copy.db").write_bytes(b"staged")

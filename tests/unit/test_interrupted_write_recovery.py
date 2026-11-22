@@ -67,9 +67,7 @@ def crash_mid_write(write_svc: WriteService, file_id: str, source: Path, monkeyp
     return write_svc.list_interrupted_operations()[0].operation_id
 
 
-def test_a_crash_mid_write_leaves_one_interrupted_record(
-    library: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_crash_leaves_one_interrupted_record(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """Only the IN_PROGRESS record is listed, and the corrupted file is still on disk."""
     _, write_svc, file_ids, source, _ = library
 
@@ -80,7 +78,7 @@ def test_a_crash_mid_write_leaves_one_interrupted_record(
     assert sorted(p.name for p in source.parent.iterdir()) == ["track_0.wav", "track_1.wav"]
 
 
-def test_restore_returns_the_original_and_marks_rolled_back(
+def test_restore_reverts_and_marks_rolled_back(
     library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Restore puts back the verified backup and clears the interrupted list."""
@@ -97,7 +95,7 @@ def test_restore_returns_the_original_and_marks_rolled_back(
     assert write_svc.list_interrupted_operations() == []
 
 
-def test_restore_with_a_tampered_backup_keeps_the_record_pending(
+def test_tampered_backup_keeps_record_pending(
     library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A backup that fails its hash check raises, leaves the file, and keeps the record."""
@@ -114,9 +112,7 @@ def test_restore_with_a_tampered_backup_keeps_the_record_pending(
     assert [r.operation_id for r in write_svc.list_interrupted_operations()] == [operation_id]
 
 
-def test_mark_finished_keeps_the_file_and_records_its_hash(
-    library: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_mark_finished_keeps_file_and_hash(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """Mark as finished stores COMPLETED and the hash of the file as it is now."""
     repo, write_svc, file_ids, source, _ = library
     operation_id = crash_mid_write(write_svc, file_ids[0], source, monkeypatch)
@@ -145,7 +141,7 @@ def test_writes_are_blocked_while_a_record_is_pending(
     assert compute_sha256(other_plan.source_path) == other_hash
 
 
-def test_an_unexpected_rollback_error_keeps_the_original_failure(
+def test_rollback_error_keeps_original_failure(
     library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A RuntimeError during rollback is recorded, and the write error still surfaces."""

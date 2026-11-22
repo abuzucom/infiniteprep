@@ -34,9 +34,7 @@ posix_only = pytest.mark.skipif(os.name == "nt", reason="Windows ignores POSIX m
 
 
 @posix_only
-def test_shared_library_folder_logs_a_warning_and_still_opens(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_shared_folder_warns_and_opens(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """A world-writable library folder opens with a warning that names the fix."""
     folder = tmp_path / "shared"
     folder.mkdir()
@@ -91,9 +89,7 @@ def test_write_with_the_previewed_data_loss_completes(tmp_path: Path) -> None:
     assert MetadataTagAdapter().read_metadata(source).standard_tags[FieldName.TITLE] == "New title"
 
 
-def test_write_stops_when_the_check_differs_from_the_preview(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_write_stops_when_check_differs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A dropped tag data result that changed after the preview stops the write."""
     source = create_mp3_fixture(tmp_path / "clean.mp3", tags={"title": "Old"})
     before = source.read_bytes()

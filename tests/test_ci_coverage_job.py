@@ -72,19 +72,19 @@ class CoverageMeasurementTest(unittest.TestCase):
         """The other legs run the plain suite."""
         self.assertIn("if: matrix.os != 'ubuntu-latest'", self.matrix)
 
-    def test_the_measurement_writes_the_report_and_the_summary(self) -> None:
+    def test_measure_writes_report_and_summary(self) -> None:
         """The report and the job summary carry the coverage numbers."""
         self.assertIn("coverage report", self.matrix)
         self.assertIn("coverage xml", self.matrix)
         self.assertIn("coverage html", self.matrix)
         self.assertIn("GITHUB_STEP_SUMMARY", self.matrix)
 
-    def test_the_summary_artifact_is_uploaded_with_a_pinned_action(self) -> None:
+    def test_summary_upload_uses_pinned_action(self) -> None:
         """The summary artifact goes up through the pinned upload action."""
         self.assertIn(UPLOAD_ARTIFACT, self.matrix)
         self.assertIn(f"name: {SUMMARY_ARTIFACT}", self.matrix)
 
-    def test_the_summary_document_comes_from_the_tested_script(self) -> None:
+    def test_summary_comes_from_tested_script(self) -> None:
         """The bounded summary document comes from the tested builder script."""
         self.assertIn("scripts/build_coverage_summary.py", self.matrix)
         self.assertIn("coverage-summary.json", self.matrix)
@@ -122,17 +122,17 @@ class CoverageCommentJobTest(unittest.TestCase):
         permissions = extract_permissions(self.job)
         self.assertEqual(permissions, {"contents": "read", "pull-requests": "write"})
 
-    def test_the_job_downloads_the_summary_with_a_pinned_action(self) -> None:
+    def test_summary_download_uses_pinned_action(self) -> None:
         """The summary arrives through the pinned download action."""
         self.assertIn(DOWNLOAD_ARTIFACT, self.job)
         self.assertIn(f"name: {SUMMARY_ARTIFACT}", self.job)
 
-    def test_the_job_posts_the_comment_with_a_pinned_action(self) -> None:
+    def test_comment_post_uses_pinned_action(self) -> None:
         """The comment goes out through the pinned script action."""
         self.assertIn(GITHUB_SCRIPT, self.job)
         self.assertIn(COMMENT_MARKER, self.job)
 
-    def test_the_comment_search_pages_through_every_comment(self) -> None:
+    def test_comment_search_reads_every_page(self) -> None:
         """The search reads every comment, not only the first page."""
         self.assertIn("github.paginate(github.rest.issues.listComments", self.job)
 
@@ -141,7 +141,7 @@ class CoverageCommentJobTest(unittest.TestCase):
         self.assertIn("github-actions[bot]", self.job)
         self.assertIn("comment.user?.login === botLogin", self.job)
 
-    def test_the_comment_search_requires_the_marker_at_the_start(self) -> None:
+    def test_comment_search_needs_leading_marker(self) -> None:
         """A comment that only mentions the marker never becomes the bot comment."""
         self.assertIn("comment.body.startsWith(marker)", self.job)
         self.assertNotIn("comment.body.includes(marker)", self.job)
@@ -190,7 +190,7 @@ class CoverageDependencyTest(unittest.TestCase):
         """The lockfile holds the pinned coverage version."""
         self.assertRegex(self.lockfile, rf"(?m)^coverage=={re.escape(COVERAGE_VERSION)} ?\\?$")
 
-    def test_the_settings_measure_the_source_package_with_branches(self) -> None:
+    def test_settings_measure_package_branches(self) -> None:
         """The coverage settings measure the source package and the branches."""
         self.assertIn("[tool.coverage.run]", self.pyproject)
         self.assertIn('source = ["src/infiniteprep"]', self.pyproject)

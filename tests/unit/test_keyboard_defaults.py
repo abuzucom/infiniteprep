@@ -56,7 +56,7 @@ def is_inside(widget: QWidget | None, ancestor: QWidget) -> bool:
     return widget is not None and (widget is ancestor or ancestor.isAncestorOf(widget))
 
 
-def test_enter_in_template_field_keeps_write_preview_open(qtbot: Any) -> None:
+def test_enter_in_template_keeps_preview_open(qtbot: Any) -> None:
     """Enter in the rename template field never applies the writes and closes the dialog."""
     dialog = WritePlanDialog(WriteService(Repository(DatabaseManager(":memory:"))), [])
     show_focused(qtbot, dialog)

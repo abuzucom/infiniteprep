@@ -124,7 +124,7 @@ class CodeQLConfigurationTest(unittest.TestCase):
             "the document must name the property value that the repository needs",
         )
 
-    def test_documented_property_value_names_an_existing_file(self) -> None:
+    def test_documented_property_names_real_file(self) -> None:
         path = PROPERTY_VALUE.rsplit(":", 1)[-1]
         self.assertTrue((ROOT / path).is_file(), path)
 

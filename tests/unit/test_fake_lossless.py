@@ -246,7 +246,7 @@ class FakeLosslessDetectionTests(unittest.TestCase):
         capped = bounded_frame_count(MAX_ANALYSIS_SAMPLE_RATE_HZ, MAX_ANALYSIS_CHANNELS, 10**9)
         self.assertLessEqual(capped * MAX_ANALYSIS_CHANNELS, MAX_DECODED_SAMPLES)
 
-    def test_transcode_preflight_surfaces_fake_lossless_warning_without_blocking(self) -> None:
+    def test_preflight_warns_without_blocking(self) -> None:
         """Fake-lossless analysis warnings appear in transcode preflight confirmation text."""
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -312,7 +312,7 @@ class FakeLosslessDetectionTests(unittest.TestCase):
                 db.close()
 
     @pytest.mark.usefixtures("qapp")
-    def test_detail_panel_persists_fake_lossless_and_ignores_stale_generation(self) -> None:
+    def test_panel_persists_and_ignores_stale(self) -> None:
         """DetailPanel persists current fake-lossless results and ignores stale generations."""
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

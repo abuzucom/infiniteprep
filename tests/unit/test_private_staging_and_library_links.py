@@ -51,7 +51,7 @@ def make_table_library(db_path: Path) -> None:
 
 
 @posix_only
-def test_private_staging_dir_is_owner_only_and_removed_with_its_files(tmp_path: Path) -> None:
+def test_staging_dir_owner_only_and_removed(tmp_path: Path) -> None:
     """The staging folder allows only the owner and leaves nothing behind."""
     with private_staging_dir(tmp_path) as staging:
         assert staging.parent == tmp_path
@@ -89,7 +89,7 @@ def test_library_path_that_is_a_link_is_refused(tmp_path: Path) -> None:
 
 
 @posix_only
-def test_migration_backup_is_copied_inside_an_owner_only_folder(
+def test_migration_backup_in_owner_only_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The backup copy and its record write happen inside a private staging folder."""
@@ -116,9 +116,7 @@ def test_migration_backup_is_copied_inside_an_owner_only_folder(
 
 
 @posix_only
-def test_restore_copy_is_staged_inside_an_owner_only_folder(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_restore_copy_in_owner_only_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The staged restore copy lives in a private staging folder until the swap."""
     db_path = tmp_path / "library.db"
     make_table_library(db_path)

@@ -32,7 +32,7 @@ def import_two_tracks(tmp_path: Path) -> tuple[Repository, list[str]]:
     return repo, file_ids
 
 
-def test_track_with_a_line_break_in_its_path_is_left_out_and_reported(tmp_path: Path) -> None:
+def test_line_break_path_skipped_and_reported(tmp_path: Path) -> None:
     """The unsafe track is skipped, the safe track is written, and no line is injected."""
     repo, file_ids = import_two_tracks(tmp_path)
     destination = tmp_path / "out" / "crate.m3u8"
@@ -47,7 +47,7 @@ def test_track_with_a_line_break_in_its_path_is_left_out_and_reported(tmp_path: 
     assert str((tmp_path / "crate" / "safe.wav").resolve()) in lines
 
 
-def test_export_m3u8_keeps_returning_the_destination_path(tmp_path: Path) -> None:
+def test_export_m3u8_returns_destination(tmp_path: Path) -> None:
     """The existing export_m3u8 contract still returns the written destination."""
     repo, file_ids = import_two_tracks(tmp_path)
     destination = tmp_path / "out" / "crate.m3u8"
@@ -55,7 +55,7 @@ def test_export_m3u8_keeps_returning_the_destination_path(tmp_path: Path) -> Non
     assert PlaylistExporter(repo).export_m3u8(file_ids, destination) == destination
 
 
-def test_export_dialog_counts_and_names_the_skipped_tracks(
+def test_export_dialog_lists_skipped_tracks(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The success dialog counts written tracks and lists the skipped file name."""
@@ -76,7 +76,7 @@ def test_export_dialog_counts_and_names_the_skipped_tracks(
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits apply only on POSIX.")
-def test_new_playlist_is_not_readable_by_group_or_others(tmp_path: Path) -> None:
+def test_new_playlist_is_owner_only(tmp_path: Path) -> None:
     """A newly created playlist carries no group or other permission bits."""
     repo, file_ids = import_two_tracks(tmp_path)
     destination = tmp_path / "out" / "crate.m3u8"
@@ -90,7 +90,7 @@ def test_new_playlist_is_not_readable_by_group_or_others(tmp_path: Path) -> None
     not hasattr(os, "O_NOFOLLOW"),
     reason="The platform has no O_NOFOLLOW flag, so the exporter cannot refuse symlinks.",
 )
-def test_symlinked_destination_is_refused_and_its_target_kept(tmp_path: Path) -> None:
+def test_symlink_dest_refused_target_kept(tmp_path: Path) -> None:
     """A destination that is a symlink raises OSError and leaves the link target unchanged."""
     repo, file_ids = import_two_tracks(tmp_path)
     target = tmp_path / "elsewhere" / "important.txt"

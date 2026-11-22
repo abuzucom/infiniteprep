@@ -121,7 +121,7 @@ class ClassifyJobTest(unittest.TestCase):
         """Parse each review caller once. No test changes the parsed data."""
         cls.jobs_by_workflow = load_jobs_by_caller()
 
-    def test_classify_job_holds_a_read_only_token_and_no_secret(self) -> None:
+    def test_classify_job_is_read_only_no_secret(self) -> None:
         """The job that reads pull request objects cannot write and sees no secret."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
@@ -151,7 +151,7 @@ class ClassifyJobTest(unittest.TestCase):
                 checkouts = [s for s in steps if s.get("uses", "").startswith(CHECKOUT_ACTION)]
                 self.assertEqual(len(checkouts), 1)
 
-    def test_fetch_takes_one_validated_commit_into_the_trusted_checkout(self) -> None:
+    def test_fetch_takes_one_validated_commit(self) -> None:
         """The head commit arrives as Git objects, and only this step sees the token."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
@@ -217,7 +217,7 @@ class ReviewSkipTest(unittest.TestCase):
                 self.assertEqual(job["permissions"], {"checks": "write"})
                 self.assertNotIn("secrets", job)
 
-    def test_skip_job_publishes_the_review_check_as_skipped(self) -> None:
+    def test_skip_job_marks_review_skipped(self) -> None:
         """The check keeps its name, so a required check still reports."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):

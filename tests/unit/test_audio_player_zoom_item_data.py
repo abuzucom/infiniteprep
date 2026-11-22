@@ -11,7 +11,7 @@ from infiniteprep.ui.audio_player import AudioPreviewWidget
 RELABELED_ZOOM_TEXT = "Wide"
 
 
-def test_zoom_selection_persists_when_the_label_has_no_number(qtbot: Any, tmp_path: Path) -> None:
+def test_zoom_persists_label_without_number(qtbot: Any, tmp_path: Path) -> None:
     """A relabeled zoom entry still selects and persists its duration."""
     manager = SettingsManager(tmp_path / "settings.json")
     widget = AudioPreviewWidget(settings_manager=manager)

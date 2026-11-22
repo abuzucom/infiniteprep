@@ -32,7 +32,7 @@ def artist_text(panel: DetailPanel) -> str:
     return widget.text()
 
 
-def test_a_raised_accept_keeps_typed_text_through_the_next_refresh(
+def test_raised_accept_keeps_typed_text(
     qtbot: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An accept that raises leaves no marker behind. The next refresh keeps the typed text."""

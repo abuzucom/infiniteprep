@@ -11,7 +11,7 @@ from infiniteprep.config.settings import AppSettings, SettingsManager
 from infiniteprep.ui.settings_dialog import SettingsDialog
 
 
-def test_stop_setting_defaults_off_and_older_settings_files_load(tmp_path: Path) -> None:
+def test_stop_setting_off_and_old_files_load(tmp_path: Path) -> None:
     """A batch continues by default, and a file without the key loads that default."""
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(json.dumps({"transcode_mode": "sibling_export"}), encoding="utf-8")
@@ -36,7 +36,7 @@ def test_settings_dialog_saves_the_stop_checkbox(qtbot: Any, tmp_path: Path) -> 
     assert reopened.stop_on_failure_checkbox.isChecked()
 
 
-def test_cleanup_button_follows_the_cleanup_enabled_flag(qtbot: Any, tmp_path: Path) -> None:
+def test_cleanup_button_follows_flag(qtbot: Any, tmp_path: Path) -> None:
     """The data deletion button is on by default and off while the caller reports a batch."""
     manager = SettingsManager(tmp_path / "settings.json")
     default_dialog = SettingsDialog(manager, CredentialStore(use_memory_backend=True))

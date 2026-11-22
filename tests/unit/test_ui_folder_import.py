@@ -143,7 +143,7 @@ def test_import_leaves_the_loaded_track_in_place(
         (CLOSE_STAY, ImportOutcome.COMMITTED, TRACK_COUNT, True),
     ],
 )
-def test_closing_during_import_cancels_or_keeps_working(
+def test_closing_mid_import_cancels_or_stays(
     qtbot: Any,
     window_parts: Any,
     monkeypatch: pytest.MonkeyPatch,
@@ -170,9 +170,7 @@ def test_closing_during_import_cancels_or_keeps_working(
     assert len(repository.list_files()) == expected_rows
 
 
-def test_worker_leaves_the_ui_connection_open_for_the_next_import(
-    qtbot: Any, window_parts: Any, tmp_path: Path
-) -> None:
+def test_worker_keeps_ui_connection_open(qtbot: Any, window_parts: Any, tmp_path: Path) -> None:
     """The worker closes only its own connection. The UI connection and a second import work."""
     window, repository, gate, folder = window_parts
     ui_connection = repository.db.connect()
@@ -226,7 +224,7 @@ def test_failed_import_message_holds_no_error_text(
     assert "disk I/O" not in box.text()
 
 
-def test_a_second_close_during_the_same_import_asks_nothing(
+def test_second_close_asks_nothing(
     qtbot: Any, window_parts: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """After Cancel and Exit is chosen, closing again waits quietly instead of asking again."""

@@ -102,7 +102,7 @@ class TranscodeDialogTests(PlainTextTestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_confirmation_and_failure_summary_render_plain_text(self) -> None:
+    def test_confirm_and_failure_text_is_plain(self) -> None:
         """The confirmation and the failure summary both use plain text and name the file."""
         removed, file_id = self.import_track("gone.wav")
         removed.unlink()

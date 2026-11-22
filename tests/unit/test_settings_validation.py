@@ -8,7 +8,7 @@ from pathlib import Path
 from infiniteprep.config.settings import AppSettings, SettingsManager
 
 
-def test_load_replaces_invalid_setting_types_and_ranges(tmp_path: Path) -> None:
+def test_load_replaces_invalid_settings(tmp_path: Path) -> None:
     """Malformed persisted values fall back independently to their defaults."""
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(
@@ -41,7 +41,7 @@ def test_load_replaces_non_object_settings_document(tmp_path: Path) -> None:
     assert SettingsManager(settings_path).load() == AppSettings()
 
 
-def test_partial_update_preserves_other_persisted_settings(tmp_path: Path) -> None:
+def test_partial_update_keeps_other_settings(tmp_path: Path) -> None:
     """Updating zoom must retain settings fields loaded from the same file."""
     manager = SettingsManager(tmp_path / "settings.json")
     manager.save(AppSettings(rename_template="{artist} - {title}"))

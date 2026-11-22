@@ -93,7 +93,7 @@ def test_unwritable_profile_on_remember_shows_an_error(env: dict[str, Any]) -> N
     assert "\n" not in message
 
 
-def test_unwritable_data_folder_shows_an_error_and_sets_nothing(env: dict[str, Any]) -> None:
+def test_unwritable_data_folder_shows_error(env: dict[str, Any]) -> None:
     """A per-user data folder that cannot be created stops before the database opens."""
     (env["root"] / "user_data_dir").write_bytes(b"not a folder")
 

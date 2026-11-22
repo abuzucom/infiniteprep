@@ -49,7 +49,7 @@ def test_acoustid_evidence_keeps_only_checked_fields(tmp_path: Path) -> None:
     assert len(stored["title"]) == MAX_PROVIDER_TEXT_CHARS
 
 
-def test_ollama_model_list_keeps_only_safe_references_once(
+def test_ollama_list_keeps_safe_unique_refs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Names outside the model reference grammar drop out, and repeats appear once."""

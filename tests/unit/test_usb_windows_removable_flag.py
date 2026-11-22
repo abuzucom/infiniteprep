@@ -83,7 +83,7 @@ class WindowsRemovableFlagTests(unittest.TestCase):
     def test_usb_disk_with_a_removable_volume_is_removable(self) -> None:
         self.assertTrue(inspect_one("USB", "Removable").is_removable)
 
-    def test_usb_disk_without_a_drive_type_is_not_removable(self) -> None:
+    def test_no_drive_type_is_not_removable(self) -> None:
         self.assertFalse(inspect_one("USB", None).is_removable)
 
     def test_drive_type_match_ignores_case(self) -> None:

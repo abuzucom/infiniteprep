@@ -178,7 +178,7 @@ def test_other_tags_show_sorted_without_internal_keys(panel_parts: Any) -> None:
     assert panel.other_tags_table.editTriggers() == no_edit
 
 
-def test_long_other_tag_value_truncates_with_full_tooltip(panel_parts: Any) -> None:
+def test_long_tag_value_truncates(panel_parts: Any) -> None:
     """A long value shows cut short in the cell and whole in the tooltip."""
     panel, repository, first_id, _second_id = panel_parts
     asset = repository.get_file_by_id(first_id)

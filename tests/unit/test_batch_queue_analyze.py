@@ -55,7 +55,7 @@ def analyze_parts(tmp_path: Path) -> tuple[Repository, JobOrchestrator, list[str
     return repo, orchestrator, file_ids
 
 
-def test_a_failed_file_lets_the_batch_continue_by_default(analyze_parts: Any) -> None:
+def test_failed_file_continues_by_default(analyze_parts: Any) -> None:
     """Any error type on one file marks that file failed, and the later files still run."""
     repo, orchestrator, file_ids = analyze_parts
 
@@ -70,7 +70,7 @@ def test_a_failed_file_lets_the_batch_continue_by_default(analyze_parts: Any) ->
     assert statuses == [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.COMPLETED]
 
 
-def test_process_files_still_propagates_an_unlisted_error(analyze_parts: Any) -> None:
+def test_process_files_raises_unlisted_error(analyze_parts: Any) -> None:
     """The earlier method keeps its contract: an unlisted error type ends the batch."""
     _repo, orchestrator, file_ids = analyze_parts
 
@@ -78,7 +78,7 @@ def test_process_files_still_propagates_an_unlisted_error(analyze_parts: Any) ->
         orchestrator.process_files(file_ids)
 
 
-def test_stop_on_failure_ends_the_batch_at_the_first_failed_file(analyze_parts: Any) -> None:
+def test_stop_on_failure_ends_at_first_fail(analyze_parts: Any) -> None:
     """With the stop rule on, files after the failed one stay untouched."""
     repo, orchestrator, file_ids = analyze_parts
 
@@ -91,7 +91,7 @@ def test_stop_on_failure_ends_the_batch_at_the_first_failed_file(analyze_parts: 
     assert repo.list_analysis_results(file_ids[2]) == []
 
 
-def test_cancel_stops_before_the_next_file_and_keeps_finished_files(analyze_parts: Any) -> None:
+def test_cancel_stops_and_keeps_finished(analyze_parts: Any) -> None:
     """A cancel request after the first file keeps its results and skips the rest."""
     repo, orchestrator, file_ids = analyze_parts
     reconciled: list[str] = []
@@ -127,7 +127,7 @@ def test_progress_and_post_process_cover_each_file(analyze_parts: Any) -> None:
     assert repo.get_file_by_id(file_ids[1]).error_message is not None
 
 
-def test_a_failing_post_process_counts_as_a_failed_file(analyze_parts: Any) -> None:
+def test_failing_post_process_fails_file(analyze_parts: Any) -> None:
     """An error raised after processing, such as in reconciliation, fails only that file."""
     _repo, orchestrator, file_ids = analyze_parts
 

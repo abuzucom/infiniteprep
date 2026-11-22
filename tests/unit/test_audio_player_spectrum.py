@@ -63,7 +63,7 @@ def make_waveform() -> SpectrumWaveform:
     return SpectrumWaveform(values, values, values, values, ANALYZED_FIXTURE_DURATION_SEC)
 
 
-def test_zoom_duration_persists_and_defaults_to_eight_seconds(qtbot: Any, tmp_path: Path) -> None:
+def test_zoom_duration_defaults_and_persists(qtbot: Any, tmp_path: Path) -> None:
     """The 8-second default and later zoom duration survive settings reloads."""
     manager = SettingsManager(tmp_path / "settings.json")
     widget = AudioPreviewWidget(settings_manager=manager)
@@ -74,7 +74,7 @@ def test_zoom_duration_persists_and_defaults_to_eight_seconds(qtbot: Any, tmp_pa
     assert manager.load().waveform_zoom_seconds == ZOOM_SELECTION_SECONDS
 
 
-def test_zoom_click_and_drag_seek_with_centered_playhead(qtbot: Any, tmp_path: Path) -> None:
+def test_zoom_click_drag_seek_centered(qtbot: Any, tmp_path: Path) -> None:
     """Zoom click and drag seek within a centered time window."""
     manager = SettingsManager(tmp_path / "settings.json")
     widget = AudioPreviewWidget(settings_manager=manager)
@@ -136,7 +136,7 @@ def test_zoom_click_and_drag_seek_with_centered_playhead(qtbot: Any, tmp_path: P
     )
 
 
-def test_overview_remains_visible_without_spectrum_result(qtbot: Any) -> None:
+def test_overview_visible_without_spectrum(qtbot: Any) -> None:
     """Analysis state does not hide the usable overview waveform."""
     widget = AudioPreviewWidget()
     qtbot.addWidget(widget)
@@ -154,9 +154,7 @@ def test_overview_remains_visible_without_spectrum_result(qtbot: Any) -> None:
     assert widget.status_label.text() == "Playback failed"
 
 
-def test_load_file_does_not_scan_waveform_on_the_ui_thread(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_load_file_skips_ui_thread_scan(qtbot: Any, tmp_path: Path, monkeypatch: Any) -> None:
     """Loading a selected track displays fallback bars until the worker completes."""
     path = create_wav_fixture(tmp_path / "track.wav", duration_sec=TRACK_DURATION_SEC)
     widget = AudioPreviewWidget()
@@ -219,7 +217,7 @@ def test_zero_duration_zoom_fallback_paths_are_safe(qtbot: Any) -> None:
     assert rendered.pixelColor(PIXEL_FALLBACK_X, PIXEL_MID_Y).alpha() == 0
 
 
-def test_zoom_uses_fallback_after_analysis_duration_cap(qtbot: Any) -> None:
+def test_zoom_fallback_after_duration_cap(qtbot: Any) -> None:
     """A capped analysis leaves later track regions navigable in zoom mode."""
     widget = AudioPreviewWidget()
     qtbot.addWidget(widget)

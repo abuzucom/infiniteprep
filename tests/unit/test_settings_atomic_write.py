@@ -48,9 +48,7 @@ def test_failed_update_keeps_previous_settings_file(tmp_path: Path, monkeypatch:
     assert list(tmp_path.iterdir()) == [settings_path]
 
 
-def test_unexpected_write_failure_removes_the_temporary_file(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_write_failure_removes_temp_file(tmp_path: Path, monkeypatch: Any) -> None:
     """A failure outside OSError still leaves no temporary file behind."""
     settings_path = tmp_path / "settings.json"
     manager = SettingsManager(settings_path)

@@ -108,7 +108,7 @@ def test_click_onsets_follow_tempo_changes() -> None:
     assert onsets[-1] < 4.0
 
 
-def test_click_track_places_clicks_and_accents_downbeats() -> None:
+def test_click_track_accents_downbeats() -> None:
     """Each onset starts a click, and downbeats peak louder than other beats."""
     signal = sa.synthesize_click_track(bpm=120.0, duration_sec=4.0, sample_rate=RATE)
     assert signal.dtype == np.float32

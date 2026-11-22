@@ -51,7 +51,7 @@ def build_sample_name(entry: str) -> str:
 class AllowlistIndexTest(unittest.TestCase):
     """The index matches exactly the names that the linear pattern scan matches."""
 
-    def test_index_agrees_with_the_linear_scan_on_every_shipped_allowlist(self) -> None:
+    def test_index_matches_linear_scan(self) -> None:
         """Every sample and non-matching name gets the same verdict from both forms."""
         for operating_system in CHECKER.OPERATING_SYSTEMS:
             entries = read_allowlist_entries(operating_system)
@@ -63,14 +63,14 @@ class AllowlistIndexTest(unittest.TestCase):
                     linear = any(pattern.fullmatch(name) for pattern in patterns)
                     self.assertEqual(index.matches(name), linear)
 
-    def test_index_keeps_exact_paths_out_of_the_pattern_buckets(self) -> None:
+    def test_index_keeps_exact_paths_separate(self) -> None:
         """A wildcard-free entry lands in the exact set only."""
         index = CHECKER.index_allowlist(["LICENSE", "_internal/base_library.zip", "_internal/*.so"])
         self.assertEqual(index.exact_paths, frozenset({"LICENSE", "_internal/base_library.zip"}))
         self.assertEqual(set(index.patterns_by_first_part), {"_internal"})
         self.assertEqual(index.unanchored_patterns, ())
 
-    def test_check_files_with_the_index_matches_the_pattern_form(self) -> None:
+    def test_indexed_check_matches_pattern_check(self) -> None:
         """Both allowlist forms yield the same report."""
         entries = ["LICENSE", "NOTICE", "ICU-LICENSE.txt", "_internal/*.so", "**/*.qm"]
         files = [*NOTICES, "_internal/a.so", "_internal/b.dll", "x/y/de.qm", "other.bin"]
@@ -83,7 +83,7 @@ class AllowlistIndexTest(unittest.TestCase):
 class RegularFileNoticeTest(unittest.TestCase):
     """The notice rule reads one source of regular files."""
 
-    def test_notice_outside_the_regular_files_counts_as_missing(self) -> None:
+    def test_non_regular_notice_is_missing(self) -> None:
         """A listed NOTICE that is not a regular file is a missing notice."""
         patterns = CHECKER.read_allowlist(["**"])
         report = CHECKER.check_files(
@@ -91,7 +91,7 @@ class RegularFileNoticeTest(unittest.TestCase):
         )
         self.assertEqual(report.missing_notices, ["NOTICE"])
 
-    def test_check_bundle_reports_a_dangling_notice_link_once(self) -> None:
+    def test_dangling_notice_link_reported_once(self) -> None:
         """A dangling NOTICE link stays in the inventory and counts as a missing notice."""
         with tempfile.TemporaryDirectory() as temp:
             bundle = Path(temp) / "InfinitePrep"
@@ -106,7 +106,7 @@ class RegularFileNoticeTest(unittest.TestCase):
 class BundleWalkTest(unittest.TestCase):
     """The walk lists files and file links and never descends into folder links."""
 
-    def test_walk_lists_nested_files_and_links_in_sorted_order(self) -> None:
+    def test_walk_lists_nested_entries_sorted(self) -> None:
         """Nested files, a file link, and a dangling link appear. A folder link does not."""
         with tempfile.TemporaryDirectory() as temp:
             bundle = Path(temp) / "InfinitePrep"
