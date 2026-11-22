@@ -58,7 +58,9 @@ class ChromaprintAcoustIDAdapter:
         self.api_key = api_key
         self.bootstrap = bootstrap_service or FpcalcBootstrapService()
         self.fpcalc_runner = fpcalc_runner
-        self.http_get_json = http_get_json or self._default_http_get_json
+        self.http_get_json = (
+            http_get_json if http_get_json is not None else self._default_http_get_json
+        )
 
     def is_available(self) -> tuple[bool, str | None]:
         """Return True if fpcalc binary and AcoustID API key are available."""

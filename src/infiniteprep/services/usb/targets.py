@@ -77,8 +77,8 @@ def load_removable_targets(
     """
     if inspector is None or probe is None:
         default_inspector, default_probe = build_platform_tools(sys.platform)
-        inspector = inspector or default_inspector
-        probe = probe or default_probe
+        inspector = inspector if inspector is not None else default_inspector
+        probe = probe if probe is not None else default_probe
     candidates: list[TargetCandidate] = []
     for inspection in inspector.inspect_all():
         if not is_supported_bus_class(inspection.drive):

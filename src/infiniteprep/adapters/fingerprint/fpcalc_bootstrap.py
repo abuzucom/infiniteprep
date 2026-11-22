@@ -118,7 +118,7 @@ class FpcalcBootstrapService:
         """Initialize FpcalcBootstrapService with an application bin directory."""
         self.install_dir = install_dir or storage_paths.current().bin_dir
         self.custom_path = custom_path
-        self.downloader = downloader or self._default_download
+        self.downloader = downloader if downloader is not None else self._default_download
 
     def binary_filename(self) -> str:
         """Return OS-specific fpcalc binary filename."""

@@ -10,6 +10,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - The USB recovery launch scan sends its notices to any passed callback, including a falsy one such as an empty recording list. Before, an empty recorder fell through to the real notice dialog. The dialog waited for a click and hung the test suite on every platform.
+- Every injected function and callback counts as passed unless it is `None`. Before, a falsy stand-in fell back to the real default, and ten tests reached the network or skipped the callback.
+  - The Discogs, iTunes, MusicBrainz, AcoustID, and Ollama adapters keep an injected request function.
+  - The fpcalc installer keeps an injected downloader.
+  - The Linux, macOS, and Windows drive tools keep an injected command runner or info reader. The USB target list keeps a passed inspector and probe.
+  - The main window toolbar actions and the detail panel change callback run a falsy callback.
 - The version advances from 0.81.1 to 0.81.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ## [0.81.1] (2026-11-21)

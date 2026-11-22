@@ -36,7 +36,7 @@ class MacOSPreflightProbe:
 
     def __init__(self, info_reader: InfoReader | None = None) -> None:
         """Initialize with an optional diskutil info source for hermetic testing."""
-        self._info_reader = info_reader or _read_default_info
+        self._info_reader = info_reader if info_reader is not None else _read_default_info
 
     def probe(self, inspection: DriveInspection) -> DriveInspection:
         """Return the inspection with the system state and the hardware ID.
