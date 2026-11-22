@@ -5,10 +5,29 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.81.4] (2026-11-22)
+## [0.82.0] (2026-11-22)
+
+### Added
+
+- The main window follows the UI-R layout (UI-2, #342).
+  - A workflow bar shows Import, Analyze, Review, Apply, and Export with a track count each. The first stage with waiting tracks carries its action as the main button. Transcode, History, and Settings sit at the right end.
+  - Alt+1 to Alt+5 run the five stages.
+  - A sidebar holds the stages, the library filters (All tracks, Needs review, Has warnings, Ready to write), the source folders with track counts, and the planned playlists and crates.
+  - From 1600 px the sidebar stays open. Below 1600 px it opens from a button beside the search field, and the bar keeps only the current stage's label. Below 1280 px the detail panel moves under the table.
+  - The window opens no smaller than 960 x 600 and remembers its size and position. A window saved on a monitor that is gone moves back onto a screen.
+- The library table follows the window width.
+  - Filename, Artist, and Title share the spare width equally. The other columns fit their cells.
+  - Label / Cat# and Filename show from a 1100 px table. Format, Duration, and Mix hide below a 1000 px table. Artist, Title, BPM, Key, Status, and Warnings always show.
+  - A right-click on the header shows or hides any other column, and that choice persists. Reset columns hands every column back to the width rules. Columns can be dragged into a new order, which persists.
+  - The Status column shows a state icon in its status color. The status name stays as tooltip and spoken text.
+  - The Warnings column shows a warning icon beside the count.
+  - Key cells take the Open Key color of their key. Minor keys use the darker shade.
+  - Rows are 24 px tall at the Standard text size.
 
 ### Changed
 
+- The sidebar filters replace the review status dropdown.
+- The Key Notation picker moved to the row above the table. The theme picker left the main window and stays in Settings.
 - Every unit test under `tests/unit/` states its behavior in a one-line docstring. The playlist storage tests and the `add_track` helper carry type hints.
 - New unit tests cover gaps in existing checks.
   - The ID3v2 date check covers a zero day as well as a zero month.
@@ -19,7 +38,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Ruff joins the signatures that now fit on one line.
   - The copied gate tests listed in the ruff `extend-exclude` keep the upstream names.
   - Nine UI test files that #347 also changes keep the old names until that pull request lands.
-- The version advances from 0.81.1 to 0.81.4 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.81.4 to 0.82.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 

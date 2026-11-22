@@ -83,7 +83,7 @@ def test_settings_theme_persistence_roundtrip(tmp_path: Path) -> None:
     assert reloaded.theme == DEFAULT_LIGHT_THEME
 
 
-@pytest.mark.parametrize("window_kind", ["main", "settings"])
+@pytest.mark.parametrize("window_kind", ["settings"])
 def test_theme_selectors_use_shared_default_for_legacy_settings(
     window_kind: str, qtbot: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:

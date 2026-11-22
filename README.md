@@ -259,15 +259,27 @@ caller before that.
 
 ## Usage Walkthrough
 
-1. **Import.** Click **Import Folder** and pick a music folder. The import
+The workflow bar at the top lists the five stages: Import, Analyze, Review,
+Apply, and Export. Each stage shows its number and track count. The first
+stage with waiting tracks is the current stage. The main button beside the
+stages runs its action. A click on any stage runs that stage's action.
+Alt+1 to Alt+5 run the stages by number. **Transcode**, **History**, and
+**Settings** sit at the right end of the bar.
+
+The sidebar repeats the stages and holds the library filters and the source
+folders. From 1600 px of window width the sidebar stays open. A narrower
+window opens it from the button beside the search field. Below 1280 px the
+detail panel sits under the table. The window keeps its size and position
+between launches.
+
+1. **Import.** Click **Import**, stage 1, and pick a music folder. The import
    reads tags and hashes each file. It never modifies the files. Each file
    appears in the table with its format, duration, current tags, status, and
    warnings.
-2. **Filter.** Type in the filter box to match filename, artist, title, label,
-   or warning text. The status menu narrows the table to `Has Warnings
-   (XDJ-RX3 / Rip)`, `Unprocessed`, `Proposed`, `Partially Approved`,
-   `Ready to Write`, `Written`, or `Error`.
-3. **Identify and analyze.** Click **Identify & Analyze All**. The batch joins
+2. **Filter.** Type in the filter box to match filename, artist, title, or
+   label. The sidebar filters narrow the table to **All tracks**, **Needs
+   review**, **Has warnings**, or **Ready to write**.
+3. **Identify and analyze.** Click **Analyze**, stage 2. The batch joins
    the queue and covers every visible row. `LocalDspAnalyzer` computes BPM,
    key, the waveform overview, and rip warnings. Reconciliation turns the
    results into field proposals.
@@ -290,8 +302,9 @@ caller before that.
      field edits, and data deletion stay disabled.
    - Closing the window during a batch offers **Keep Working** or **Cancel
      and Exit**. Waiting batches do not survive an exit.
-4. **Pick the key notation.** The **Key Notation** menu switches the table and
-   detail panel between Standard, Camelot, and Open Key.
+4. **Pick the key notation.** The **Key Notation** menu above the table
+   switches the table and detail panel between Standard, Camelot, and Open
+   Key.
 5. **Review one track.** Select a row. The detail panel shows hardware
    warnings, the audio preview, and each field proposal.
    - **Play** plays the track through the system audio output. **Stop**
@@ -303,9 +316,10 @@ caller before that.
    - **Accept** approves a proposal.
    - **Save** stores a manual edit.
    - **Lock** protects a field from later proposals. **Unlock** releases it.
-6. **Bulk approve.** Click **Bulk Approve Non-Conflicting** to approve every
-   proposal without a competing value on the visible rows.
-7. **Preview and apply.** Click **Preview & Apply Writes**. The dialog lists
+6. **Bulk approve.** Click **Review**, stage 3, to approve every proposal
+   without a competing value on the visible rows. As the current stage, its
+   main button reads **Approve all matches**.
+7. **Preview and apply.** Click **Apply**, stage 4. The dialog lists
    each destination file, the tag changes, the preserved custom frames, the
    backup path, and a safety status.
    - Check **Rename files using template** to rename on write. The default
@@ -325,19 +339,21 @@ caller before that.
      finished** keeps the file as it is. The app blocks new writes until the
      dialog lists no rows. A dialog closed early leaves the block in place
      until the next launch.
-8. **Restore.** Click **Change Journal & Restore**. Each completed write shows
+8. **Restore.** Click **History** at the right end of the bar. Each completed
+   write shows
    a **Restore Backup** button. A confirmation names the file first. The
    restore verifies the backup and returns the original file.
    - A file edited after the write gets a second confirmation.
    - The restore copies the current file to `backups/` before replacing it.
-9. **Transcode to XDJ.** Click **Transcode to XDJ** to convert the
+9. **Transcode to XDJ.** Click **Transcode** at the right end of the bar to
+   convert the
    visible rows with the mode and preset from **Settings & Providers**. A
    confirmation names the file count, mode, and preset.
    - `sibling_export` writes a `<name>_XDJ` copy next to each original.
    - `in_place_backed_up` replaces each original. Each replacement first
      takes a SHA-256 verified backup and records a journal entry.
    - A summary lists each output file and each failure.
-10. **Export a playlist.** Click **Export Playlist (.m3u8)** and pick a
+10. **Export a playlist.** Click **Export**, stage 5, and pick a
     destination. The export writes the visible rows to a UTF-8 Extended M3U
     playlist for Traktor Pro 4 and Rekordbox. A name without the `.m3u8`
     suffix gains it.

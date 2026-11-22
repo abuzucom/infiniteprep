@@ -33,11 +33,12 @@ SUPPORTED_UNSORTED_PLACEMENTS: Final[tuple[str, ...]] = (
     UNSORTED_PLACEMENT_FIRST,
     UNSORTED_PLACEMENT_LAST,
 )
-# Theme identifiers name the project theme files under ui/themes (UI-R, #245).
+# Theme identifiers name the project theme files under ui/themes.
 DARK_THEME_ID: Final[str] = "infiniteprep_dark.xml"
 LIGHT_THEME_ID: Final[str] = "infiniteprep_light.xml"
-# Settings files from before UI-R name the qt-material teal themes or the native style.
-# Those values load as the matching UI-R theme. Native left the picker, so it loads as dark.
+# Older settings files can name the qt-material teal themes or the native style.
+# Those values load as the matching project theme. The pickers lack Native, so it
+# loads as dark.
 LEGACY_THEME_REPLACEMENTS: Final[dict[str, str]] = {
     "dark_teal.xml": DARK_THEME_ID,
     "light_teal.xml": LIGHT_THEME_ID,
@@ -206,6 +207,10 @@ class AppSettings:
     file_table_column_count: int = 0  # Column count when the layout was saved.
     detail_table_layout: str = ""  # Base64-encoded QHeaderView state.
     detail_table_column_count: int = 0  # Column count when the layout was saved.
+    window_geometry: str = ""  # Base64-encoded QWidget geometry of the main window.
+    # JSON map of library column index to shown (true) or hidden (false), set in the
+    # header menu. Columns without an entry follow the width rules.
+    file_table_column_choices: str = ""
     waveform_zoom_seconds: int = DEFAULT_WAVEFORM_ZOOM_SECONDS
     usb_reserve_percent: float = 0.0  # Percent of the estimated export size.
     usb_reserve_bytes: int = 0
@@ -217,7 +222,7 @@ class AppSettings:
 
 
 def replace_legacy_theme(theme: str) -> str:
-    """Return the UI-R theme that replaces a pre-UI-R theme value, or the value unchanged."""
+    """Return the project theme for a legacy theme value, or the value unchanged."""
     return LEGACY_THEME_REPLACEMENTS.get(theme, theme)
 
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from PySide6.QtGui import QIcon
 
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.db.connection import DatabaseManager
@@ -15,11 +16,14 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui import main_window as main_window_module
 from infiniteprep.ui.main_window import STATUS_FILTER_VALUES, MainWindow, format_status_label
-from infiniteprep.ui.theme import get_theme_choices
+from infiniteprep.ui.theme import DEFAULT_LIGHT_THEME
+from infiniteprep.ui.tokens import LIGHT_PALETTE
+from infiniteprep.ui.workflow import LibraryFilter, WorkflowStage
 from tests.fixtures.audio_factory import create_wav_fixture
 from tests.fixtures.memory_settings import MemorySettingsManager
 
-MIN_THEMES_FOR_SWITCH = 2
+ICON_PROBE_SIZE = 20
+OPAQUE_ALPHA = 255
 
 
 @pytest.fixture
@@ -61,11 +65,11 @@ def test_status_filter_offers_every_review_status() -> None:
 def test_status_filter_shows_a_pipeline_status(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
-    """A file the pipeline marks no_match appears under its own filter entry."""
+    """A file the pipeline marks no_match appears under the Needs review filter."""
     window, repo, ids = build_window(qtbot, tmp_path, ["matched.wav", "unmatched.wav"])
     repo.update_file_status(ids["unmatched.wav"], review_status=ReviewStatus.NO_MATCH)
 
-    window.status_filter_combo.setCurrentText(format_status_label(ReviewStatus.NO_MATCH))
+    window.sidebar.filter_buttons[LibraryFilter.NEEDS_REVIEW].click()
 
     assert visible_names(window) == ["unmatched.wav"]
 
@@ -94,19 +98,25 @@ def test_search_matches_an_approved_value_the_table_shows(
     assert visible_names(window) == ["b.wav"]
 
 
-def test_reload_settings_moves_the_theme_picker_to_the_stored_theme(
-    qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
-) -> None:
-    """After the Settings dialog changes the theme, the toolbar picker shows that theme."""
-    choices = get_theme_choices()
-    if len(choices) < MIN_THEMES_FOR_SWITCH:
-        pytest.skip("This build offers one theme only.")
+def opaque_colors(icon: QIcon) -> set[str]:
+    """Return the colors of the fully opaque pixels of a 20 px icon render."""
+    image = icon.pixmap(ICON_PROBE_SIZE, ICON_PROBE_SIZE).toImage()
+    return {
+        image.pixelColor(x, y).name()
+        for x in range(image.width())
+        for y in range(image.height())
+        if image.pixelColor(x, y).alpha() == OPAQUE_ALPHA
+    }
+
+
+def test_reload_redraws_icons(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
+    """After the Settings dialog changes the theme, the bar icons take its colors."""
     window, _repo, _ids = build_window(qtbot, tmp_path, ["a.wav"])
-    other_theme = next(theme for theme in choices if theme != window.theme_combo.currentData())
     stored = settings.load()
-    stored.theme = other_theme
+    stored.theme = DEFAULT_LIGHT_THEME
     settings.save(stored)
 
     window.reload_settings()
 
-    assert window.theme_combo.currentData() == other_theme
+    review_icon = window.workflow_bar.stage_buttons[WorkflowStage.REVIEW].icon()
+    assert opaque_colors(review_icon) == {LIGHT_PALETTE.text_muted}

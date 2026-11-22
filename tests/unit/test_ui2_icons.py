@@ -1,4 +1,4 @@
-"""Behavioral tests for the bundled UI-R icons, their notices, and the icon loader (#342)."""
+"""Behavioral tests for the bundled icons, their notices, and the icon loader."""
 
 from __future__ import annotations
 
@@ -27,7 +27,6 @@ LUCIDE_ICON_COUNT = 33
 # SHA-256 digests of each file at Tabler Icons v3.50.0
 # (commit 6904efd245391ad396df17654738f52f6da8c40e, icons/outline/<name>.svg) and
 # Lucide 1.70.0 (commit b826f0c527e1498f5e46f41ca0277ccab144bf31, icons/<name>.svg).
-# Each copy matched its Git blob at the pinned commit before these digests were taken.
 PINNED_DIGESTS: dict[str, str] = {
     "tabler/adjustments.svg": "46ee742d7cdec46bacd05374a8322f6dae1ccca41b4e09e3c52456ef70af014d",
     "tabler/arrow-down.svg": "34efc2d5737ffa3f29f8056e6d861ea8218d8f40858539a959a9482811f6bd05",
@@ -101,7 +100,7 @@ PINNED_DIGESTS: dict[str, str] = {
 ICON_COLOR = "#38bdf8"
 
 
-def test_the_bundle_holds_the_fifty_four_approved_icons() -> None:
+def test_icon_count() -> None:
     """21 Tabler and 33 Lucide icons ship, and each name belongs to one set only."""
     assert len(TABLER_ICONS) == TABLER_ICON_COUNT
     assert len(LUCIDE_ICONS) == LUCIDE_ICON_COUNT
@@ -111,14 +110,14 @@ def test_the_bundle_holds_the_fifty_four_approved_icons() -> None:
 
 
 @pytest.mark.parametrize("relative_path", sorted(PINNED_DIGESTS))
-def test_each_icon_matches_its_pinned_upstream_file(relative_path: str) -> None:
+def test_icon_digests(relative_path: str) -> None:
     """Every icon file holds the bytes of its file at the pinned upstream commit."""
     digest = hashlib.sha256((ICONS_DIR / relative_path).read_bytes()).hexdigest()
     assert digest == PINNED_DIGESTS[relative_path]
 
 
-def test_no_unlisted_svg_ships_in_the_icon_folders() -> None:
-    """The icon folders hold the approved SVG files and nothing else of that type."""
+def test_no_extra_svgs() -> None:
+    """The icon folders hold the listed SVG files and nothing else of that type."""
     shipped = {
         f"{icon_set.value}/{path.name}"
         for icon_set in IconSet
@@ -128,7 +127,7 @@ def test_no_unlisted_svg_ships_in_the_icon_folders() -> None:
 
 
 @pytest.mark.parametrize("name", sorted(ICON_SETS))
-def test_every_icon_name_loads_and_renders(name: str, qtbot: Any) -> None:
+def test_every_icon_renders(name: str, qtbot: Any) -> None:
     """Each icon renders at the requested size, and the result is not empty."""
     image = render_icon_image(name, ICON_COLOR, 20)
 
@@ -137,7 +136,7 @@ def test_every_icon_name_loads_and_renders(name: str, qtbot: Any) -> None:
     assert any(image.pixelColor(x, y).alpha() > 0 for x in range(image.width()) for y in range(20))
 
 
-def test_a_render_paints_the_strokes_in_the_given_color(qtbot: Any) -> None:
+def test_render_color(qtbot: Any) -> None:
     """The opaque pixels of a render carry the requested color."""
     image = render_icon_image("square", ICON_COLOR, 48)
     target = QColor(ICON_COLOR)
@@ -155,7 +154,7 @@ def test_a_render_paints_the_strokes_in_the_given_color(qtbot: Any) -> None:
     )
 
 
-def test_a_render_follows_the_device_pixel_ratio(qtbot: Any) -> None:
+def test_render_pixel_ratio(qtbot: Any) -> None:
     """A 2x render holds twice the pixels and reports the same logical size."""
     image = render_icon_image("folder", ICON_COLOR, 16, device_pixel_ratio=2.0)
 
@@ -163,7 +162,7 @@ def test_a_render_follows_the_device_pixel_ratio(qtbot: Any) -> None:
     assert image.devicePixelRatio() == 2.0
 
 
-def test_a_themed_icon_holds_each_requested_size(qtbot: Any) -> None:
+def test_themed_icon_sizes(qtbot: Any) -> None:
     """A QIcon from the loader offers a pixmap at each size it was built for."""
     icon = themed_icon("play", ICON_COLOR, sizes=(16, 24))
 
@@ -171,7 +170,7 @@ def test_a_themed_icon_holds_each_requested_size(qtbot: Any) -> None:
     assert {size.width() for size in icon.availableSizes()} == {16, 24}
 
 
-def test_the_color_enters_the_svg_as_a_normalized_hex_value() -> None:
+def test_color_normalized() -> None:
     """The loader writes #rrggbb in place of currentColor and rejects other text."""
     svg = colored_svg("x", "#38BDF8")
 
@@ -181,7 +180,7 @@ def test_the_color_enters_the_svg_as_a_normalized_hex_value() -> None:
         colored_svg("x", '"/><script')
 
 
-def test_unknown_names_and_sizes_raise(qtbot: Any) -> None:
+def test_bad_name_or_size(qtbot: Any) -> None:
     """An unknown icon name and a size below one logical pixel raise ValueError."""
     with pytest.raises(ValueError, match="No bundled icon"):
         icon_file_path("sparkles")
@@ -196,13 +195,13 @@ def test_unknown_names_and_sizes_raise(qtbot: Any) -> None:
         (IconSet.LUCIDE, "Copyright (c) 2026 Lucide Icons and Contributors"),
     ],
 )
-def test_each_icon_set_ships_its_license(icon_set: IconSet, copyright_line: str) -> None:
+def test_icon_licenses(icon_set: IconSet, copyright_line: str) -> None:
     """Each icon folder carries its set's license text."""
     license_text = (ICONS_DIR / icon_set.value / "LICENSE").read_text(encoding="utf-8")
     assert copyright_line in license_text
 
 
-def test_lucide_license_names_the_feather_icons_in_the_bundle() -> None:
+def test_feather_icons_listed() -> None:
     """The Lucide license lists every bundled Feather-derived icon under its Feather name."""
     license_text = (ICONS_DIR / "lucide" / "LICENSE").read_text(encoding="utf-8")
     feather_names = ("check", "database", "loader", "square", "x", "x-circle", "alert-triangle")
@@ -213,8 +212,8 @@ def test_lucide_license_names_the_feather_icons_in_the_bundle() -> None:
     assert set(feather_names) <= listed
 
 
-def test_notice_names_both_icon_sets_and_feather() -> None:
-    """NOTICE carries the Tabler, Lucide, and Feather entries that #342 lists."""
+def test_notice_entries() -> None:
+    """NOTICE carries the Tabler, Lucide, and Feather entries."""
     notice = (REPO_ROOT / "NOTICE").read_text(encoding="utf-8")
 
     assert "Tabler Icons v3.50.0 (21 icons): MIT." in notice
@@ -224,7 +223,7 @@ def test_notice_names_both_icon_sets_and_feather() -> None:
     assert "Copyright (c) 2013-present Cole Bemis." in notice
 
 
-def test_every_bundle_ships_the_icons_and_their_licenses() -> None:
+def test_bundles_ship_icons() -> None:
     """The spec collects both icon folders, and every allowlist names them."""
     spec_text = (REPO_ROOT / "infiniteprep.spec").read_text(encoding="utf-8")
     for icon_set in IconSet:

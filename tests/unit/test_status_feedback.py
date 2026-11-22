@@ -178,7 +178,7 @@ def test_status_cell_shows_a_readable_label(
     """The library shows "Unprocessed", not the stored value "unprocessed"."""
     window = build_window(qtbot, tmp_path, with_track=True)
 
-    assert window.file_table.item(0, STATUS_COLUMN).text() == "Unprocessed"
+    assert window.file_table.item(0, STATUS_COLUMN).toolTip() == "Unprocessed"
     assert format_status_cell("ready_to_write") == "Ready to Write"
     assert format_status_cell("not_a_status") == "not_a_status"
 

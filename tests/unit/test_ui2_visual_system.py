@@ -1,4 +1,4 @@
-"""Behavioral tests for the UI-R visual system: tokens, theme files, and text sizes (#342)."""
+"""Behavioral tests for the visual system: tokens, theme files, and text sizes."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def graphic_pairs(palette: Palette) -> list[tuple[str, str, str]]:
 
 
 @pytest.mark.parametrize("theme", sorted(PALETTES))
-def test_every_text_pair_reaches_the_text_minimum(theme: str) -> None:
+def test_text_contrast(theme: str) -> None:
     """Every text color reaches 4.5:1 on each background it sits on."""
     for name, foreground, background in text_pairs(PALETTES[theme]):
         ratio = contrast_ratio(QColor(foreground), QColor(background))
@@ -99,7 +99,7 @@ def test_every_text_pair_reaches_the_text_minimum(theme: str) -> None:
 
 
 @pytest.mark.parametrize("theme", sorted(PALETTES))
-def test_every_graphic_pair_reaches_the_graphic_minimum(theme: str) -> None:
+def test_graphic_contrast(theme: str) -> None:
     """Focus rings, primary buttons, and status icons reach 3:1 on each background."""
     for name, graphic, background in graphic_pairs(PALETTES[theme]):
         ratio = contrast_ratio(QColor(graphic), QColor(background))
@@ -107,7 +107,7 @@ def test_every_graphic_pair_reaches_the_graphic_minimum(theme: str) -> None:
 
 
 @pytest.mark.parametrize("is_minor", [False, True])
-def test_every_key_cell_text_reaches_the_text_minimum(is_minor: bool) -> None:
+def test_key_cell_contrast(is_minor: bool) -> None:
     """Each key cell carries black or white text at 4.5:1 or more."""
     for open_key_number in range(1, OPEN_KEY_COUNT + 1):
         colors = key_cell_colors(open_key_number, is_minor)
@@ -115,7 +115,7 @@ def test_every_key_cell_text_reaches_the_text_minimum(is_minor: bool) -> None:
         assert ratio >= TEXT_CONTRAST_MINIMUM, f"{open_key_number} minor={is_minor}"
 
 
-def test_minor_keys_use_a_darker_shade_of_the_same_hue() -> None:
+def test_minor_key_shade() -> None:
     """A minor key cell is darker than its major key cell and keeps the hue."""
     for open_key_number in range(1, OPEN_KEY_COUNT + 1):
         major = QColor(key_cell_colors(open_key_number, is_minor=False).fill)
@@ -124,14 +124,14 @@ def test_minor_keys_use_a_darker_shade_of_the_same_hue() -> None:
         assert abs(minor.hslHue() - major.hslHue()) <= HUE_ROUNDING_TOLERANCE
 
 
-def test_each_open_key_number_has_its_own_hue() -> None:
+def test_key_hues_distinct() -> None:
     """The twelve major key fills are twelve different colors."""
     fills = {key_cell_colors(number, is_minor=False).fill for number in range(1, 13)}
     assert len(fills) == OPEN_KEY_COUNT
 
 
 @pytest.mark.parametrize("open_key_number", [0, OPEN_KEY_COUNT + 1])
-def test_key_cell_colors_reject_numbers_off_the_wheel(open_key_number: int) -> None:
+def test_bad_key_number(open_key_number: int) -> None:
     """Open Key numbers outside 1 to 12 raise ValueError."""
     with pytest.raises(ValueError, match="1 to 12"):
         key_cell_colors(open_key_number, is_minor=False)
@@ -144,7 +144,7 @@ def read_theme_colors(theme: str) -> dict[str, str]:
 
 
 @pytest.mark.parametrize("theme", [DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME])
-def test_each_theme_file_matches_its_palette(theme: str) -> None:
+def test_theme_files_match(theme: str) -> None:
     """The qt-material roles in each theme file hold the palette colors."""
     palette = THEME_PALETTES[theme]
     colors = read_theme_colors(theme)
@@ -157,26 +157,22 @@ def test_each_theme_file_matches_its_palette(theme: str) -> None:
 
 
 @pytest.mark.parametrize("theme", [DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME])
-def test_text_on_the_theme_accent_reaches_the_text_minimum(theme: str) -> None:
+def test_accent_text_contrast(theme: str) -> None:
     """qt-material puts primaryTextColor on primaryColor, so the pair reaches 4.5:1."""
     colors = read_theme_colors(theme)
     ratio = contrast_ratio(QColor(colors["primaryTextColor"]), QColor(colors["primaryColor"]))
     assert ratio >= TEXT_CONTRAST_MINIMUM
 
 
-def test_the_dark_theme_uses_the_logo_colors() -> None:
-    """The dark theme uses the logo navy, royal blue, and sky blue (#342).
-
-    The royal blue fill sits one step lighter than the logo value #2456e0, so it reaches
-    3:1 on the surface color.
-    """
+def test_logo_colors() -> None:
+    """The dark theme uses the logo navy background, royal blue fill, and sky blue accent."""
     assert DARK_PALETTE.background == "#070b1c"
     assert DARK_PALETTE.primary == "#2a5ce6"
     assert DARK_PALETTE.highlight == "#38bdf8"
 
 
-def test_the_text_size_presets_match_the_issue_table() -> None:
-    """The presets hold the point sizes that #342 lists for each text role."""
+def test_text_size_presets() -> None:
+    """Each preset holds its point size for each text role."""
     expected = {
         TextSizePreset.COMPACT: (9, 10, 12, 14),
         TextSizePreset.STANDARD: (10, 11, 13, 16),
@@ -188,7 +184,7 @@ def test_the_text_size_presets_match_the_issue_table() -> None:
     assert {preset.value for preset in TextSizePreset} == set(SUPPORTED_TEXT_SIZES)
 
 
-def test_spacing_scales_with_the_preset() -> None:
+def test_spacing_scale() -> None:
     """Standard spacing is 4 to 24 px, and Large spacing grows with the body size."""
     assert spacing_for(TEXT_SIZE_STANDARD) == STANDARD_SPACING
     large = spacing_for(TEXT_SIZE_LARGE)
@@ -197,7 +193,7 @@ def test_spacing_scales_with_the_preset() -> None:
     assert scaled_size(32, "unknown preset") == 32
 
 
-def test_the_style_sheet_sets_the_preset_sizes_and_button_heights() -> None:
+def test_style_sheet() -> None:
     """The style sheet carries the body size, the caption header, and the button heights."""
     style = build_style_sheet(DARK_PALETTE, TEXT_SIZE_STANDARD)
 
@@ -209,21 +205,21 @@ def test_the_style_sheet_sets_the_preset_sizes_and_button_heights() -> None:
     assert "background-color: #2a5ce6" in style
 
 
-def test_resolve_theme_maps_the_pre_ui_r_themes() -> None:
-    """The teal themes resolve to the UI-R themes, and the native fallback stays native."""
+def test_resolve_legacy_themes() -> None:
+    """The teal themes resolve to the project themes, and the native fallback stays native."""
     assert resolve_theme("dark_teal.xml") == DEFAULT_DARK_THEME
     assert resolve_theme("light_teal.xml") == DEFAULT_LIGHT_THEME
     assert resolve_theme(NATIVE_THEME) == NATIVE_THEME
 
 
-def test_the_pickers_leave_out_the_native_theme(tmp_path: Path, monkeypatch: Any) -> None:
+def test_pickers_skip_native(tmp_path: Path, monkeypatch: Any) -> None:
     """With qt-material present, the pickers offer Dark, Light, and Match System only."""
     monkeypatch.setattr("infiniteprep.ui.theme._qt_material_package_dir", lambda: tmp_path)
 
     assert get_theme_choices() == [DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME, SYSTEM_THEME]
 
 
-def test_the_pickers_offer_native_only_without_qt_material(monkeypatch: Any) -> None:
+def test_native_without_engine(monkeypatch: Any) -> None:
     """Without qt-material, no project theme applies, so the pickers offer native only."""
     monkeypatch.setattr("infiniteprep.ui.theme._qt_material_package_dir", lambda: None)
 
@@ -244,8 +240,8 @@ def apply_with_engine(theme: str, text_size: str) -> tuple[MagicMock, MagicMock,
     return app, engine, result
 
 
-def test_a_theme_applies_its_project_file_and_the_ui_r_style_sheet() -> None:
-    """qt-material receives the project file path, and the UI-R sheet follows its sheet."""
+def test_theme_applies_files() -> None:
+    """qt-material receives the project file path, and the app sheet follows its sheet."""
     app, engine, result = apply_with_engine(DEFAULT_LIGHT_THEME, TEXT_SIZE_LARGE)
 
     assert result.applied is True
@@ -260,8 +256,8 @@ def test_a_theme_applies_its_project_file_and_the_ui_r_style_sheet() -> None:
     assert build_style_sheet(LIGHT_PALETTE, TEXT_SIZE_LARGE) in applied_sheet
 
 
-def test_a_pre_ui_r_theme_applies_the_ui_r_theme() -> None:
-    """A stored teal theme applies and reports the UI-R theme that replaces it."""
+def test_legacy_theme_applies() -> None:
+    """A stored teal theme applies and reports the matching project theme."""
     _app, engine, result = apply_with_engine("dark_teal.xml", TEXT_SIZE_STANDARD)
 
     assert result.theme == DEFAULT_DARK_THEME
@@ -277,17 +273,15 @@ def test_a_pre_ui_r_theme_applies_the_ui_r_theme() -> None:
         ("system", "system"),
     ],
 )
-def test_settings_load_pre_ui_r_themes_as_ui_r_themes(
-    tmp_path: Path, stored: str, loaded: str
-) -> None:
-    """A settings file from before UI-R loads with the matching UI-R theme."""
+def test_settings_map_legacy_themes(tmp_path: Path, stored: str, loaded: str) -> None:
+    """A settings file that names a legacy theme loads with the matching project theme."""
     path = tmp_path / "settings.json"
     path.write_text(json.dumps({"theme": stored}), encoding="utf-8")
 
     assert SettingsManager(path).load().theme == loaded
 
 
-def test_settings_keep_a_valid_text_size_and_reject_others(tmp_path: Path) -> None:
+def test_text_size_setting(tmp_path: Path) -> None:
     """A stored preset loads as stored. An unknown preset loads as Standard."""
     path = tmp_path / "settings.json"
     manager = SettingsManager(path)
@@ -300,7 +294,7 @@ def test_settings_keep_a_valid_text_size_and_reject_others(tmp_path: Path) -> No
     assert AppSettings().theme == DARK_THEME_ID
 
 
-def test_the_general_tab_picks_and_stores_the_text_size(qtbot: Any) -> None:
+def test_general_tab_text_size(qtbot: Any) -> None:
     """The General tab shows the stored preset and copies the chosen preset into settings."""
     tab = GeneralTab(DEFAULT_DARK_THEME, settings=AppSettings(text_size=TEXT_SIZE_LARGE))
     qtbot.addWidget(tab)
@@ -313,15 +307,15 @@ def test_the_general_tab_picks_and_stores_the_text_size(qtbot: Any) -> None:
     assert settings.text_size == TEXT_SIZE_STANDARD
 
 
-def test_the_general_tab_selects_the_ui_r_theme_for_a_teal_value(qtbot: Any) -> None:
-    """A General tab opened with a teal theme value shows the UI-R theme that replaces it."""
+def test_general_tab_legacy_theme(qtbot: Any) -> None:
+    """A General tab opened with a teal theme value shows the matching project theme."""
     tab = GeneralTab("light_teal.xml")
     qtbot.addWidget(tab)
 
     assert tab.theme_combo.currentData() == DEFAULT_LIGHT_THEME
 
 
-def test_every_bundle_ships_the_project_theme_files() -> None:
+def test_bundles_ship_themes() -> None:
     """The spec collects both theme files, and every bundle allowlist names them."""
     spec_text = (REPO_ROOT / "infiniteprep.spec").read_text(encoding="utf-8")
     for theme in (DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME):

@@ -1,13 +1,13 @@
-"""Load the bundled UI-R icons and render them in a theme color at any size.
+"""Load the bundled icons and render them in a theme color at any size.
 
-The icons are unchanged SVG files from Tabler Icons v3.50.0 and Lucide 1.70.0 (UI-R
-step 4, #245). Both sets draw strokes in currentColor, so a render swaps that keyword
-for a token color. The Qt SVG image plugin renders the result, so no extra Qt module
-ships for icons.
+The icons are unchanged SVG files from Tabler Icons v3.50.0 and Lucide 1.70.0. Both
+sets draw strokes in currentColor, so a render swaps that keyword for a token color.
+The Qt SVG image plugin renders the result, so no extra Qt module ships for icons.
 """
 
 from __future__ import annotations
 
+import functools
 from enum import StrEnum
 from pathlib import Path
 from typing import Final
@@ -28,6 +28,8 @@ SVG_FORMAT: Final[bytes] = b"svg"
 CURRENT_COLOR: Final[bytes] = b"currentColor"
 # QIcon picks the closest pixmap. These sizes cover menus, tables, and toolbars.
 DEFAULT_ICON_SIZES: Final[tuple[int, ...]] = (16, 20, 24, 32)
+# Enough for every icon in both themes' status colors and the plain text colors.
+ICON_CACHE_SIZE: Final[int] = 256
 
 TABLER_ICONS: Final[tuple[str, ...]] = (
     "adjustments",
@@ -137,6 +139,15 @@ def render_icon_image(name: str, color: str, size: int, device_pixel_ratio: floa
         )
     image.setDevicePixelRatio(device_pixel_ratio)
     return image
+
+
+@functools.lru_cache(maxsize=ICON_CACHE_SIZE)
+def cached_themed_icon(name: str, color: str) -> QIcon:
+    """Return a shared QIcon for a name and color at the default sizes.
+
+    Table cells repeat a few icons on every row. The cache renders each pair once.
+    """
+    return themed_icon(name, color)
 
 
 def themed_icon(

@@ -1,6 +1,6 @@
-"""The UI-R style sheet that the theme adds after the qt-material style sheet.
+"""The app style sheet that the theme adds after the qt-material style sheet.
 
-qt-material styles every widget from the theme file. This sheet sets the UI-R text
+qt-material styles every widget from the theme file. This sheet sets the text
 sizes, button variants, focus ring, and table lines from the design tokens. A later
 rule with the same selector wins, so these rules override the qt-material rules.
 """
@@ -31,6 +31,8 @@ TEXT_ROLE_PROPERTY: Final[str] = "textRole"
 CAPTION_TEXT_ROLE: Final[str] = "caption"
 SECTION_HEADING_TEXT_ROLE: Final[str] = "sectionHeading"
 DIALOG_TITLE_TEXT_ROLE: Final[str] = "dialogTitle"
+# The workflow bar and sidebar set this dynamic property on the current stage.
+CURRENT_STAGE_PROPERTY: Final[str] = "currentStage"
 # Index of the 8 px step in the spacing scale. Buttons use it as side padding.
 BUTTON_PADDING_STEP: Final[int] = 1
 
@@ -72,6 +74,8 @@ def _button_rules(palette: Palette, preset: str) -> list[str]:
         f"{{ background-color: {palette.surface}; }}",
         f"QPushButton:focus, QToolButton:focus {{ border: {FOCUS_RING_WIDTH}px solid "
         f"{palette.highlight}; }}",
+        f'QToolButton[{CURRENT_STAGE_PROPERTY}="true"] '
+        f"{{ color: {palette.highlight}; font-weight: 600; }}",
     ]
 
 
@@ -84,6 +88,6 @@ def _table_rules(palette: Palette) -> list[str]:
 
 
 def build_style_sheet(palette: Palette, preset: str) -> str:
-    """Return the UI-R style sheet for a palette and a text size preset."""
+    """Return the app style sheet for a palette and a text size preset."""
     rules = _text_rules(palette, preset) + _button_rules(palette, preset) + _table_rules(palette)
     return "\n".join(rules)
