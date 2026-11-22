@@ -77,18 +77,18 @@ class WeightedColumnSizer(QObject):
 
     def share_spare_width(self) -> None:
         """Split the width the other columns leave among the weighted columns."""
-        header = self._table.horizontalHeader()
         free = [
             column
             for column in self._weights
-            if column not in self._pinned and not header.isSectionHidden(column)
+            if column not in self._pinned and self._is_shown(column)
         ]
         if not free:
             return
+        header = self._table.horizontalHeader()
         used = sum(
             header.sectionSize(column)
             for column in range(header.count())
-            if column not in free and not header.isSectionHidden(column)
+            if column not in free and self._is_shown(column)
         )
         spare = max(0, self._table.viewport().width() - used)
         # Every weight is at least one, so the total of a non-empty list is positive.
@@ -96,6 +96,15 @@ class WeightedColumnSizer(QObject):
         for column in free:
             share = spare * self._weights[column] // total_weight
             self._resize(column, max(self._minimum_width, share))
+
+    def _is_shown(self, column: int) -> bool:
+        """Return True for a column that takes width in the table.
+
+        Qt reports a hide as a resize to zero before it marks the column hidden. A
+        zero width therefore counts as hidden, so a share during the hide skips it.
+        """
+        header = self._table.horizontalHeader()
+        return not header.isSectionHidden(column) and header.sectionSize(column) > 0
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         """Share the spare width again whenever the table viewport changes size."""
