@@ -525,6 +525,8 @@ class MainWindow(QMainWindow):
         self.detail_scroll = QScrollArea(content)
         self.detail_scroll.setWidgetResizable(True)
         self.detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        # The panel's own controls take Tab. The scroll area follows the focused control.
+        self.detail_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.detail_scroll.setWidget(self.detail_panel)
         self.detail_splitter.addWidget(self.detail_scroll)
         content_layout.addWidget(self.detail_splitter)
@@ -700,9 +702,8 @@ class MainWindow(QMainWindow):
             header.sectionResized.connect(self._schedule_layout_save)
         # A dragged column order persists the same way as a dragged width.
         self.file_table.horizontalHeader().sectionMoved.connect(self._schedule_layout_save)
-        # A restored layout carries the hidden flags of its last session. The width rules
-        # and the header menu choices decide again for the current width.
-        self.column_visibility.apply()
+        # The width rules wait for the table's first resize. Before the window shows, the
+        # table holds a default size, and the rules would hide columns at that size.
 
     def _schedule_layout_save(self, *_args: int) -> None:
         """Restart the layout save timer after a column resize, move, or hide."""

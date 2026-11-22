@@ -127,7 +127,15 @@ class WeightedColumnSizer(QObject):
         finally:
             self._applying = False
 
-    def _on_section_resized(self, column: int, _old_width: int, _new_width: int) -> None:
-        """Keep a width the user set. Sizer resizes do not count."""
-        if not self._applying:
-            self._pinned.add(column)
+    def _on_section_resized(self, column: int, old_width: int, new_width: int) -> None:
+        """Keep a width the user set. Sizer resizes and hide or show changes do not count.
+
+        Qt reports a hidden column as zero wide. A drag never reaches zero, so a resize
+        from or to zero is a hide or a show. That change moves the spare width.
+        """
+        if self._applying:
+            return
+        if old_width == 0 or new_width == 0:
+            self.share_spare_width()
+            return
+        self._pinned.add(column)

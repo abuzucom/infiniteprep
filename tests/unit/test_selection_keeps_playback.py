@@ -24,6 +24,7 @@ from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui import detail_panel as detail_panel_module
 from infiniteprep.ui import main_window as main_window_module
 from infiniteprep.ui.audio_player import FILE_ID_MIME_TYPE
+from infiniteprep.ui.library_columns import LibraryColumn
 from infiniteprep.ui.main_window import MainWindow
 from tests.fixtures.audio_factory import create_wav_fixture
 from tests.fixtures.memory_settings import MemorySettingsManager
@@ -269,7 +270,8 @@ def test_context_menu_play_plays_row(library: Library, monkeypatch: pytest.Monke
 
     monkeypatch.setattr(library.window, "_exec_context_menu", capture)
     row = row_for(library, SECOND_NAME)
-    item = library.window.file_table.item(row, 0)
+    # Artist never hides. Filename hides in a table narrower than 1100 px.
+    item = library.window.file_table.item(row, LibraryColumn.ARTIST)
     assert item is not None
     position = library.window.file_table.visualItemRect(item).center()
 
