@@ -5,7 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Final
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QDialog,
     QHBoxLayout,
@@ -14,8 +16,8 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -23,10 +25,25 @@ from PySide6.QtWidgets import (
 from infiniteprep.domain.ports import FileWritePlan
 from infiniteprep.services.write_service import PendingRecoveryError, WriteService
 from infiniteprep.ui.accessible_names import announce
+from infiniteprep.ui.detail_panel import field_label
+from infiniteprep.ui.write_preview_model import (
+    BACKUP_NOTE,
+    count_plans,
+    format_apply_label,
+    format_summary_badges,
+    plan_field_diff,
+    plan_status_label,
+    plan_status_reasons,
+)
 
 WRITE_PLAN_DIALOG_WIDTH: Final[int] = 980
 WRITE_PLAN_DIALOG_HEIGHT: Final[int] = 560
-WRITE_PLAN_TABLE_COLUMNS: Final[int] = 6
+PLAN_TREE_HEADERS: Final[tuple[str, ...]] = ("File", "Current", "New", "Status")
+COLUMN_PLAN_FILE: Final[int] = 0
+COLUMN_PLAN_OLD: Final[int] = 1
+COLUMN_PLAN_NEW: Final[int] = 2
+COLUMN_PLAN_STATUS: Final[int] = 3
+RENAME_ARROW: Final[str] = " -> "
 NO_SAFE_PLANS_TEXT: Final[str] = (
     "No file is ready for a safe write. Resolve the blocked rows, or close the preview."
 )
@@ -69,7 +86,11 @@ class WritePlanDialog(QDialog):
 
         self.rename_checkbox = QCheckBox("Rename files using template:", self)
         self.template_input = QLineEdit(default_template, self)
-        self.table = QTableWidget(0, WRITE_PLAN_TABLE_COLUMNS, self)
+        self.change_badge = QLabel("", self)
+        self.loss_badge = QLabel("", self)
+        self.skipped_badge = QLabel("", self)
+        self.backup_note = QLabel(BACKUP_NOTE, self)
+        self.plan_tree = QTreeWidget(self)
         self.status_label = QLabel("", self)
         self.refresh_btn = QPushButton("Refresh Preview", self)
         self.apply_btn = QPushButton("Apply Safe Writes", self)
@@ -93,25 +114,24 @@ class WritePlanDialog(QDialog):
         top_row.addWidget(self.refresh_btn)
         root.addLayout(top_row)
 
-        self.table.setHorizontalHeaderLabels(
-            [
-                "Current File",
-                "Destination File",
-                "Proposed Tag Changes",
-                "Preserved Custom Frames",
-                "Backup Path",
-                "Safety Status",
-            ]
-        )
-        header = self.table.horizontalHeader()
+        summary = QHBoxLayout()
+        for badge in (self.change_badge, self.loss_badge, self.skipped_badge):
+            summary.addWidget(badge)
+        summary.addStretch()
+        summary.addWidget(self.backup_note)
+        root.addLayout(summary)
+
+        self.plan_tree.setColumnCount(len(PLAN_TREE_HEADERS))
+        self.plan_tree.setHeaderLabels(list(PLAN_TREE_HEADERS))
+        header = self.plan_tree.header()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setStretchLastSection(True)
         # The rows preview computed plans. An edit in a cell changed nothing and was lost.
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setTabKeyNavigation(False)
-        self.table.setAccessibleName("Write plan")
+        self.plan_tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.plan_tree.setTabKeyNavigation(False)
+        self.plan_tree.setAccessibleName("Write plan")
         self.template_input.setAccessibleName("Rename template")
-        root.addWidget(self.table, stretch=1)
+        root.addWidget(self.plan_tree, stretch=1)
 
         bottom = QHBoxLayout()
         bottom.addWidget(self.status_label, stretch=1)
@@ -130,35 +150,36 @@ class WritePlanDialog(QDialog):
             rename_template=self.template_input.text().strip(),
             enable_rename=self.rename_checkbox.isChecked(),
         )
-        self.table.setRowCount(len(self.current_plans))
-        for index, plan in enumerate(self.current_plans):
-            self._populate_plan_row(index, plan)
-        safe_count = sum(1 for write_plan in self.current_plans if write_plan.is_safe_to_apply)
+        self.plan_tree.clear()
+        for plan in self.current_plans:
+            self.plan_tree.addTopLevelItem(self._build_plan_item(plan))
+        counts = count_plans(self.current_plans)
+        change_text, loss_text, skipped_text = format_summary_badges(counts)
+        self.change_badge.setText(change_text)
+        self.loss_badge.setText(loss_text)
+        self.loss_badge.setVisible(counts.removes_tag_data > 0)
+        self.skipped_badge.setText(skipped_text)
+        self.skipped_badge.setVisible(counts.skipped > 0)
+        self.apply_btn.setText(format_apply_label(counts))
+        safe_count = counts.will_change
         self._show_status(
             f"{safe_count} of {len(self.current_plans)} files ready for safe backed-up write."
         )
 
-    def _populate_plan_row(self, row_index: int, plan: FileWritePlan) -> None:
-        """Render a single FileWritePlan row in the preview table."""
-        tags_text = (
-            ", ".join(
-                f"{tag_name}={tag_value}"
-                for tag_name, tag_value in plan.proposed_tags_to_write.items()
-            )
-            or "None"
-        )
-        preserved_text = ", ".join(plan.preserved_custom_tags.keys()) or "None"
-        status_text = format_plan_status(plan)
-        cells = [
-            plan.source_path.name,
-            plan.destination_path.name,
-            tags_text,
-            preserved_text,
-            str(plan.backup_destination_path.name),
-            status_text,
-        ]
-        for column_index, cell_value in enumerate(cells):
-            self.table.setItem(row_index, column_index, QTableWidgetItem(cell_value))
+    @staticmethod
+    def _build_plan_item(plan: FileWritePlan) -> QTreeWidgetItem:
+        """Return one file row with a child row per changed field, collapsed."""
+        name = plan.source_path.name
+        if plan.rename_enabled:
+            name = f"{name}{RENAME_ARROW}{plan.destination_path.name}"
+        item = QTreeWidgetItem([name, "", "", plan_status_label(plan)])
+        reasons = plan_status_reasons(plan)
+        if reasons:
+            item.setToolTip(COLUMN_PLAN_STATUS, reasons)
+        item.setData(COLUMN_PLAN_FILE, Qt.ItemDataRole.UserRole, plan.file_id)
+        for label, old_value, new_value in plan_field_diff(plan, field_label):
+            item.addChild(QTreeWidgetItem([label, old_value, new_value, ""]))
+        return item
 
     def _apply_or_submit(self, safe_plans: list[FileWritePlan]) -> None:
         """Hand the plans to submit_plans, or apply them here without one.

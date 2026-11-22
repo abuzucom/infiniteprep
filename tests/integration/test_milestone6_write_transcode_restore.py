@@ -250,7 +250,7 @@ def test_milestone6_ui_dialogs_smoke(qtbot, tmp_path: Path) -> None:
 
     wp_dlg = WritePlanDialog(write_service=write_svc, file_ids=[])
     qtbot.addWidget(wp_dlg)
-    assert wp_dlg.table.rowCount() == 0
+    assert wp_dlg.plan_tree.topLevelItemCount() == 0
 
     j_dlg = JournalDialog(repository=repo, write_service=write_svc)
     qtbot.addWidget(j_dlg)

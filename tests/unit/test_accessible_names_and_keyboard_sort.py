@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAccessible
-from PySide6.QtWidgets import QAbstractItemView, QTableWidget, QWidget
+from PySide6.QtWidgets import QAbstractItemView, QWidget
 
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.db.connection import DatabaseManager
@@ -121,15 +121,16 @@ def test_dialog_tables_are_read_only_and_leave_on_tab(qtbot: Any) -> None:
     repository = Repository(DatabaseManager(":memory:"))
     write_service = WriteService(repository)
     # The list keeps each dialog alive. A dropped dialog deletes its table with it.
+    write_dialog = WritePlanDialog(write_service, [])
     dialogs = [
-        WritePlanDialog(write_service, []),
+        write_dialog,
         JournalDialog(repository, write_service),
         RecoveryDialog(write_service),
     ]
-    tables: list[QTableWidget] = []
     for dialog in dialogs:
         qtbot.addWidget(dialog)
-        tables.append(dialog.table)
+    tables: list[QAbstractItemView] = [write_dialog.plan_tree]
+    tables.extend(dialog.table for dialog in dialogs[1:])
 
     no_edit = QAbstractItemView.EditTrigger.NoEditTriggers
     assert [table.editTriggers() == no_edit for table in tables] == [True, True, True]

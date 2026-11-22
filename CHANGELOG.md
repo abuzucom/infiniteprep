@@ -19,6 +19,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The strip shows the batch name, the current file, a progress bar, a done-of-total count, and the time left.
   - The strip hides while no batch runs or waits.
   - A click on the strip shows the full queue above it. A second click hides the queue.
+- The write preview opens with a summary bar and a row per file (UI-2, #342).
+  - The summary bar counts the files that change, the files that lose some tag data, and the skipped files. A note says each file gets a backup first.
+  - Each file row opens to list every field that changes, with the current and the new value.
+  - Each file shows Ready, Ready (some tag data will be lost), or Skipped. The reasons sit in the status tooltip.
+  - The save button names the number of files it saves.
 
 - The main window follows the UI-R layout (UI-2, #342).
   - A workflow bar shows Import, Analyze, Review, Apply, and Export with a track count each. The first stage with waiting tracks carries its action as the main button. Transcode, History, and Settings sit at the right end.

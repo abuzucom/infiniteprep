@@ -64,12 +64,14 @@ def test_tables_allow_column_resizing(qtbot: Any) -> None:
     for widget in widgets:
         qtbot.addWidget(widget)
 
-    stretched = [journal_dialog.table, write_plan_dialog.table, recovery_dialog.table]
+    stretched = [journal_dialog.table, recovery_dialog.table]
     unstretched = [main_window.file_table, detail_panel.fields_table]
-    for table in stretched + unstretched:
-        header = table.horizontalHeader()
+    stretched_headers = [table.horizontalHeader() for table in stretched]
+    stretched_headers.append(write_plan_dialog.plan_tree.header())
+    unstretched_headers = [table.horizontalHeader() for table in unstretched]
+    for header in stretched_headers + unstretched_headers:
         assert header.sectionResizeMode(0) == QHeaderView.ResizeMode.Interactive
-    for table in stretched:
-        assert table.horizontalHeader().stretchLastSection()
-    for table in unstretched:
-        assert not table.horizontalHeader().stretchLastSection()
+    for header in stretched_headers:
+        assert header.stretchLastSection()
+    for header in unstretched_headers:
+        assert not header.stretchLastSection()
