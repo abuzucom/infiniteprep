@@ -35,7 +35,7 @@ from infiniteprep.services.reconciliation import (
 from tests.fixtures.audio_factory import create_wav_fixture
 
 
-def test_discogs_adapter_with_ttl_cache_and_optin_stubs() -> None:
+def test_discogs_adapter_cache_and_stubs() -> None:
     """Verify DiscogsAdapter parses vinyl positions and caches responses with 6-hour TTL."""
     db = DatabaseManager(":memory:")
     repo = Repository(db)
@@ -86,7 +86,7 @@ def test_discogs_adapter_with_ttl_cache_and_optin_stubs() -> None:
     db.close()
 
 
-def test_closed_world_validator_and_ollama_bootstrap_consent() -> None:
+def test_closed_world_validator_ollama_consent() -> None:
     """Verify ClosedWorldValidator rejects hallucinated IDs/values and Ollama requires consent."""
     validator = ClosedWorldValidator()
     allowed = [
@@ -143,7 +143,7 @@ def test_closed_world_validator_and_ollama_bootstrap_consent() -> None:
         bootstrap.pull_model("qwen2.5:3b", user_consented=False)
 
 
-def test_artwork_service_resizes_to_xdj_rx3_safe_baseline_jpeg(tmp_path: Path) -> None:
+def test_artwork_resized_to_xdj_safe_jpeg(tmp_path: Path) -> None:
     """Verify ArtworkService scales 1400x1400 cover art down to <= 800x800 JPEG for XDJ-RX3."""
     big_img = QImage(1400, 1400, QImage.Format.Format_RGB32)
     big_img.fill(QColor("#2563eb"))
@@ -167,7 +167,7 @@ def test_artwork_service_resizes_to_xdj_rx3_safe_baseline_jpeg(tmp_path: Path) -
         art_svc.normalize_image_bytes(bomb_png.read_bytes())
 
 
-def test_matching_engine_reconciliation_rules_and_vinyl_pitch_drift(tmp_path: Path) -> None:
+def test_reconciliation_rules_and_pitch_drift(tmp_path: Path) -> None:
     """Verify all 10 reconciliation rules, DJ mix parsing, and Vinyl Pitch Drift detection."""
     parsed_title, parsed_mix, parsed_remixer = parse_dj_title_and_mix(
         "The Dream (Sharam's Deep Dish Dreamscape Mix)"

@@ -64,7 +64,7 @@ def imported_roots(source: Path) -> set[str]:
     return roots
 
 
-def test_approved_allowlist_matches_the_declared_dependencies() -> None:
+def test_allowlist_matches_declared_deps() -> None:
     """Verify the checked-in allowlist equals the runtime dependencies in pyproject.toml."""
     approved = approved_runtime_packages()
     declared = declared_runtime_packages()
@@ -75,7 +75,7 @@ def test_approved_allowlist_matches_the_declared_dependencies() -> None:
     )
 
 
-def test_source_imports_stay_inside_the_approved_dependencies() -> None:
+def test_imports_stay_in_approved_deps() -> None:
     """Verify every package imported under src/ is standard library, first party, or approved."""
     allowed = allowed_packages()
     offenders: list[str] = []

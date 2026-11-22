@@ -61,7 +61,7 @@ class AttestationWorkflowTest(unittest.TestCase):
         [step] = [step for step in self.steps if step.get("name") == name]
         return step
 
-    def test_release_job_holds_required_attestation_permissions(self) -> None:
+    def test_release_job_has_attest_permissions(self) -> None:
         """The release job holds id-token, attestations, and artifact-metadata (D325)."""
         self.assertEqual(self.release_job["permissions"], REQUIRED_PERMISSIONS)
 
@@ -98,7 +98,7 @@ class AttestationWorkflowTest(unittest.TestCase):
             "Missing attestation step for SHA256SUMS.txt",
         )
 
-    def test_save_bundles_step_checks_assets_with_require_bundles(self) -> None:
+    def test_save_bundles_step_requires_bundles(self) -> None:
         """The bundle-saving step copies six bundles and runs check-assets --require-bundles."""
         step = self._step("Save package attestation bundles")
         run_script = step["run"]
@@ -136,7 +136,7 @@ class AttestationReleaseToolingTest(unittest.TestCase):
         self.assertEqual(assets, expected)
         self.assertEqual(len(assets), RELEASE_ASSET_COUNT)
 
-    def test_asset_problems_with_bundles_and_packages_passes(self) -> None:
+    def test_asset_problems_passes_full_set(self) -> None:
         """A folder holding the six packages and six bundles has zero asset problems."""
         with tempfile.TemporaryDirectory() as folder:
             dir_path = Path(folder)
@@ -174,7 +174,7 @@ class AttestationReleaseToolingTest(unittest.TestCase):
 class AttestationReadmeTest(unittest.TestCase):
     """README.md documents gh attestation verify instructions."""
 
-    def test_readme_contains_attestation_verification_command(self) -> None:
+    def test_readme_has_attestation_command(self) -> None:
         """README.md contains the gh attestation verify command."""
         content = README_PATH.read_text(encoding="utf-8")
         self.assertIn("gh attestation verify <package-file> --repo abuzucom/infiniteprep", content)

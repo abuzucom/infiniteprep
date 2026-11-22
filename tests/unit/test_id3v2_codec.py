@@ -76,7 +76,7 @@ def test_unsupported_major_version_raises_format_error() -> None:
         parse_id3v2(b"ID3\x05\x00\x00" + synchsafe(0))
 
 
-def test_render_round_trip_keeps_unknown_frames_byte_for_byte() -> None:
+def test_round_trip_keeps_unknown_frames() -> None:
     """Rendering as v2.3 and parsing again keeps unknown frame bodies unchanged."""
     priv_body = b"TRAKTOR4\x00" + bytes(range(256))
     source = parse_id3v2(tag_bytes(3, v23_frame("PRIV", priv_body)))
@@ -90,7 +90,7 @@ def test_render_round_trip_keeps_unknown_frames_byte_for_byte() -> None:
     assert decode_text_values(reparsed.frames[1]) == ["124.00"]
 
 
-def test_render_converts_v24_text_to_utf16_and_tdrc_to_tyer() -> None:
+def test_render_converts_v24_text_and_dates() -> None:
     """v2.4 UTF-8 text is re-encoded as UTF-16 and TDRC becomes TYER in v2.3 output."""
     frames = v24_frame("TPE1", b"\x03Ch\xc3\xa9 Artist\x00") + v24_frame(
         "TDRC", b"\x032021-05-14\x00"
@@ -116,7 +116,7 @@ def test_render_joins_multiple_values_with_slash() -> None:
     assert decode_text_values(reparsed.frames[0]) == ["House/Techno"]
 
 
-def test_replace_helpers_drop_old_frames_with_the_same_key() -> None:
+def test_replace_drops_frames_with_same_key() -> None:
     """Replacing a frame removes every frame with that key and keeps other TXXX frames."""
     tag = Id3Tag(source_version=3)
     tag = replace_text_frame(tag, "TKEY", "8A")
@@ -130,7 +130,7 @@ def test_replace_helpers_drop_old_frames_with_the_same_key() -> None:
     assert decode_txxx(tag.frames[2]) == ("STYLE", ["Minimal"])
 
 
-def test_v24_utf16be_multi_value_text_decodes_without_mojibake() -> None:
+def test_v24_utf16be_multi_value_decodes() -> None:
     """Big-endian UTF-16 multi-value text preserves endianness across values."""
     utf16be_bom = b"\xfe\xff"
     val1 = "Artist A".encode("utf-16-be")
@@ -141,7 +141,7 @@ def test_v24_utf16be_multi_value_text_decodes_without_mojibake() -> None:
     assert decode_text_values(tag.frames[0]) == ["Artist A", "Artist B"]
 
 
-def test_txxx_utf16be_decodes_secondary_values_with_matching_endianness() -> None:
+def test_txxx_utf16be_decodes_all_values() -> None:
     """Big-endian UTF-16 TXXX frame preserves endianness from description to values."""
     utf16be_bom = b"\xfe\xff"
     desc = "CATALOG".encode("utf-16-be")

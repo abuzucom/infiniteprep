@@ -148,7 +148,7 @@ def test_a_quick_batch_raises_no_prompt(qtbot: Any, stuck_parts: StuckParts) -> 
     assert exit_codes == []
 
 
-def test_default_limits_and_wording_follow_the_batch_kind() -> None:
+def test_limits_and_wording_follow_kind() -> None:
     """Analysis gets 5 minutes, writes get 2, and the write prompt names the recovery."""
     five_minutes_ms = 5 * 60 * 1000
     two_minutes_ms = 2 * 60 * 1000

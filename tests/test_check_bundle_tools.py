@@ -26,7 +26,7 @@ CHECKER = _load_checker()
 class LauncherNameTest(unittest.TestCase):
     """A tool name fails behind a launcher suffix, the wrapper prefix, or as a folder."""
 
-    def test_launcher_suffixes_and_the_wrapper_prefix_are_denied(self) -> None:
+    def test_launcher_suffixes_and_prefix_denied(self) -> None:
         """Scripts and wrappers named after a tool fail the check."""
         for name in (
             "_internal/rcc.sh",
@@ -66,7 +66,7 @@ class PatternEdgeTest(unittest.TestCase):
             with self.subTest(pattern=pattern), self.assertRaises(ValueError):
                 CHECKER.compile_pattern(pattern)
 
-    def test_leading_double_star_matches_with_an_unquantified_group(self) -> None:
+    def test_leading_double_star_matches(self) -> None:
         """'**/' still matches zero or more folders, and its group carries no quantifier."""
         pattern = CHECKER.compile_pattern("**/*.qm")
         self.assertTrue(pattern.fullmatch("qt_de.qm"))

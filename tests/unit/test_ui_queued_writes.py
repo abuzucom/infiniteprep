@@ -63,9 +63,7 @@ def write_parts(
     qtbot.waitUntil(lambda: not window.batch_queue.is_busy(), timeout=SIGNAL_TIMEOUT_MS)
 
 
-def test_dialog_submits_the_safe_plans_and_writes_nothing_itself(
-    qtbot: Any, write_parts: WriteParts
-) -> None:
+def test_dialog_submits_plans_but_writes_none(qtbot: Any, write_parts: WriteParts) -> None:
     """With submit_plans, Apply hands over the previewed safe plans and closes."""
     _window, repository, write_svc, file_ids = write_parts
     submitted: list[list[FileWritePlan]] = []
@@ -81,7 +79,7 @@ def test_dialog_submits_the_safe_plans_and_writes_nothing_itself(
     assert dialog.result() == WritePlanDialog.DialogCode.Accepted
 
 
-def test_dialog_keeps_plans_back_while_a_recovery_is_pending(
+def test_dialog_holds_plans_during_recovery(
     qtbot: Any, write_parts: WriteParts, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A pending recovery shows the warning, submits nothing, and leaves the dialog open."""
@@ -103,9 +101,7 @@ def test_dialog_keeps_plans_back_while_a_recovery_is_pending(
     assert dialog.result() != WritePlanDialog.DialogCode.Accepted
 
 
-def test_queued_writes_run_on_the_queue_and_change_the_files(
-    qtbot: Any, write_parts: WriteParts
-) -> None:
+def test_queued_writes_change_the_files(qtbot: Any, write_parts: WriteParts) -> None:
     """queue_safe_writes adds one write batch. The worker applies each previewed plan."""
     window, repository, write_svc, file_ids = write_parts
     plans = write_svc.build_batch_preview(file_ids)

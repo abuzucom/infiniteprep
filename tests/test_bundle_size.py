@@ -380,7 +380,7 @@ class WorkflowTest(unittest.TestCase):
         run = next(step["run"] for step in self._size_steps() if "--os macos" in step["run"])
         self.assertIn("--folders-root dist/InfinitePrep.app/Contents", run)
 
-    def test_the_size_step_runs_after_the_packages_are_built(self) -> None:
+    def test_size_step_runs_after_packaging(self) -> None:
         """Every size step comes after the step that builds the packages."""
         names = [step.get("name", "") for step in self.steps]
         last_package = max(names.index(name) for name in PACKAGE_STEPS)

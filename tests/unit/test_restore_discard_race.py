@@ -71,7 +71,7 @@ def test_restore_removes_the_renamed_file(renamed_write: Any) -> None:
     assert discard_leftovers(source.parent) == []
 
 
-def test_restore_keeps_a_file_that_replaced_the_renamed_one(
+def test_restore_keeps_replacement_file(
     renamed_write: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A file another program puts at the renamed path during the restore stays."""
@@ -102,7 +102,7 @@ def test_discard_deletes_the_same_file(tmp_path: Path) -> None:
     assert list(tmp_path.iterdir()) == []
 
 
-def test_discard_keeps_a_different_file_at_the_same_name(tmp_path: Path) -> None:
+def test_discard_keeps_a_different_file(tmp_path: Path) -> None:
     """A file with another identity returns to its name unchanged."""
     target = tmp_path / "renamed.wav"
     target.write_bytes(RENAMED_BYTES)

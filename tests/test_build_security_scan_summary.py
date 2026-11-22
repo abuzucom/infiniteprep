@@ -88,7 +88,7 @@ class BuildSecurityScanSummaryTest(unittest.TestCase):
         self.assertEqual(len(summary["tools"]), builder.MAX_TOOLS)
         self.assertEqual(summary["total"], 30)
 
-    def test_a_run_without_a_tool_name_gets_the_fallback_name(self) -> None:
+    def test_unnamed_tool_run_gets_fallback_name(self) -> None:
         """A run that names no tool still counts under the fallback name."""
         summary = builder.read_summary(self.write_report({"runs": [{"results": [{}]}]}))
 

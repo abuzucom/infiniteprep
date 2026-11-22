@@ -37,7 +37,7 @@ def test_confirm_dialog_lists_the_fixed_disk_note(qtbot) -> None:
     assert dialog.confirm_btn.isEnabled()
 
 
-def test_confirm_dialog_shows_no_note_for_a_removable_stick(qtbot) -> None:
+def test_confirm_dialog_omits_note_for_stick(qtbot) -> None:
     """A stick with the removable flag shows an empty notes list."""
     dialog = open_confirm_dialog(qtbot, build_inspection())
 

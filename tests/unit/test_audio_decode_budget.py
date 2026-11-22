@@ -62,7 +62,7 @@ def test_analyzer_decode_stops_at_the_frame_cap(
     assert mono.size == SMALL_FRAME_CAP
 
 
-def test_transcoder_rejects_a_sample_rate_above_the_cap(
+def test_transcoder_rejects_high_sample_rate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The bounds check refuses a file whose sample rate exceeds the transcoder cap."""

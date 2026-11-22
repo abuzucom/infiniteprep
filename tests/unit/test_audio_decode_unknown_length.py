@@ -37,7 +37,7 @@ def _reject_join(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(local_dsp.np, "concatenate", reject)
 
 
-def test_unknown_length_stream_decodes_every_frame_without_a_join(
+def test_unknown_length_full_decode_no_join(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A stream without a declared frame count decodes whole into one buffer."""

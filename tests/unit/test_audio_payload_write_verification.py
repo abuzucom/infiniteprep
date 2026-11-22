@@ -107,7 +107,7 @@ def test_library_tag_write_preserves_audio_payload(
 
 
 @pytest.mark.parametrize(("suffix", "factory"), FORMATS)
-def test_payload_mismatch_keeps_source_and_blocks_rename(
+def test_payload_mismatch_blocks_rename(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, suffix: str, factory: Callable[..., Path]
 ) -> None:
     """A parseable staged copy with modified audio never replaces or renames the source."""
@@ -137,9 +137,7 @@ def test_payload_mismatch_keeps_source_and_blocks_rename(
     assert after.content_hash == asset.content_hash
 
 
-def test_payload_mismatch_preserves_a_concurrent_source_edit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_mismatch_keeps_concurrent_edit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed staged write leaves another program's edit in place."""
     adapter = MetadataTagAdapter()
     repo = Repository(DatabaseManager(":memory:"))
@@ -160,9 +158,7 @@ def test_payload_mismatch_preserves_a_concurrent_source_edit(
     assert record.operation_status == OperationStatus.FAILED
 
 
-def test_transcode_payload_mismatch_prevents_publication(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_transcode_mismatch_blocks_publish(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed tag write discards the new transcode and keeps the original."""
     repo = Repository(DatabaseManager(":memory:"))
     source = create_wav_fixture(tmp_path / "track.wav", sample_rate=96000)

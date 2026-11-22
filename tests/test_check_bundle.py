@@ -155,7 +155,7 @@ class CheckFilesTest(unittest.TestCase):
         self.assertFalse(report.passed)
         self.assertEqual(report.unlisted, ["_internal/libnew.so.1"])
 
-    def test_denied_file_fails_even_when_a_pattern_matches_it(self) -> None:
+    def test_denied_file_fails_despite_pattern(self) -> None:
         """The denylist wins over a pattern that allows every file."""
         patterns = CHECKER.read_allowlist(["**"])
 
@@ -177,7 +177,7 @@ class CheckFilesTest(unittest.TestCase):
 class BundleFolderTest(unittest.TestCase):
     """check_bundle and main read a real folder and a real allowlist."""
 
-    def test_real_linux_allowlist_names_only_the_unknown_library(self) -> None:
+    def test_linux_allowlist_flags_unknown_lib(self) -> None:
         """A folder of listed Linux files plus one unknown library fails on that library."""
         files = (
             *NOTICES,
@@ -224,7 +224,7 @@ class BundleFolderTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("macos bundle passed", output.getvalue())
 
-    def test_every_allowlist_lists_the_notices_and_no_denied_name(self) -> None:
+    def test_allowlists_list_notices_not_denied(self) -> None:
         """Each OS allowlist allows the three notices, and no plain entry is a denied name."""
         for operating_system in CHECKER.OPERATING_SYSTEMS:
             with self.subTest(operating_system=operating_system):
@@ -270,7 +270,7 @@ class WorkflowWiringTest(unittest.TestCase):
         fetch = self.names.index("Fetch pinned ICU license")
         self.assertLess(fetch, self.names.index("Add license notices to bundle"))
 
-    def test_check_runs_on_every_os_before_any_upload_or_package(self) -> None:
+    def test_check_runs_everywhere_before_upload(self) -> None:
         """The check follows the notices and comes before every upload and package step."""
         step = self._step("Check bundle contents")
         self.assertNotIn("if", step)

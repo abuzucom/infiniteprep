@@ -60,7 +60,7 @@ def test_restore_refuses_a_file_edited_after_the_write(written: Any) -> None:
     assert stored.operation_status == OperationStatus.COMPLETED
 
 
-def test_a_confirmed_restore_saves_the_later_edit_first(written: Any) -> None:
+def test_confirmed_restore_saves_later_edit(written: Any) -> None:
     """allow_modified restores the original after copying the edited file to the backups."""
     _, write_svc, operation_id, source, original_hash, backup_dir = written
     source.write_bytes(LATER_EDIT)
@@ -71,7 +71,7 @@ def test_a_confirmed_restore_saves_the_later_edit_first(written: Any) -> None:
     assert pre_restore_copies(backup_dir) == [LATER_EDIT]
 
 
-def test_an_unchanged_restore_also_keeps_the_written_file(written: Any) -> None:
+def test_unchanged_restore_keeps_written_file(written: Any) -> None:
     """A restore with no later edit still saves the written file before replacing it."""
     _, write_svc, operation_id, source, original_hash, backup_dir = written
     written_bytes = source.read_bytes()
@@ -101,7 +101,7 @@ def click_restore(qtbot: Any, repo: Repository, write_svc: WriteService) -> None
     dialog.table.cellWidget(0, COLUMN_RESTORE_ACTION).click()
 
 
-def test_declining_the_journal_confirmation_changes_nothing(
+def test_journal_decline_changes_nothing(
     qtbot, written: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The confirmation names the target file, and No leaves the written file in place."""
@@ -119,7 +119,7 @@ def test_declining_the_journal_confirmation_changes_nothing(
     assert stored.operation_status == OperationStatus.COMPLETED
 
 
-def test_the_journal_asks_again_before_overwriting_a_later_edit(
+def test_journal_asks_before_overwriting(
     qtbot, written: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A later edit triggers a second question, and Yes restores the original."""

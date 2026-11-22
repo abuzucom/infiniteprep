@@ -30,7 +30,7 @@ def test_two_in_memory_managers_never_share_rows() -> None:
     assert count_probe_rows(second) == 0
 
 
-def test_a_replacement_manager_starts_empty_while_an_old_connection_lives() -> None:
+def test_replacement_manager_starts_empty() -> None:
     """A new manager stays empty after an older one is dropped with its connection open."""
     old = DatabaseManager(":memory:")
     old_conn = old.connect()

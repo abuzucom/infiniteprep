@@ -44,7 +44,7 @@ def test_batches_start_in_arrival_order_one_at_a_time() -> None:
     assert queue.finished() == [first, second, third]
 
 
-def test_display_order_is_running_then_waiting_then_finished() -> None:
+def test_display_order_running_waiting_done() -> None:
     """batches lists the running batch first, then the waiting line, then finished ones."""
     queue = BatchQueue()
     first, second, third = enqueue_three(queue)
@@ -73,7 +73,7 @@ def test_move_reorders_waiting_batches_only() -> None:
     assert queue.start_next() is third
 
 
-def test_reorder_waiting_applies_a_full_order_and_refuses_a_mismatch() -> None:
+def test_reorder_waiting_rejects_mismatch() -> None:
     """A dragged order applies only when it names exactly the waiting batches."""
     queue = BatchQueue()
     first, second, third = enqueue_three(queue)
@@ -86,7 +86,7 @@ def test_reorder_waiting_applies_a_full_order_and_refuses_a_mismatch() -> None:
     assert queue.waiting() == [third, first, second]
 
 
-def test_cancel_removes_a_waiting_batch_and_never_starts_it() -> None:
+def test_cancel_removes_waiting_batch() -> None:
     """A cancelled waiting batch leaves the line. The running batch is not cancelled here."""
     queue = BatchQueue()
     first, second, third = enqueue_three(queue)
@@ -102,7 +102,7 @@ def test_cancel_removes_a_waiting_batch_and_never_starts_it() -> None:
     assert queue.start_next() is third
 
 
-def test_cancel_all_waiting_empties_the_line_and_keeps_the_running_batch() -> None:
+def test_cancel_all_waiting_keeps_running() -> None:
     """Cancel all drops every waiting batch and leaves the running one alone."""
     queue = BatchQueue()
     first, second, third = enqueue_three(queue)

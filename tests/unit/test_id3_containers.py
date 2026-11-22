@@ -60,7 +60,7 @@ def riff_chunk_ids(data: bytes) -> list[bytes]:
     return ids
 
 
-def test_mp3_without_tag_reads_none_and_gains_one_before_the_audio() -> None:
+def test_untagged_mp3_gains_tag_before_audio() -> None:
     """Writing a tag to a bare MP3 prepends it and keeps every audio byte."""
     assert read_mp3_tag(MP3_AUDIO) is None
     written = write_mp3_tag(MP3_AUDIO, titled("New"))
@@ -110,7 +110,7 @@ def test_mp3_stacked_tags_collapse_into_one() -> None:
     assert written[:offset].count(b"ID3") == 1
 
 
-def test_wav_without_tag_gains_an_id3_chunk_and_a_correct_riff_size() -> None:
+def test_wav_gains_id3_chunk_and_riff_size() -> None:
     """Writing to a WAV with no tag appends an id3 chunk and updates the RIFF size."""
     source = basic_wav()
     assert read_wav_tag(source) is None
@@ -140,7 +140,7 @@ def test_wav_duplicate_id3_chunks_become_one() -> None:
     assert riff_chunk_ids(written) == [b"fmt ", b"data", b"id3 "]
 
 
-def test_wav_id3_chunk_before_data_keeps_the_samples_in_place() -> None:
+def test_wav_chunk_before_data_keeps_samples() -> None:
     """A smaller tag in an id3 chunk ahead of the data chunk keeps the sample offset unchanged."""
     source = wav_file(
         riff_chunk(b"fmt ", WAV_FMT_BODY),

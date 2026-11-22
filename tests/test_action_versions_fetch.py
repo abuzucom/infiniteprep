@@ -100,7 +100,7 @@ class ActionVersionFetchTest(unittest.TestCase):
         self.assertEqual(len(violations), 1)
         self.assertIn(UNREADABLE_TEXT, violations[0])
 
-    def test_the_claimed_tag_is_read_without_listing_every_tag(self) -> None:
+    def test_claimed_tag_read_without_listing(self) -> None:
         """A pin that names its release costs one ref lookup and no tag listing."""
         ref = completed(stdout=f"commit {PIN_SHA}\n")
         fake = FakeGh({f"git/ref/tags/v{CLAIMED_VERSION}": ref})
@@ -110,7 +110,7 @@ class ActionVersionFetchTest(unittest.TestCase):
         self.assertEqual(violations, [])
         self.assertEqual(len(fake.endpoints), 1)
 
-    def test_an_annotated_claimed_tag_resolves_to_its_commit(self) -> None:
+    def test_annotated_tag_resolves_to_commit(self) -> None:
         """An annotated tag points at a tag object, which then names the commit."""
         fake = FakeGh(
             {
@@ -123,7 +123,7 @@ class ActionVersionFetchTest(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
-    def test_a_claimed_tag_on_another_commit_falls_back_to_the_listing(self) -> None:
+    def test_tag_on_other_commit_uses_listing(self) -> None:
         """A claim that names a different commit still gets the full tag check."""
         fake = FakeGh(
             {
@@ -146,7 +146,7 @@ class ActionVersionFetchTest(unittest.TestCase):
         self.assertEqual(violations, [])
         self.assertTrue(any(PAGE_SIZE_ARGUMENT in endpoint for endpoint in fake.endpoints))
 
-    def test_a_failed_changelog_fetch_names_the_fetch_failure(self) -> None:
+    def test_failed_changelog_fetch_is_named(self) -> None:
         """A refused changelog read reports the fetch, never a missing release."""
         fake = FakeGh({"contents/CHANGELOG.md": completed(returncode=1, stderr=RATE_LIMIT_ERROR)})
         pin = self.pin(owner="abuzucom", repo="agents", workflow="/.github/workflows/x.yml")

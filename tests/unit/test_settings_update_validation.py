@@ -14,9 +14,7 @@ FLOAT_ZOOM_SECONDS = 16.0
 
 
 @pytest.mark.parametrize("invalid_value", [UNSUPPORTED_ZOOM_SECONDS, FLOAT_ZOOM_SECONDS, "16"])
-def test_update_rejects_invalid_value_and_keeps_saved_setting(
-    tmp_path: Path, invalid_value: object
-) -> None:
+def test_update_rejects_invalid_value(tmp_path: Path, invalid_value: object) -> None:
     """An invalid update raises and leaves the stored value unchanged."""
     manager = SettingsManager(tmp_path / "settings.json")
     manager.save(AppSettings(waveform_zoom_seconds=SAVED_ZOOM_SECONDS))

@@ -67,7 +67,7 @@ class UnsortedRowSortTests(unittest.TestCase):
         self.assertEqual(ordered[-1], "keyless")
         self.assertEqual(set(ordered[:2]), {"c-major", "a-minor"})
 
-    def test_review_status_sort_places_unlisted_statuses_last(self) -> None:
+    def test_status_sort_puts_unlisted_last(self) -> None:
         rows = [
             make_row("no-match", review_status=ReviewStatus.NO_MATCH.value),
             make_row("written", review_status=ReviewStatus.WRITTEN.value),

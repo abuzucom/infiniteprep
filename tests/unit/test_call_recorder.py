@@ -14,7 +14,7 @@ def join_first_two(first: str, second: str, *_rest: str) -> str:
     return f"{first}+{second}"
 
 
-def test_recorder_without_picks_keeps_each_argument_tuple() -> None:
+def test_no_picks_keeps_argument_tuples() -> None:
     """With no pick indexes, every call records its whole positional argument tuple."""
     recorder = CallRecorder()
     recorder("a", "b")
@@ -22,35 +22,35 @@ def test_recorder_without_picks_keeps_each_argument_tuple() -> None:
     assert recorder == [("a", "b"), ("c",)]
 
 
-def test_recorder_with_one_pick_keeps_that_argument_alone() -> None:
+def test_one_pick_keeps_that_argument() -> None:
     """One pick index records the argument at that position without a tuple."""
     recorder = CallRecorder(1)
     recorder("a", "b", "c")
     assert recorder == ["b"]
 
 
-def test_recorder_with_several_picks_keeps_a_tuple_in_pick_order() -> None:
+def test_several_picks_keep_pick_order() -> None:
     """Several pick indexes record a tuple of those arguments in the order given."""
     recorder = CallRecorder(2, 0)
     recorder("a", "b", "c")
     assert recorder == [("c", "a")]
 
 
-def test_recorder_with_a_record_function_keeps_its_result() -> None:
+def test_record_function_result_is_kept() -> None:
     """A record function builds each entry from the call arguments."""
     recorder = CallRecorder(record=join_first_two)
     recorder("a", "b", "c")
     assert recorder == ["a+b"]
 
 
-def test_recorder_returns_the_fixed_reply_and_ignores_keywords() -> None:
+def test_fixed_reply_ignores_keywords() -> None:
     """Every call returns the reply, and keyword arguments stay out of the entry."""
     recorder = CallRecorder(reply=FIXED_REPLY)
     assert recorder("a", flag=True) == FIXED_REPLY
     assert recorder == [("a",)]
 
 
-def test_recorder_rejects_picks_together_with_a_record_function() -> None:
+def test_rejects_picks_with_record_function() -> None:
     """Pick indexes and a record function together raise before any call records."""
     with pytest.raises(ValueError, match="not both"):
         CallRecorder(0, record=join_first_two)

@@ -66,9 +66,7 @@ def window_parts(
     qtbot.waitUntil(lambda: not window.batch_queue.is_busy(), timeout=SIGNAL_TIMEOUT_MS)
 
 
-def test_import_waits_behind_a_running_batch_and_opens_no_report(
-    qtbot: Any, window_parts: WindowParts
-) -> None:
+def test_import_waits_behind_running_batch(qtbot: Any, window_parts: WindowParts) -> None:
     """A queued import starts after the running batch ends. No report opens by itself."""
     window, repository, jobs, folder = window_parts
     first = window.queue_batch(BatchKind.ANALYZE, "first", jobs.make("first"))
@@ -111,9 +109,7 @@ def test_identify_and_analyze_runs_as_a_queued_batch(qtbot: Any, window_parts: W
     assert statuses == {TaskStatus.COMPLETED}
 
 
-def test_library_changing_actions_lock_while_a_batch_is_active(
-    qtbot: Any, window_parts: WindowParts
-) -> None:
+def test_library_actions_lock_during_batch(qtbot: Any, window_parts: WindowParts) -> None:
     """Transcode, journal, Bulk Approve, and field edits stay off until the queue is idle."""
     window, _repository, jobs, _folder = window_parts
     locked = (
@@ -136,7 +132,7 @@ def test_library_changing_actions_lock_while_a_batch_is_active(
     assert all(widget.isEnabled() for widget in locked)
 
 
-def test_keep_working_leaves_the_window_open_and_the_queue_running(
+def test_keep_working_leaves_queue_running(
     qtbot: Any, window_parts: WindowParts, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Keep Working ignores the close. Every batch still runs to its end."""
@@ -266,7 +262,7 @@ def test_view_result_opens_the_import_report(qtbot: Any, window_parts: WindowPar
     dialogs[0].close()
 
 
-def test_a_failed_import_shows_fixed_text_only_on_request(
+def test_failed_import_shows_fixed_text(
     qtbot: Any, window_parts: WindowParts, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A failed import opens nothing by itself. View Result shows text with no error detail."""

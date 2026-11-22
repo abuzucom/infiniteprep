@@ -48,7 +48,7 @@ def run_fixed_commands(cmd: list[str]) -> subprocess.CompletedProcess[str]:
 class ReadOnlyMountGuidanceTests(unittest.TestCase):
     """A read-only mount on writable media refuses and names both causes."""
 
-    def test_refusal_guidance_names_a_deliberate_read_only_mount(self) -> None:
+    def test_guidance_names_read_only_mount(self) -> None:
         """The refusal names a repair and a deliberate read-only mount as causes."""
         partition = build_partition(filesystem_health=None)
         probe = LinuxPreflightProbe(run_fixed_commands, lambda: READ_ONLY_MOUNT_TABLE)

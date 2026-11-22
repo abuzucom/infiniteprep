@@ -43,7 +43,7 @@ class LoadedOrphanTest(unittest.TestCase):
         """Return the libraries the given source links against."""
         return self.links[source]
 
-    def test_no_conflict_when_no_kept_binary_links_a_dropped_file(self) -> None:
+    def test_no_conflict_without_dropped_link(self) -> None:
         """Dropping QtPdf alone is safe while nothing kept links it."""
         kept = [("PySide6/QtWidgets.abi3.so", "/build/widgets", "BINARY")]
 
@@ -66,7 +66,7 @@ class LoadedOrphanTest(unittest.TestCase):
 
         self.assertEqual(conflicts, ["plugins/new/libnew.so loads libQt6Pdf.so.6"])
 
-    def test_macos_framework_link_matches_the_dropped_framework_binary(self) -> None:
+    def test_macos_framework_link_matches_binary(self) -> None:
         """An @rpath framework link matches the framework binary by file name."""
         kept = [("plugins/libffmpegmediaplugin.dylib", "/build/ffmpeg-macos", "BINARY")]
         dropped = ["PySide6/Qt/lib/QtQuick.framework/Versions/A/QtQuick"]
@@ -96,7 +96,7 @@ class LoadedOrphanTest(unittest.TestCase):
 class SpecLoadedOrphanWiringTest(unittest.TestCase):
     """The spec checks the dropped binaries on every OS and stops the build on a conflict."""
 
-    def test_spec_checks_after_the_plugin_trim_and_before_the_prune(self) -> None:
+    def test_spec_checks_between_trim_and_prune(self) -> None:
         """The check sees the binaries left after the Linux plugin trim, then stops the build.
 
         Dropped EGLFS plugins link the dropped EGLFS libraries, so the check must follow

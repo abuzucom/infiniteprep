@@ -41,9 +41,7 @@ def library(tmp_path: Path) -> Path:
     return db_path
 
 
-def test_staged_copy_that_differs_from_the_record_is_never_installed(
-    library: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_mismatched_copy_never_installed(library: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A backup swapped after its check fails the staged-copy check. The library stays."""
     real_copyfile = backup_module.shutil.copyfile
 

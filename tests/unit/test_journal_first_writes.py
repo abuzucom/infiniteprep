@@ -109,7 +109,7 @@ def test_unsafe_plan_creates_no_journal_record(pending_write: Any) -> None:
     assert repo.list_change_records(plan.file_id) == []
 
 
-def test_restore_replaces_the_file_through_a_verified_staging_copy(pending_write: Any) -> None:
+def test_restore_uses_verified_staging_copy(pending_write: Any) -> None:
     """Restore returns the original bytes and leaves no staging file behind."""
     _, write_svc, plan, source, original_hash = pending_write
     record = write_svc.apply_single_plan(plan)
@@ -121,7 +121,7 @@ def test_restore_replaces_the_file_through_a_verified_staging_copy(pending_write
     assert sorted(p.name for p in source.parent.iterdir()) == ["track.wav"]
 
 
-def test_restore_failure_at_the_swap_keeps_the_current_file(
+def test_failed_swap_keeps_current_file(
     pending_write: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A failed swap leaves the written file intact and removes the staging copy."""

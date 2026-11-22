@@ -175,7 +175,7 @@ class LinuxProbeTests(unittest.TestCase):
         refusals = evaluate_preflight(result, build_request()).refusals
         self.assertEqual([refusal.code for refusal in refusals], [RefusalCode.ACTIVE_PARTITION])
 
-    def test_logical_and_extended_partitions_are_not_primary(self) -> None:
+    def test_logical_and_extended_not_primary(self) -> None:
         for changes in ({"partn": 5}, {"parttype": "0x5"}):
             with self.subTest(changes=changes):
                 probe, _runner = build_linux_probe([build_lsblk_stick(**changes)])
@@ -198,7 +198,7 @@ class LinuxProbeTests(unittest.TestCase):
         refusals = evaluate_preflight(result, build_request()).refusals
         self.assertEqual([refusal.code for refusal in refusals], [RefusalCode.FILESYSTEM_ERRORS])
 
-    def test_unreadable_mount_table_leaves_health_unverified(self) -> None:
+    def test_unreadable_mount_table_skips_health(self) -> None:
         def raise_os_error() -> str:
             raise OSError("mount table unavailable")
 

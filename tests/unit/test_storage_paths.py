@@ -91,9 +91,7 @@ def test_portable_keeps_database_and_settings_in_data(user_dirs: Path, app_folde
     assert confirm.asked == []
 
 
-def test_unwritable_folder_with_remember_saves_the_choice(
-    user_dirs: Path, app_folder: Path
-) -> None:
+def test_unwritable_remember_saves_choice(user_dirs: Path, app_folder: Path) -> None:
     """Use my user profile with Remember falls back and records the folder (D258)."""
     _block_data_folder(app_folder)
     confirm = RecordingConfirm(FallbackAnswer(use_per_user=True, remember=True))

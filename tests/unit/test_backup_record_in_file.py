@@ -69,7 +69,7 @@ def test_restored_library_carries_no_record_table(library: Path) -> None:
     assert "source_groups" in _table_names(library)
 
 
-def test_backup_without_its_record_is_neither_offered_nor_restored(library: Path) -> None:
+def test_backup_without_record_is_ignored(library: Path) -> None:
     """A backup whose record is missing fails both the offer check and restore."""
     with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         conn.execute(f"DROP TABLE {RECORD_TABLE}")

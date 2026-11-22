@@ -81,7 +81,7 @@ def test_portable_folders_include_the_per_user_rest(tmp_path: Path) -> None:
     assert set(folders) == {locations.data_dir, user.backup_dir, user.bin_dir, user.cache_dir}
 
 
-def test_data_choice_removes_every_folder_and_keeps_music(tmp_path: Path) -> None:
+def test_data_choice_clears_data_keeps_music(tmp_path: Path) -> None:
     """The data box removes each listed folder, and a music folder nearby stays."""
     locations = _per_user(tmp_path)
     folders = data_folders(locations)

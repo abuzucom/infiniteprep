@@ -80,7 +80,7 @@ class SingleWalkTest(unittest.TestCase):
             bundle = make_tree(Path(directory), FLAT_FILES)
             self.assert_single_walk(bundle, bundle)
 
-    def test_folders_root_outside_the_bundle_keeps_its_own_folders(self) -> None:
+    def test_outside_root_keeps_own_folders(self) -> None:
         """A folders root outside the bundle still lists its own folders."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

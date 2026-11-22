@@ -75,7 +75,7 @@ class ProposalFilterTestCase(unittest.TestCase):
 class BulkApproveTests(ProposalFilterTestCase):
     """Bulk approve reads pending proposals only."""
 
-    def test_superseded_proposal_does_not_block_the_pending_value(self) -> None:
+    def test_superseded_does_not_block_pending(self) -> None:
         file_id = self.import_track("a.wav")
         self.store_proposal(file_id, FieldName.LABEL.value, "Tribal America", score=GOOD_SCORE)
         self.store_proposal(

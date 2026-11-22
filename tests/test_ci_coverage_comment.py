@@ -198,7 +198,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
         actions = [call["action"] for call in calls]
         self.assertEqual(actions, ["create"])
 
-    def test_a_bot_comment_with_the_marker_inside_the_body_is_left_alone(self) -> None:
+    def test_marker_inside_body_is_left_alone(self) -> None:
         """A bot comment that only mentions the marker is not the target."""
         calls = self.run_comment_script(
             {"total": 87.9, "files": []},

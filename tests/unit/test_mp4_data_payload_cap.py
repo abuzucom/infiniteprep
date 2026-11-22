@@ -42,7 +42,7 @@ def _tag_values(data: bytes) -> dict[str, tuple[str, ...]]:
     return {tag.key: tag.values for tag in read_mp4(data).tags}
 
 
-def test_text_payload_above_the_cap_becomes_a_size_summary(
+def test_oversize_text_becomes_size_summary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A text payload past the cap reads as its size, and a short payload still decodes."""
@@ -78,7 +78,7 @@ def test_cover_above_the_cap_keeps_its_cover_summary(monkeypatch: pytest.MonkeyP
     assert values["covr"] == (f"<cover image/jpeg {COVER_BYTES} bytes>",)
 
 
-def test_integer_payload_longer_than_eight_bytes_reads_as_binary() -> None:
+def test_long_integer_payload_reads_as_binary() -> None:
     """An integer data atom longer than any iTunes integer reads as a binary summary."""
     short = item(b"tmpo", data_atom(SIGNED_INT, struct.pack(">H", 124)))
     long = item(b"plID", data_atom(SIGNED_INT, LONG_INTEGER))

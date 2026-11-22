@@ -96,7 +96,7 @@ class SuccessMessageCountTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn(f"holds the {len(PACKAGES)} release assets", output)
 
-    def test_message_counts_packages_and_bundles_with_the_flag(self) -> None:
+    def test_message_counts_bundles_with_flag(self) -> None:
         """Six packages and six bundles give a count of twelve."""
         with tempfile.TemporaryDirectory() as folder:
             _write_files(Path(folder), (*PACKAGES, *BUNDLES))

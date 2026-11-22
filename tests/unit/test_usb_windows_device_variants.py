@@ -29,7 +29,7 @@ NAMES_LIKE_VARIANTS = (
 
 
 @pytest.mark.parametrize("relative_path", DEVICE_VARIANT_PATHS)
-def test_windows_device_variant_is_not_a_safe_relative_path(relative_path: str) -> None:
+def test_device_variant_is_not_a_safe_path(relative_path: str) -> None:
     """A superscript port name or a console device name is refused in any component."""
     assert not is_safe_relative_path(relative_path)
 

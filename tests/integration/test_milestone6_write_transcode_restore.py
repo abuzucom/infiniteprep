@@ -44,7 +44,7 @@ from tests.fixtures.audio_factory import (
 )
 
 
-def test_write_service_applies_tags_renames_preserves_traktor_and_restores(
+def test_write_rename_restore_keeps_traktor(
     tmp_path: Path,
 ) -> None:
     """Verify WriteService writes MP3/FLAC/WAV/AIFF, preserves PRIV:TRAKTOR4, and restores."""
@@ -128,7 +128,7 @@ def test_write_service_applies_tags_renames_preserves_traktor_and_restores(
     db.close()
 
 
-def test_write_service_blocks_external_modification_and_filename_collision(
+def test_write_blocks_changed_file_and_clash(
     tmp_path: Path,
 ) -> None:
     """Verify WriteService preflight blocks external file tampering and rename collisions."""

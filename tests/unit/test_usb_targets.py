@@ -57,7 +57,7 @@ def build_named_inspection(name: str, **drive_changes: object) -> DriveInspectio
     return build_inspection(drive=build_drive(name=name, **drive_changes))
 
 
-def test_failed_probe_lists_the_drive_without_hiding_the_rest() -> None:
+def test_failed_probe_still_lists_all_drives() -> None:
     """One failed probe yields an error entry. Other drives still load."""
     inspector = FixedInspector((build_named_inspection("sdb"), build_named_inspection("sdc")))
     probe = RecordingProbe(failing_names=frozenset({"sdb"}))
@@ -71,7 +71,7 @@ def test_failed_probe_lists_the_drive_without_hiding_the_rest() -> None:
     assert candidates[1].error is None
 
 
-def test_failed_probe_error_text_holds_no_command_output() -> None:
+def test_probe_error_omits_command_output() -> None:
     """The error entry carries fixed text. Raw command errors stay out of the list."""
     inspector = FixedInspector((build_named_inspection("sdb"),))
     probe = RecordingProbe(failing_names=frozenset({"sdb"}))

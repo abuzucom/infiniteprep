@@ -28,7 +28,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The sidebar filters replace the review status dropdown.
 - The Key Notation picker moved to the row above the table. The theme picker left the main window and stays in Settings.
-- The version advances from 0.81.2 to 0.82.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- Test function names stay at 50 characters or fewer, `test_` included.
+  - 582 tests under `tests/unit/`, `tests/integration/`, `tests/e2e/`, and `tests/` take shorter names. Only the `def` lines change.
+  - Ruff joins the signatures that now fit on one line.
+  - The copied gate tests listed in the ruff `extend-exclude` keep the upstream names.
+  - Nine UI test files that #347 also changes keep the old names until that pull request lands.
+- The version advances from 0.81.3 to 0.82.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 

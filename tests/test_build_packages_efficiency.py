@@ -43,7 +43,7 @@ class VersionReadTest(unittest.TestCase):
         """Parse the workflow once."""
         cls.steps = load_jobs()["bundle"]["steps"]
 
-    def test_only_the_record_step_imports_the_package_for_the_version(self) -> None:
+    def test_only_record_step_imports_package(self) -> None:
         """One step reads the version and writes it to GITHUB_ENV."""
         readers = [step["name"] for step in self.steps if VERSION_IMPORT in step.get("run", "")]
         self.assertEqual(readers, [RECORD_STEP_NAME])
@@ -51,7 +51,7 @@ class VersionReadTest(unittest.TestCase):
         self.assertIn(f"{VERSION_VARIABLE}=", record["run"])
         self.assertIn("GITHUB_ENV", record["run"])
 
-    def test_the_version_is_recorded_before_the_first_reader(self) -> None:
+    def test_version_recorded_before_first_use(self) -> None:
         """The record step runs before the smoke check, the first step that needs it."""
         names = [step.get("name") for step in self.steps]
         self.assertLess(names.index(RECORD_STEP_NAME), names.index(SMOKE_STEP_NAME))

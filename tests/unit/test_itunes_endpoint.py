@@ -65,7 +65,7 @@ def _adapter(
     )
 
 
-def test_the_endpoint_is_the_published_https_search_url() -> None:
+def test_endpoint_is_published_search_url() -> None:
     """The adapter uses the published iTunes Search endpoint over HTTPS."""
     parsed = urllib.parse.urlsplit(ITUNES_SEARCH_URL)
 
@@ -81,7 +81,7 @@ def test_the_request_path_refuses_a_redirect() -> None:
     assert not any(isinstance(item, urllib.request.HTTPRedirectHandler) for item in opener.handlers)
 
 
-def test_a_redirect_response_becomes_an_error_and_never_reaches_the_target() -> None:
+def test_redirect_errors_without_following() -> None:
     """A redirect response raises and the target path never receives a request."""
     requested_paths: list[str] = []
 
@@ -123,7 +123,7 @@ def test_a_redirect_response_becomes_an_error_and_never_reaches_the_target() -> 
     assert "/target" not in requested_paths
 
 
-def test_the_request_path_refuses_a_url_outside_the_published_endpoint() -> None:
+def test_request_refuses_off_endpoint_url() -> None:
     """The default request path rejects any URL that is not the published endpoint."""
     adapter = ItunesSearchAdapter(repository=build_memory_repository(), limiter=RequestLimiter(0.0))
 
@@ -139,7 +139,7 @@ def test_every_adapter_shares_the_provider_limiter() -> None:
     assert first.limiter is second.limiter
 
 
-def test_two_adapters_that_share_a_limiter_wait_for_each_other(
+def test_adapters_sharing_limiter_wait(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A second adapter waits for the interval the first adapter used."""

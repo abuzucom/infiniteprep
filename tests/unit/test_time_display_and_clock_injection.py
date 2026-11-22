@@ -47,7 +47,7 @@ def test_stored_utc_time_displays_in_the_given_zone() -> None:
     assert format_local_timestamp(STORED_TIME, HALF_HOUR_ZONE) == "2026-11-16 17:30:00"
 
 
-def test_local_display_crosses_the_date_line_of_the_zone() -> None:
+def test_local_display_crosses_date_line() -> None:
     """An instant early in the UTC day falls on the previous local date west of UTC."""
     early_utc = "2026-03-01T02:00:00+00:00"
 
@@ -79,9 +79,7 @@ def test_text_that_names_no_instant_displays_unchanged(unreadable: str) -> None:
         (1999, None),
     ],
 )
-def test_release_year_needs_four_digits_then_end_or_hyphen(
-    raw_date: object, expected_year: str | None
-) -> None:
+def test_release_year_needs_four_digits(raw_date: object, expected_year: str | None) -> None:
     """Only a date that starts with a four-digit year yields a year."""
     assert extract_release_year(raw_date) == expected_year
 
@@ -94,7 +92,7 @@ def _import_one_track(repo: Repository, tag_adapter: MetadataTagAdapter, folder:
     return ImportService(repo, tag_adapter).import_paths([source]).imported_files[0]
 
 
-def test_write_takes_journal_times_from_the_injected_clocks(tmp_path: Path) -> None:
+def test_write_journal_uses_injected_clocks(tmp_path: Path) -> None:
     """The stored journal time comes from the service clock. The result uses the adapter clock."""
     repo = Repository(DatabaseManager(":memory:"))
     tag_adapter = MetadataTagAdapter(now_iso=lambda: ADAPTER_CLOCK_TIME)
@@ -112,7 +110,7 @@ def test_write_takes_journal_times_from_the_injected_clocks(tmp_path: Path) -> N
     assert record.timestamp == ADAPTER_CLOCK_TIME
 
 
-def test_transcoder_journal_takes_its_time_from_the_injected_clock(tmp_path: Path) -> None:
+def test_transcoder_uses_injected_clock(tmp_path: Path) -> None:
     """The in-place transcode journal record carries the injected clock value."""
     repo = Repository(DatabaseManager(":memory:"))
     tag_adapter = MetadataTagAdapter()
@@ -129,7 +127,7 @@ def test_transcoder_journal_takes_its_time_from_the_injected_clock(tmp_path: Pat
     assert stored.timestamp == TRANSCODER_CLOCK_TIME
 
 
-def test_recovery_dialog_shows_local_time_not_stored_text(
+def test_recovery_dialog_shows_local_time(
     qtbot: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The recovery table cell holds the local form of the interrupted write time."""
@@ -158,7 +156,7 @@ def test_recovery_dialog_shows_local_time_not_stored_text(
     assert shown != STORED_TIME
 
 
-def test_journal_dialog_shows_local_time_not_stored_text(qapp: Any, tmp_path: Path) -> None:
+def test_journal_dialog_shows_local_time(qapp: Any, tmp_path: Path) -> None:
     """The journal table cell holds the local form of the stored instant."""
     repo = Repository(DatabaseManager(":memory:"))
     tag_adapter = MetadataTagAdapter()

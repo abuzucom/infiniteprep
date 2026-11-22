@@ -10,7 +10,7 @@ from infiniteprep.db.migrations import ROW_COUNT_QUERIES
 from infiniteprep.db.migrations.backup import table_row_counts
 
 
-def test_registry_covers_every_table_of_a_migrated_library(tmp_path: Path) -> None:
+def test_registry_covers_every_table(tmp_path: Path) -> None:
     """Each table in a fully migrated library has a literal count query."""
     library = tmp_path / "infiniteprep.sqlite3"
     with DatabaseManager(library):

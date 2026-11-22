@@ -61,7 +61,7 @@ class MacosPackagingWorkflowTest(unittest.TestCase):
         self.assertIn(DMG_NAME, run)
         self.assertNotIn("portable.mode", run)
 
-    def test_dmg_test_checks_contents_signature_plist_and_launch(self) -> None:
+    def test_dmg_test_checks_contents_and_launch(self) -> None:
         """The test mounts the DMG read-only and checks what users get."""
         run = self._step("Test macOS DMG")["run"]
         for fragment in (

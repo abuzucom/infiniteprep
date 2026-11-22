@@ -598,7 +598,7 @@ class TestUsbLinuxInspection(unittest.TestCase):
         self.assertEqual(inspections[0].drive.bus_type, "usb")
         self.assertEqual(inspections[0].drive.subsystem, "block:scsi:pci:usb")
 
-    def test_malformed_blockdevice_element_raises_parse_error(self) -> None:
+    def test_malformed_blockdevice_raises(self) -> None:
         """Top-level blockdevices entries that are not mappings raise InspectionParseError."""
         for invalid_element in (None, "not-a-dict", 12345, [1, 2]):
             bad_json = json.dumps({"blockdevices": [invalid_element]})

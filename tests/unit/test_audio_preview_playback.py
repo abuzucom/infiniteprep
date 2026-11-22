@@ -47,9 +47,7 @@ def test_the_slider_is_named_and_spans_the_track(preview: AudioPreviewWidget) ->
     assert slider.focusPolicy() == Qt.FocusPolicy.StrongFocus
 
 
-def test_arrow_and_page_keys_seek_by_one_and_ten_seconds(
-    qtbot: Any, preview: AudioPreviewWidget
-) -> None:
+def test_arrow_and_page_keys_seek_1s_and_10s(qtbot: Any, preview: AudioPreviewWidget) -> None:
     """Arrow keys move 1 s, Page keys move 10 s, and the accessible time follows."""
     slider = preview.position_slider
     slider.setFocus()
@@ -63,7 +61,7 @@ def test_arrow_and_page_keys_seek_by_one_and_ten_seconds(
     assert slider.accessibleDescription() == format_clock(expected)
 
 
-def test_programmatic_seeks_move_the_slider_without_feedback(
+def test_programmatic_seek_skips_feedback(
     preview: AudioPreviewWidget,
 ) -> None:
     """A cue jump moves the slider once, and the slider does not seek back on its own."""
@@ -76,7 +74,7 @@ def test_programmatic_seeks_move_the_slider_without_feedback(
     assert seeks == []
 
 
-def test_a_player_error_shows_plain_text_and_resets_play(
+def test_player_error_shows_text_and_resets(
     preview: AudioPreviewWidget,
 ) -> None:
     """A playback failure appears as plain text, and the button returns to Play."""

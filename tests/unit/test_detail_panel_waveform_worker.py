@@ -28,9 +28,7 @@ ANALYSIS_WAIT_TIMEOUT_MS = 3_000
 STALE_ANALYSIS_MAX_WAIT_SECONDS = 3.0
 
 
-def test_detail_panel_passes_shared_settings_manager_to_audio_preview(
-    qtbot: Any, monkeypatch: Any
-) -> None:
+def test_preview_gets_shared_settings(qtbot: Any, monkeypatch: Any) -> None:
     """The panel shares one settings store with its audio preview."""
     received: list[tuple[bool, bool]] = []
 
@@ -53,9 +51,7 @@ def test_detail_panel_passes_shared_settings_manager_to_audio_preview(
     assert received == [(False, True)]
 
 
-def test_stale_track_result_does_not_replace_selected_waveform(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_stale_result_keeps_waveform(qtbot: Any, tmp_path: Path, monkeypatch: Any) -> None:
     """A slower result for the old selection cannot replace the current spectrum."""
     first = create_wav_fixture(tmp_path / "one" / "first.wav")
     second = create_wav_fixture(tmp_path / "two" / "second.wav")

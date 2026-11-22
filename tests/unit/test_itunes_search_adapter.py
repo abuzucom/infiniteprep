@@ -79,7 +79,7 @@ def _adapter(
     )
 
 
-def test_search_returns_the_matching_row_with_a_genre_and_a_date() -> None:
+def test_search_match_has_genre_and_date() -> None:
     """A matching row supplies the coarse genre and the release year."""
     adapter = _adapter(build_memory_repository(), _recorded("match_with_genre_and_date"))
 
@@ -102,7 +102,7 @@ def test_search_without_a_match_returns_no_candidate() -> None:
     assert adapter.search(_query(), file_id=FILE_ID) == []
 
 
-def test_the_earliest_release_date_wins_among_tied_rows() -> None:
+def test_earliest_release_date_wins_ties() -> None:
     """Two collections for one track keep the earliest release date."""
     adapter = _adapter(build_memory_repository(), _recorded("two_collections"))
 
@@ -147,7 +147,7 @@ def test_the_response_artwork_is_ignored() -> None:
     assert "artwork" not in json.dumps(candidate.match_evidence).lower()
 
 
-def test_the_response_is_cached_in_the_shared_sqlite_cache() -> None:
+def test_response_cached_in_shared_sqlite() -> None:
     """A second identical search reads the cached response instead of the network."""
     repository = build_memory_repository()
     calls: list[tuple[str, dict[str, str]]] = []
@@ -196,7 +196,7 @@ def test_an_unrelated_row_supplies_no_candidate() -> None:
     assert adapter.search(_query(), file_id=FILE_ID) == []
 
 
-def test_a_malformed_duration_leaves_the_candidate_without_a_duration() -> None:
+def test_malformed_duration_is_dropped() -> None:
     """A row with a malformed duration still supplies the genre and the year."""
     adapter = _adapter(build_memory_repository(), _recorded("malformed_duration"))
 
@@ -207,7 +207,7 @@ def test_a_malformed_duration_leaves_the_candidate_without_a_duration() -> None:
     assert matches[0].release_details.genre == "Dance"
 
 
-def test_the_cache_key_names_the_provider_and_the_endpoint() -> None:
+def test_cache_key_names_provider_and_endpoint() -> None:
     """The cache key holds the provider and the endpoint, so no other source shares it."""
     adapter = _adapter(build_memory_repository(), _recorded("match_with_genre_and_date"))
 
@@ -217,7 +217,7 @@ def test_the_cache_key_names_the_provider_and_the_endpoint() -> None:
     assert "itunes.apple.com" not in key
 
 
-def test_two_threads_send_one_lookup_for_the_same_track(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_two_threads_share_one_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
     """Two threads that miss the cache together send one request between them."""
     repository = build_memory_repository()
     limiter = RequestLimiter(0.0)
@@ -267,7 +267,7 @@ def test_two_threads_send_one_lookup_for_the_same_track(monkeypatch: pytest.Monk
     assert results == [1, 1]
 
 
-def test_the_request_carries_the_shared_user_agent_and_the_search_terms() -> None:
+def test_request_has_user_agent_and_terms() -> None:
     """The request names the search endpoint and sends the artist and the title."""
     calls: list[tuple[str, dict[str, str]]] = []
     adapter = _adapter(build_memory_repository(), _recorded("match_with_genre_and_date"), calls)
@@ -282,7 +282,7 @@ def test_the_request_carries_the_shared_user_agent_and_the_search_terms() -> Non
     assert params["country"] == "US"
 
 
-def test_each_proposal_records_itunes_search_as_its_source() -> None:
+def test_proposals_name_itunes_as_source() -> None:
     """A proposal from the adapter names iTunes Search as the provider."""
     repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
@@ -300,7 +300,7 @@ def test_each_proposal_records_itunes_search_as_its_source() -> None:
     assert genre_proposals[0].proposed_value == "Dance"
 
 
-def test_a_field_another_source_supplied_gets_no_itunes_proposal() -> None:
+def test_supplied_field_gets_no_proposal() -> None:
     """A higher ranked source keeps the field and the iTunes proposal never appears."""
     repository = build_memory_repository()
     repository.upsert_file_asset(_asset())
@@ -329,7 +329,7 @@ def test_a_field_another_source_supplied_gets_no_itunes_proposal() -> None:
 
 
 @pytest.mark.parametrize("fixture_name", ["no_match", "artwork_only"])
-def test_no_network_call_reaches_the_response_without_a_search_term(
+def test_no_network_call_without_search_term(
     fixture_name: str,
 ) -> None:
     """A query without an artist or a title never reaches the network."""

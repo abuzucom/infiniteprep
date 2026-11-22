@@ -16,7 +16,7 @@ from infiniteprep.services.write_service import WriteService
 from tests.fixtures.audio_factory import create_wav_fixture
 
 
-def test_mark_finished_refuses_a_path_outside_the_library(
+def test_mark_finished_refuses_outside_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A tampered new_path outside the library root raises, and nothing changes."""

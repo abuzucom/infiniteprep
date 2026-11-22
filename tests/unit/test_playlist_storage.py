@@ -72,7 +72,7 @@ def test_membership_rules_and_casefolded_names():
         assert collections.crate_tracks(crate.id) == {"one", "two"}
 
 
-def test_folder_move_preserves_collections_and_checks_descendants():
+def test_folder_move_guards_and_keeps_items():
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)
         add_track(repo, "one")
@@ -100,7 +100,7 @@ def test_folder_move_preserves_collections_and_checks_descendants():
         assert collections.playlist_tracks(playlist.id) == ["one"]
 
 
-def test_import_preflight_reports_first_folder_beyond_limit():
+def test_preflight_reports_first_over_limit():
     path = [f"Level {level}" for level in range(1, 9)]
     validate_import_folder_paths([path])
     with pytest.raises(ValueError, match="First excess"):

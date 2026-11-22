@@ -180,7 +180,7 @@ class ScanSummaryWiringTest(unittest.TestCase):
         self.assertEqual(step["run"], BUILD_COMMAND)
         self.assertEqual(step["env"], {"SARIF_FILE": "${{ steps.msdo.outputs.sarifFile }}"})
 
-    def test_the_summary_artifact_is_uploaded_with_a_pinned_action(self) -> None:
+    def test_summary_upload_uses_pinned_action(self) -> None:
         """The summary goes up through the pinned upload action."""
         step = find_step(self.job, "Upload the scan summary")
         self.assertEqual(step["uses"], UPLOAD_ARTIFACT)
@@ -243,14 +243,14 @@ class ScanCommentJobTest(unittest.TestCase):
         self.assertEqual(group, "security-scan-comment-${{ github.event.pull_request.number }}")
         self.assertIs(self.job["concurrency"]["cancel-in-progress"], True)
 
-    def test_the_job_downloads_the_summary_only_after_a_passed_scan(self) -> None:
+    def test_summary_download_needs_passed_scan(self) -> None:
         """A failed scan uploads no summary, so the download waits for a pass."""
         step = find_step(self.job, "Download the scan summary")
         self.assertEqual(step["uses"], DOWNLOAD_ARTIFACT)
         self.assertEqual(step["with"]["name"], SUMMARY_ARTIFACT)
         self.assertEqual(step["if"], "needs.msdo.result == 'success'")
 
-    def test_the_job_posts_the_comment_with_a_pinned_action(self) -> None:
+    def test_comment_post_uses_pinned_action(self) -> None:
         """The comment goes out through the pinned script action."""
         step = find_step(self.job, COMMENT_STEP)
         self.assertEqual(step["uses"], GITHUB_SCRIPT)
@@ -267,7 +267,7 @@ class ScanCommentJobTest(unittest.TestCase):
         for step in self.job["steps"]:
             self.assertNotIn("continue-on-error", step)
 
-    def test_the_comment_search_pages_through_every_comment(self) -> None:
+    def test_comment_search_reads_every_page(self) -> None:
         """The search reads every comment, not only the first page."""
         self.assertIn("github.paginate(github.rest.issues.listComments", self.script)
 
@@ -320,7 +320,7 @@ class ScanCommentScriptTest(unittest.TestCase):
         self.assertIn("3  checkov", calls[0]["body"])
         self.assertIn("0  bandit", calls[0]["body"])
 
-    def test_a_failed_scan_posts_the_failure_without_a_summary(self) -> None:
+    def test_failed_scan_posts_without_summary(self) -> None:
         """A failed scan job leaves no summary, and the comment reports the failure."""
         calls = self.run_comment_script(None, [], scan_result="failure")
 
@@ -350,7 +350,7 @@ class ScanCommentScriptTest(unittest.TestCase):
 
         self.assertEqual([call["action"] for call in calls], ["create"])
 
-    def test_a_bot_comment_with_the_marker_inside_the_body_is_left_alone(self) -> None:
+    def test_marker_inside_body_is_left_alone(self) -> None:
         """A bot comment that only mentions the marker is not the target."""
         mention = {"id": 8, "user": {"login": BOT}, "body": "text before the marker " + MARKER}
 
@@ -374,7 +374,7 @@ class ScanCommentScriptTest(unittest.TestCase):
 
         self.assertEqual([call["action"] for call in calls], ["info"])
 
-    def test_a_tool_name_with_a_fence_character_is_rejected(self) -> None:
+    def test_tool_name_with_fence_is_rejected(self) -> None:
         """A crafted tool name never reaches the comment."""
         summary = {"total": 1, "tools": [{"name": "bandit`\n@someone", "findings": 1}]}
 

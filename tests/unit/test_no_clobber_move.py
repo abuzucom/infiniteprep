@@ -59,9 +59,7 @@ def test_move_onto_an_existing_file_keeps_both_files(tmp_path: Path) -> None:
 
 
 @POSIX_ONLY
-def test_system_without_an_atomic_rename_keeps_the_source(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_no_atomic_rename_keeps_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Without a no-replace rename call, the move is refused and the file keeps its name."""
     source = make_source(tmp_path)
     destination = tmp_path / "renamed.wav"
@@ -74,7 +72,7 @@ def test_system_without_an_atomic_rename_keeps_the_source(
 
 
 @POSIX_ONLY
-def test_file_system_that_rejects_the_atomic_rename_keeps_the_source(
+def test_rejected_atomic_rename_keeps_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A file system that answers EINVAL to the no-replace flag refuses the move."""

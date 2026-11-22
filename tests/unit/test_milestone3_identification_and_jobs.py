@@ -28,7 +28,7 @@ from infiniteprep.services.job_orchestrator import JobOrchestrator
 from tests.fixtures.audio_factory import create_wav_fixture
 
 
-def test_settings_and_credential_store_with_ssrf_validation(tmp_path: Path) -> None:
+def test_settings_and_credentials_check_ssrf(tmp_path: Path) -> None:
     """Verify JSON settings, strict SSRF endpoint validation, and fail-closed CredentialStore."""
     cfg_path = tmp_path / "settings.json"
     mgr = SettingsManager(cfg_path)
@@ -75,7 +75,7 @@ def test_settings_and_credential_store_with_ssrf_validation(tmp_path: Path) -> N
     assert strict_creds._memory.get("discogs_token") is None
 
 
-def test_fpcalc_bootstrap_requires_explicit_user_consent_and_verifies_sha256(
+def test_fpcalc_bootstrap_consent_and_sha256(
     tmp_path: Path,
 ) -> None:
     """Verify FpcalcBootstrapService refuses unconsented downloads and extracts ZIP and TAR.GZ."""
@@ -131,7 +131,7 @@ def test_fpcalc_bootstrap_requires_explicit_user_consent_and_verifies_sha256(
         )
 
 
-def test_chromaprint_acoustid_and_musicbrainz_adapters_with_cache(tmp_path: Path) -> None:
+def test_identification_adapters_use_cache(tmp_path: Path) -> None:
     """Verify ChromaprintAcoustIDAdapter and MusicBrainzAdapter use SQLite cache."""
     db = DatabaseManager(":memory:")
     repo = Repository(db)
@@ -226,7 +226,7 @@ def test_chromaprint_acoustid_and_musicbrainz_adapters_with_cache(tmp_path: Path
     db.close()
 
 
-def test_job_orchestrator_executes_and_persists_candidates_and_analysis(tmp_path: Path) -> None:
+def test_job_orchestrator_persists_results(tmp_path: Path) -> None:
     """Verify JobOrchestrator runs fingerprint, catalog search, and audio analysis idempotently."""
     db = DatabaseManager(":memory:")
     repo = Repository(db)

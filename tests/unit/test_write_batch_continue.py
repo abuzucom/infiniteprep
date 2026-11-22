@@ -59,7 +59,7 @@ def write_parts(
     return repo, write_svc, plans
 
 
-def test_a_failed_write_lets_the_batch_continue_by_default(write_parts: Any) -> None:
+def test_batch_continues_on_failure_by_default(write_parts: Any) -> None:
     """The failed file is recorded and left untouched. The later file is still written."""
     repo, write_svc, plans = write_parts
     broken_hash = compute_sha256(plans[1].source_path)
@@ -77,7 +77,7 @@ def test_a_failed_write_lets_the_batch_continue_by_default(write_parts: Any) -> 
     assert last_record.operation_status == OperationStatus.COMPLETED
 
 
-def test_records_of_one_batch_share_a_batch_operation_id(write_parts: Any) -> None:
+def test_batch_records_share_operation_id(write_parts: Any) -> None:
     """Every write of a queued batch carries the same batch operation ID."""
     _repo, write_svc, plans = write_parts
 
@@ -88,7 +88,7 @@ def test_records_of_one_batch_share_a_batch_operation_id(write_parts: Any) -> No
     assert None not in batch_ids
 
 
-def test_apply_batch_still_stops_at_the_first_failed_write(write_parts: Any) -> None:
+def test_apply_batch_stops_at_first_failure(write_parts: Any) -> None:
     """The earlier method keeps its contract: the error propagates and later files wait."""
     repo, write_svc, plans = write_parts
 
@@ -98,7 +98,7 @@ def test_apply_batch_still_stops_at_the_first_failed_write(write_parts: Any) -> 
     assert repo.list_change_records(plans[2].file_id) == []
 
 
-def test_stop_on_failure_ends_the_batch_at_the_first_failed_write(write_parts: Any) -> None:
+def test_stop_on_failure_ends_batch_early(write_parts: Any) -> None:
     """With the stop rule on, files after the failed one stay unwritten."""
     repo, write_svc, plans = write_parts
 
@@ -110,7 +110,7 @@ def test_stop_on_failure_ends_the_batch_at_the_first_failed_write(write_parts: A
     assert repo.list_change_records(plans[2].file_id) == []
 
 
-def test_cancel_stops_before_the_next_write_and_keeps_finished_writes(write_parts: Any) -> None:
+def test_cancel_stops_and_keeps_finished_writes(write_parts: Any) -> None:
     """A cancel request after the first file keeps that write and skips the rest."""
     repo, write_svc, plans = write_parts
     started = CallRecorder(record=select_progress_file_name)
@@ -132,7 +132,7 @@ def test_cancel_stops_before_the_next_write_and_keeps_finished_writes(write_part
     assert repo.list_change_records(plans[1].file_id) == []
 
 
-def test_pending_recovery_blocks_the_whole_batch_before_any_write(write_parts: Any) -> None:
+def test_pending_recovery_blocks_whole_batch(write_parts: Any) -> None:
     """An interrupted write still waiting for recovery refuses the batch up front."""
     repo, write_svc, plans = write_parts
     interrupted = write_svc._journal_in_progress(plans[0], None)
