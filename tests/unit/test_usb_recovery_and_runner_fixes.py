@@ -62,6 +62,7 @@ class UsbRecoveryRetryTests(unittest.TestCase):
     """A Resume interrupted by a journal failure can run again."""
 
     def test_resume_retries_after_the_journal_write_fails(self) -> None:
+        """A Resume that fails on the journal save keeps the manifest and succeeds on retry."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
             mount_root.mkdir()
@@ -107,11 +108,13 @@ class CleanIntTests(unittest.TestCase):
     """Untrusted numbers that cannot become an int fall back to the default."""
 
     def test_infinite_or_invalid_gives_default(self) -> None:
+        """Infinities, NaN, text, and None give the default."""
         for value in (float("inf"), float("-inf"), float("nan"), "abc", None):
             with self.subTest(value=value):
                 self.assertEqual(clean_int(value, DEFAULT_SIZE), DEFAULT_SIZE)
 
     def test_finite_values_parse(self) -> None:
+        """A numeric string parses to its value and a negative number clamps to zero."""
         self.assertEqual(clean_int("42"), 42)
         self.assertEqual(clean_int(-3), 0)
 
@@ -121,6 +124,7 @@ class BoundedRunnerDrainTests(unittest.TestCase):
     """A child that floods stderr before it writes stdout finishes without a stall."""
 
     def test_stderr_flood_before_stdout_does_not_stall(self) -> None:
+        """The runner drains a stderr flood and still returns stdout in time."""
         script = (
             "import sys\n"
             f"sys.stderr.write('e' * {STDERR_FLOOD_BYTES})\n"
@@ -140,6 +144,7 @@ class WindowsOutputEncodingTests(unittest.TestCase):
     """Each PowerShell command sets UTF-8 output before it runs."""
 
     def test_every_command_sets_utf8_output_first(self) -> None:
+        """The disk, partition, and volume commands all start with the UTF-8 prefix."""
         for text in (DISK_COMMAND_TEXT, PARTITION_COMMAND_TEXT, VOLUME_COMMAND_TEXT):
             with self.subTest(text=text):
                 self.assertTrue(text.startswith(UTF8_OUTPUT_PREFIX))
@@ -150,6 +155,7 @@ class Win32ErrorTests(unittest.TestCase):
     """A Win32 code keeps its own meaning instead of a C errno meaning."""
 
     def test_sharing_violation_maps_to_permission_error(self) -> None:
+        """A sharing violation becomes a PermissionError that keeps the Win32 code."""
         error = win32_error(WIN32_SHARING_VIOLATION, Path("C:/usb/meta.json"))
 
         self.assertIsInstance(error, PermissionError)

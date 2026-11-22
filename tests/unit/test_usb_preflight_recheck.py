@@ -55,9 +55,11 @@ class SnapshotTests(unittest.TestCase):
     """The snapshot records the confirmed mount path."""
 
     def test_snapshot_records_the_mount_path(self) -> None:
+        """A snapshot of a mounted target keeps its mount path."""
         self.assertEqual(capture_target_snapshot(build_inspection()).mount_path, MOUNT_PATH)
 
     def test_snapshot_of_an_unmounted_target_is_rejected(self) -> None:
+        """A snapshot of a target with no mount point raises ValueError."""
         inspection = build_inspection(partitions=(build_partition(mount_points=()),))
         with self.assertRaises(ValueError):
             capture_target_snapshot(inspection)
@@ -67,11 +69,13 @@ class UnchangedTargetTests(unittest.TestCase):
     """An unchanged target may be written."""
 
     def test_unchanged_target_passes(self) -> None:
+        """An identical fresh inspection gives no abort reason."""
         result = recheck_against(build_inspection())
         self.assertEqual(result.abort_reasons, ())
         self.assertTrue(result.may_write)
 
     def test_device_node_rename_alone_does_not_abort(self) -> None:
+        """A new device node name with the same identity still allows the write."""
         fresh = build_inspection(
             drive=build_drive(name="sdc", path="/dev/sdc"),
             partitions=(build_partition(name="sdc1", path="/dev/sdc1"),),
@@ -79,6 +83,7 @@ class UnchangedTargetTests(unittest.TestCase):
         self.assertTrue(recheck_against(fresh).may_write)
 
     def test_harmless_free_space_change_does_not_abort(self) -> None:
+        """Less free space that still fits the export allows the write."""
         fresh = build_inspection(available_bytes=REDUCED_FREE_BYTES)
         self.assertTrue(recheck_against(fresh).may_write)
 
@@ -94,6 +99,7 @@ class ChangedIdentityTests(unittest.TestCase):
         self.assertIn(field_name, result.abort_reasons[0].message)
 
     def test_each_changed_drive_identifier_aborts(self) -> None:
+        """Each changed drive identifier aborts with a message that names the field."""
         changes = {
             "serial": "FFFF000011112222",
             "hardware_id": "0951:1666",
@@ -107,6 +113,7 @@ class ChangedIdentityTests(unittest.TestCase):
                 self.assert_identity_abort(fresh, field_name)
 
     def test_each_changed_partition_identifier_aborts(self) -> None:
+        """Each changed partition identifier aborts with a message that names the field."""
         changes = {
             "uuid": "9999-0000",
             "label": "OTHER",
@@ -120,9 +127,11 @@ class ChangedIdentityTests(unittest.TestCase):
                 self.assert_identity_abort(fresh, field_name)
 
     def test_identifier_that_disappears_aborts(self) -> None:
+        """A serial that goes missing counts as a changed identity."""
         self.assert_identity_abort(build_inspection(drive=build_drive(serial=None)), "serial")
 
     def test_identifier_that_appears_aborts(self) -> None:
+        """A serial that appears after the snapshot counts as a changed identity."""
         snapshot = capture_target_snapshot(build_inspection(drive=build_drive(serial=None)))
         result = recheck_target(
             snapshot, build_inspection(), build_request(), is_path_writable=report_writable
@@ -130,6 +139,7 @@ class ChangedIdentityTests(unittest.TestCase):
         self.assertEqual(abort_codes(result), (AbortCode.IDENTITY_CHANGED,))
 
     def test_abort_message_omits_identifier_values(self) -> None:
+        """The identity abort message leaves out the old and new serial values."""
         result = recheck_against(build_inspection(drive=build_drive(serial="FFFF000011112222")))
         message = result.abort_reasons[0].message
         self.assertNotIn("FFFF000011112222", message)
@@ -140,6 +150,7 @@ class ChangedStateTests(unittest.TestCase):
     """Mount path, writability, safety, and space changes abort the export."""
 
     def test_changed_mount_path_aborts(self) -> None:
+        """A different mount path aborts the write."""
         other_mount = "/media/dj/STICK1"
         fresh = build_inspection(partitions=(build_partition(mount_points=(other_mount,)),))
         result = recheck_against(fresh)
@@ -147,6 +158,7 @@ class ChangedStateTests(unittest.TestCase):
         self.assertFalse(result.may_write)
 
     def test_unwritable_mount_path_aborts(self) -> None:
+        """A mount path that fails the writability check aborts as not writable."""
         snapshot = capture_target_snapshot(build_inspection())
         result = recheck_target(
             snapshot, build_inspection(), build_request(), is_path_writable=report_not_writable
@@ -154,6 +166,7 @@ class ChangedStateTests(unittest.TestCase):
         self.assertEqual(abort_codes(result), (AbortCode.NOT_WRITABLE,))
 
     def test_read_only_remount_aborts_through_the_policy(self) -> None:
+        """A read-only remount aborts through the preflight read-only refusal."""
         fresh = build_inspection(partitions=(build_partition(is_read_only=True),))
         result = recheck_against(fresh)
         self.assertEqual(abort_codes(result), (AbortCode.PREFLIGHT_REFUSED,))
@@ -161,11 +174,13 @@ class ChangedStateTests(unittest.TestCase):
         self.assertEqual(codes, (RefusalCode.READ_ONLY_MEDIA,))
 
     def test_new_filesystem_errors_abort(self) -> None:
+        """Filesystem errors found at the recheck abort through the preflight policy."""
         partition = build_partition(filesystem_health=FilesystemHealth.ERRORS)
         result = recheck_against(build_inspection(partitions=(partition,)))
         self.assertEqual(abort_codes(result), (AbortCode.PREFLIGHT_REFUSED,))
 
     def test_space_that_became_insufficient_aborts(self) -> None:
+        """Free space below the estimate plus the reserve aborts as insufficient space."""
         request = build_request()
         estimate = estimate_export_bytes(
             request.file_sizes, request.directory_count, request.database_allowance_bytes
@@ -184,6 +199,7 @@ class ChangedStateTests(unittest.TestCase):
         self.assertEqual(codes, (RefusalCode.INSUFFICIENT_SPACE,))
 
     def test_changed_identity_and_state_report_both(self) -> None:
+        """A changed serial and a read-only remount give both abort codes in order."""
         fresh = build_inspection(
             drive=build_drive(serial="FFFF000011112222"),
             partitions=(build_partition(is_read_only=True),),

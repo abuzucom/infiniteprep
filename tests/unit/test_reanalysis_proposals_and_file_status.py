@@ -75,6 +75,7 @@ class ReanalysisProposalTests(LibraryTestCase):
     """A changed analysis replaces the pending analysis proposal."""
 
     def test_changed_bpm_same_version_reconciles(self) -> None:
+        """A newer analysis with the same version replaces the pending BPM."""
         service = ReconciliationService(self.repo)
         self.store_analysis("ana-1", bpm=128.0, version=FIRST_VERSION, analyzed_at=EARLIER)
         service.reconcile_file(self.file_id)
@@ -85,6 +86,7 @@ class ReanalysisProposalTests(LibraryTestCase):
         self.assertEqual(self.pending_bpm_values(), ["126.0"])
 
     def test_version_bump_uses_newest_result(self) -> None:
+        """An analysis from a newer analyzer version replaces the pending BPM."""
         service = ReconciliationService(self.repo)
         self.store_analysis("ana-1", bpm=128.0, version=FIRST_VERSION, analyzed_at=EARLIER)
         service.reconcile_file(self.file_id)
@@ -108,6 +110,7 @@ class FileStatusTests(LibraryTestCase):
         )
 
     def test_clear_error_removes_the_stored_message(self) -> None:
+        """clear_error drops the message and leaves the unnamed review status as it was."""
         self.mark_failed()
 
         self.repo.update_file_status(
@@ -121,6 +124,7 @@ class FileStatusTests(LibraryTestCase):
         self.assertEqual(asset.review_status, ReviewStatus.ERROR)
 
     def test_update_without_clear_error_keeps_the_message(self) -> None:
+        """A task status update without clear_error keeps the stored error message."""
         self.mark_failed()
 
         self.repo.update_file_status(self.file_id, task_status=TaskStatus.PROCESSING)
@@ -131,6 +135,7 @@ class FileStatusTests(LibraryTestCase):
         self.assertEqual(asset.review_status, ReviewStatus.ERROR)
 
     def test_successful_processing_clears_the_old_error(self) -> None:
+        """A successful processing run completes the file and clears its old error."""
         self.mark_failed()
 
         summary = JobOrchestrator(repository=self.repo).process_files([self.file_id])

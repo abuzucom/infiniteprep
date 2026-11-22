@@ -46,6 +46,7 @@ class UpperBoundClusterTests(unittest.TestCase):
     """The estimate assumes the largest FAT32 cluster for every volume."""
 
     def test_cluster_constant_is_64_kib(self) -> None:
+        """The upper-bound cluster size is 64 KiB."""
         self.assertEqual(CLUSTER, EXPECTED_CLUSTER_BYTES)
 
 
@@ -53,29 +54,37 @@ class EstimateExportBytesTests(unittest.TestCase):
     """The estimate rounds up and never undercounts."""
 
     def test_empty_plan_needs_no_space(self) -> None:
+        """A plan with no files, directories, or allowance needs zero bytes."""
         self.assertEqual(estimate_export_bytes(()), 0)
 
     def test_one_byte_file_data_and_dir_clusters(self) -> None:
+        """A one-byte file costs one data cluster and one directory cluster."""
         self.assertEqual(estimate_export_bytes((1,)), SMALL_FILE_CLUSTERS * CLUSTER)
 
     def test_exact_cluster_file_is_not_rounded_further(self) -> None:
+        """A file of exactly one cluster costs one data cluster and one directory cluster."""
         self.assertEqual(estimate_export_bytes((CLUSTER,)), SMALL_FILE_CLUSTERS * CLUSTER)
 
     def test_one_byte_over_needs_two_data_clusters(self) -> None:
+        """A file one byte over a cluster costs two data clusters and one directory cluster."""
         self.assertEqual(estimate_export_bytes((CLUSTER + 1,)), SPILLED_FILE_CLUSTERS * CLUSTER)
 
     def test_empty_file_still_takes_a_directory_cluster(self) -> None:
+        """An empty file costs its directory cluster alone."""
         self.assertEqual(estimate_export_bytes((0,)), CLUSTER)
 
     def test_each_directory_adds_one_cluster(self) -> None:
+        """Each planned directory adds one cluster."""
         estimate = estimate_export_bytes((), directory_count=DIRECTORY_COUNT)
         self.assertEqual(estimate, DIRECTORY_COUNT * CLUSTER)
 
     def test_database_allowance_is_added_unrounded(self) -> None:
+        """The database allowance adds its exact byte count."""
         estimate = estimate_export_bytes((), database_allowance_bytes=DATABASE_ALLOWANCE_BYTES)
         self.assertEqual(estimate, DATABASE_ALLOWANCE_BYTES)
 
     def test_all_parts_sum(self) -> None:
+        """Data, file entry, and directory clusters plus the allowance make the estimate."""
         estimate = estimate_export_bytes(
             MIXED_FILE_SIZES,
             directory_count=MIXED_DIRECTORY_COUNT,
@@ -85,10 +94,12 @@ class EstimateExportBytesTests(unittest.TestCase):
         self.assertEqual(estimate, cluster_count * CLUSTER + MIXED_ALLOWANCE_BYTES)
 
     def test_estimate_is_never_below_the_raw_sum(self) -> None:
+        """Boundary file sizes never estimate below their raw byte total."""
         estimate = estimate_export_bytes(BOUNDARY_FILE_SIZES)
         self.assertGreaterEqual(estimate, sum(BOUNDARY_FILE_SIZES))
 
     def test_negative_inputs_are_rejected(self) -> None:
+        """A negative file size, directory count, or allowance raises ValueError."""
         with self.assertRaises(ValueError):
             estimate_export_bytes((-1,))
         with self.assertRaises(ValueError):
@@ -101,31 +112,38 @@ class ComputeReserveBytesTests(unittest.TestCase):
     """The reserve is the larger of the percentage and the fixed byte count."""
 
     def test_initial_reserve_is_zero(self) -> None:
+        """The default reserve policy keeps no bytes back."""
         self.assertEqual(ReservePolicy(), ReservePolicy(percent=0.0, fixed_bytes=0))
         self.assertEqual(compute_reserve_bytes(ESTIMATE_BYTES, ReservePolicy()), 0)
 
     def test_percentage_reserve_applies_to_the_estimate(self) -> None:
+        """A percentage reserve takes that share of the estimate."""
         reserve = ReservePolicy(percent=TEN_PERCENT)
         self.assertEqual(compute_reserve_bytes(ESTIMATE_BYTES, reserve), TEN_PERCENT_OF_ESTIMATE)
 
     def test_percentage_reserve_rounds_up(self) -> None:
+        """A percentage reserve with a fractional result rounds up to the next byte."""
         reserve = ReservePolicy(percent=TEN_PERCENT)
         reserve_bytes = compute_reserve_bytes(UNEVEN_ESTIMATE_BYTES, reserve)
         self.assertEqual(reserve_bytes, TEN_PERCENT_OF_UNEVEN_ESTIMATE)
 
     def test_fixed_byte_reserve_applies_alone(self) -> None:
+        """A fixed byte reserve with no percentage keeps exactly those bytes."""
         reserve = ReservePolicy(fixed_bytes=FIXED_RESERVE_BYTES)
         self.assertEqual(compute_reserve_bytes(ESTIMATE_BYTES, reserve), FIXED_RESERVE_BYTES)
 
     def test_larger_percentage_wins(self) -> None:
+        """A percentage above the fixed bytes sets the reserve."""
         reserve = ReservePolicy(percent=FIFTY_PERCENT, fixed_bytes=SMALL_FIXED_RESERVE_BYTES)
         self.assertEqual(compute_reserve_bytes(ESTIMATE_BYTES, reserve), FIFTY_PERCENT_OF_ESTIMATE)
 
     def test_larger_fixed_bytes_win(self) -> None:
+        """Fixed bytes above the percentage set the reserve."""
         reserve = ReservePolicy(percent=FIVE_PERCENT, fixed_bytes=SMALL_FIXED_RESERVE_BYTES)
         self.assertEqual(compute_reserve_bytes(ESTIMATE_BYTES, reserve), SMALL_FIXED_RESERVE_BYTES)
 
     def test_invalid_reserve_values_are_rejected(self) -> None:
+        """Negative, NaN, and infinite reserve values raise ValueError."""
         for reserve in (
             ReservePolicy(percent=-1.0),
             ReservePolicy(fixed_bytes=-1),
@@ -136,6 +154,7 @@ class ComputeReserveBytesTests(unittest.TestCase):
                 compute_reserve_bytes(ESTIMATE_BYTES, reserve)
 
     def test_negative_estimate_is_rejected(self) -> None:
+        """A negative estimate raises ValueError."""
         with self.assertRaises(ValueError):
             compute_reserve_bytes(-1, ReservePolicy())
 
