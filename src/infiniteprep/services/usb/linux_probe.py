@@ -126,7 +126,9 @@ class LinuxPreflightProbe:
         mount_table_reader: Callable[[], str] = read_mount_table,
     ) -> None:
         """Initialize with optional command and mount table sources for hermetic testing."""
-        self._command_runner = command_runner or default_command_runner
+        self._command_runner = (
+            command_runner if command_runner is not None else default_command_runner
+        )
         self._mount_table_reader = mount_table_reader
 
     def probe(self, inspection: DriveInspection) -> DriveInspection:

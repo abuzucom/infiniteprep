@@ -238,7 +238,9 @@ class WindowsDriveInspector:
         command_runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
     ) -> None:
         """Initialize with optional command runner for hermetic testing."""
-        self._command_runner = command_runner or _default_windows_runner
+        self._command_runner = (
+            command_runner if command_runner is not None else _default_windows_runner
+        )
 
     def inspect_all(self) -> tuple[DriveInspection, ...]:
         """Inspect all disks and return DriveInspection records ordered by disk number."""

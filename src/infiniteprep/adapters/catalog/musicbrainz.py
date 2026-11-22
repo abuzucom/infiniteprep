@@ -76,7 +76,9 @@ class MusicBrainzAdapter:
     ) -> None:
         """Initialize MusicBrainzAdapter with Repository cache and rate limiter."""
         self.repo = repository
-        self.http_get_json = http_get_json or self._default_http_get_json
+        self.http_get_json = (
+            http_get_json if http_get_json is not None else self._default_http_get_json
+        )
         self.min_interval_sec = min_interval_sec
         self._limiter = RequestLimiter(min_interval_sec)
 

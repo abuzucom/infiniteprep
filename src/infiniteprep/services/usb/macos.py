@@ -293,7 +293,9 @@ class MacOSDriveInspector:
         if timeout_seconds <= 0:
             raise DriveInspectionError("timeout_seconds must be positive.")
         self._timeout_seconds = timeout_seconds
-        self._command_runner = command_runner or self._bounded_runner
+        self._command_runner = (
+            command_runner if command_runner is not None else self._bounded_runner
+        )
 
     def _bounded_runner(self, command: list[str]) -> subprocess.CompletedProcess[str]:
         """Run a fixed command array. Stdout above the byte cap raises InspectionParseError."""

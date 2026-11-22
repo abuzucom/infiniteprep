@@ -891,7 +891,7 @@ class DetailPanel(QWidget):
         """
         if self.current_file_id:
             self.select_file_asset(self.current_file_id)
-        if self.on_change_callback:
+        if self.on_change_callback is not None:
             self.on_change_callback()
 
     def _format_display_val(self, field_name: str, raw_value: str) -> str:
@@ -952,7 +952,7 @@ class DetailPanel(QWidget):
         accepted = self.review_service.accept_proposal(proposal_id)
         if self.current_file_id:
             self.select_file_asset(self.current_file_id)
-        if self.on_change_callback:
+        if self.on_change_callback is not None:
             self.on_change_callback()
         return accepted
 
@@ -969,7 +969,7 @@ class DetailPanel(QWidget):
                 cleaned = cleaned[:MAX_MANUAL_FIELD_LENGTH]
             self.review_service.set_manual_field_value(file_id, field_name, cleaned, lock=True)
             self.select_file_asset(file_id)
-            if self.on_change_callback:
+            if self.on_change_callback is not None:
                 self.on_change_callback()
         finally:
             self._acted_field = None
@@ -990,5 +990,5 @@ class DetailPanel(QWidget):
             return
         self.review_service.set_field_lock(file_id, field_name, locked=locked)
         self.select_file_asset(file_id)
-        if self.on_change_callback:
+        if self.on_change_callback is not None:
             self.on_change_callback()
