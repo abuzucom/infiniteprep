@@ -209,7 +209,7 @@ def test_artwork_service_resizes_to_xdj_rx3_safe_baseline_jpeg(tmp_path: Path) -
 
 
 def test_matching_engine_reconciliation_rules_and_vinyl_pitch_drift(tmp_path: Path) -> None:
-    """Verify all 10 reconciliation rules, DJ mix parsing, and Vinyl Pitch Drift detection."""
+    """Check DJ mix parsing, pitch drift detection, and the proposals of a full reconcile."""
     parsed_title, parsed_mix, parsed_remixer = parse_dj_title_and_mix(
         "The Dream (Sharam's Deep Dish Dreamscape Mix)"
     )
@@ -226,7 +226,8 @@ def test_matching_engine_reconciliation_rules_and_vinyl_pitch_drift(tmp_path: Pa
     assert drift_warn is not None
     assert "pitch" in drift_warn.lower()
 
-    # Reconciliation rules 1-10: Recording ID vs Release label/cat# separation & BPM/Key authority
+    # A full reconcile over a recording, a release, and a local analysis. The rule tests below
+    # check Rules 1, 2, and 5 one at a time.
     db = DatabaseManager(":memory:")
     repo = Repository(db)
     importer = ImportService(repo)
@@ -299,3 +300,98 @@ def test_matching_engine_reconciliation_rules_and_vinyl_pitch_drift(tmp_path: Pa
     assert by_field[FieldName.BPM.value].proposed_value == "124.0"
     assert by_field[FieldName.BPM.value].provider == "local_dsp"
     db.close()
+
+
+RULE_TEST_ARTIST = "Deep Dish"
+RULE_TEST_TITLE = "The Dream"
+RULE_TEST_LABEL = "Tribal America"
+RULE_TEST_CATALOG = "TRIUK014"
+RULE_TEST_SCORE = 0.95
+LOCAL_ANALYZER = "local_dsp"
+
+
+def import_rule_track(tmp_path: Path, repo: Repository) -> str:
+    """Import one tagged WAV and return its file id."""
+    wav_path = create_wav_fixture(
+        tmp_path / "rule_track.wav",
+        duration_sec=4.0,
+        tags={"artist": RULE_TEST_ARTIST, "title": RULE_TEST_TITLE},
+    )
+    return ImportService(repo).import_paths([wav_path]).imported_files[0].id
+
+
+def build_recording_candidate(file_id: str, catalog_number: str | None) -> CandidateMatch:
+    """Return a MusicBrainz recording candidate that carries a label in its release details."""
+    return CandidateMatch(
+        id="c-rule-rec",
+        file_id=file_id,
+        provider="musicbrainz",
+        provider_entity_id="mb-rec-1",
+        entity_type=EntityType.RECORDING,
+        artist=RULE_TEST_ARTIST,
+        title=RULE_TEST_TITLE,
+        duration=4.0,
+        release_details=ReleaseDetails(label=RULE_TEST_LABEL, catalog_number=catalog_number),
+        match_score=RULE_TEST_SCORE,
+    )
+
+
+def reconcile_proposal_providers(repo: Repository, file_id: str) -> dict[str, list[str]]:
+    """Reconcile one file and return the providers of the proposals for each field."""
+    ReconciliationService(repository=repo, matching_engine=MatchingEngine()).reconcile_file(file_id)
+    providers: dict[str, list[str]] = {}
+    for proposal in repo.list_field_proposals(file_id):
+        providers.setdefault(proposal.field_name, []).append(proposal.provider)
+    return providers
+
+
+def test_rule_1_recording_without_catalog_number_proposes_no_release_fields(
+    tmp_path: Path,
+) -> None:
+    """Rule 1: a recording candidate without a catalog number gives no label proposal."""
+    with DatabaseManager(":memory:") as db:
+        repo = Repository(db)
+        file_id = import_rule_track(tmp_path, repo)
+        repo.upsert_candidate_match(build_recording_candidate(file_id, catalog_number=None))
+        providers = reconcile_proposal_providers(repo, file_id)
+    assert FieldName.ARTIST.value in providers
+    assert FieldName.LABEL.value not in providers
+    assert FieldName.CATALOG_NUMBER.value not in providers
+
+
+def test_rule_2_verified_catalog_number_admits_release_fields(tmp_path: Path) -> None:
+    """Rule 2: a recording with a verified catalog number proposes the label and catalog."""
+    with DatabaseManager(":memory:") as db:
+        repo = Repository(db)
+        file_id = import_rule_track(tmp_path, repo)
+        candidate = build_recording_candidate(file_id, catalog_number=RULE_TEST_CATALOG)
+        repo.upsert_candidate_match(candidate)
+        providers = reconcile_proposal_providers(repo, file_id)
+    assert providers[FieldName.LABEL.value] == ["musicbrainz"]
+    assert providers[FieldName.CATALOG_NUMBER.value] == ["musicbrainz"]
+
+
+def test_rule_5_only_local_analysis_proposes_bpm_and_key(tmp_path: Path) -> None:
+    """Rule 5: BPM and key proposals come from the local analyzer and never from a candidate."""
+    with DatabaseManager(":memory:") as db:
+        repo = Repository(db)
+        file_id = import_rule_track(tmp_path, repo)
+        repo.upsert_candidate_match(
+            build_recording_candidate(file_id, catalog_number=RULE_TEST_CATALOG)
+        )
+        repo.upsert_analysis_result(
+            AnalysisResult(
+                id="ana-rule-5",
+                file_id=file_id,
+                analyzer_name=LOCAL_ANALYZER,
+                analyzer_version="0.1.0",
+                configuration={},
+                bpm=124.0,
+                key_tonic=PitchClass.F_SHARP,
+                key_mode=KeyMode.MINOR,
+                analysis_strength=0.91,
+            )
+        )
+        providers = reconcile_proposal_providers(repo, file_id)
+    assert providers[FieldName.BPM.value] == [LOCAL_ANALYZER]
+    assert providers[FieldName.KEY.value] == [LOCAL_ANALYZER]
