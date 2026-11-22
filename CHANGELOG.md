@@ -15,6 +15,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Badges under the track name show the status, the format, the BPM, and the key in its key color.
   - Changes lists fields with a proposal or a changed value first, with the field name in bold. Every field keeps its row.
   - Each warning sentence sits on its own line.
+- A one-line Batch Queue strip at the bottom of the window shows the running batch (UI-2, #342).
+  - The strip shows the batch name, the current file, a progress bar, a done-of-total count, and the time left.
+  - The strip hides while no batch runs or waits.
+  - A click on the strip shows the full queue above it. A second click hides the queue.
 
 - The main window follows the UI-R layout (UI-2, #342).
   - A workflow bar shows Import, Analyze, Review, Apply, and Export with a track count each. The first stage with waiting tracks carries its action as the main button. Transcode, History, and Settings sit at the right end.

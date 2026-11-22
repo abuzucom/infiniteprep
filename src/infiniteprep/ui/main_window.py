@@ -76,6 +76,7 @@ from infiniteprep.ui.batch_queue import (
     format_batch_row,
 )
 from infiniteprep.ui.batch_queue_dock import BatchQueueDock
+from infiniteprep.ui.batch_queue_strip import BatchQueueStrip
 from infiniteprep.ui.column_sizing import WeightedColumnSizer
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.folder_import import FolderImportController, ImportReportDialog
@@ -403,6 +404,12 @@ class MainWindow(QMainWindow):
         )
         self.batch_dock = BatchQueueDock(self.batch_queue, self)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.batch_dock)
+        # The strip shows progress. The full queue opens above it on a click.
+        self.batch_dock.hide()
+        self.batch_strip = BatchQueueStrip(self.batch_queue, self)
+        self.centralWidget().layout().addWidget(self.batch_strip)
+        self.batch_strip.queue_toggled.connect(self.batch_dock.setVisible)
+        self.batch_dock.visibilityChanged.connect(self.batch_strip.set_queue_shown)
         self._close_after_queue = False
         self.import_failure_box: QMessageBox | None = None
         self.batch_result_box: QMessageBox | None = None

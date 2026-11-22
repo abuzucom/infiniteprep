@@ -92,6 +92,10 @@ class QueuedBatch:
     progress_text: str = ""
     result: object = None
     cancel_requested: bool = False
+    # The latest progress report: files done, files in the batch, and the current file.
+    progress_done: int = 0
+    progress_total: int = 0
+    progress_path: str = ""
 
 
 class BatchQueue:
