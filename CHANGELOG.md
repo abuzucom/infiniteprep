@@ -28,7 +28,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The sidebar filters replace the review status dropdown.
 - The Key Notation picker moved to the row above the table. The theme picker left the main window and stays in Settings.
-- The version advances from 0.81.1 to 0.82.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.81.2 to 0.82.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 
