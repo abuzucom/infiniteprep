@@ -55,7 +55,7 @@ def _adapter(post: Any) -> OllamaOpenAIReasoningAdapter:
     return OllamaOpenAIReasoningAdapter(base_url="http://127.0.0.1:11434/v1", http_post_json=post)
 
 
-def test_validator_rejects_an_id_paired_with_another_candidates_value() -> None:
+def test_validator_rejects_mismatched_pair() -> None:
     """The ID of one candidate and the value of another never pass together."""
     output = {"selected_candidate_id": "cand-1", "proposed_value": "Danny Tenaglia Dub"}
 
@@ -66,7 +66,7 @@ def test_validator_rejects_an_id_paired_with_another_candidates_value() -> None:
     assert "does not belong" in error
 
 
-def test_validator_rejects_a_value_when_no_candidate_carries_values() -> None:
+def test_rejects_value_when_none_have_values() -> None:
     """A proposed value with no candidate value to match counts as invented."""
     allowed = [{"id": "cand-1"}, {"id": "cand-2"}]
 
@@ -77,7 +77,7 @@ def test_validator_rejects_a_value_when_no_candidate_carries_values() -> None:
     assert is_valid is False
 
 
-def test_validator_rejects_a_value_for_a_candidate_without_one() -> None:
+def test_rejects_value_on_valueless_candidate() -> None:
     """A value proposed for a candidate that carries no value counts as invented."""
     allowed = [{"id": "cand-1"}]
 
@@ -97,14 +97,14 @@ def test_validator_rejects_a_value_for_a_candidate_without_one() -> None:
         {"proposed_value": "y" * (MAX_LLM_FIELD_CHARS + 1)},
     ],
 )
-def test_validator_rejects_wrong_types_and_oversized_fields(output: dict[str, Any]) -> None:
+def test_validator_rejects_bad_types_sizes(output: dict[str, Any]) -> None:
     """A non-string field or a field above the length cap fails validation."""
     is_valid, _ = ClosedWorldValidator().validate_response(output, ALLOWED)
 
     assert is_valid is False
 
 
-def test_validator_accepts_a_matching_pair_an_id_alone_and_a_value_alone() -> None:
+def test_validator_accepts_pair_id_or_value() -> None:
     """A matching pair, a lone known ID, and a lone known value each pass."""
     validator = ClosedWorldValidator()
 
@@ -120,7 +120,7 @@ def test_validator_accepts_a_matching_pair_an_id_alone_and_a_value_alone() -> No
     )
 
 
-def test_adapter_returns_the_candidates_own_value_and_a_bounded_rationale() -> None:
+def test_adapter_returns_value_and_rationale() -> None:
     """The adapter returns the stored candidate value, and the rationale is plain and short."""
     content = (
         '{"selected_candidate_id": "cand-1", "proposed_value": "DREAMSCAPE MIX", '
@@ -135,7 +135,7 @@ def test_adapter_returns_the_candidates_own_value_and_a_bounded_rationale() -> N
     assert len(result["rationale"]) <= MAX_RATIONALE_CHARS
 
 
-def test_adapter_failure_names_only_the_exception_class() -> None:
+def test_adapter_failure_names_only_class() -> None:
     """A failed request reports the exception class and never the exception text."""
     body_text = "response body with private details"
 
@@ -159,7 +159,7 @@ def test_provider_text_accepts_text_and_integers_only() -> None:
     assert provider_text("   ") is None
 
 
-def test_provider_text_drops_control_characters_and_caps_length() -> None:
+def test_provider_text_drops_controls_and_caps() -> None:
     """Line breaks and tabs drop out, and long text stops at the cap."""
     assert provider_text("Deep\nDish\t") == "DeepDish"
     capped = provider_text(LONG_TEXT)
@@ -216,7 +216,7 @@ def test_discogs_search_survives_malformed_fields() -> None:
     assert details.format_description is None
 
 
-def test_discogs_never_caches_a_response_that_is_not_an_object() -> None:
+def test_discogs_never_caches_non_object() -> None:
     """A JSON array response fails the lookup before the cache write, so a retry asks again."""
     requested: list[str] = []
 
@@ -237,7 +237,7 @@ def test_discogs_never_caches_a_response_that_is_not_an_object() -> None:
     assert len(requested) == 2
 
 
-def test_musicbrainz_caps_long_text_and_ignores_a_text_length() -> None:
+def test_musicbrainz_caps_text_skips_text_length() -> None:
     """A long title stops at the cap, and a length given as text reads as no duration."""
     payload = {"recordings": [{"id": "rec-1", "title": LONG_TEXT, "length": "480000"}]}
     adapter = MusicBrainzAdapter(
@@ -251,7 +251,7 @@ def test_musicbrainz_caps_long_text_and_ignores_a_text_length() -> None:
     assert candidates[0].duration is None
 
 
-def test_acoustid_rejects_an_out_of_range_score_and_bad_list_items(tmp_path: Path) -> None:
+def test_acoustid_rejects_bad_score_and_items(tmp_path: Path) -> None:
     """A score above 1 reads as no confidence, and non-dict list items drop out."""
     payload = {
         "results": [
@@ -299,7 +299,7 @@ def test_ollama_model_list_reads_only_valid_names(
     assert OllamaBootstrapService().list_installed_models() == expected
 
 
-def test_ollama_model_list_refuses_a_body_above_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ollama_model_list_refuses_big_body(monkeypatch: pytest.MonkeyPatch) -> None:
     """A tag response larger than the cap returns no models."""
     monkeypatch.setattr(ollama_bootstrap, "MAX_TAGS_RESPONSE_BYTES", len(TAGS_TOO_LARGE) - 1)
     monkeypatch.setattr(

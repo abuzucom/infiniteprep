@@ -69,7 +69,7 @@ def test_folder_list_names_every_folder_as_plain_text(qtbot: QtBot) -> None:
         assert str(folder) in dialog.folder_label.text()
 
 
-def test_yes_on_the_final_prompt_accepts_with_the_choice(qtbot: QtBot) -> None:
+def test_final_prompt_yes_accepts_choice(qtbot: QtBot) -> None:
     """Delete shows the final prompt, and Yes closes the dialog with the chosen boxes."""
     confirm = RecordingConfirm(reply=True)
     dialog = _dialog(qtbot, confirm)
@@ -93,7 +93,7 @@ def test_no_on_the_final_prompt_keeps_the_dialog_open(qtbot: QtBot) -> None:
 
 
 @pytest.mark.usefixtures("qapp")
-def test_final_prompt_defaults_to_no_and_lists_the_items() -> None:
+def test_final_prompt_defaults_no_lists_items() -> None:
     """The final prompt names every folder and the keys, with No as its default (D296)."""
     box = build_cleanup_confirm(CleanupChoice(delete_data=True, delete_keys=True), FOLDERS)
 

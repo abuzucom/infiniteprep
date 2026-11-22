@@ -100,7 +100,7 @@ class WavListInfoMergeTests(unittest.TestCase):
         self.assertEqual(fields[b"INAM"], "New Title")
         self.assertEqual(fields[b"ICMT"], "Ripped from vinyl")
 
-    def test_file_holds_one_list_info_chunk_after_the_write(self) -> None:
+    def test_write_leaves_one_list_info_chunk(self) -> None:
         """The write leaves exactly one LIST INFO chunk in the file."""
         synchronize_wav_list_info_chunk(self.wav, {FieldName.GENRE.value: "House"})
 

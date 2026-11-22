@@ -140,7 +140,7 @@ def settings(monkeypatch: pytest.MonkeyPatch) -> CountingSettingsManager:
     return manager
 
 
-def test_table_refresh_query_count_does_not_grow_with_the_library(
+def test_table_refresh_queries_stay_flat(
     qtbot: Any, tmp_path: Path, settings: CountingSettingsManager
 ) -> None:
     """A refresh runs a fixed number of queries, however many files the library holds."""
@@ -182,7 +182,7 @@ def test_bulk_readers_match_the_per_file_readers(tmp_path: Path) -> None:
     assert analyses[file_ids[0]] == repo.list_analysis_results(file_ids[0])
 
 
-def test_playlist_order_query_count_does_not_grow_with_the_playlist(tmp_path: Path) -> None:
+def test_playlist_order_queries_stay_flat(tmp_path: Path) -> None:
     """Ordering a playlist reads its tracks in a fixed number of queries."""
     small_repo, _, small_ids = build_library(tmp_path, SMALL_LIBRARY)
     large_repo, _, large_ids = build_library(tmp_path, LARGE_LIBRARY)
@@ -196,7 +196,7 @@ def test_playlist_order_query_count_does_not_grow_with_the_playlist(tmp_path: Pa
     assert sorted(ordered) == sorted(large_ids)
 
 
-def test_interrupted_write_check_reads_only_in_progress_records(tmp_path: Path) -> None:
+def test_interrupted_check_reads_in_progress(tmp_path: Path) -> None:
     """The status query returns the in-progress records and no completed ones."""
     repo, _importer, file_ids = build_library(tmp_path, SMALL_LIBRARY)
     for index, status in enumerate((OperationStatus.COMPLETED, OperationStatus.IN_PROGRESS)):
@@ -257,7 +257,7 @@ def test_closing_the_window_saves_a_pending_layout(
     assert settings.settings.file_table_layout
 
 
-def test_transcode_stops_before_the_next_file_on_cancel(tmp_path: Path) -> None:
+def test_transcode_cancel_skips_next_file(tmp_path: Path) -> None:
     """A cancel request ends the batch before the next file and keeps the finished one."""
     repo, _importer, file_ids = build_library(tmp_path, SMALL_LIBRARY)
     transcoder = SafeTranscoderAdapter(repo, backup_dir=tmp_path / "backups")

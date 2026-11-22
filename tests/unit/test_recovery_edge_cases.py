@@ -89,9 +89,7 @@ def test_an_unreadable_backup_keeps_the_original_error(
     assert "backup unreadable" in (record.error_message or "")
 
 
-def test_mark_finished_lets_the_next_write_pass_preflight(
-    library: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_mark_finished_clears_preflight(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """After Mark as finished, the library holds the file's current path and hash."""
     repo, write_svc, file_id, source = library
     imported_hash = compute_sha256(source)

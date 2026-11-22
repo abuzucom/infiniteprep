@@ -22,7 +22,7 @@ TAMPER_STATEMENTS = {
 
 
 @pytest.mark.parametrize("tampered_field", ["previous_path", "new_path"])
-def test_restore_interrupted_refuses_a_path_outside_the_library(
+def test_restore_interrupted_refuses_outside(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, tampered_field: str
 ) -> None:
     """A tampered journal path outside the library root raises, and no file changes."""

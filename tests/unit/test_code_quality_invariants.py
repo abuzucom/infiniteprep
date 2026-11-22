@@ -175,7 +175,7 @@ def first_non_ascii(text: str) -> tuple[int, str]:
     return next((idx, ch) for idx, ch in enumerate(text) if ord(ch) >= ASCII_LIMIT)
 
 
-def test_all_source_files_are_ascii_only_and_free_of_todo_markers(
+def test_sources_are_ascii_without_todos(
     parsed_sources: list[ParsedSource],
 ) -> None:
     """Verify every file in src/infiniteprep is strict ASCII and has no deferred-work markers."""
@@ -194,7 +194,7 @@ def test_all_source_files_are_ascii_only_and_free_of_todo_markers(
         )
 
 
-def test_functions_respect_length_locals_nesting_and_docstrings(
+def test_functions_meet_size_and_doc_rules(
     parsed_sources: list[ParsedSource],
 ) -> None:
     """Verify function length <= 60, locals <= 10, nesting <= 3, and return annotations."""
@@ -227,7 +227,7 @@ def test_functions_respect_length_locals_nesting_and_docstrings(
             )
 
 
-def test_no_assignments_in_conditionals_or_empty_catch_blocks(
+def test_no_assign_in_if_or_empty_except(
     parsed_sources: list[ParsedSource],
 ) -> None:
     """Verify no walrus assignments in conditionals and no empty except blocks."""
@@ -269,7 +269,7 @@ def test_no_weak_hashing_or_unsafe_execution_calls(parsed_sources: list[ParsedSo
 @pytest.mark.parametrize(
     "file_path", USB_WORKTREE_PATHS, ids=[path.name for path in USB_WORKTREE_PATHS]
 )
-def test_usb_worktree_files_keep_lines_within_the_limit(file_path: Path) -> None:
+def test_usb_worktree_lines_within_limit(file_path: Path) -> None:
     """Verify every line of the USB-5 source files fits within MAX_LINE_LENGTH characters."""
     long_lines = [
         line_num

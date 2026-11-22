@@ -23,7 +23,7 @@ POSIX_MODE_BITS = os.name == "posix"
     not hasattr(os, "fchmod") or not POSIX_MODE_BITS,
     reason="The platform does not carry POSIX file mode bits.",
 )
-def test_overwritten_playlist_loses_group_and_other_bits(tmp_path: Path) -> None:
+def test_overwritten_playlist_is_owner_only(tmp_path: Path) -> None:
     """An existing world-readable playlist ends with mode 0o600 after the export."""
     repo = Repository(DatabaseManager(":memory:"))
     track = create_wav_fixture(tmp_path / "crate" / "track.wav", duration_sec=1.0)

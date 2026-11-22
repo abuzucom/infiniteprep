@@ -145,9 +145,7 @@ def _ollama_send() -> Any:
     [_discogs_send, _musicbrainz_send, _acoustid_send, _ollama_send],
     ids=["discogs", "musicbrainz", "acoustid", "ollama-openai"],
 )
-def test_credentialed_adapters_send_through_the_no_redirect_opener(
-    monkeypatch: pytest.MonkeyPatch, send: Any
-) -> None:
+def test_credentialed_use_no_redirect_opener(monkeypatch: pytest.MonkeyPatch, send: Any) -> None:
     """Each credentialed adapter sends exactly one request through the shared opener."""
     sent: list[urllib.request.Request] = []
 

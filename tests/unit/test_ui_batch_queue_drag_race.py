@@ -22,9 +22,7 @@ DRAGGED_ROW = 2
 DROP_ROW = 1
 
 
-def test_a_state_change_before_the_drop_sync_keeps_the_dragged_order(
-    qtbot: Any, tmp_path: Path
-) -> None:
+def test_state_change_keeps_dragged_order(qtbot: Any, tmp_path: Path) -> None:
     """The dock applies a dropped order even when the queue announces a change first.
 
     The drop sync runs on the next event loop turn. A rebuild of the rows before that

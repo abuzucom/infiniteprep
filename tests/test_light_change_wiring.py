@@ -77,7 +77,7 @@ class ClassifyStepTest(unittest.TestCase):
                 self.assertEqual(checkout["with"]["fetch-depth"], 0)
                 self.assertIs(checkout["with"]["persist-credentials"], False)
 
-    def test_classify_step_passes_revisions_through_the_environment(self) -> None:
+    def test_classify_revisions_come_from_env(self) -> None:
         """Event data reaches the script as environment values, never as shell text."""
         for workflow_name, job_name in CLASSIFYING_JOBS:
             with self.subTest(workflow=workflow_name):
@@ -146,7 +146,7 @@ class ScanSkipTest(unittest.TestCase):
                 self.assertNotIn("continue-on-error", classify)
                 self.assertNotIn("if", classify)
 
-    def test_every_step_after_classify_skips_on_a_light_change(self) -> None:
+    def test_later_steps_skip_light_changes(self) -> None:
         """The scan and its upload carry the light condition."""
         for workflow_name, job_name in SCAN_JOBS:
             steps = self.jobs_by_workflow[workflow_name][job_name]["steps"]

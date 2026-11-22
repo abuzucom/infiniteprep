@@ -19,7 +19,7 @@ from infiniteprep.services.write_service import WriteService
 from tests.fixtures.audio_factory import create_wav_fixture
 
 
-def test_unsafe_plan_leaves_no_backup_and_an_unchanged_source(tmp_path: Path) -> None:
+def test_unsafe_plan_leaves_files_untouched(tmp_path: Path) -> None:
     """A plan that fails preflight creates no backup file and keeps the source bytes."""
     repo = Repository(DatabaseManager(":memory:"))
     tag_adapter = MetadataTagAdapter()

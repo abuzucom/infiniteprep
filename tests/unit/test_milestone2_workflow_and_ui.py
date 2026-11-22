@@ -27,7 +27,7 @@ from infiniteprep.ui.main_window import MainWindow
 from tests.fixtures.audio_factory import create_wav_fixture
 
 
-def test_mock_providers_produce_deterministic_candidates_and_analysis(tmp_path: Path) -> None:
+def test_mock_providers_are_deterministic(tmp_path: Path) -> None:
     """Verify mock fingerprint, catalog, analyzer, and LLM adapters work offline."""
     wav_path = create_wav_fixture(
         tmp_path / "01_deep_dish_the_dream.wav",
@@ -62,7 +62,7 @@ def test_mock_providers_produce_deterministic_candidates_and_analysis(tmp_path: 
     assert rec["selected_candidate_id"] == "cand-1"
 
 
-def test_review_service_accept_edit_reject_lock_and_bulk_approve(tmp_path: Path) -> None:
+def test_review_accept_edit_reject_lock_bulk(tmp_path: Path) -> None:
     """Verify ReviewService enforces locks, manual edits, and non-conflicting bulk approval."""
     db = DatabaseManager(":memory:")
     repo = Repository(db)
@@ -199,7 +199,7 @@ def _verify_group_release_propagation(
     assert f2_cat.approved_value == "TW12-55412"
 
 
-def test_pyside6_main_window_and_needle_drop_audio_preview(qtbot, tmp_path: Path) -> None:
+def test_main_window_and_needle_drop_preview(qtbot, tmp_path: Path) -> None:
     """Verify MainWindow table filtering, notation switching, and audio cue jump positions."""
     cues = compute_cue_jump_positions(300.0)
     assert cues["Intro"] == 15.0

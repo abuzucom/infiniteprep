@@ -85,14 +85,14 @@ def test_paren_pattern_captures_match_the_reference() -> None:
         assert capture_groups(PAREN_PATTERN, text) == expected, repr(text)
 
 
-def test_by_remixer_pattern_captures_match_the_reference() -> None:
+def test_by_remixer_captures_match_reference() -> None:
     """The remixer capture matches the reference on stripped mix names."""
     for text in build_samples(MIX_NAME_TOKENS):
         expected = capture_groups(REFERENCE_BY_REMIXER_PATTERN, text)
         assert capture_groups(BY_REMIXER_PATTERN, text) == expected, repr(text)
 
 
-def test_remixer_survives_extra_spaces_before_the_keyword() -> None:
+def test_remixer_survives_extra_spaces() -> None:
     """Extra spaces between the remixer and the mix keyword keep the remixer."""
     assert parse_dj_title_and_mix("Track (Danny Tenaglia   Dub)") == (
         "Track",

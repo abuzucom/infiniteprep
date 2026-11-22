@@ -72,7 +72,7 @@ class SecurityScanWorkflowTest(unittest.TestCase):
         for path in (DEPENDENCY_REVIEW, SECURITY_DEVOPS):
             self.assertEqual(load_workflow(path)["permissions"], {"contents": "read"}, path.name)
 
-    def test_dependency_review_runs_only_on_pull_requests_with_read_access(self) -> None:
+    def test_dependency_review_is_pr_read_only(self) -> None:
         workflow = load_workflow(DEPENDENCY_REVIEW)
         self.assertEqual(list(workflow[TRIGGER_KEY]), ["pull_request"])
         job = workflow["jobs"]["dependency-review"]
@@ -85,7 +85,7 @@ class SecurityScanWorkflowTest(unittest.TestCase):
         upload = collect_steps(workflow)[-1]
         self.assertEqual(upload["with"]["sarif_file"], "${{ steps.msdo.outputs.sarifFile }}")
 
-    def test_no_advanced_codeql_workflow_competes_with_default_setup(self) -> None:
+    def test_no_advanced_codeql_workflow(self) -> None:
         self.assertFalse(ADVANCED_CODEQL.exists())
 
 

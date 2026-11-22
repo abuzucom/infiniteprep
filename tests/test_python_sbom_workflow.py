@@ -78,7 +78,7 @@ class PythonSbomWorkflowTest(unittest.TestCase):
         ]
         self.assertEqual(len(bundle_uploads), 1)
 
-    def test_sbom_tool_requirements_pin_every_package_with_hashes(self) -> None:
+    def test_sbom_requirements_pin_hashes(self) -> None:
         """Every SBOM tool package has an exact version and SHA-256 pin."""
         requirements = REQUIREMENTS_PATH.read_text(encoding="utf-8").splitlines()
         package_entries: list[str] = []

@@ -113,7 +113,7 @@ def test_clicking_the_active_header_reverses_the_order(qtbot: Any, tmp_path: Pat
     assert visible_names(window) == ["b.wav", "a.wav"]
 
 
-def test_bpm_column_sorts_numerically_in_both_directions(qtbot: Any, tmp_path: Path) -> None:
+def test_bpm_column_sorts_numerically(qtbot: Any, tmp_path: Path) -> None:
     """The BPM column sorts by value, and a second click reverses the order."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -184,7 +184,7 @@ def test_key_column_sorts_by_camelot_wheel_position(qtbot: Any, tmp_path: Path) 
     assert visible_names(window) == ["a.wav", "b.wav", "c.wav"]
 
 
-def test_key_column_keeps_minor_before_major_at_one_position(qtbot: Any, tmp_path: Path) -> None:
+def test_key_column_puts_minor_before_major(qtbot: Any, tmp_path: Path) -> None:
     """Two keys at one wheel position keep the minor key first in both directions."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -223,7 +223,7 @@ def test_key_column_sorts_by_open_key_number(qtbot: Any, tmp_path: Path) -> None
     assert visible_names(window) == ["a.wav", "b.wav", "c.wav"]
 
 
-def test_key_column_sorts_by_pitch_class_in_standard_notation(qtbot: Any, tmp_path: Path) -> None:
+def test_key_column_sorts_by_pitch_class(qtbot: Any, tmp_path: Path) -> None:
     """The key column sorts upward from C in the standard notation."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -311,9 +311,7 @@ def test_a_non_finite_bpm_sorts_with_the_unsorted_rows(qtbot: Any, tmp_path: Pat
     assert visible_names(window) == ["b.wav", "a.wav"]
 
 
-def test_a_non_finite_bpm_follows_the_placement_setting(
-    qtbot: Any, tmp_path: Path, settings
-) -> None:
+def test_non_finite_bpm_follows_placement(qtbot: Any, tmp_path: Path, settings) -> None:
     """A BPM that is not a finite number moves with the unsorted group."""
     settings.settings = replace(settings.settings, unsorted_rows_placement="last")
     window, _repo, _ids = build_window(

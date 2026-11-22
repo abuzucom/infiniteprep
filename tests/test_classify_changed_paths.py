@@ -106,7 +106,7 @@ class VersionOnlyEditTest(unittest.TestCase):
             classifier.is_version_only_edit("pyproject.toml", PYPROJECT_TEXT, new_text)
         )
 
-    def test_pyproject_version_in_another_table_is_rejected(self) -> None:
+    def test_pyproject_other_table_is_rejected(self) -> None:
         """A version key outside the project table is not the project version."""
         new_text = PYPROJECT_TEXT + '\n[tool.sample]\nversion = "9.9.9"\n'
         self.assertFalse(
@@ -244,7 +244,7 @@ class ClassifyRangeTest(unittest.TestCase):
         self.assertEqual(classifier.main(arguments, str(output)), 0)
         self.assertEqual(output.read_text(encoding="utf-8"), "change_class=docs\nlight=true\n")
 
-    def test_main_selects_full_when_the_range_is_unreadable(self) -> None:
+    def test_main_selects_full_for_bad_range(self) -> None:
         """An unknown commit selects full CI and still exits with success."""
         output = self.root / "outputs.txt"
         missing = "1" * 40

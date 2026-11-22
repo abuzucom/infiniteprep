@@ -20,7 +20,7 @@ from infiniteprep.domain.enums import (
 from infiniteprep.domain.models import FileAsset, ReleaseDetails
 
 
-def test_write_and_read_supported_formats_include_aiff_and_wav() -> None:
+def test_supported_formats_include_aiff_wav() -> None:
     """Verify MP3, FLAC, WAV, and AIFF are write-supported while OGG/M4A are read-only."""
     assert AudioFormat.MP3 in WRITE_SUPPORTED_FORMATS
     assert AudioFormat.FLAC in WRITE_SUPPORTED_FORMATS
@@ -31,7 +31,7 @@ def test_write_and_read_supported_formats_include_aiff_and_wav() -> None:
     assert AudioFormat.UNSUPPORTED not in READ_SUPPORTED_FORMATS
 
 
-def test_canonical_key_formatting_across_all_three_notations() -> None:
+def test_key_formatting_in_all_notations() -> None:
     """Verify Standard, Camelot, and Open Key display notations for canonical keys."""
     assert (
         format_canonical_key(PitchClass.F_SHARP, KeyMode.MINOR, KeyDisplayNotation.STANDARD)
@@ -51,7 +51,7 @@ def test_canonical_key_formatting_across_all_three_notations() -> None:
     assert format_canonical_key(None, None, KeyDisplayNotation.STANDARD) == "unknown"
 
 
-def test_parse_key_string_handles_camelot_open_key_and_enharmonic_strings() -> None:
+def test_parse_key_handles_all_notations() -> None:
     """Verify parse_key_string normalizes diverse DJ key notations into canonical tuples."""
     assert parse_key_string("11A") == (PitchClass.F_SHARP, KeyMode.MINOR)
     assert parse_key_string("4m") == (PitchClass.F_SHARP, KeyMode.MINOR)
@@ -66,7 +66,7 @@ def test_parse_key_string_handles_camelot_open_key_and_enharmonic_strings() -> N
     assert parse_key_string("not-a-key") is None
 
 
-def test_release_details_roundtrip_and_file_asset_write_property() -> None:
+def test_release_roundtrip_and_asset_write() -> None:
     """Verify ReleaseDetails dict serialization and FileAsset.is_write_supported."""
     details = ReleaseDetails(
         release_title="The Dream",

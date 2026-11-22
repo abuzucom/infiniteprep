@@ -68,7 +68,7 @@ def test_partial_or_precise_year_writes_to_mp3(tmp_path: Path, year: str) -> Non
     assert stored_year.get(FieldName.YEAR.value) == v23_date_text(year)
 
 
-def test_txxx_replace_matches_the_description_without_case() -> None:
+def test_txxx_replace_ignores_case() -> None:
     """A stale TXXX frame with a different case goes, so readers see one value."""
     tag = Id3Tag(frames=(build_txxx_frame("CatalogNumber", "OLD-1"),))
 
@@ -78,7 +78,7 @@ def test_txxx_replace_matches_the_description_without_case() -> None:
     assert txxx == [("CATALOGNUMBER", ["NEW-2"])]
 
 
-def test_portable_backup_name_replaces_forbidden_characters(tmp_path: Path) -> None:
+def test_backup_name_replaces_bad_chars(tmp_path: Path) -> None:
     """A colon or backslash becomes an underscore, and the guard accepts the result."""
     name = portable_backup_name("AC:DC \\ Live.mp3")
 

@@ -69,7 +69,7 @@ def test_byte_counts_show_a_unit_and_the_exact_value(byte_count: int, expected: 
     assert format_byte_count(byte_count) == expected
 
 
-def test_passing_target_shows_identity_profiles_changes_and_space(qtbot) -> None:
+def test_passing_target_shows_all_details(qtbot) -> None:
     """The dialog names the target, the profiles, the planned changes, and the space figures."""
     dialog = open_dialog(qtbot, build_inspection())
     result = evaluate_preflight(build_inspection(), build_request())
@@ -133,7 +133,7 @@ def test_drive_text_renders_as_plain_text(qtbot) -> None:
         assert value.textFormat() == Qt.TextFormat.PlainText
 
 
-def test_refusal_disables_confirm_and_lists_reason_and_guidance(qtbot) -> None:
+def test_refusal_disables_confirm_with_reason(qtbot) -> None:
     """A refused target cannot be confirmed. Each refusal shows its message and guidance."""
     partition = build_partition(filesystem_health=FilesystemHealth.ERRORS)
     inspection = build_inspection(partitions=(partition,))

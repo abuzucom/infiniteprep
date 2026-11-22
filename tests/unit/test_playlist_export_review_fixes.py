@@ -77,7 +77,7 @@ def test_resolved_path_line_is_checked_before_writing(
     assert "linked" not in destination.read_text(encoding="utf-8")
 
 
-def test_skipped_text_names_unknown_ids_and_blanks_control_characters(tmp_path: Path) -> None:
+def test_skip_text_names_ids_blanks_controls(tmp_path: Path) -> None:
     """A stale ID gets an unknown-track label, and control characters become spaces."""
     repo, _, file_ids = import_tracks(tmp_path, 1)
     store_path(repo, file_ids[0], str(tmp_path / "crate" / "tab\there.wav"))
@@ -92,7 +92,7 @@ def test_skipped_text_names_unknown_ids_and_blanks_control_characters(tmp_path: 
     ("chosen_name", "expected_name"),
     [("set.M3U8", "set.M3U8"), ("set.v2", "set.v2.m3u8"), ("notes.txt", "notes.txt.m3u8")],
 )
-def test_export_button_appends_the_suffix_only_when_missing(
+def test_export_adds_suffix_only_if_missing(
     qtbot,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

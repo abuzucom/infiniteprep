@@ -75,7 +75,7 @@ def test_membership_rules_and_casefolded_names() -> None:
         assert collections.crate_tracks(crate.id) == {"one", "two"}
 
 
-def test_folder_move_preserves_collections_and_checks_descendants() -> None:
+def test_folder_move_guards_and_keeps_items() -> None:
     """A folder move refuses cycles and excess depth and keeps the nested collections."""
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)
@@ -104,7 +104,7 @@ def test_folder_move_preserves_collections_and_checks_descendants() -> None:
         assert collections.playlist_tracks(playlist.id) == ["one"]
 
 
-def test_import_preflight_reports_first_folder_beyond_limit() -> None:
+def test_preflight_reports_first_over_limit() -> None:
     """The import check passes eight levels and names the first folder past the limit."""
     path = [f"Level {level}" for level in range(1, 9)]
     validate_import_folder_paths([path])

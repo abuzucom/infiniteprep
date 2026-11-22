@@ -34,7 +34,7 @@ class CountingWriteService(WriteService):
         return super().build_batch_preview(file_ids, rename_template, enable_rename)
 
 
-def test_enter_in_template_field_refreshes_the_preview_once(qtbot: Any) -> None:
+def test_enter_refreshes_preview_once(qtbot: Any) -> None:
     """Enter rebuilds the preview once with the typed template and keeps the dialog open."""
     service = CountingWriteService(Repository(DatabaseManager(":memory:")))
     dialog = WritePlanDialog(service, [])

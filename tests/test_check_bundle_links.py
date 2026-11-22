@@ -50,7 +50,7 @@ class ModuleStemTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertTrue(CHECKER.is_denied(name))
 
-    def test_every_allowlist_entry_stays_clear_of_the_wider_markers(self) -> None:
+    def test_allowlist_avoids_wider_markers(self) -> None:
         """No allowlist entry matches a module marker."""
         for operating_system in CHECKER.OPERATING_SYSTEMS:
             path = ROOT / "packaging" / "bundle-allowlist" / f"{operating_system}.txt"

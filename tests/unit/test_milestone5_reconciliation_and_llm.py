@@ -40,7 +40,7 @@ from tests.fixtures.call_recorder import CallRecorder
 DISCOGS_STUB_KEY = "synthetic-discogs-key"
 
 
-def test_discogs_adapter_with_ttl_cache_and_optin_stubs() -> None:
+def test_discogs_adapter_cache_and_stubs() -> None:
     """Verify DiscogsAdapter parses vinyl positions and caches responses with 6-hour TTL."""
     db = DatabaseManager(":memory:")
     repo = Repository(db)
@@ -127,7 +127,7 @@ def test_discogs_cache_serves_until_the_ttl_ends(
     assert calls == expected_calls
 
 
-def test_closed_world_validator_and_ollama_bootstrap_consent() -> None:
+def test_closed_world_validator_ollama_consent() -> None:
     """Verify ClosedWorldValidator rejects hallucinated IDs/values and Ollama requires consent."""
     validator = ClosedWorldValidator()
     allowed = [
@@ -184,7 +184,7 @@ def test_closed_world_validator_and_ollama_bootstrap_consent() -> None:
         bootstrap.pull_model("qwen2.5:3b", user_consented=False)
 
 
-def test_artwork_service_resizes_to_xdj_rx3_safe_baseline_jpeg(tmp_path: Path) -> None:
+def test_artwork_resized_to_xdj_safe_jpeg(tmp_path: Path) -> None:
     """Verify ArtworkService scales 1400x1400 cover art down to <= 800x800 JPEG for XDJ-RX3."""
     big_img = QImage(1400, 1400, QImage.Format.Format_RGB32)
     big_img.fill(QColor("#2563eb"))
@@ -208,7 +208,7 @@ def test_artwork_service_resizes_to_xdj_rx3_safe_baseline_jpeg(tmp_path: Path) -
         art_svc.normalize_image_bytes(bomb_png.read_bytes())
 
 
-def test_matching_engine_reconciliation_rules_and_vinyl_pitch_drift(tmp_path: Path) -> None:
+def test_reconciliation_rules_and_pitch_drift(tmp_path: Path) -> None:
     """Check DJ mix parsing, pitch drift detection, and the proposals of a full reconcile."""
     parsed_title, parsed_mix, parsed_remixer = parse_dj_title_and_mix(
         "The Dream (Sharam's Deep Dish Dreamscape Mix)"
@@ -345,9 +345,7 @@ def reconcile_proposal_providers(repo: Repository, file_id: str) -> dict[str, li
     return providers
 
 
-def test_rule_1_recording_without_catalog_number_proposes_no_release_fields(
-    tmp_path: Path,
-) -> None:
+def test_rule_1_recording_gives_no_label(tmp_path: Path) -> None:
     """Rule 1: a recording candidate without a catalog number gives no label proposal."""
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)
@@ -359,7 +357,7 @@ def test_rule_1_recording_without_catalog_number_proposes_no_release_fields(
     assert FieldName.CATALOG_NUMBER.value not in providers
 
 
-def test_rule_2_verified_catalog_number_admits_release_fields(tmp_path: Path) -> None:
+def test_rule_2_catalog_number_admits_label(tmp_path: Path) -> None:
     """Rule 2: a recording with a verified catalog number proposes the label and catalog."""
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)
@@ -371,7 +369,7 @@ def test_rule_2_verified_catalog_number_admits_release_fields(tmp_path: Path) ->
     assert providers[FieldName.CATALOG_NUMBER.value] == ["musicbrainz"]
 
 
-def test_rule_5_only_local_analysis_proposes_bpm_and_key(tmp_path: Path) -> None:
+def test_rule_5_bpm_and_key_from_analysis(tmp_path: Path) -> None:
     """Rule 5: BPM and key proposals come from the local analyzer and never from a candidate."""
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)

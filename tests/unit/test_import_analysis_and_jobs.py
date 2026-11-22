@@ -65,7 +65,7 @@ def import_one(repo: Repository, path: Path) -> str:
     sys.platform == "win32" or os.geteuid() == 0,
     reason="POSIX permissions only block a non-root user.",
 )
-def test_unreadable_subfolder_skips_without_stopping_the_import(tmp_path: Path) -> None:
+def test_import_skips_unreadable_subfolder(tmp_path: Path) -> None:
     """A protected folder on a drive root no longer aborts the whole import."""
     root = tmp_path / "drive"
     create_wav_fixture(root / "music" / "track.wav", duration_sec=0.5)
@@ -132,7 +132,7 @@ def test_raise_on_failure_raises_after_recording(tmp_path: Path) -> None:
     assert job_rows(repo)["audio_analysis"][0] == "failed"
 
 
-def test_transcode_refuses_an_untaggable_output_before_decoding(
+def test_transcode_refuses_untaggable_early(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A WAV output past the tag write limit fails up front. Nothing is written."""
@@ -176,9 +176,7 @@ def test_transcode_limit_counts_the_container_header(
         )
 
 
-def test_transcode_of_an_untagged_file_ignores_the_tag_limit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_untagged_file_ignores_tag_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A file with no tags to copy never reaches the tag writer, so the limit does not apply."""
     monkeypatch.setattr(safe_transcoder, "MAX_WAV_REWRITE_BYTES", TINY_TAG_WRITE_LIMIT)
     repo = make_repo()
@@ -194,7 +192,7 @@ def test_transcode_of_an_untagged_file_ignores_the_tag_limit(
     assert result.output_path.exists()
 
 
-def test_a_file_that_is_not_a_database_releases_its_handle(tmp_path: Path) -> None:
+def test_non_database_file_releases_handle(tmp_path: Path) -> None:
     """The failed open closes the file. A restore can then rename it, also on Windows."""
     library = tmp_path / "library.db"
     library.write_bytes(CORRUPT_DATABASE_BYTES)

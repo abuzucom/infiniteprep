@@ -93,7 +93,7 @@ class UsbRecoveryDialogTests(unittest.TestCase):
         self.assertIn("<u>SanDisk</u>", joined)
         self.assertIn("SER<123>", joined)
 
-    def test_reconnect_choice_buttons_set_selected_choice_and_accept(self) -> None:
+    def test_reconnect_buttons_pick_and_accept(self) -> None:
         """Each choice button records its choice and accepts the dialog."""
         cases = (
             ("resume_btn", ReconnectChoice.RESUME),
@@ -108,7 +108,7 @@ class UsbRecoveryDialogTests(unittest.TestCase):
                 self.assertEqual(dialog.result(), QDialog.DialogCode.Accepted)
                 self.assertEqual(dialog.selected_choice, expected_choice)
 
-    def test_confirmation_gates_resume_and_restore_until_checked(self) -> None:
+    def test_resume_and_restore_need_confirmation(self) -> None:
         """Resume and Restore stay disabled while the confirmation box is clear."""
         dialog = UsbRecoveryDialog(_build_match(requires_confirmation=True))
         self.addCleanup(dialog.close)
@@ -141,7 +141,7 @@ class UsbRecoveryDialogTests(unittest.TestCase):
         self.assertIn("expired", overdue.casefold())
         self.assertIn(entry.export_id, overdue)
 
-    def test_launch_processes_usb_expiry_and_displays_notices(self) -> None:
+    def test_launch_runs_usb_expiry_with_notices(self) -> None:
         """Launch deletes the overdue entry, warns about the aging one, and keeps the fresh one."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
@@ -205,7 +205,7 @@ class UsbRecoveryDialogTests(unittest.TestCase):
 class StorageTabUsbRecoverySettingsTests(unittest.TestCase):
     """Verify StorageTab and SettingsDialog persist USB recovery expiry preferences."""
 
-    def test_storage_tab_exposes_controls_and_persists_settings(self) -> None:
+    def test_storage_tab_controls_save_settings(self) -> None:
         """The Storage tab shows the expiry defaults and saves changed values."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mgr = SettingsManager(Path(tmp_dir) / "settings.json")
@@ -227,7 +227,7 @@ class StorageTabUsbRecoverySettingsTests(unittest.TestCase):
             self.assertFalse(reloaded.usb_recovery_expiry_enabled)
             self.assertEqual(reloaded.usb_recovery_expiry_days, 45)
 
-    def test_default_settings_and_validation_for_usb_recovery_expiry(self) -> None:
+    def test_usb_expiry_defaults_and_validation(self) -> None:
         """Expiry defaults to on at 30 days and rejects day counts outside 1-365."""
         defaults = AppSettings()
         self.assertTrue(defaults.usb_recovery_expiry_enabled)
@@ -244,7 +244,7 @@ class StorageTabUsbRecoverySettingsTests(unittest.TestCase):
             self.assertFalse(saved.usb_recovery_expiry_enabled)
             self.assertEqual(saved.usb_recovery_expiry_days, 15)
 
-    def test_launch_and_storage_cleanup_preserve_corrupt_journal_and_report_error(self) -> None:
+    def test_corrupt_journal_is_kept_and_reported(self) -> None:
         """Launch and manual cleanup each report one error and leave a corrupt journal intact."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)

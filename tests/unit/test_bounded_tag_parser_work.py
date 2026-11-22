@@ -41,7 +41,7 @@ def _latin1_frame(frame_id: str, text: bytes) -> Id3Frame:
     return Id3Frame(frame_id, bytes((LATIN1,)) + text)
 
 
-def test_text_frame_at_the_value_cap_decodes_every_value() -> None:
+def test_text_frame_at_value_cap_decodes() -> None:
     """A frame with exactly the allowed number of values keeps all of them."""
     frame = _latin1_frame("TPE1", b"a\x00" * (MAX_TEXT_VALUES - 1) + b"last")
 
@@ -75,7 +75,7 @@ def test_txxx_values_past_the_value_cap_are_rejected() -> None:
         decode_txxx(frame)
 
 
-def test_renderer_rejects_a_tag_with_a_text_frame_past_the_value_cap() -> None:
+def test_renderer_rejects_text_past_cap() -> None:
     """The v2.3 renderer raises for an oversized text frame and never rewrites it."""
     frame = _latin1_frame("TPE1", b"a\x00" * MAX_TEXT_VALUES + b"last")
 
@@ -83,7 +83,7 @@ def test_renderer_rejects_a_tag_with_a_text_frame_past_the_value_cap() -> None:
         render_id3v23(Id3Tag(frames=(frame,)))
 
 
-def test_utf16_terminator_only_counts_at_an_even_offset() -> None:
+def test_utf16_terminator_needs_even_offset() -> None:
     """A zero pair that straddles two code units does not end a UTF-16 value."""
     # The code units 0x0041 and 0x0100 encode as 41 00 00 01. The zero pair in the middle
     # sits at an odd offset.
@@ -94,14 +94,14 @@ def test_utf16_terminator_only_counts_at_an_even_offset() -> None:
     assert decode_text_values(Id3Frame("TPE1", body)) == [first.decode("utf-16-le"), "B"]
 
 
-def test_description_reads_without_the_bytes_that_follow() -> None:
+def test_description_ignores_trailing_bytes() -> None:
     """decode_description returns the description of a body with a large binary tail."""
     body = bytes((LATIN1,)) + b"Cover\x00" + b"\x00\x01" * (PICTURE_BYTES // 2)
 
     assert decode_description(body) == "Cover"
 
 
-def test_picture_larger_than_the_text_cap_keeps_its_description() -> None:
+def test_large_picture_keeps_description() -> None:
     """Picture bytes never count as text, so a large picture keeps its MIME and description."""
     picture = b"\x00\xff" * (PICTURE_BYTES // 2)
     body = bytes((LATIN1,)) + b"image/png\x00" + b"\x03" + b"Front\x00" + picture
@@ -125,7 +125,7 @@ def test_long_ogg_packet_assembles_in_linear_time() -> None:
     assert elapsed < LINEAR_TIME_LIMIT_SECONDS
 
 
-def test_ogg_packet_size_cap_counts_the_fragment_from_earlier_pages() -> None:
+def test_ogg_size_cap_counts_earlier_pages() -> None:
     """A fragment carried over from an earlier page counts toward the packet size cap."""
     pending = [b"\x01" * MAX_PACKET_SIZE]
     packets: list[bytes] = []
@@ -134,7 +134,7 @@ def test_ogg_packet_size_cap_counts_the_fragment_from_earlier_pages() -> None:
         _extract_page_packets([1], b"\x01", pending, packets)
 
 
-def test_ogg_packet_size_resets_after_each_completed_packet() -> None:
+def test_ogg_packet_size_resets_per_packet() -> None:
     """Two packets on one page each count their own bytes against the cap."""
     first = b"\x01" * 10
     second = b"\x02" * 20
@@ -145,7 +145,7 @@ def test_ogg_packet_size_resets_after_each_completed_packet() -> None:
     assert packets == [first, second]
 
 
-def test_natural_key_accepts_a_digit_run_past_the_integer_limit() -> None:
+def test_natural_key_accepts_huge_digit_run() -> None:
     """A digit run that int() refuses still yields a comparable key."""
     long_run = "9" * LONG_DIGIT_RUN
 

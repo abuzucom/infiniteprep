@@ -74,7 +74,7 @@ class LibraryTestCase(unittest.TestCase):
 class ReanalysisProposalTests(LibraryTestCase):
     """A changed analysis replaces the pending analysis proposal."""
 
-    def test_changed_bpm_for_the_same_analyzer_version_reconciles(self) -> None:
+    def test_changed_bpm_same_version_reconciles(self) -> None:
         """A newer analysis with the same version replaces the pending BPM."""
         service = ReconciliationService(self.repo)
         self.store_analysis("ana-1", bpm=128.0, version=FIRST_VERSION, analyzed_at=EARLIER)
@@ -85,7 +85,7 @@ class ReanalysisProposalTests(LibraryTestCase):
 
         self.assertEqual(self.pending_bpm_values(), ["126.0"])
 
-    def test_analyzer_version_bump_reconciles_with_the_newest_result(self) -> None:
+    def test_version_bump_uses_newest_result(self) -> None:
         """An analysis from a newer analyzer version replaces the pending BPM."""
         service = ReconciliationService(self.repo)
         self.store_analysis("ana-1", bpm=128.0, version=FIRST_VERSION, analyzed_at=EARLIER)

@@ -111,9 +111,7 @@ def test_second_upsert_advances_updated_at_only(
     "supplied",
     ["2026-11-16T12:00:00Z", "2026-11-16T17:00:00+05:00", "2026-11-16T12:00:00.000000+00:00"],
 )
-def test_supplied_journal_timestamp_normalizes_to_the_stored_form(
-    repo: Repository, supplied: str
-) -> None:
+def test_journal_timestamp_is_normalized(repo: Repository, supplied: str) -> None:
     """A caller timestamp in any offset form reaches the journal as fixed-width UTC text."""
     _add_file(repo, "file-a")
 
@@ -124,7 +122,7 @@ def test_supplied_journal_timestamp_normalizes_to_the_stored_form(
     assert stored.timestamp == FIRST_WRITE_TIME
 
 
-def test_journal_timestamp_without_an_offset_is_rejected(repo: Repository) -> None:
+def test_journal_timestamp_needs_offset(repo: Repository) -> None:
     """A timestamp with no offset names no instant. The repository refuses it."""
     _add_file(repo, "file-a")
 
@@ -134,7 +132,7 @@ def test_journal_timestamp_without_an_offset_is_rejected(repo: Repository) -> No
     assert repo.get_change_record("op-1") is None
 
 
-def test_migration_three_backfills_updated_at_from_timestamp(tmp_path: Path) -> None:
+def test_migration_3_backfills_updated_at(tmp_path: Path) -> None:
     """A version-2 library gains the column. Each existing row starts at its timestamp."""
     library = tmp_path / "library.sqlite3"
     with closing(sqlite3.connect(library)) as conn, conn:
@@ -164,7 +162,7 @@ def test_migration_three_backfills_updated_at_from_timestamp(tmp_path: Path) -> 
     assert stored.updated_at == FIRST_WRITE_TIME
 
 
-def test_journal_order_follows_insertion_after_a_backward_clock_step(repo: Repository) -> None:
+def test_journal_keeps_order_on_clock_rewind(repo: Repository) -> None:
     """The newest record comes first even when its timestamp reads older."""
     _add_file(repo, "file-a")
     repo.upsert_change_record(_record("op-old", "file-a", FIRST_WRITE_TIME))
@@ -177,9 +175,7 @@ def test_journal_order_follows_insertion_after_a_backward_clock_step(repo: Repos
     ]
 
 
-def test_pending_jobs_keep_insertion_order_after_a_backward_clock_step(
-    repo: Repository, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_jobs_keep_order_on_clock_rewind(repo: Repository, monkeypatch: pytest.MonkeyPatch) -> None:
     """The first queued job stays first when the clock stamps the second one earlier."""
     _add_file(repo, "file-a")
     _add_file(repo, "file-b")
@@ -228,7 +224,7 @@ def test_cache_expiry_accepts_any_offset_form(repo: Repository, suffix_form: str
         ("2026-11-16T11:59:59+00:00", False),
     ],
 )
-def test_legacy_cache_rows_without_a_fraction_expire_at_the_right_instant(
+def test_legacy_cache_rows_expire_on_time(
     repo: Repository, monkeypatch: pytest.MonkeyPatch, legacy_expiry: str, expected_live: bool
 ) -> None:
     """A row an older version stored without microseconds keeps its true expiry."""
@@ -246,7 +242,7 @@ def test_legacy_cache_rows_without_a_fraction_expire_at_the_right_instant(
     assert (cached == {"v": 1}) is expected_live
 
 
-def test_rejected_journal_timestamp_leaves_the_record_unchanged(repo: Repository) -> None:
+def test_rejected_timestamp_keeps_record(repo: Repository) -> None:
     """Validation runs first. A refused record keeps its empty updated_at."""
     _add_file(repo, "file-a")
     record = _record("op-1", "file-a", "2026-11-16T12:00:00")

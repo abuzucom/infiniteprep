@@ -62,7 +62,7 @@ def select_export_id_and_path(item: UsbJournalEntry, path: Path) -> tuple[str, P
 class MyTagsDigestTests(unittest.TestCase):
     """Canonical SHA-256 digest over My Tags vocabulary and assignments."""
 
-    def test_digest_is_order_independent_and_lowercase_sha256(self) -> None:
+    def test_digest_is_order_independent_sha256(self) -> None:
         """Reordered tags and assignments give the same lowercase SHA-256 digest."""
         vocab_a = build_sample_vocabulary()
         vocab_b = list(reversed(vocab_a))
@@ -78,7 +78,7 @@ class MyTagsDigestTests(unittest.TestCase):
         self.assertEqual(digest_a, digest_b)
         self.assertRegex(digest_a, r"^[0-9a-f]{64}$")
 
-    def test_digest_changes_when_tag_data_or_assignment_changes(self) -> None:
+    def test_digest_tracks_tags_and_assignment(self) -> None:
         """A changed tag field or track assignment changes the digest."""
         vocab = build_sample_vocabulary()
         assignments = build_sample_assignments()
@@ -99,7 +99,7 @@ class MyTagsDigestTests(unittest.TestCase):
 class UsbExportManifestTests(unittest.TestCase):
     """Temporary in-progress and latest completed JSON manifests on the USB drive."""
 
-    def test_in_progress_manifest_preserves_existing_completed_manifest(self) -> None:
+    def test_in_progress_keeps_completed(self) -> None:
         """Writing an in-progress manifest leaves the completed manifest in place."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir)
@@ -123,7 +123,7 @@ class UsbExportManifestTests(unittest.TestCase):
             self.assertEqual(read_completed_manifest(mount_root), prior)
             self.assertEqual(read_in_progress_manifest(mount_root), current)
 
-    def test_completed_manifest_replaces_in_progress_and_round_trips_fields(self) -> None:
+    def test_completed_manifest_round_trips(self) -> None:
         """A completed write removes the in-progress marker and reads back every field."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir)
@@ -150,7 +150,7 @@ class UsbExportManifestTests(unittest.TestCase):
             # Equality covers every field the builder set, the omissions included.
             self.assertEqual(read_completed_manifest(mount_root), completed)
 
-    def test_symlinked_metadata_dir_or_manifest_file_is_rejected(self) -> None:
+    def test_symlinked_manifest_paths_rejected(self) -> None:
         """A symlinked metadata folder or manifest file blocks every read, write, and removal."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
@@ -190,7 +190,7 @@ class UsbExportManifestTests(unittest.TestCase):
                 remove_in_progress_manifest(mount_root)
             self.assertTrue(outside_file.exists())
 
-    def test_posix_read_uses_nofollow_and_blocks_swapped_symlink(self) -> None:
+    def test_posix_read_blocks_swapped_symlink(self) -> None:
         """A completed manifest that is a symlink fails to read where O_NOFOLLOW exists."""
         if not hasattr(os, "O_NOFOLLOW"):
             self.skipTest("this platform has no O_NOFOLLOW")
@@ -206,7 +206,7 @@ class UsbExportManifestTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 read_completed_manifest(mount_root)
 
-    def test_malformed_manifest_counts_and_types_are_rejected(self) -> None:
+    def test_malformed_manifest_is_rejected(self) -> None:
         """Negative counts, wrong value types, and a missing completion time fail to read."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
@@ -240,7 +240,7 @@ class UsbExportManifestTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 read_completed_manifest(mount_root)
 
-    def test_manifest_normalizes_non_utc_and_dst_timestamps_to_utc(self) -> None:
+    def test_manifest_normalizes_times_to_utc(self) -> None:
         """The reader converts offset timestamps to UTC and rejects offset-free ones."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
@@ -265,7 +265,7 @@ class UsbExportManifestTests(unittest.TestCase):
 class UsbRecoveryMatchingTests(unittest.TestCase):
     """Volume ID and confirmation matching for reconnected USB targets."""
 
-    def test_exact_volume_uuid_identity_and_mount_match_without_confirmation(self) -> None:
+    def test_exact_uuid_match_skips_confirmation(self) -> None:
         """A target with the same volume id, drive, and mount matches with no confirmation."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
@@ -290,7 +290,7 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
             self.assertFalse(match.requires_confirmation)
             self.assertEqual(match.entry.export_id, entry.export_id)
 
-    def test_uuid_match_with_changed_drive_or_mount_requires_confirmation(self) -> None:
+    def test_moved_uuid_match_needs_confirmation(self) -> None:
         """A volume id match on a changed drive or mount needs confirmation."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
@@ -327,7 +327,7 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
             self.assertTrue(match_mount.requires_confirmation)
             self.assertTrue(match_drive.requires_confirmation)
 
-    def test_empty_uuid_matches_serial_and_marker_with_confirmation(self) -> None:
+    def test_empty_uuid_matches_serial_and_marker(self) -> None:
         """Without a volume id the serial and marker match only with confirmation."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
@@ -395,7 +395,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
         store.start_export(entry, mount_root, in_prog)
         return store, mount_root, entry
 
-    def test_unconfirmed_choice_raises_when_confirmation_required(self) -> None:
+    def test_unconfirmed_choice_raises(self) -> None:
         """A choice without confirmation raises on a match that needs one."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
@@ -438,7 +438,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             self.assertIsNotNone(read_in_progress_manifest(mount_root))
             self.assertEqual(len(store.load_entries()), 1)
 
-    def test_resume_runs_callback_removes_marker_and_keeps_journal(self) -> None:
+    def test_resume_clears_marker_keeps_journal(self) -> None:
         """Resume calls its handler once, removes the marker, and records the choice."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
@@ -467,7 +467,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             self.assertEqual(len(persisted), 1)
             self.assertEqual(persisted[0].last_recovery_action, ReconnectChoice.RESUME.value)
 
-    def test_resume_and_restore_require_callback_before_marking_recovered(self) -> None:
+    def test_recovery_waits_for_callback(self) -> None:
         """A missing or failing handler leaves the marker, the entry, and the match intact."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
@@ -501,7 +501,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             self.assertEqual(store.load_entries()[0].last_recovery_action, "")
             self.assertIsNotNone(store.match_reconnected_target(candidate))
 
-    def test_restore_runs_callback_removes_marker_and_keeps_journal(self) -> None:
+    def test_restore_clears_marker_keeps_journal(self) -> None:
         """Restore calls its handler once, removes the marker, and keeps the journal entry."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
@@ -528,7 +528,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
             self.assertIsNone(read_in_progress_manifest(mount_root))
             self.assertEqual(len(store.load_entries()), 1)
 
-    def test_recovery_rejects_unrelated_mount_or_mismatched_marker(self) -> None:
+    def test_recovery_rejects_mismatched_target(self) -> None:
         """A wrong mount, missing marker, or foreign marker raises before any handler runs."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
@@ -659,7 +659,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
         """Recovery entries expire after 30 days by default."""
         self.assertEqual(DEFAULT_RECOVERY_EXPIRY_DAYS, 30)
 
-    def test_one_day_warning_and_automatic_deletion_and_overdue_launch_cleanup(self) -> None:
+    def test_expiry_warns_deletes_and_cleans_up(self) -> None:
         """An entry warns a day before expiry and goes at expiry or at an overdue launch."""
         start = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -685,7 +685,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
             self.assertEqual(len(overdue_scan.overdue_notice_entries), 1)
             self.assertEqual(store.load_entries(), [])
 
-    def test_disabled_expiry_keeps_entries_and_manual_cleanup_deletes(self) -> None:
+    def test_disabled_expiry_keeps_entries(self) -> None:
         """Old entries survive disabled expiry until a manual cleanup removes them."""
         start = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -710,7 +710,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
             self.assertEqual([item.export_id for item in removed_rest], ["exp-2"])
             self.assertEqual(store.load_entries(), [])
 
-    def test_expiry_and_manual_cleanup_preserve_resolved_and_record_history(self) -> None:
+    def test_cleanup_keeps_resolved_and_history(self) -> None:
         """Cleanup keeps resolved entries and records a capped history with each reason."""
         start = EXPIRY_BASELINE_UTC
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -764,7 +764,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
             self.assertEqual(len(store.load_cleanup_history()), MAX_CLEANUP_HISTORY_RECORDS)
             self.assertEqual([item.export_id for item in store.load_entries()], ["exp-resolved"])
 
-    def test_journal_store_rejects_posix_fifo_without_blocking(self) -> None:
+    def test_journal_store_rejects_fifo(self) -> None:
         """A named pipe in place of the journal fails to load without blocking."""
         if not hasattr(os, "mkfifo"):
             self.skipTest("this platform has no named pipes")
@@ -776,7 +776,7 @@ class UsbRecoveryExpiryTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 store.load_entries()
 
-    def test_journal_store_rejects_symlink_parent_and_normalizes_offsets(self) -> None:
+    def test_journal_store_rejects_symlink_parent(self) -> None:
         """The store refuses a symlinked parent folder and loads offset times as UTC."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)

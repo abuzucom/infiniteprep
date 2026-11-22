@@ -71,9 +71,7 @@ def test_archive_install_rejects_missing_digest(tmp_path: Path, missing_digest: 
     assert not (tmp_path / "bin").exists()
 
 
-def test_install_fpcalc_verifies_pinned_digest_by_default(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_fpcalc_checks_pinned_digest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A download that misses the pinned digest raises and installs nothing."""
     monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply="Windows"))
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
@@ -85,9 +83,7 @@ def test_install_fpcalc_verifies_pinned_digest_by_default(
     assert not (tmp_path / "bin").exists()
 
 
-def test_install_fpcalc_rejects_download_that_misses_caller_digest(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_fpcalc_rejects_digest_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A caller digest that differs from the download raises and installs nothing."""
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
     monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply="Windows"))
@@ -103,7 +99,7 @@ def test_install_fpcalc_rejects_download_that_misses_caller_digest(
 
 
 @pytest.mark.parametrize("system_name", ["Linux", "FreeBSD", ""])
-def test_install_fpcalc_refuses_platform_without_pinned_archive(
+def test_fpcalc_refuses_unpinned_platform(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, system_name: str
 ) -> None:
     """A platform without a pinned archive points to the package manager and downloads nothing."""
@@ -126,7 +122,7 @@ def test_pinned_fpcalc_platforms_are_windows_and_macos() -> None:
     assert set(fpcalc_module.OFFICIAL_FPCALC_SHA256) == {"windows", "darwin"}
 
 
-def test_archive_install_accepts_explicit_matching_digest(tmp_path: Path) -> None:
+def test_archive_accepts_matching_digest(tmp_path: Path) -> None:
     """An archive with a matching digest installs the binary unchanged."""
     archive_bytes = _build_fpcalc_zip(FAKE_BINARY)
     bootstrap = FpcalcBootstrapService(install_dir=tmp_path / "bin")
@@ -190,7 +186,7 @@ def test_render_filename_substitutes_known_tokens() -> None:
     assert rendered == "Deep Dish - The Dream.mp3"
 
 
-def test_render_filename_unknown_token_uses_default_layout() -> None:
+def test_render_filename_unknown_token() -> None:
     """An unknown token falls back to the artist and title layout."""
     rendered = MetadataTagAdapter().render_filename(
         Path("track.mp3"),
@@ -219,7 +215,7 @@ def test_render_filename_unknown_token_uses_default_layout() -> None:
         "0249504",
     ],
 )
-def test_discogs_fetch_rejects_unsafe_or_zero_led_release_id(entity_id: str) -> None:
+def test_discogs_rejects_bad_release_id(entity_id: str) -> None:
     """An unsafe or zero-led release id raises before the adapter sends any request."""
     requested: list[str] = []
 
@@ -318,7 +314,7 @@ def test_pull_model_accepts_namespaced_names(model_name: str) -> None:
 # Deprecated install_fpcalc digest parameter and template fallback observability.
 
 
-def test_install_fpcalc_accepts_caller_digest_that_matches_pin(
+def test_fpcalc_accepts_caller_digest(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recwarn: pytest.WarningsRecorder
 ) -> None:
     """An uppercase caller digest that matches the pin installs with no deprecation warning."""
@@ -476,7 +472,7 @@ def test_render_filename_unbalanced_braces_use_default(template: str) -> None:
     assert rendered == "Deep Dish - The Dream.mp3"
 
 
-def test_discogs_fetch_unavailable_returns_empty_for_any_id() -> None:
+def test_discogs_unavailable_returns_empty() -> None:
     """Without a token the adapter reports unavailable and fetches nothing for any id."""
     adapter = DiscogsAdapter(
         repository=build_memory_repository(), user_token=None, min_interval_sec=0.0
@@ -485,9 +481,7 @@ def test_discogs_fetch_unavailable_returns_empty_for_any_id() -> None:
     assert adapter.fetch("../database/search") == []
 
 
-def test_install_fpcalc_rejects_caller_digest_before_download(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_fpcalc_rejects_bad_digest_early(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A caller digest that differs from the pin raises before any download."""
     monkeypatch.setattr(fpcalc_module.platform, "system", CallRecorder(reply="Windows"))
     downloads: list[str] = []

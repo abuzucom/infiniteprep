@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.81.3] (2026-11-22)
+## [0.81.4] (2026-11-22)
 
 ### Changed
 
@@ -13,8 +13,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - New unit tests cover gaps in existing checks.
   - The ID3v2 date check covers a zero day as well as a zero month.
   - The Discogs cache serves a repeat search inside the 6-hour TTL and fetches again after it.
-  - Reconciliation Rules 1, 2, and 5 each have a dedicated test. The full reconcile test no longer claims all 10 rules, because the source names only these three.
-- The version advances from 0.81.1 to 0.81.3 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+  - Reconciliation Rules 1, 2, and 5 each have a dedicated test. The full reconcile test no longer claims all 10 rules, because the source names only these three. The three rule tests carry names under 50 characters.
+- Test function names stay at 50 characters or fewer, `test_` included.
+  - 582 tests under `tests/unit/`, `tests/integration/`, `tests/e2e/`, and `tests/` take shorter names. Only the `def` lines change.
+  - Ruff joins the signatures that now fit on one line.
+  - The copied gate tests listed in the ruff `extend-exclude` keep the upstream names.
+  - Nine UI test files that #347 also changes keep the old names until that pull request lands.
+- The version advances from 0.81.1 to 0.81.4 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 

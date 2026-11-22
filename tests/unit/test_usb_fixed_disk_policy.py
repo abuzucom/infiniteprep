@@ -69,7 +69,7 @@ def test_other_bus_fails_the_class_rule(bus_type: str | None, is_removable: bool
     assert not is_supported_bus_class(build_drive(bus_type=bus_type, is_removable=is_removable))
 
 
-def test_fixed_usb_disk_passes_with_the_fixed_disk_note() -> None:
+def test_fixed_usb_disk_passes_with_note() -> None:
     """A USB disk without the removable flag passes and carries one fixed-disk note."""
     result = evaluate(build_inspection(drive=build_drive(is_removable=False)))
 
@@ -108,7 +108,7 @@ def test_fixed_usb_system_disk_is_refused() -> None:
     assert [refusal.code for refusal in result.refusals] == [RefusalCode.SYSTEM_VOLUME]
 
 
-def test_non_usb_system_disk_returns_both_safety_refusals() -> None:
+def test_non_usb_system_disk_refused_twice() -> None:
     """An internal system disk refuses on the bus and on the system state."""
     drive = build_drive(bus_type="nvme", is_removable=False, is_system=True)
     result = evaluate(build_inspection(drive=drive))

@@ -26,7 +26,7 @@ NAMES_LIKE_DEVICES = (
 
 
 @pytest.mark.parametrize("relative_path", WINDOWS_DEVICE_PATHS)
-def test_windows_device_name_is_not_a_safe_relative_path(relative_path: str) -> None:
+def test_windows_device_name_is_unsafe(relative_path: str) -> None:
     """A device name in any component, with or without an extension, is refused."""
     assert not is_safe_relative_path(relative_path)
 

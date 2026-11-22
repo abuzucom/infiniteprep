@@ -50,7 +50,7 @@ def test_the_spec_collects_the_theme_package() -> None:
     assert 'hookspath=[str(project_root / "packaging" / "pyinstaller_hooks")]' in spec_text
 
 
-def test_the_hook_collects_the_theme_files_the_template_and_the_icons() -> None:
+def test_hook_collects_theme_template_icons() -> None:
     """The hook keeps the theme files, the style sheet template, and the icon sources."""
     hook = load_hook_module()
     destinations = {destination for _source, destination in hook.datas}
@@ -65,7 +65,7 @@ def test_the_hook_collects_the_theme_files_the_template_and_the_icons() -> None:
     assert any(name.endswith(".template") for name in sources)
 
 
-def test_the_hook_collects_the_roboto_fonts_and_their_license_text() -> None:
+def test_hook_collects_roboto_fonts_license() -> None:
     """The hook keeps the Roboto fonts and the Apache license text beside them."""
     hook = load_hook_module()
     fonts = [
@@ -135,7 +135,7 @@ def test_each_bundle_allowlist_names_the_theme_payload(
     assert "_internal/qt_material/fonts/roboto/Apache-2.0.txt" in entries
 
 
-def test_the_theme_packages_stay_pinned_to_the_approved_versions() -> None:
+def test_theme_packages_stay_pinned() -> None:
     """The theme engine and its template dependencies keep their approved pins."""
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     pinned = (name.partition("==") for name in pyproject["project"]["dependencies"])
@@ -164,7 +164,7 @@ def test_the_unused_opengl_bindings_leave_every_bundle() -> None:
         assert not any("opengl.abi3.so" in entry for entry in entries)
 
 
-def test_the_notice_names_the_bundled_theme_package_versions() -> None:
+def test_notice_names_theme_package_versions() -> None:
     """NOTICE names the pinned versions of the packages the theme bundle ships."""
     notice = (REPO_ROOT / "NOTICE").read_text(encoding="utf-8")
     lock_text = (REPO_ROOT / "requirements-lock.txt").read_text(encoding="utf-8")
@@ -178,7 +178,7 @@ def test_the_notice_names_the_bundled_theme_package_versions() -> None:
         assert f"{package} {version}" in notice
 
 
-def test_the_hook_stops_the_build_when_the_fonts_are_missing(tmp_path: Path) -> None:
+def test_hook_fails_build_without_fonts(tmp_path: Path) -> None:
     """A theme package without the Roboto fonts stops the build."""
     hook = load_hook_module()
 

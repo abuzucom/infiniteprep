@@ -65,7 +65,7 @@ class AppVersionTest(unittest.TestCase):
         """A package init with a __version__ line yields that version."""
         self.assertEqual(self.read_app_version(INIT_TEXT), VERSION)
 
-    def test_missing_version_line_stops_the_build_with_a_message(self) -> None:
+    def test_missing_version_line_stops_build(self) -> None:
         """A package init without the line raises SystemExit that names the file."""
         with self.assertRaises(SystemExit) as raised:
             self.read_app_version('"""Package."""\n')

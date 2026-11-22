@@ -72,7 +72,7 @@ class PassingTargetTests(unittest.TestCase):
         self.assertEqual(result.available_bytes, KNOWN_FREE_BYTES)
         self.assertEqual(result.mount_path, MOUNT_PATH)
 
-    def test_scheme_and_filesystem_names_from_each_platform_pass(self) -> None:
+    def test_platform_scheme_and_fs_names_pass(self) -> None:
         """Each platform spelling of MBR and FAT32 passes."""
         for scheme, filesystem in (("dos", "vfat"), ("MBR", "FAT32"), ("mbr", "fat32")):
             with self.subTest(scheme=scheme, filesystem=filesystem):
@@ -156,7 +156,7 @@ class MediaAndLayoutRefusalTests(unittest.TestCase):
         inspection = build_inspection(partitions=(build_partition(is_read_only=True),))
         self.assert_single_refusal(inspection, RefusalCode.READ_ONLY_MEDIA)
 
-    def test_filesystem_errors_are_refused_with_repair_guidance(self) -> None:
+    def test_filesystem_errors_suggest_repair(self) -> None:
         """Preflight refuses filesystem errors with guidance that names a repair."""
         partition = build_partition(filesystem_health=FilesystemHealth.ERRORS)
         result = evaluate_default(build_inspection(partitions=(partition,)))
@@ -313,7 +313,7 @@ class SpaceRefusalTests(unittest.TestCase):
         result = self.evaluate_with(self.estimate - 1, ReservePolicy())
         self.assertEqual(refusal_codes(result), (RefusalCode.INSUFFICIENT_SPACE,))
 
-    def test_percentage_reserve_blocks_and_passes_at_the_boundary(self) -> None:
+    def test_percentage_reserve_boundary(self) -> None:
         """A percentage reserve blocks one byte under its total and passes at it."""
         reserve = ReservePolicy(percent=TEN_PERCENT)
         needed = self.estimate + compute_reserve_bytes(self.estimate, reserve)
@@ -324,7 +324,7 @@ class SpaceRefusalTests(unittest.TestCase):
         self.assertTrue(passing.passed)
         self.assertEqual(passing.reserve_bytes, needed - self.estimate)
 
-    def test_fixed_byte_reserve_blocks_and_passes_at_the_boundary(self) -> None:
+    def test_fixed_byte_reserve_boundary(self) -> None:
         """A fixed byte reserve blocks one byte under its total and passes at it."""
         reserve = ReservePolicy(fixed_bytes=FIXED_RESERVE_BYTES)
         needed = self.estimate + FIXED_RESERVE_BYTES

@@ -48,7 +48,7 @@ def library(tmp_path: Path) -> tuple[Repository, ImportService, list[str]]:
     return repo, importer, [asset.id for asset in report.imported_files]
 
 
-def test_resolve_transcode_options_falls_back_to_safe_defaults() -> None:
+def test_transcode_options_default_safely() -> None:
     """Unknown stored values select sibling export and the lossless auto preset."""
     assert resolve_transcode_options("in_place_backed_up", "FORCE_WAV_44K_16B") == (
         TranscodeMode.IN_PLACE_BACKED_UP,
@@ -60,7 +60,7 @@ def test_resolve_transcode_options_falls_back_to_safe_defaults() -> None:
     )
 
 
-def test_pre_rename_preset_name_and_value_still_select_lossless_auto() -> None:
+def test_legacy_preset_selects_lossless_auto() -> None:
     """The XDJ_RX3 member alias and a stored XDJ_RX3 value both resolve to the renamed preset."""
     assert TranscodePreset.XDJ_RX3_LOSSLESS_AUTO is TranscodePreset.XDJ_LOSSLESS_AUTO
     assert TranscodePreset("XDJ_RX3_LOSSLESS_AUTO") is TranscodePreset.XDJ_LOSSLESS_AUTO
@@ -76,7 +76,7 @@ def test_pre_rename_preset_name_and_value_still_select_lossless_auto() -> None:
     ]
 
 
-def test_confirmed_batch_transcode_converts_and_reports_the_missing_file(
+def test_confirmed_transcode_reports_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, library: Any
 ) -> None:
     """A confirmed batch writes a 48 kHz sibling and lists the failed file by name."""
@@ -120,7 +120,7 @@ def test_declined_batch_transcode_writes_nothing(
     assert not (tmp_path / "backups").exists()
 
 
-def test_main_window_transcode_button_passes_the_visible_files(qtbot, library: Any) -> None:
+def test_transcode_button_sends_visible_files(qtbot, library: Any) -> None:
     """The toolbar button hands every visible file ID to the transcode callback."""
     repo, importer, file_ids = library
     transcode_calls: list[list[str]] = []

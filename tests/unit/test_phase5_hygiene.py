@@ -42,7 +42,7 @@ def test_default_stuck_text_keeps_its_wording() -> None:
     assert STUCK_TEXT == PREVIOUS_STUCK_TEXT
 
 
-def test_space_entries_keep_the_first_entry_per_mount_in_order() -> None:
+def test_space_entries_keep_first_per_mount() -> None:
     """A repeated mount drops its later space entry and the order stays the same."""
     first = SpaceInfo(total_bytes=100, used_bytes=50, available_bytes=50)
     second = SpaceInfo(total_bytes=200, used_bytes=120, available_bytes=80)

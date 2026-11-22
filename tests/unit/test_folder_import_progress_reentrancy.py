@@ -16,7 +16,7 @@ TOTAL = 2
 PATH = "track.wav"
 
 
-def test_finish_during_set_value_leaves_no_dialog_and_no_timer(qtbot: Any) -> None:
+def test_finish_in_set_value_cleans_up(qtbot: Any) -> None:
     """A finish that runs inside QProgressDialog.setValue ends the update cleanly.
 
     On a modal dialog, setValue processes pending events. A queued finished signal can

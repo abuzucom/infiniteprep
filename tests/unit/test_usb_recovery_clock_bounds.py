@@ -67,7 +67,7 @@ class UsbRecoveryClockBoundsTests(unittest.TestCase):
         self.store = UsbRecoveryJournalStore(self.root / "usb_recovery_journal.json")
         self.store.save_entries([_build_entry()])
 
-    def test_clock_behind_the_entry_start_keeps_and_reports_the_entry(self) -> None:
+    def test_clock_behind_entry_keeps_and_reports(self) -> None:
         """A clock before the start time gives a negative age. The entry stays."""
         scan = self.store.evaluate_expiry(STARTED_AT_UTC - ONE_SECOND, at_launch=True)
 

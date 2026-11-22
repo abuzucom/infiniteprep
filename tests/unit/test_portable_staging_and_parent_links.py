@@ -81,7 +81,7 @@ def test_staging_on_modeless_media_warns_and_continues(
 
 
 @posix_only
-def test_staging_with_a_foreign_owner_warns_and_continues(
+def test_staging_foreign_owner_warns(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A staging folder that reports another owner, as a FAT mount can, still works."""
@@ -135,7 +135,7 @@ def test_migration_backup_on_modeless_media_succeeds(
 
 
 @posix_only
-def test_library_behind_a_linked_folder_opens_through_the_real_path(tmp_path: Path) -> None:
+def test_library_under_link_opens_real_path(tmp_path: Path) -> None:
     """SQLite receives the resolved folder. No link remains in the path it opens."""
     real_folder = tmp_path / "real"
     real_folder.mkdir()
@@ -154,7 +154,7 @@ def test_library_behind_a_linked_folder_opens_through_the_real_path(tmp_path: Pa
 
 
 @posix_only
-def test_backup_behind_a_linked_folder_stages_in_the_real_folder(
+def test_backup_under_link_uses_real_folder(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The backup copy goes through the resolved folder of the library."""
@@ -181,9 +181,7 @@ def test_backup_behind_a_linked_folder_stages_in_the_real_folder(
 
 
 @posix_only
-def test_shared_folder_above_the_library_logs_a_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_shared_parent_logs_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """A folder above the library that others can write without the sticky bit warns."""
     shared = tmp_path / "shared"
     shared.mkdir()
@@ -198,9 +196,7 @@ def test_shared_folder_above_the_library_logs_a_warning(
 
 
 @posix_only
-def test_sticky_shared_folder_above_the_library_logs_no_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
+def test_sticky_shared_parent_no_warning(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     """A sticky world-writable folder such as /tmp counts as safe above the library."""
     sticky = tmp_path / "sticky"
     sticky.mkdir()

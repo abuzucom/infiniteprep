@@ -146,9 +146,7 @@ def test_bundle_lookalike_uses_the_executable_folder(user_dirs: Path, tmp_path: 
     assert locations.data_dir == folder.resolve() / PORTABLE_DATA_DIR_NAME
 
 
-def test_unwritable_folder_with_remember_saves_the_choice(
-    user_dirs: Path, applications: Path
-) -> None:
+def test_unwritable_remember_saves_choice(user_dirs: Path, applications: Path) -> None:
     """An unwritable folder gets the D258 prompt, keyed by the folder holding the .app."""
     _add_marker(applications)
     _block_data_folder(applications)

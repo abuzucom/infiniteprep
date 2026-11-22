@@ -36,7 +36,7 @@ def crate(tmp_path: Path) -> tuple[Repository, ImportService, list[str]]:
     return repo, importer, [asset.id for asset in report.imported_files]
 
 
-def test_export_button_appends_m3u8_and_passes_visible_files(
+def test_export_uses_m3u8_and_visible_files(
     qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, crate: Any
 ) -> None:
     """A destination without the suffix gains .m3u8, and the visible IDs reach the callback."""
@@ -78,7 +78,7 @@ def test_cancelled_save_dialog_exports_nothing(
     assert export_calls == []
 
 
-def test_export_writes_the_crate_and_reports_the_destination(
+def test_export_writes_crate_and_reports_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, crate: Any
 ) -> None:
     """The export writes an extended M3U8 with tagged and filename-derived entries."""
@@ -98,7 +98,7 @@ def test_export_writes_the_crate_and_reports_the_destination(
     assert dialogs.texts("information") == [f"Exported 2 track(s) to {destination}."]
 
 
-def test_export_to_an_unwritable_path_reports_the_failure(
+def test_unwritable_export_path_reports_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, crate: Any
 ) -> None:
     """An OSError from the write shows a warning and returns None."""

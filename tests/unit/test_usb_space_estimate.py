@@ -57,7 +57,7 @@ class EstimateExportBytesTests(unittest.TestCase):
         """A plan with no files, directories, or allowance needs zero bytes."""
         self.assertEqual(estimate_export_bytes(()), 0)
 
-    def test_one_byte_file_takes_data_and_directory_clusters(self) -> None:
+    def test_one_byte_file_data_and_dir_clusters(self) -> None:
         """A one-byte file costs one data cluster and one directory cluster."""
         self.assertEqual(estimate_export_bytes((1,)), SMALL_FILE_CLUSTERS * CLUSTER)
 
@@ -65,7 +65,7 @@ class EstimateExportBytesTests(unittest.TestCase):
         """A file of exactly one cluster costs one data cluster and one directory cluster."""
         self.assertEqual(estimate_export_bytes((CLUSTER,)), SMALL_FILE_CLUSTERS * CLUSTER)
 
-    def test_file_one_byte_over_a_cluster_takes_two_data_clusters(self) -> None:
+    def test_one_byte_over_needs_two_data_clusters(self) -> None:
         """A file one byte over a cluster costs two data clusters and one directory cluster."""
         self.assertEqual(estimate_export_bytes((CLUSTER + 1,)), SPILLED_FILE_CLUSTERS * CLUSTER)
 

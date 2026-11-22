@@ -15,9 +15,7 @@ from infiniteprep.ui.main_window import MainWindow
 from tests.fixtures.memory_settings import MemorySettingsManager
 
 
-def test_file_and_detail_column_widths_persist_between_windows(
-    qtbot: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_column_widths_persist(qtbot: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """Restore file and detail table widths from application settings."""
     repository = Repository(DatabaseManager(":memory:"))
     review_service = ReviewService(repository)

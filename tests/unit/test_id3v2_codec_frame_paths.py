@@ -64,7 +64,7 @@ def test_v23_encrypted_frame_is_dropped_and_named() -> None:
     assert tag.dropped_frames == ("PRIV",)
 
 
-def test_v24_plain_integer_frame_size_with_top_bit_decodes() -> None:
+def test_v24_plain_size_with_top_bit_decodes() -> None:
     """A v2.4 frame size stored as a plain integer with a top bit set still reads in full."""
     body = b"owner\x00" + bytes(PLAIN_SIZE_WITH_TOP_BIT - len(b"owner\x00"))
     raw = b"PRIV" + struct.pack(">I", PLAIN_SIZE_WITH_TOP_BIT) + b"\x00\x00" + body
@@ -101,13 +101,13 @@ def test_remove_frames_drops_only_the_named_identifier() -> None:
     assert remove_frames(tag, "TKEY").frames == (Id3Frame("TIT2", b"\x00Title"),)
 
 
-def test_undefined_text_encoding_byte_raises_format_error() -> None:
+def test_unknown_encoding_byte_raises() -> None:
     """A text frame whose encoding byte is outside 0 to 3 raises Id3FormatError."""
     with pytest.raises(Id3FormatError):
         decode_text_values(Id3Frame("TIT2", b"\x07Title"))
 
 
-def test_v23_compressed_frame_exceeding_max_size_is_dropped() -> None:
+def test_v23_compressed_over_max_is_dropped() -> None:
     """A compressed frame whose decompressed size exceeds the maximum is dropped and named."""
     large_data = b"\x00" * (17 * 1024 * 1024)
     compressed = zlib.compress(large_data)

@@ -149,9 +149,7 @@ def test_cancel_removes_a_waiting_batch(qtbot: Any, dock_parts: DockParts) -> No
     assert log == ["first", "third"]
 
 
-def test_cancel_stops_the_running_batch_and_the_next_one_starts(
-    qtbot: Any, dock_parts: DockParts
-) -> None:
+def test_cancel_running_starts_next(qtbot: Any, dock_parts: DockParts) -> None:
     """The running batch sees the cancel request, ends as cancelled, and the queue goes on."""
     controller, dock, make_job, log, gate = dock_parts
     first = controller.enqueue_job(BatchKind.ANALYZE, "first", make_job("first"))
@@ -171,9 +169,7 @@ def test_cancel_stops_the_running_batch_and_the_next_one_starts(
     assert log == ["first", "second"]
 
 
-def test_a_batch_that_raises_is_failed_and_the_next_one_starts(
-    qtbot: Any, dock_parts: DockParts
-) -> None:
+def test_raising_batch_fails_next_starts(qtbot: Any, dock_parts: DockParts) -> None:
     """An error in a batch body fails that batch only. Its text reaches the result."""
     controller, _dock, make_job, log, gate = dock_parts
     gate.set()
@@ -191,9 +187,7 @@ def test_a_batch_that_raises_is_failed_and_the_next_one_starts(
     assert "RuntimeError: boom" in format_batch_result(failed)
 
 
-def test_rows_show_progress_and_finished_batches_offer_their_result(
-    qtbot: Any, dock_parts: DockParts
-) -> None:
+def test_rows_show_progress_and_result(qtbot: Any, dock_parts: DockParts) -> None:
     """A running row shows its progress. View Result names the batch. Clear empties the list."""
     controller, dock, make_job, _log, gate = dock_parts
     first = controller.enqueue_job(BatchKind.ANALYZE, "first", make_job("first"))
@@ -219,7 +213,7 @@ def test_rows_show_progress_and_finished_batches_offer_their_result(
     assert dock.listed_batch_ids() == []
 
 
-def test_result_text_lists_counts_and_caps_the_failed_files() -> None:
+def test_result_text_caps_failed_files() -> None:
     """The result names the counts and the first failed files, then counts the rest."""
     extra = 3
     result = WriteBatchResult(

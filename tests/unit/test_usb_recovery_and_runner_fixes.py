@@ -107,7 +107,7 @@ class UsbRecoveryRetryTests(unittest.TestCase):
 class CleanIntTests(unittest.TestCase):
     """Untrusted numbers that cannot become an int fall back to the default."""
 
-    def test_infinite_and_invalid_values_return_the_default(self) -> None:
+    def test_infinite_or_invalid_gives_default(self) -> None:
         """Infinities, NaN, text, and None give the default."""
         for value in (float("inf"), float("-inf"), float("nan"), "abc", None):
             with self.subTest(value=value):

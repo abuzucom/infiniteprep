@@ -28,7 +28,7 @@ def test_v24_header_and_frame_unsync_reverse_once() -> None:
     assert tag.frames == (Id3Frame("PRIV", PRIV_BODY),)
 
 
-def test_v24_frame_unsync_without_header_flag_still_reverses() -> None:
+def test_v24_frame_unsync_needs_no_header() -> None:
     """A v2.4 frame flag reverses unsynchronisation for that frame when the header flag is clear."""
     raw = v24_frame("PRIV", unsynchronise(PRIV_BODY), FRAME_FLAG_UNSYNC)
     tag = parse_id3v2(tag_bytes(4, raw))

@@ -41,7 +41,7 @@ def library(tmp_path: Path) -> tuple[WriteService, str, Path, str]:
     return write_svc, asset.id, source, original_hash
 
 
-def test_a_failed_swap_keeps_the_original_and_removes_the_copy(
+def test_failed_swap_keeps_original_drops_copy(
     library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A swap that fails after verification leaves the original bytes and no staged copy."""
