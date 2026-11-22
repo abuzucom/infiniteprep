@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -10,10 +11,11 @@ from PySide6.QtGui import QColor, QImage
 
 from infiniteprep.adapters.catalog.acrcloud_optin import ACRCloudOptInAdapter
 from infiniteprep.adapters.catalog.beatport_stub import BeatportStubAdapter
-from infiniteprep.adapters.catalog.discogs import DiscogsAdapter
+from infiniteprep.adapters.catalog.discogs import DISCOGS_TTL_SEC, DiscogsAdapter
 from infiniteprep.adapters.llm.ollama_bootstrap import OllamaBootstrapService
 from infiniteprep.adapters.llm.ollama_openai import OllamaOpenAIReasoningAdapter
 from infiniteprep.adapters.llm.validator import ClosedWorldValidator
+from infiniteprep.db import repositories as repositories_module
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
@@ -33,6 +35,9 @@ from infiniteprep.services.reconciliation import (
     detect_vinyl_pitch_drift,
 )
 from tests.fixtures.audio_factory import create_wav_fixture
+from tests.fixtures.call_recorder import CallRecorder
+
+DISCOGS_STUB_KEY = "synthetic-discogs-key"
 
 
 def test_discogs_adapter_with_ttl_cache_and_optin_stubs() -> None:
@@ -84,6 +89,42 @@ def test_discogs_adapter_with_ttl_cache_and_optin_stubs() -> None:
     bp = BeatportStubAdapter()
     assert bp.is_available()[0] is False
     db.close()
+
+
+@pytest.mark.parametrize(
+    ("read_offset_sec", "expected_calls"),
+    [(DISCOGS_TTL_SEC - 1, 1), (DISCOGS_TTL_SEC + 1, 2)],
+)
+def test_discogs_cache_serves_until_the_ttl_ends(
+    monkeypatch: pytest.MonkeyPatch, read_offset_sec: int, expected_calls: int
+) -> None:
+    """A repeat search reads the cache inside the 6-hour TTL and fetches again after it."""
+    calls = 0
+
+    def count_search(_url: str, _params: dict[str, str]) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        return {"results": [{"id": 5001, "title": "Deep Dish - The Dream", "year": "1994"}]}
+
+    with DatabaseManager(":memory:") as db:
+        discogs = DiscogsAdapter(
+            repository=Repository(db),
+            user_token=DISCOGS_STUB_KEY,
+            http_get_json=count_search,
+            min_interval_sec=0.0,
+        )
+        query = MetadataSearchQuery(artist="Deep Dish", title="The Dream")
+        discogs.search(query, file_id="file-1")
+        # The cache compares stored expiry text with this clock. A later reading
+        # stands in for elapsed time without a real wait.
+        later = datetime.now(UTC) + timedelta(seconds=read_offset_sec)
+        monkeypatch.setattr(
+            repositories_module,
+            "utc_now_iso",
+            CallRecorder(reply=later.isoformat(timespec="microseconds")),
+        )
+        discogs.search(query, file_id="file-1")
+    assert calls == expected_calls
 
 
 def test_closed_world_validator_and_ollama_bootstrap_consent() -> None:
