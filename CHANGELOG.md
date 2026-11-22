@@ -5,6 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.81.2] (2026-11-22)
+
+### Fixed
+
+- The USB recovery launch scan sends its notices to any passed callback, including a falsy one such as an empty recording list. Before, an empty recorder fell through to the real notice dialog. The dialog waited for a click and hung the test suite on every platform.
+- The version advances from 0.81.1 to 0.81.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
 ## [0.81.1] (2026-11-21)
 
 ### Added

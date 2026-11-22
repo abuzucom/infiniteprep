@@ -233,7 +233,12 @@ def process_usb_recovery_at_launch(
     """Scan unresolved USB recovery entries at launch and display notices (D194-D196)."""
     active_settings = (settings_manager or SettingsManager()).load()
     active_store = journal_store or UsbRecoveryJournalStore()
-    notify = show_notice or (lambda title, body: _show_usb_recovery_notice(parent, title, body))
+    # A falsy callable, such as an empty recording list, still counts as a passed callback.
+    notify = (
+        show_notice
+        if show_notice is not None
+        else (lambda title, body: _show_usb_recovery_notice(parent, title, body))
+    )
     try:
         scan = active_store.evaluate_expiry(
             now_utc or datetime.now(UTC),
