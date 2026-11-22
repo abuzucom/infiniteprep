@@ -5,9 +5,16 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.82.0] (2026-11-22)
+## [0.83.0] (2026-11-22)
 
 ### Added
+
+- The detail panel stacks its content in sections (UI-2, #342).
+  - Waveform and player, Changes, Warnings, Other tags, and Candidates each open by default. A section arrow closes it.
+  - Technical details starts closed. It holds the tag frame name of each field, the content hash, the latest backup, and the decoder message.
+  - Badges under the track name show the status, the format, the BPM, and the key in its key color.
+  - Changes lists fields with a proposal or a changed value first, with the field name in bold. Every field keeps its row.
+  - Each warning sentence sits on its own line.
 
 - The main window follows the UI-R layout (UI-2, #342).
   - A workflow bar shows Import, Analyze, Review, Apply, and Export with a track count each. The first stage with waiting tracks carries its action as the main button. Transcode, History, and Settings sit at the right end.
@@ -38,7 +45,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Ruff joins the signatures that now fit on one line.
   - The copied gate tests listed in the ruff `extend-exclude` keep the upstream names.
   - Nine UI test files that #347 also changes keep the old names until that pull request lands.
-- The version advances from 0.81.4 to 0.82.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.82.0 to 0.83.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 

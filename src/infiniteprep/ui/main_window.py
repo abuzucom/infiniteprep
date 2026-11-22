@@ -85,6 +85,8 @@ from infiniteprep.ui.library_columns import (
     ColumnVisibility,
     LibraryColumn,
     format_column_choices,
+    format_status_cell,
+    format_status_label,
     key_cell_style,
     parse_column_choices,
     status_icon,
@@ -157,17 +159,6 @@ KEY_NOTATION_LABELS: Final[dict[KeyDisplayNotation, str]] = {
     KeyDisplayNotation.OPEN_KEY: "Open Key",
 }
 WARNING_LINE_SEPARATOR: Final[str] = "\n"
-# Words that stay lower case inside a status label, as in "Ready to Write".
-STATUS_LABEL_MINOR_WORDS: Final[frozenset[str]] = frozenset({"to", "for"})
-
-
-def format_status_label(status: ReviewStatus) -> str:
-    """Return the filter label of one review status, such as "Ready for Review"."""
-    words = status.value.split("_")
-    return " ".join(
-        word if index and word in STATUS_LABEL_MINOR_WORDS else word.capitalize()
-        for index, word in enumerate(words)
-    )
 
 
 def format_warning_summary(warnings: list[str]) -> str:
@@ -177,18 +168,6 @@ def format_warning_summary(warnings: list[str]) -> str:
         return ""
     noun = "warning" if count == 1 else "warnings"
     return f"{count} {noun}"
-
-
-def format_status_cell(value: str) -> str:
-    """Return the label a status cell shows, such as "Ready to Write".
-
-    An unknown stored value shows as stored, so no row loses its status.
-    """
-    try:
-        status = ReviewStatus(value)
-    except ValueError:
-        return value
-    return format_status_label(status)
 
 
 # The status cell label of each review status value.
@@ -828,6 +807,7 @@ class MainWindow(QMainWindow):
         rows.setDefaultSectionSize(row_height)
         self.workflow_bar.set_palette(palette)
         self.sidebar.set_palette(palette)
+        self.detail_panel.set_palette(palette)
         self.sidebar_toggle_btn.setIcon(themed_icon(SIDEBAR_TOGGLE_ICON, palette.text))
 
     def _restore_window_geometry(self) -> None:

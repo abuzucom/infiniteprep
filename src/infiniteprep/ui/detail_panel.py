@@ -15,7 +15,6 @@ from PySide6.QtGui import QCloseEvent, QPalette
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
-    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -43,15 +42,38 @@ from infiniteprep.services.fake_lossless import FakeLosslessResult
 from infiniteprep.services.review_service import MAX_MANUAL_FIELD_LENGTH, ReviewService
 from infiniteprep.ui.action_handlers import show_plain_message
 from infiniteprep.ui.audio_player import AudioPreviewWidget
+from infiniteprep.ui.collapsible_section import CollapsibleSection
 from infiniteprep.ui.column_sizing import WeightedColumnSizer
 from infiniteprep.ui.contrast import warning_text_color
+from infiniteprep.ui.detail_badges import (
+    build_track_badges,
+    is_field_changed,
+    order_changed_first,
+)
+from infiniteprep.ui.technical_details import technical_detail_rows
+from infiniteprep.ui.tokens import Palette
+from infiniteprep.ui.track_badges_row import TrackBadgesRow
 from infiniteprep.ui.waveform_worker import CANCEL_WAIT_MS, WaveformAnalysisPool
 
 DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = tuple(FieldName)
 FIELDS_TABLE_COLUMN_COUNT: Final[int] = 6
-FIELDS_TABLE_STRETCH: Final[int] = 3
-OTHER_TAGS_STRETCH: Final[int] = 1
-CANDIDATE_BOX_STRETCH: Final[int] = 1
+PLAYER_SECTION_TITLE: Final[str] = "Waveform and player"
+CHANGES_SECTION_TITLE: Final[str] = "Changes"
+WARNINGS_SECTION_TITLE: Final[str] = "Warnings"
+OTHER_TAGS_SECTION_TITLE: Final[str] = "Other tags"
+CANDIDATES_SECTION_TITLE: Final[str] = "Candidates"
+TECHNICAL_SECTION_TITLE: Final[str] = "Technical details"
+# The field table takes most of the height. The lists below share the rest.
+SECTION_STRETCH: Final[dict[str, int]] = {
+    CHANGES_SECTION_TITLE: 3,
+    OTHER_TAGS_SECTION_TITLE: 1,
+    CANDIDATES_SECTION_TITLE: 1,
+}
+# Each warning sentence sits on its own line.
+WARNING_LINE_SEPARATOR: Final[str] = "\n"
+TECHNICAL_ROW_SEPARATOR: Final[str] = ": "
+# The Field cell of a changed row carries True under this role.
+CHANGED_ROW_ROLE: Final[int] = Qt.ItemDataRole.UserRole + 1
 OTHER_TAGS_COLUMN_COUNT: Final[int] = 2
 COLUMN_OTHER_KEY: Final[int] = 0
 COLUMN_OTHER_VALUE: Final[int] = 1
@@ -319,15 +341,43 @@ class DetailPanel(QWidget):
             application.aboutToQuit.connect(self.waveform_pool.shutdown)
 
     def _build_layout(self) -> None:
-        """Assemble the vertical layout of DetailPanel."""
+        """Stack the track header and the sections, each with its collapse arrow.
+
+        Every section opens by default. Technical details starts closed, so tag frame
+        names, the content hash, the backup path, and decoder messages stay out of sight.
+        """
         root = QVBoxLayout(self)
         header_row = QHBoxLayout()
         header_row.addWidget(self.header_label, stretch=1)
         header_row.addWidget(self.play_selected_btn)
         root.addLayout(header_row)
-        root.addWidget(self.warnings_label)
-        root.addWidget(self.audio_player)
+        self.badges_row = TrackBadgesRow(self)
+        root.addWidget(self.badges_row)
+        self._setup_fields_table()
+        self._setup_other_tags_table()
+        self.candidates_list.setAccessibleName("Candidate releases and analysis evidence")
+        self.warnings_label.setWordWrap(True)
+        self.technical_label = QLabel("", self)
+        self.technical_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.technical_label.setWordWrap(True)
+        self.technical_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        sections = (
+            (PLAYER_SECTION_TITLE, self.audio_player, True),
+            (CHANGES_SECTION_TITLE, self.fields_table, True),
+            (WARNINGS_SECTION_TITLE, self.warnings_label, True),
+            (OTHER_TAGS_SECTION_TITLE, self.other_tags_table, True),
+            (CANDIDATES_SECTION_TITLE, self.candidates_list, True),
+            (TECHNICAL_SECTION_TITLE, self.technical_label, False),
+        )
+        self.sections: dict[str, CollapsibleSection] = {}
+        for title, content, expanded in sections:
+            section = CollapsibleSection(title, content, self, expanded=expanded)
+            self.sections[title] = section
+            root.addWidget(section, stretch=SECTION_STRETCH.get(title, 0))
+        self.technical_section = self.sections[TECHNICAL_SECTION_TITLE]
 
+    def _setup_fields_table(self) -> None:
+        """Set the headers, sizing, and keyboard behavior of the field table."""
         self.fields_table.setHorizontalHeaderLabels(
             [
                 "Field",
@@ -347,10 +397,9 @@ class DetailPanel(QWidget):
         # Edits go through the edit box of each row. A typed cell value was discarded.
         self.fields_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.fields_table.setAccessibleName("Field proposals")
-        root.addWidget(self.fields_table, stretch=FIELDS_TABLE_STRETCH)
 
-        other_box = QGroupBox("Other Tags", self)
-        other_layout = QVBoxLayout(other_box)
+    def _setup_other_tags_table(self) -> None:
+        """Set the headers and the read-only behavior of the Other tags table."""
         self.other_tags_table.setHorizontalHeaderLabels(["Key", "Value"])
         self.other_tags_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.other_tags_table.setTabKeyNavigation(False)
@@ -359,14 +408,6 @@ class DetailPanel(QWidget):
         other_header = self.other_tags_table.horizontalHeader()
         other_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         other_header.setStretchLastSection(True)
-        other_layout.addWidget(self.other_tags_table)
-        root.addWidget(other_box, stretch=OTHER_TAGS_STRETCH)
-
-        candidate_box = QGroupBox("Candidate Releases & Analysis Evidence", self)
-        candidate_layout = QVBoxLayout(candidate_box)
-        self.candidates_list.setAccessibleName("Candidate releases and analysis evidence")
-        candidate_layout.addWidget(self.candidates_list)
-        root.addWidget(candidate_box, stretch=CANDIDATE_BOX_STRETCH)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         """Stop analysis work when this panel is closed independently.
@@ -395,11 +436,19 @@ class DetailPanel(QWidget):
         """
         self.current_file_id = None
         self.header_label.setText(NO_SELECTION_TEXT)
+        self.badges_row.clear()
         self.warnings_label.clear()
         self.fields_table.setRowCount(0)
         self.other_tags_table.setRowCount(0)
         self.candidates_list.clear()
+        self.technical_label.clear()
         self.play_selected_btn.setEnabled(False)
+
+    def set_palette(self, palette: Palette) -> None:
+        """Draw the badges in the theme's colors and show the current track again."""
+        self.badges_row.set_palette(palette)
+        if self.current_file_id is not None:
+            self.select_file_asset(self.current_file_id)
 
     def select_file_asset(self, file_id: str) -> FileAsset | None:
         """Populate the detail panel for the specified file_id without touching the player.
@@ -423,8 +472,19 @@ class DetailPanel(QWidget):
         self._populate_fields_table(asset)
         self._populate_other_tags(asset)
         self._populate_candidates_list(file_id)
+        self._populate_technical_details(asset)
         self.play_selected_btn.setEnabled(True)
         return asset
+
+    def _populate_technical_details(self, asset: FileAsset) -> None:
+        """List tag frame names, the content hash, the backup, and the decoder message."""
+        records = self.repo.list_change_records(asset.id)
+        rows = technical_detail_rows(asset, records, field_label)
+        self.technical_label.setText(
+            WARNING_LINE_SEPARATOR.join(
+                f"{label}{TECHNICAL_ROW_SEPARATOR}{value}" for label, value in rows
+            )
+        )
 
     def load_file_asset(self, file_id: str) -> None:
         """Populate the detail panel for the specified file_id and load the track."""
@@ -690,7 +750,10 @@ class DetailPanel(QWidget):
         warnings: list[str] = list(technical_tags.get("warnings", []))
         for analysis in self.repo.list_analysis_results(asset.id):
             warnings.extend(analysis.warnings)
-        self.warnings_label.setText(" | ".join(warnings) if warnings else "No hardware warnings.")
+        no_warnings = "No hardware warnings."
+        self.warnings_label.setText(
+            WARNING_LINE_SEPARATOR.join(warnings) if warnings else no_warnings
+        )
 
     def _populate_fields_table(self, asset: FileAsset) -> None:
         """Populate rows for each standard DJ field.
@@ -707,9 +770,17 @@ class DetailPanel(QWidget):
         by_field: dict[str, list[FieldProposal]] = {}
         for proposal in proposals:
             by_field.setdefault(proposal.field_name, []).append(proposal)
+        changed = {
+            field: is_field_changed(
+                str(existing_standard_tags.get(field.value, "")),
+                approved_map.get(field.value),
+                by_field.get(field.value, []),
+            )
+            for field in DISPLAY_FIELDS
+        }
 
         self.fields_table.setRowCount(len(DISPLAY_FIELDS))
-        for row_index, field_enum in enumerate(DISPLAY_FIELDS):
+        for row_index, field_enum in enumerate(order_changed_first(changed)):
             f_name = field_enum.value
             self._populate_single_field_row(
                 row_index=row_index,
@@ -719,10 +790,25 @@ class DetailPanel(QWidget):
                 field_proposals=by_field.get(f_name, []),
                 approved=approved_map.get(f_name),
             )
+            if changed[field_enum]:
+                self._mark_changed_row(row_index)
+        self.badges_row.show_badges(
+            build_track_badges(asset, approved_map, proposals, self.key_notation)
+        )
         self._fields_file_id = asset.id
         self._acted_field = None
         self._restore_row_state(kept)
         self.fields_sizer.refit()
+
+    def _mark_changed_row(self, row_index: int) -> None:
+        """Show a changed field's name in bold, so changes stand out from unchanged rows."""
+        name_item = self.fields_table.item(row_index, COLUMN_FIELD_NAME)
+        if name_item is None:
+            return
+        font = name_item.font()
+        font.setBold(True)
+        name_item.setFont(font)
+        name_item.setData(CHANGED_ROW_ROLE, True)
 
     def _row_controls(self) -> Iterator[QWidget]:
         """Yield the edit box and the buttons of every current field row."""

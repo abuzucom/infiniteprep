@@ -211,6 +211,29 @@ STATUS_STATES: Final[dict[ReviewStatus, tuple[str, StatusRole]]] = {
 }
 WARNING_ICON: Final[str] = "triangle-exclamation-point"
 MINOR_MODE_SUFFIX: Final[str] = "m"
+# Words that stay lower case inside a status label, as in "Ready to Write".
+STATUS_LABEL_MINOR_WORDS: Final[frozenset[str]] = frozenset({"to", "for"})
+
+
+def format_status_label(status: ReviewStatus) -> str:
+    """Return the label of one review status, such as "Ready for Review"."""
+    words = status.value.split("_")
+    return " ".join(
+        word if index and word in STATUS_LABEL_MINOR_WORDS else word.capitalize()
+        for index, word in enumerate(words)
+    )
+
+
+def format_status_cell(value: str) -> str:
+    """Return the label a status shows, such as "Ready to Write".
+
+    An unknown stored value shows as stored, so no row loses its status.
+    """
+    try:
+        status = ReviewStatus(value)
+    except ValueError:
+        return value
+    return format_status_label(status)
 
 
 def status_icon(status: str, palette: Palette) -> tuple[str, str] | None:
