@@ -420,6 +420,17 @@ This replaces D246.
 | --- | --- |
 | D407 | A library selection never touches the player. The player keeps its track, its position, and its play state until an explicit load. Four paths load and play the selected file. A `Play Selected` button in the detail panel header. `Ctrl+Enter` on the library table. A `Play` item in the library row context menu, which selects the row under the pointer first. A double-click on a library row. The player `Play` button loads the selection when the selection differs from the loaded track. A library row dragged onto the waveform loads that track paused at the start. A drop while a track plays asks first, and the warning names the playing track and the dropped track. `Cancel` keeps the playing track and its position. The player shows a `Loaded:` line with the file name it holds. The waveform shows the loaded track only. |
 
+## D408: USB update matching (2026-11-23)
+
+Issue 309 absorbed issue 160 on 2026-11-23. Issue 160 cited D135 for
+matching, and issue 309 cited D148. The owner chose the rule Update uses and
+asked for this entry ahead of the pending batch. This entry refines how D135
+and D148 apply to Update.
+
+| ID | Decision |
+| --- | --- |
+| D408 | Update matches a track by verified stable ID, then by exact normalized path (D135). Relative path, title, and artist (D148) only propose a match. The DJ confirms each proposed match. Ambiguous and proposed matches go to the DJ (D134). D148 stays the identity the manifest records (issue 309). |
+
 ## Open questions
 
 | Source | Question |

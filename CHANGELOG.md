@@ -5,10 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.84.1] (2026-11-23)
+## [0.84.2] (2026-11-23)
 
 ### Added
 
+- The decision register records D408. USB Update matches by verified stable ID, then exact normalized path. Relative path, title, and artist only propose a match the DJ confirms (#309).
 - History lists past tag writes on the left and the chosen write on the right (UI-2, #342).
   - Each write shows when it ran, the file, and a plain status such as Saved, Undone, or Stopped partway.
   - The right side lists each field the write changed, with its value before and after.
@@ -27,7 +28,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `platformdirs` moves to 4.14.8. The per-user folder paths stay the same on every platform.
 - `ruff` moves to 0.17.6. The lint and format checks pass on the current tree.
 - The SBOM tool `cyclonedx-bom` moves to 9.0.0. The release raises the `cyclonedx-python-lib` floor to 11.12, and the lock holds 11.12.0.
-- The version advances from 0.83.0 to 0.84.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.83.0 to 0.84.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 
