@@ -29,6 +29,9 @@ BACKUP_PENDING_TEXT: Final[str] = (
     "the next time it starts."
 )
 BACKUP_FAILED_TEXT: Final[str] = "This change failed. The file kept its earlier tags."
+BACKUP_UNKNOWN_TEXT: Final[str] = (
+    "InfinitePrep doesn't recognize this change's state, so Restore stays off."
+)
 NO_SELECTION_TEXT: Final[str] = "Pick a change to see what it did."
 RESTORED_STATUSES: Final[frozenset[OperationStatus]] = frozenset(
     {OperationStatus.ROLLED_BACK, OperationStatus.RESTORED}
@@ -49,8 +52,15 @@ def can_restore(record: ChangeRecord) -> bool:
 
 
 def backup_state_text(record: ChangeRecord) -> str:
-    """Return the sentence that says what the backup of one change can do now."""
-    status = OperationStatus(record.operation_status)
+    """Return the sentence that says what the backup of one change can do now.
+
+    The repository rejects an unknown status when it loads a record. A record built
+    another way still gets a sentence instead of an error.
+    """
+    try:
+        status = OperationStatus(record.operation_status)
+    except ValueError:
+        return BACKUP_UNKNOWN_TEXT
     if status is OperationStatus.COMPLETED:
         return BACKUP_READY_TEXT
     if status in RESTORED_STATUSES:
