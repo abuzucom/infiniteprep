@@ -18,7 +18,7 @@ FULL_SHA_PIN: Final[re.Pattern[str]] = re.compile(r"^[\w.-]+/[\w./-]+@[0-9a-f]{4
 CHECKOUT_ACTION: Final[str] = "actions/checkout@"
 # Each pin names the commit of the release tag the maintainer approved under Rule 9.
 APPROVED_PINS: Final[dict[str, str]] = {
-    "actions/dependency-review-action": "a1d282b36b6f3519aa1f3fc636f609c47dddb294",
+    "actions/dependency-review-action": "bbc44d14a204704ccc493733616cd1e93a0321ec",
     "github/codeql-action/upload-sarif": "33d7b85da1a04171e211befe2c739303b9a4c066",
     "microsoft/security-devops-action": "cf28f87c67770dbaa208cce3665fafc849f77507",
 }
