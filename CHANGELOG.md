@@ -26,7 +26,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - Desktop Identify & Analyze stores no mock candidate matches. The app previously fell back to the mock fingerprint and catalog adapters. Every run stored made-up Deep Dish / TRIUK014 candidates in the library. Analyze now runs local analysis only until the app connects online identification.
-- Technical details names each field as the Changes table does, such as Artist and BPM.
+- Technical details, the write preview, and History name each field as the Changes table does, such as Artist and BPM.
 - The Batch Queue strip forgets the start time of each batch once it leaves the queue.
 - The Batch Queue strip tests drain the queue before the test window closes. The window owns the worker thread, and Qt ends the process when a running thread loses its owner.
 

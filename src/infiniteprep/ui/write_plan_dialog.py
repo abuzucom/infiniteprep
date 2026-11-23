@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 from infiniteprep.domain.ports import FileWritePlan
 from infiniteprep.services.write_service import PendingRecoveryError, WriteService
 from infiniteprep.ui.accessible_names import announce
-from infiniteprep.ui.detail_panel import field_label
+from infiniteprep.ui.detail_panel import field_display_name
 from infiniteprep.ui.write_preview_model import (
     BACKUP_NOTE,
     count_plans,
@@ -180,7 +180,7 @@ class WritePlanDialog(QDialog):
         if reasons:
             item.setToolTip(COLUMN_PLAN_STATUS, reasons)
         item.setData(COLUMN_PLAN_FILE, Qt.ItemDataRole.UserRole, plan.file_id)
-        for label, old_value, new_value in plan_field_diff(plan, field_label):
+        for label, old_value, new_value in plan_field_diff(plan, field_display_name):
             item.addChild(QTreeWidgetItem([label, old_value, new_value, ""]))
         return item
 

@@ -24,7 +24,7 @@ from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.models import ChangeRecord
 from infiniteprep.services.write_service import RestoreConflictError, WriteService
 from infiniteprep.ui.action_handlers import ask_plain_question, show_plain_message
-from infiniteprep.ui.detail_panel import field_label
+from infiniteprep.ui.detail_panel import field_display_name
 from infiniteprep.ui.history_model import (
     NO_SELECTION_TEXT,
     backup_state_text,
@@ -164,7 +164,7 @@ class JournalDialog(QDialog):
         old_name, new_name = Path(record.previous_path).name, Path(record.new_path).name
         title = new_name if old_name == new_name else f"{old_name}{RENAME_ARROW}{new_name}"
         self.detail_title.setText(title)
-        diff = record_field_diff(record, field_label)
+        diff = record_field_diff(record, field_display_name)
         self.diff_table.setRowCount(len(diff))
         for row_index, row in enumerate(diff):
             for column_index, text in enumerate(row):
