@@ -20,10 +20,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The change journal window takes the title History. One Restore button beside the chosen write replaces the button on each row.
 - A write preview of up to 10 files opens every file row to its field changes. A longer preview keeps one closed row per file.
 - The Batch Queue strip paces its time left by the finished files only. Time on the file in progress leaves the estimate unchanged.
+- The Storage tab hides the two USB export reserve rows. USB export has no entry point in the app yet. No code reads the reserve. A save keeps the stored reserve values.
 - The version advances from 0.83.0 to 0.84.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 
+- Desktop Identify & Analyze stores no mock candidate matches. The app previously fell back to the mock fingerprint and catalog adapters. Every run stored made-up Deep Dish / TRIUK014 candidates in the library. Analyze now runs local analysis only until the app connects online identification.
 - Technical details names each field as the Changes table does, such as Artist and BPM.
 - The Batch Queue strip forgets the start time of each batch once it leaves the queue.
 - The Batch Queue strip tests drain the queue before the test window closes. The window owns the worker thread, and Qt ends the process when a running thread loses its owner.
@@ -49,7 +51,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The save button names the number of files it saves.
 - Settings lists the sections on the left with an icon each, and shows the chosen section on the right (UI-2, #342).
   - Each section states when its changes take effect.
-  - The Identification note and the USB reserve note state that the app stores these values for later. Analysis and USB export read neither yet.
+  - The Identification note states that the app stores those keys for later. Analysis reads none of them yet.
 
 - The main window follows the UI-R layout (UI-2, #342).
   - A workflow bar shows Import, Analyze, Review, Apply, and Export with a track count each. The first stage with waiting tracks carries its action as the main button. Transcode, History, and Settings sit at the right end.
