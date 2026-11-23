@@ -18,11 +18,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - The change journal window takes the title History. One Restore button beside the chosen write replaces the button on each row.
+- A write preview of up to 10 files opens every file row to its field changes. A longer preview keeps one closed row per file.
+- The Batch Queue strip paces its time left by the finished files only. Time on the file in progress leaves the estimate unchanged.
 - The version advances from 0.83.0 to 0.84.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 
 - Technical details names each field as the Changes table does, such as Artist and BPM.
+- The Batch Queue strip forgets the start time of each batch once it leaves the queue.
 - The Batch Queue strip tests drain the queue before the test window closes. The window owns the worker thread, and Qt ends the process when a running thread loses its owner.
 
 ## [0.83.0] (2026-11-22)

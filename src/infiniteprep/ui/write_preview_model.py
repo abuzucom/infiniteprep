@@ -16,6 +16,13 @@ BACKUP_NOTE: Final[str] = (
     "Each file is backed up before it changes. You can restore it from History."
 )
 NO_FILES_BUTTON_LABEL: Final[str] = "Save changes"
+# A short preview opens every file row. A longer one stays one line per file to scan.
+EXPAND_ROWS_MAX_FILES: Final[int] = 10
+
+
+def should_expand_rows(file_count: int) -> bool:
+    """Return True when a preview of file_count files opens its rows."""
+    return 0 < file_count <= EXPAND_ROWS_MAX_FILES
 
 
 @dataclass(frozen=True)

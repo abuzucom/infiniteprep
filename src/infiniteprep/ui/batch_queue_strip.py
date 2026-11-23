@@ -62,6 +62,9 @@ class BatchQueueStrip(QWidget):
         self.controller = controller
         self._clock = clock
         self._started_at: dict[str, float] = {}
+        # (files done, time of the report that raised it) per batch. The pace counts
+        # finished files only, so time on the file in progress leaves it unchanged.
+        self._last_finish: dict[str, tuple[int, float]] = {}
         self.setAccessibleName(STRIP_NAME)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.batch_label = QLabel(self)
@@ -93,6 +96,7 @@ class BatchQueueStrip(QWidget):
         """Show the running batch, or hide the strip while nothing runs or waits."""
         running = self.controller.queue.running
         self.setVisible(self.controller.is_busy())
+        self._forget_other_batches(running)
         if running is None:
             self.batch_label.setText("")
             self.progress_bar.setRange(0, 0)
@@ -135,9 +139,22 @@ class BatchQueueStrip(QWidget):
         self.progress_bar.setRange(0, total)
         self.progress_bar.setValue(batch.progress_done)
         self.count_label.setText(f"{batch.progress_done} of {total}")
-        elapsed = self._clock() - self._started_at[batch.id]
-        left = estimate_seconds_left(elapsed, batch.progress_done, total)
+        left = estimate_seconds_left(self._finished_elapsed(batch), batch.progress_done, total)
         self.time_label.setText(ESTIMATING_TEXT if left is None else format_time_left(left))
+
+    def _finished_elapsed(self, batch: QueuedBatch) -> float:
+        """Return the seconds from the batch start to the report of its last finished file."""
+        done_before, finished_at = self._last_finish.get(batch.id, (0, 0.0))
+        if batch.progress_done > done_before:
+            finished_at = self._clock()
+            self._last_finish[batch.id] = (batch.progress_done, finished_at)
+        return finished_at - self._started_at[batch.id]
+
+    def _forget_other_batches(self, running: QueuedBatch | None) -> None:
+        """Drop the start and finish times of every batch except the running one."""
+        keep = running.id if running is not None else None
+        self._started_at = {key: at for key, at in self._started_at.items() if key == keep}
+        self._last_finish = {key: at for key, at in self._last_finish.items() if key == keep}
 
     def _on_queue_button_toggled(self, shown: bool) -> None:
         """Relabel the queue button and report the new queue state."""

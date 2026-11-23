@@ -34,6 +34,7 @@ from infiniteprep.ui.write_preview_model import (
     plan_field_diff,
     plan_status_label,
     plan_status_reasons,
+    should_expand_rows,
 )
 
 WRITE_PLAN_DIALOG_WIDTH: Final[int] = 980
@@ -153,6 +154,8 @@ class WritePlanDialog(QDialog):
         self.plan_tree.clear()
         for plan in self.current_plans:
             self.plan_tree.addTopLevelItem(self._build_plan_item(plan))
+        if should_expand_rows(len(self.current_plans)):
+            self.plan_tree.expandAll()
         counts = count_plans(self.current_plans)
         change_text, loss_text, skipped_text = format_summary_badges(counts)
         self.change_badge.setText(change_text)
@@ -168,7 +171,7 @@ class WritePlanDialog(QDialog):
 
     @staticmethod
     def _build_plan_item(plan: FileWritePlan) -> QTreeWidgetItem:
-        """Return one file row with a child row per changed field, collapsed."""
+        """Return one file row with a child row per changed field."""
         name = plan.source_path.name
         if plan.rename_enabled:
             name = f"{name}{RENAME_ARROW}{plan.destination_path.name}"

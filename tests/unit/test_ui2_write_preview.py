@@ -118,7 +118,7 @@ def test_dialog_rows_expand_to_the_diff(qtbot: Any, tmp_path: Path) -> None:
     file_row = tree.topLevelItem(0)
     assert file_row.text(COLUMN_PLAN_FILE) == "a.wav"
     assert file_row.text(COLUMN_PLAN_STATUS) == READY_LABEL
-    assert not file_row.isExpanded()
+    assert file_row.isExpanded()
     changes = [
         (
             file_row.child(index).text(COLUMN_PLAN_FILE),
