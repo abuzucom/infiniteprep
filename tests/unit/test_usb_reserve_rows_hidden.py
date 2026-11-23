@@ -7,12 +7,12 @@ from infiniteprep.ui.settings.storage import StorageTab
 
 STORED_PERCENT = 12.5
 STORED_RESERVE_BYTES = 3 * BYTES_PER_MIB + 1
-# A partial MiB rounds up, so a save never shrinks the stored reserve.
+# A partial MiB rounds up. A save never shrinks the stored reserve.
 ROUNDED_RESERVE_BYTES = 4 * BYTES_PER_MIB
 
 
 def test_reserve_rows_stay_hidden(qtbot) -> None:
-    """USB export has no entry point, so the Storage tab hides both reserve rows."""
+    """The Storage tab hides both reserve rows. USB export has no entry point."""
     tab = StorageTab(AppSettings())
     qtbot.addWidget(tab)
 
@@ -23,9 +23,7 @@ def test_reserve_rows_stay_hidden(qtbot) -> None:
 
 def test_hidden_rows_keep_the_stored_reserve(qtbot) -> None:
     """A save from the tab keeps the stored percentage and rounds the size up to a MiB."""
-    stored = AppSettings(
-        usb_reserve_percent=STORED_PERCENT, usb_reserve_bytes=STORED_RESERVE_BYTES
-    )
+    stored = AppSettings(usb_reserve_percent=STORED_PERCENT, usb_reserve_bytes=STORED_RESERVE_BYTES)
     tab = StorageTab(stored)
     qtbot.addWidget(tab)
     saved = AppSettings()
