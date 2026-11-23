@@ -479,7 +479,7 @@ class DetailPanel(QWidget):
     def _populate_technical_details(self, asset: FileAsset) -> None:
         """List tag frame names, the content hash, the backup, and the decoder message."""
         records = self.repo.list_change_records(asset.id)
-        rows = technical_detail_rows(asset, records, field_label)
+        rows = technical_detail_rows(asset, records, field_display_name)
         self.technical_label.setText(
             WARNING_LINE_SEPARATOR.join(
                 f"{label}{TECHNICAL_ROW_SEPARATOR}{value}" for label, value in rows

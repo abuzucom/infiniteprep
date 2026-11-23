@@ -51,9 +51,12 @@ StripParts = tuple[BatchQueueController, BatchQueueStrip, GatedJobs, StepClock]
 
 @pytest.fixture
 def strip_parts(qtbot: Any, tmp_path: Path) -> Iterator[StripParts]:
-    """Build a controller and a strip with a set clock. Teardown drains the queue."""
+    """Build a controller and a strip with a set clock. Teardown drains the queue.
+
+    qtbot deletes its registered widgets before fixture teardown runs. The parent owns
+    the worker thread, so the fixture deletes the parent itself after the queue drains.
+    """
     parent = QWidget()
-    qtbot.addWidget(parent)
     repository = Repository(DatabaseManager(tmp_path / "queue.sqlite3"))
     import_controller = FolderImportController(
         ImportService(repository), parent, show_progress_dialog=False
@@ -67,6 +70,8 @@ def strip_parts(qtbot: Any, tmp_path: Path) -> Iterator[StripParts]:
     yield controller, strip, jobs, clock
     jobs.gate.set()
     qtbot.waitUntil(lambda: not controller.is_busy(), timeout=SIGNAL_TIMEOUT_MS)
+    parent.close()
+    parent.deleteLater()
 
 
 def test_time_left_formats() -> None:
@@ -89,10 +94,10 @@ def test_strip_hides_when_idle(qtbot: Any, strip_parts: StripParts) -> None:
     assert not strip.isVisible()
 
     controller.enqueue_job(BatchKind.ANALYZE, "Analyze 4 files", jobs.make("first"))
-    qtbot.waitUntil(lambda: jobs.log == ["first"], timeout=SIGNAL_TIMEOUT_MS)
+    qtbot.waitUntil(lambda: strip.count_label.text() == "1 of 1", timeout=SIGNAL_TIMEOUT_MS)
 
     assert strip.isVisible()
-    assert strip.batch_label.text() == "Analyze 4 files"
+    assert strip.batch_label.text() == "Analyze 4 files: first"
     with qtbot.waitSignal(controller.idle, timeout=SIGNAL_TIMEOUT_MS):
         jobs.gate.set()
     assert not strip.isVisible()

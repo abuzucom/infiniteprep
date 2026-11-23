@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.84.0] (2026-11-23)
+## [0.84.1] (2026-11-23)
 
 ### Added
 
@@ -18,7 +18,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - The change journal window takes the title History. One Restore button beside the chosen write replaces the button on each row.
-- The version advances from 0.83.0 to 0.84.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.83.0 to 0.84.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
+### Fixed
+
+- Technical details names each field as the Changes table does, such as Artist and BPM.
+- The Batch Queue strip tests drain the queue before the test window closes. The window owns the worker thread, and Qt ends the process when a running thread loses its owner.
 
 ## [0.83.0] (2026-11-22)
 
