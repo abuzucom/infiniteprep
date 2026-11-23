@@ -5,6 +5,17 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.82.1] (2026-11-23)
+
+### Changed
+
+- The Storage tab hides the two USB export reserve rows. USB export has no entry point in the app yet. No code reads the reserve. A save keeps the stored reserve values.
+- The version advances from 0.82.0 to 0.82.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
+### Fixed
+
+- Desktop Identify & Analyze stores no mock candidate matches. The app previously fell back to the mock fingerprint and catalog adapters. Every run stored made-up Deep Dish / TRIUK014 candidates in the library. Analyze now runs local analysis only until the app connects online identification.
+
 ## [0.82.0] (2026-11-22)
 
 ### Added
