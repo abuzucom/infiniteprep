@@ -5,12 +5,17 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.82.1] (2026-11-23)
+## [0.82.2] (2026-11-23)
 
 ### Changed
 
 - The Storage tab hides the two USB export reserve rows. USB export has no entry point in the app yet. No code reads the reserve. A save keeps the stored reserve values.
-- The version advances from 0.82.0 to 0.82.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The dependency review action pin moves to `bbc44d1`. The pin names the v5.0.1 release, and the action inputs stay the same.
+- The foucault security review pin moves to 3.8.9. Both `uses:` references and both `audit_ref` values name commit `9ec9681`. The upstream release publishes a cancelled review run as a cancelled check run.
+- `platformdirs` moves to 4.14.8. The per-user folder paths stay the same on every platform.
+- `ruff` moves to 0.17.6. The lint and format checks pass on the current tree.
+- The SBOM tool `cyclonedx-bom` moves to 9.0.0. The release raises the `cyclonedx-python-lib` floor to 11.12, and the lock holds 11.12.0.
+- The version advances from 0.82.1 to 0.82.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 
