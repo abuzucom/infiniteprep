@@ -34,6 +34,11 @@ class GeneralTab(FormSettingsTab):
     """Settings tab for the UI theme, unsorted rows, and tag output."""
 
     TITLE = "General"
+    ICON = "adjustments"
+    TAKES_EFFECT = (
+        "Theme, text size, and row order change when you save. "
+        "Key and BPM formats apply the next time you save tags."
+    )
 
     def __init__(
         self,

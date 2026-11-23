@@ -15,6 +15,8 @@ class IdentificationTab(FormSettingsTab):
     """Settings tab for AcoustID and Discogs credentials and LLM arbitration."""
 
     TITLE = "Identification"
+    ICON = "fingerprint"
+    TAKES_EFFECT = "Saved for when online identification arrives. Analysis doesn't use these yet."
 
     def __init__(
         self,

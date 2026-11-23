@@ -317,6 +317,9 @@ class BatchQueueController(QObject):
         if (running.kind is BatchKind.IMPORT) != kind_is_import:
             return
         running.progress_text = f"{done} of {total}: {path}"
+        running.progress_done = done
+        running.progress_total = total
+        running.progress_path = path
         self.progress_changed.emit(running)
 
     @Slot(int, int, str)

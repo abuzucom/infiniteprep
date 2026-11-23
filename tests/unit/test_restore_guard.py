@@ -18,7 +18,7 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import RestoreConflictError, WriteService
 from infiniteprep.ui import journal_dialog as journal_module
-from infiniteprep.ui.journal_dialog import COLUMN_RESTORE_ACTION, JournalDialog
+from infiniteprep.ui.journal_dialog import JournalDialog
 from tests.fixtures.audio_factory import create_wav_fixture
 
 LATER_EDIT = b"edited in another app after the write"
@@ -95,10 +95,11 @@ def answer_questions(monkeypatch: pytest.MonkeyPatch, answers: list[bool]) -> li
 
 
 def click_restore(qtbot: Any, repo: Repository, write_svc: WriteService) -> None:
-    """Open the journal and click the Restore Backup button of its only row."""
+    """Open History, select its only write, and click the Restore button."""
     dialog = JournalDialog(repo, write_svc)
     qtbot.addWidget(dialog)
-    dialog.table.cellWidget(0, COLUMN_RESTORE_ACTION).click()
+    dialog.table.selectRow(0)
+    dialog.restore_btn.click()
 
 
 def test_journal_decline_changes_nothing(

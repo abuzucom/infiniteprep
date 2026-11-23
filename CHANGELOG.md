@@ -5,25 +5,60 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.82.2] (2026-11-23)
+## [0.84.1] (2026-11-23)
+
+### Added
+
+- History lists past tag writes on the left and the chosen write on the right (UI-2, #342).
+  - Each write shows when it ran, the file, and a plain status such as Saved, Undone, or Stopped partway.
+  - The right side lists each field the write changed, with its value before and after.
+  - A sentence states what the backup can do now. Restore sits under it and turns on only for a finished write.
+  - The newest write opens chosen.
 
 ### Changed
 
+- The change journal window takes the title History. One Restore button beside the chosen write replaces the button on each row.
+- A write preview of up to 10 files opens every file row to its field changes. A longer preview keeps one closed row per file.
+- A file whose new values match its tags, with no new name, reads Skipped with the reason Nothing to change. The counts and Save leave it out, so Save writes no same-tag copy and no backup for it.
+- The Batch Queue strip paces its time left by the finished files only. Time on the file in progress leaves the estimate unchanged.
 - The Storage tab hides the two USB export reserve rows. USB export has no entry point in the app yet. No code reads the reserve. A save keeps the stored reserve values.
 - The dependency review action pin moves to `bbc44d1`. The pin names the v5.0.1 release, and the action inputs stay the same.
 - The foucault security review pin moves to 3.8.9. Both `uses:` references and both `audit_ref` values name commit `9ec9681`. The upstream release publishes a cancelled review run as a cancelled check run.
 - `platformdirs` moves to 4.14.8. The per-user folder paths stay the same on every platform.
 - `ruff` moves to 0.17.6. The lint and format checks pass on the current tree.
 - The SBOM tool `cyclonedx-bom` moves to 9.0.0. The release raises the `cyclonedx-python-lib` floor to 11.12, and the lock holds 11.12.0.
-- The version advances from 0.82.1 to 0.82.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.83.0 to 0.84.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 
 - Desktop Identify & Analyze stores no mock candidate matches. The app previously fell back to the mock fingerprint and catalog adapters. Every run stored made-up Deep Dish / TRIUK014 candidates in the library. Analyze now runs local analysis only until the app connects online identification.
+- Technical details, the write preview, and History name each field as the Changes table does, such as Artist and BPM.
+- The Batch Queue strip forgets the start time of each batch once it leaves the queue.
+- History shows a plain sentence for a change whose state it doesn't recognize, and Restore stays off for it.
+- The Batch Queue strip tests drain the queue before the test window closes. The window owns the worker thread, and Qt ends the process when a running thread loses its owner.
 
-## [0.82.0] (2026-11-22)
+## [0.83.0] (2026-11-22)
 
 ### Added
+
+- The detail panel stacks its content in sections (UI-2, #342).
+  - Waveform and player, Changes, Warnings, Other tags, and Candidates each open by default. A section arrow closes it.
+  - Technical details starts closed. It holds the tag frame name of each field, the content hash, the latest backup, and the decoder message.
+  - Badges under the track name show the status, the format, the BPM, and the key in its key color.
+  - Changes lists fields with a proposal or a changed value first, with the field name in bold. Every field keeps its row.
+  - Each warning sentence sits on its own line.
+- A one-line Batch Queue strip at the bottom of the window shows the running batch (UI-2, #342).
+  - The strip shows the batch name, the current file, a progress bar, a done-of-total count, and the time left.
+  - The strip hides while no batch runs or waits.
+  - A click on the strip shows the full queue above it. A second click hides the queue.
+- The write preview opens with a summary bar and a row per file (UI-2, #342).
+  - The summary bar counts the files that change, the files that lose some tag data, and the skipped files. A note says each file gets a backup first.
+  - Each file row opens to list every field that changes, with the current and the new value.
+  - Each file shows Ready, Ready (some tag data will be lost), or Skipped. The reasons sit in the status tooltip.
+  - The save button names the number of files it saves.
+- Settings lists the sections on the left with an icon each, and shows the chosen section on the right (UI-2, #342).
+  - Each section states when its changes take effect.
+  - The Identification note states that the app stores those keys for later. Analysis reads none of them yet.
 
 - The main window follows the UI-R layout (UI-2, #342).
   - A workflow bar shows Import, Analyze, Review, Apply, and Export with a track count each. The first stage with waiting tracks carries its action as the main button. Transcode, History, and Settings sit at the right end.
@@ -54,7 +89,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Ruff joins the signatures that now fit on one line.
   - The copied gate tests listed in the ruff `extend-exclude` keep the upstream names.
   - Nine UI test files that #347 also changes keep the old names until that pull request lands.
-- The version advances from 0.81.4 to 0.82.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.82.0 to 0.83.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 

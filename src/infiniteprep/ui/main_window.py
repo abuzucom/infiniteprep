@@ -76,6 +76,7 @@ from infiniteprep.ui.batch_queue import (
     format_batch_row,
 )
 from infiniteprep.ui.batch_queue_dock import BatchQueueDock
+from infiniteprep.ui.batch_queue_strip import BatchQueueStrip
 from infiniteprep.ui.column_sizing import WeightedColumnSizer
 from infiniteprep.ui.detail_panel import DetailPanel
 from infiniteprep.ui.folder_import import FolderImportController, ImportReportDialog
@@ -85,6 +86,8 @@ from infiniteprep.ui.library_columns import (
     ColumnVisibility,
     LibraryColumn,
     format_column_choices,
+    format_status_cell,
+    format_status_label,
     key_cell_style,
     parse_column_choices,
     status_icon,
@@ -157,17 +160,6 @@ KEY_NOTATION_LABELS: Final[dict[KeyDisplayNotation, str]] = {
     KeyDisplayNotation.OPEN_KEY: "Open Key",
 }
 WARNING_LINE_SEPARATOR: Final[str] = "\n"
-# Words that stay lower case inside a status label, as in "Ready to Write".
-STATUS_LABEL_MINOR_WORDS: Final[frozenset[str]] = frozenset({"to", "for"})
-
-
-def format_status_label(status: ReviewStatus) -> str:
-    """Return the filter label of one review status, such as "Ready for Review"."""
-    words = status.value.split("_")
-    return " ".join(
-        word if index and word in STATUS_LABEL_MINOR_WORDS else word.capitalize()
-        for index, word in enumerate(words)
-    )
 
 
 def format_warning_summary(warnings: list[str]) -> str:
@@ -177,18 +169,6 @@ def format_warning_summary(warnings: list[str]) -> str:
         return ""
     noun = "warning" if count == 1 else "warnings"
     return f"{count} {noun}"
-
-
-def format_status_cell(value: str) -> str:
-    """Return the label a status cell shows, such as "Ready to Write".
-
-    An unknown stored value shows as stored, so no row loses its status.
-    """
-    try:
-        status = ReviewStatus(value)
-    except ValueError:
-        return value
-    return format_status_label(status)
 
 
 # The status cell label of each review status value.
@@ -424,6 +404,12 @@ class MainWindow(QMainWindow):
         )
         self.batch_dock = BatchQueueDock(self.batch_queue, self)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.batch_dock)
+        # The strip shows progress. The full queue opens above it on a click.
+        self.batch_dock.hide()
+        self.batch_strip = BatchQueueStrip(self.batch_queue, self)
+        self.centralWidget().layout().addWidget(self.batch_strip)
+        self.batch_strip.queue_toggled.connect(self.batch_dock.setVisible)
+        self.batch_dock.visibilityChanged.connect(self.batch_strip.set_queue_shown)
         self._close_after_queue = False
         self.import_failure_box: QMessageBox | None = None
         self.batch_result_box: QMessageBox | None = None
@@ -828,6 +814,7 @@ class MainWindow(QMainWindow):
         rows.setDefaultSectionSize(row_height)
         self.workflow_bar.set_palette(palette)
         self.sidebar.set_palette(palette)
+        self.detail_panel.set_palette(palette)
         self.sidebar_toggle_btn.setIcon(themed_icon(SIDEBAR_TOGGLE_ICON, palette.text))
 
     def _restore_window_geometry(self) -> None:

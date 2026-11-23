@@ -17,6 +17,10 @@ class AnalysisTab(FormSettingsTab):
     """Settings tab for analysis and the batch queue."""
 
     TITLE = "Analysis"
+    ICON = "microscope"
+    TAKES_EFFECT = (
+        "Changes apply to your next Analyze or write batch, and to the next track you pick."
+    )
 
     def __init__(self, settings: AppSettings, parent: QWidget | None = None) -> None:
         """Initialize the tab from the stored settings."""

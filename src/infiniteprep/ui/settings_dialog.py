@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QPushButton,
-    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -25,6 +24,7 @@ from infiniteprep.config.settings import (
 from infiniteprep.data_cleanup import CleanupChoice, data_folders
 from infiniteprep.storage_paths import StorageLocations
 from infiniteprep.ui.cleanup_dialog import CleanupDialog
+from infiniteprep.ui.icon_loader import themed_icon
 from infiniteprep.ui.settings.analysis import STOP_ON_FAILURE_LABEL, AnalysisTab
 from infiniteprep.ui.settings.base import SettingsTab
 from infiniteprep.ui.settings.general import GeneralTab
@@ -37,7 +37,14 @@ from infiniteprep.ui.settings.storage import (
 )
 from infiniteprep.ui.settings.transcode import TranscodeTab
 from infiniteprep.ui.settings.updates import UpdatesTab
-from infiniteprep.ui.theme import DEFAULT_DARK_THEME, switch_application_theme
+from infiniteprep.ui.settings_sections import SettingsSectionView
+from infiniteprep.ui.theme import (
+    DEFAULT_DARK_THEME,
+    THEME_PALETTES,
+    resolve_theme,
+    switch_application_theme,
+)
+from infiniteprep.ui.tokens import DARK_PALETTE
 
 __all__ = [
     "CLEANUP_BUTTON_LABEL",
@@ -48,8 +55,9 @@ __all__ = [
     "SettingsDialog",
 ]
 
-SETTINGS_DIALOG_WIDTH: Final[int] = 620
-SETTINGS_DIALOG_HEIGHT: Final[int] = 460
+# The section list takes 180 px, so the pages keep the width they had as tabs.
+SETTINGS_DIALOG_WIDTH: Final[int] = 800
+SETTINGS_DIALOG_HEIGHT: Final[int] = 480
 
 
 class SettingsDialog(QDialog):
@@ -84,11 +92,13 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("InfinitePrep Settings & Providers")
         self.resize(SETTINGS_DIALOG_WIDTH, SETTINGS_DIALOG_HEIGHT)
 
-        self.tabs = QTabWidget(self)
+        self.tabs = SettingsSectionView(self)
         self.setting_tabs: list[SettingsTab] = self._create_tabs(cleanup_enabled)
+        icon_color = self._icon_color()
         for tab in self.setting_tabs:
             if tab.SHOWN:
-                self.tabs.addTab(tab, tab.TITLE)
+                icon = themed_icon(tab.ICON, icon_color) if tab.ICON else None
+                self.tabs.addTab(tab, tab.TITLE, icon, tab.TAKES_EFFECT)
             else:
                 # The dialog still owns a hidden tab, so the tab never shows as a window.
                 tab.setParent(self)
@@ -98,6 +108,11 @@ class SettingsDialog(QDialog):
         self.save_btn = QPushButton("Save Settings", self)
         self.cancel_btn = QPushButton("Cancel", self)
         self._build_layout()
+
+    def _icon_color(self) -> str:
+        """Return the text color of the stored theme, which the section icons take."""
+        stored_theme = getattr(self.current_settings, "theme", DEFAULT_DARK_THEME)
+        return THEME_PALETTES.get(resolve_theme(stored_theme), DARK_PALETTE).text
 
     def _create_tabs(self, cleanup_enabled: bool) -> list[SettingsTab]:
         """Create every tab in display order. A new area adds one entry here."""
