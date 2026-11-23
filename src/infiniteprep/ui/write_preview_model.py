@@ -16,6 +16,7 @@ BACKUP_NOTE: Final[str] = (
     "Each file is backed up before it changes. You can restore it from History."
 )
 NO_FILES_BUTTON_LABEL: Final[str] = "Save changes"
+NOTHING_TO_CHANGE_REASON: Final[str] = "Nothing to change"
 # A short preview opens every file row. A longer one stays one line per file to scan.
 EXPAND_ROWS_MAX_FILES: Final[int] = 10
 
@@ -34,13 +35,25 @@ class PreviewCounts:
     skipped: int
 
 
+def plan_has_changes(plan: FileWritePlan) -> bool:
+    """Return True when the write changes a field value or gives the file a new name."""
+    if plan.rename_enabled and plan.destination_path != plan.source_path:
+        return True
+    return bool(plan_field_diff(plan, str))
+
+
+def plan_will_write(plan: FileWritePlan) -> bool:
+    """Return True when Save writes the file: it is safe and has something to change."""
+    return plan.is_safe_to_apply and plan_has_changes(plan)
+
+
 def count_plans(plans: Sequence[FileWritePlan]) -> PreviewCounts:
     """Count the files that change, the ones that lose tag data, and the skipped ones."""
-    safe = [plan for plan in plans if plan.is_safe_to_apply]
+    writes = [plan for plan in plans if plan_will_write(plan)]
     return PreviewCounts(
-        will_change=len(safe),
-        removes_tag_data=sum(1 for plan in safe if plan.tag_data_warnings),
-        skipped=len(plans) - len(safe),
+        will_change=len(writes),
+        removes_tag_data=sum(1 for plan in writes if plan.tag_data_warnings),
+        skipped=len(plans) - len(writes),
     )
 
 
@@ -69,7 +82,7 @@ def format_apply_label(counts: PreviewCounts) -> str:
 
 def plan_status_label(plan: FileWritePlan) -> str:
     """Return the plain status of one file: ready, ready with data loss, or skipped."""
-    if not plan.is_safe_to_apply:
+    if not plan_will_write(plan):
         return SKIPPED_LABEL
     if plan.tag_data_warnings:
         return READY_WITH_LOSS_LABEL
@@ -80,6 +93,8 @@ def plan_status_reasons(plan: FileWritePlan) -> str:
     """Return the sentences behind a status: why a file is skipped or loses tag data."""
     if not plan.is_safe_to_apply:
         return REASON_SEPARATOR.join(plan.validation_errors + plan.collision_warnings)
+    if not plan_has_changes(plan):
+        return NOTHING_TO_CHANGE_REASON
     return REASON_SEPARATOR.join(plan.tag_data_warnings)
 
 

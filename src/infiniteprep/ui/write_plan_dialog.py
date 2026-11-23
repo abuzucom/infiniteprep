@@ -34,6 +34,7 @@ from infiniteprep.ui.write_preview_model import (
     plan_field_diff,
     plan_status_label,
     plan_status_reasons,
+    plan_will_write,
     should_expand_rows,
 )
 
@@ -206,7 +207,7 @@ class WritePlanDialog(QDialog):
         Without a safe plan, the dialog stays open and says why nothing was applied.
         """
         safe_plans = [
-            write_plan for write_plan in self.current_plans if write_plan.is_safe_to_apply
+            write_plan for write_plan in self.current_plans if plan_will_write(write_plan)
         ]
         if not safe_plans:
             self._show_status(NO_SAFE_PLANS_TEXT)

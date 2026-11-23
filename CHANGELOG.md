@@ -19,6 +19,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - The change journal window takes the title History. One Restore button beside the chosen write replaces the button on each row.
 - A write preview of up to 10 files opens every file row to its field changes. A longer preview keeps one closed row per file.
+- A file whose new values match its tags, with no new name, reads Skipped with the reason Nothing to change. The counts and Save leave it out, so Save writes no same-tag copy and no backup for it.
 - The Batch Queue strip paces its time left by the finished files only. Time on the file in progress leaves the estimate unchanged.
 - The Storage tab hides the two USB export reserve rows. USB export has no entry point in the app yet. No code reads the reserve. A save keeps the stored reserve values.
 - The version advances from 0.83.0 to 0.84.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.

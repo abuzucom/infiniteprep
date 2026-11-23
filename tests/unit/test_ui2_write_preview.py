@@ -61,7 +61,11 @@ def make_plan(
 
 def test_counts_split_ready_loss_skipped() -> None:
     """Safe files count as changing, data loss counts inside them, and blocked ones skip."""
-    plans = [make_plan(), make_plan(losses=["drops GEOB"]), make_plan(errors=["missing"])]
+    plans = [
+        make_plan(proposed={"artist": "New"}),
+        make_plan(losses=["drops GEOB"], proposed={"artist": "New"}),
+        make_plan(errors=["missing"]),
+    ]
 
     assert count_plans(plans) == PreviewCounts(will_change=2, removes_tag_data=1, skipped=1)
 
@@ -85,8 +89,11 @@ def test_badges_read_as_counts() -> None:
 
 def test_status_labels_are_plain() -> None:
     """A file reads as ready, ready with tag data loss, or skipped."""
-    assert plan_status_label(make_plan()) == READY_LABEL
-    assert plan_status_label(make_plan(losses=["drops GEOB"])) == READY_WITH_LOSS_LABEL
+    assert plan_status_label(make_plan(proposed={"artist": "New"})) == READY_LABEL
+    assert (
+        plan_status_label(make_plan(losses=["drops GEOB"], proposed={"artist": "New"}))
+        == READY_WITH_LOSS_LABEL
+    )
     assert plan_status_label(make_plan(errors=["missing"])) == SKIPPED_LABEL
 
 
