@@ -161,9 +161,9 @@ def test_window_strip_opens_the_dock(qtbot: Any, tmp_path: Path) -> None:
     qtbot.addWidget(window)
     window.show()
     qtbot.waitExposed(window)
-    hidden_at_start = window.batch_dock.isVisible()
+    visible_at_start = window.batch_dock.isVisible()
 
     window.batch_strip.queue_button.click()
 
-    assert hidden_at_start is False
+    assert visible_at_start is False
     assert window.batch_dock.isVisible()
