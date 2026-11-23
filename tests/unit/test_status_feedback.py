@@ -33,7 +33,7 @@ from tests.fixtures.memory_settings import MemorySettingsManager
 from tests.fixtures.qt_dialogs import MESSAGE_ICON_INDEX, MESSAGE_TEXT_INDEX, MESSAGE_TITLE_INDEX
 from tests.fixtures.waveform_stub import keep_waveform_pool_idle
 
-STATUS_COLUMN: int = TABLE_COLUMNS.index("Review Status")
+STATUS_COLUMN: int = TABLE_COLUMNS.index("Status")
 PLAYBACK_ERROR: str = "Playback failed: decoder error."
 BATCH_LABEL: str = "Announce check"
 BATCH_TIMEOUT_MS: int = 10_000
@@ -169,7 +169,7 @@ def test_bulk_approve_reports_the_approved_count(
     assert len(messages) == 1
     icon, _title, text = messages[0]
     assert icon == QMessageBox.Icon.Information
-    assert text.startswith("Approved 0 field(s)")
+    assert text == "Approved 0 fields."
 
 
 def test_status_cell_shows_a_readable_label(

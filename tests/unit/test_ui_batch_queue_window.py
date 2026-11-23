@@ -200,13 +200,11 @@ def test_an_idle_window_closes_without_a_prompt(
     assert prompts == []
 
 
-@pytest.mark.parametrize(
-    "button_case", [("Keep Working", CLOSE_STAY), ("Cancel and Exit", CLOSE_CANCEL)]
-)
+@pytest.mark.parametrize("button_case", [("Keep working", CLOSE_STAY), ("Quit now", CLOSE_CANCEL)])
 def test_close_prompt_offers_exactly_the_two_choices(
     qtbot: Any, window_parts: WindowParts, button_case: tuple[str, str]
 ) -> None:
-    """The prompt holds Keep Working and Cancel and Exit, and returns the clicked choice."""
+    """The prompt holds Keep working and Quit now, and returns the clicked choice."""
     button_text, expected_choice = button_case
     window, _repository, _jobs, _folder = window_parts
     seen_buttons: list[str] = []
@@ -225,7 +223,7 @@ def test_close_prompt_offers_exactly_the_two_choices(
     QTimer.singleShot(0, click_choice)
 
     assert window.ask_close_during_import() == expected_choice
-    assert seen_buttons == ["Cancel and Exit", "Keep Working"]
+    assert seen_buttons == ["Keep working", "Quit now"]
 
 
 def test_view_result_shows_a_job_result_in_plain_text(

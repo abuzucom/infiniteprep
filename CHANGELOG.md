@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.84.1] (2026-11-23)
+## [0.85.0] (2026-11-23)
 
 ### Added
 
@@ -27,7 +27,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `platformdirs` moves to 4.14.8. The per-user folder paths stay the same on every platform.
 - `ruff` moves to 0.17.6. The lint and format checks pass on the current tree.
 - The SBOM tool `cyclonedx-bom` moves to 9.0.0. The release raises the `cyclonedx-python-lib` floor to 11.12, and the lock holds 11.12.0.
-- The version advances from 0.83.0 to 0.84.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The main window and its sidebar use plain copy (UI-2, #342, item 12).
+  - Columns read Artist, Title, Mix, Status, and Issues. The Issues cell counts issues, such as "2 issues". Label / Cat# stays.
+  - The sidebar filters read With issues and Ready to save.
+  - The window title is InfinitePrep. The key picker reads Key format.
+  - Dialog titles read Analyze, Approve all matches, Review changes, Transcode, Export playlist, Results, Import failed, and Still working.
+  - Approve all matches reports "Approved 3 fields.". An Analyze batch reads "Analyze 3 files" in the queue.
+  - With no tracks shown, a message says "Nothing here yet. Add a folder or clear your filters."
+  - The quit prompt offers Keep working and Quit now.
+- The version advances from 0.83.0 to 0.85.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 
