@@ -21,6 +21,10 @@ from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapte
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.adapters.transcoder.safe_transcoder import SafeTranscoderAdapter
+from infiniteprep.adapters.unconfigured import (
+    UnconfiguredCatalogProvider,
+    UnconfiguredFingerprintProvider,
+)
 from infiniteprep.config.credentials import CredentialStore, forget_all_credentials
 from infiniteprep.config.settings import SettingsManager
 from infiniteprep.data_cleanup import CleanupChoice, run_cleanup
@@ -162,6 +166,21 @@ def stop_on_first_failure() -> bool:
     return SettingsManager().load().stop_batch_on_first_failure
 
 
+def build_desktop_orchestrator(repo: Repository) -> JobOrchestrator:
+    """Return the orchestrator behind the desktop Identify & Analyze batch.
+
+    JobOrchestrator falls back to mock providers without explicit providers. The
+    desktop app supplies unavailable providers instead. Analyze then stores no
+    invented candidate matches in the library.
+    """
+    return JobOrchestrator(
+        repository=repo,
+        fingerprint_provider=UnconfiguredFingerprintProvider(),
+        catalog_providers=[UnconfiguredCatalogProvider()],
+        audio_analyzer=LocalDspAnalyzer(),
+    )
+
+
 def build_analyze_runner(
     orchestrator: JobOrchestrator, reconciler: ReconciliationService
 ) -> AnalyzeRunner:
@@ -286,7 +305,7 @@ def launch_desktop_app() -> int:
     repo = opened.repository
     tag_adapter = MetadataTagAdapter(SettingsManager().load_tag_output)
     writer = WriteService(repo, tag_adapter=tag_adapter, backup_dir=opened.locations.backup_dir)
-    orchestrator = JobOrchestrator(repository=repo, audio_analyzer=LocalDspAnalyzer())
+    orchestrator = build_desktop_orchestrator(repo)
     reconciler = ReconciliationService(repo)
     transcoder = SafeTranscoderAdapter(
         repo, tag_adapter=tag_adapter, backup_dir=opened.locations.backup_dir

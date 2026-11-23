@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class StorageTab(FormSettingsTab):
-    """Settings tab for the USB export reserve and the data cleanup button.
+    """Settings tab for USB recovery, the hidden USB export reserve, and data cleanup.
 
     The dialog connects the cleanup button, since a confirmed cleanup closes the
     dialog.
@@ -75,6 +75,10 @@ class StorageTab(FormSettingsTab):
         # A partial MiB rounds up. A save never shrinks the stored reserve.
         self.usb_reserve_mib_spin.setValue(-(-settings.usb_reserve_bytes // BYTES_PER_MIB))
         self.form.addRow("USB Export Reserve (MiB):", self.usb_reserve_mib_spin)
+        # USB export has no entry point yet. The reserve rows stay hidden until then.
+        # The hidden inputs still hold the stored values. A save keeps those values.
+        self.form.setRowVisible(self.usb_reserve_percent_spin, False)
+        self.form.setRowVisible(self.usb_reserve_mib_spin, False)
 
         self.usb_recovery_expiry_checkbox = QCheckBox(
             "Delete unresolved USB recovery data automatically",
