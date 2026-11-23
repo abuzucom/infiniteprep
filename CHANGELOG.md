@@ -5,6 +5,21 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.84.0] (2026-11-23)
+
+### Added
+
+- History lists past tag writes on the left and the chosen write on the right (UI-2, #342).
+  - Each write shows when it ran, the file, and a plain status such as Saved, Undone, or Stopped partway.
+  - The right side lists each field the write changed, with its value before and after.
+  - A sentence states what the backup can do now. Restore sits under it and turns on only for a finished write.
+  - The newest write opens chosen.
+
+### Changed
+
+- The change journal window takes the title History. One Restore button beside the chosen write replaces the button on each row.
+- The version advances from 0.83.0 to 0.84.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
 ## [0.83.0] (2026-11-22)
 
 ### Added
