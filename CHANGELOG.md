@@ -5,9 +5,17 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.84.1] (2026-11-23)
+## [0.85.0] (2026-11-23)
 
 ### Added
+
+- A USB export dialog walks through two steps, Choose drive and then Confirm (UI-2, #342).
+  - Choose drive lists USB drives and memory cards. Next turns on for a drive that passed inspection.
+  - Confirm names the drive and the players. Drive details hold the location, model, device ID, serial number, and each fact the check could not confirm. The details start closed.
+  - A space bar shows the share of free space the export needs, with a line such as "1.2 GB needed of 16.0 GB free".
+  - What happens on the drive lists the planned changes, or says nothing on the drive changes.
+  - Export turns on only when the drive passes every check. Enter cancels. A drive that must never take an export hides its identity and space.
+  - No window opens the dialog yet. The older drive picker and confirm dialog stay as they were.
 
 - History lists past tag writes on the left and the chosen write on the right (UI-2, #342).
   - Each write shows when it ran, the file, and a plain status such as Saved, Undone, or Stopped partway.
@@ -27,7 +35,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `platformdirs` moves to 4.14.8. The per-user folder paths stay the same on every platform.
 - `ruff` moves to 0.17.6. The lint and format checks pass on the current tree.
 - The SBOM tool `cyclonedx-bom` moves to 9.0.0. The release raises the `cyclonedx-python-lib` floor to 11.12, and the lock holds 11.12.0.
-- The version advances from 0.83.0 to 0.84.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.83.0 to 0.85.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 
