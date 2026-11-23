@@ -100,7 +100,7 @@ class PythonSbomWorkflowTest(unittest.TestCase):
 
         self.assertFalse(pending_lines)
         self.assertEqual(len(package_entries), 33)
-        self.assertTrue(any(entry.startswith("cyclonedx-bom==8.0.1 ") for entry in package_entries))
+        self.assertTrue(any(entry.startswith("cyclonedx-bom==9.0.0 ") for entry in package_entries))
         self.assertTrue(any(entry.startswith("chardet==7.7.0 ") for entry in package_entries))
 
 
