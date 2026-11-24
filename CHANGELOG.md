@@ -41,6 +41,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The local AI option reads "Let a local AI pick between matches". The batch option reads "Stop when a file fails".
   - USB recovery cleanup asks "Delete USB recovery data?" and reports such as "Deleted 3 USB recovery entries.".
   - The hidden reserve row keeps its MiB unit, since the value counts mebibytes.
+- History uses plain copy (UI-2, #342, item 12).
+  - Screen readers name the list of writes History.
+  - A failed restore reads such as "Couldn't restore this file (disk full). It's unchanged. Check the backup drive and try again."
 - The version advances from 0.85.0 to 0.86.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ## [0.85.0] (2026-11-23)

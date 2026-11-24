@@ -48,6 +48,15 @@ RENAME_ARROW: Final[str] = " -> "
 # The list takes the left share of the dialog. The detail side takes the rest.
 LIST_STRETCH: Final[int] = 2
 DETAIL_STRETCH: Final[int] = 3
+HISTORY_LIST_NAME: Final[str] = "History"
+
+
+def format_restore_failure(reason: object) -> str:
+    """Return the message for a restore that failed, with the reason it gave."""
+    return (
+        f"Couldn't restore this file ({reason}). It's unchanged. "
+        "Check the backup drive and try again."
+    )
 
 
 class JournalDialog(QDialog):
@@ -84,7 +93,7 @@ class JournalDialog(QDialog):
         """Place the write list beside the detail side, above the Close button."""
         root = QVBoxLayout(self)
         splitter = QSplitter(Qt.Orientation.Horizontal, self)
-        self._setup_table(self.table, JOURNAL_LIST_HEADERS, "Change journal")
+        self._setup_table(self.table, JOURNAL_LIST_HEADERS, HISTORY_LIST_NAME)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.itemSelectionChanged.connect(self._show_selected_record)
@@ -196,8 +205,7 @@ class JournalDialog(QDialog):
                 self,
                 QMessageBox.Icon.Warning,
                 JOURNAL_DIALOG_TITLE,
-                f"Restore failed ({exc}). The current file is unchanged. Check the backup disk "
-                "and retry.",
+                format_restore_failure(exc),
             )
         self.refresh_journal()
 
