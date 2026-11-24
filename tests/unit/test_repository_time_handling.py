@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from infiniteprep.db.connection import DatabaseManager
-from infiniteprep.db.migrations import m0001_initial, m0002_collections
+from infiniteprep.db.migrations import LATEST_VERSION, m0001_initial, m0002_collections
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import AudioFormat, OperationStatus
 from infiniteprep.domain.models import ChangeRecord, FileAsset, utc_now_iso
@@ -22,7 +22,6 @@ from infiniteprep.domain.models import ChangeRecord, FileAsset, utc_now_iso
 FIRST_WRITE_TIME = "2026-11-16T12:00:00.000000+00:00"
 LATER_WRITE_TIME = "2026-11-16T12:05:00.000000+00:00"
 LAST_WRITE_TIME = "2026-11-16T12:10:00.000000+00:00"
-MIGRATION_THREE_VERSION = 3
 LEGACY_CREATED_TIME = "2026-11-15T12:00:00+00:00"
 CLOCK_WITH_FRACTION = "2026-11-16T12:00:00.000123+00:00"
 # A clock that stepped backward stamps a newer record with an older time.
@@ -156,7 +155,7 @@ def test_migration_3_backfills_updated_at(tmp_path: Path) -> None:
         stored = Repository(db).get_change_record("op-1")
         version = db.connect().execute("PRAGMA user_version").fetchone()[0]
 
-    assert version == MIGRATION_THREE_VERSION
+    assert version == LATEST_VERSION
     assert stored is not None
     assert stored.timestamp == FIRST_WRITE_TIME
     assert stored.updated_at == FIRST_WRITE_TIME

@@ -8,7 +8,7 @@ import pytest
 
 from infiniteprep.db.collections import validate_import_folder_paths
 from infiniteprep.db.connection import DatabaseManager
-from infiniteprep.db.migrations import m0001_initial
+from infiniteprep.db.migrations import LATEST_VERSION, m0001_initial
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import ApprovalOrigin, AudioFormat
 from infiniteprep.domain.models import ApprovedField, FieldProposal, FileAsset
@@ -47,7 +47,7 @@ def test_migrate_populated_library(tmp_path: Path) -> None:
     with DatabaseManager(library) as db:
         repo = Repository(db)
         assert repo.get_source_group("group").user_label == "Library"
-        assert db.connect().execute("PRAGMA user_version").fetchone()[0] == 3
+        assert db.connect().execute("PRAGMA user_version").fetchone()[0] == LATEST_VERSION
         assert repo.collections.create_playlist("Warmup").name == "Warmup"
 
 

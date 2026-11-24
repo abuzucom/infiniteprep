@@ -5,7 +5,63 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.87.0] (2026-11-24)
+## [0.88.0] (2026-11-24)
+
+### Added
+
+- A shared framework imports a DJ library into the app (IMPORT-1, #143).
+  - One importer interface reads any source format. EXPORT-7 calls the same interface with no user interface.
+  - The merge compares every field against the value the app holds. A value with no conflict becomes an approved field. A conflicting value becomes a proposal in pending review.
+  - The commit reads every field back before it writes it. A value that changed after the merge becomes a proposal. A concurrent edit survives the import.
+  - The pending changes stay in memory until one commit writes the whole set in one transaction. A cancel drops the set, and the database never holds a half-finished import.
+  - The library record and the path mappings join the same transaction as the tracks.
+  - The source library stays read-only. The import never writes to it.
+  - A field with no storage yet stays pending. The app writes no field name it cannot store.
+  - A file whose parser fails leaves its track unresolved. One unreadable file never stops the import.
+  - The framework handles only the errors the audio parser documents. A defect in the adapter stops the import instead of hiding it.
+  - The dialog picks the library of the row the DJ picked. A library the app cannot read never takes the pick.
+  - A track that moved keeps its library row. The import leaves no second row for the same track.
+  - The change count covers every row the commit writes. An import that found no track still reports the library record and the path mappings.
+  - The import root must be an absolute folder that exists. A root that cannot hold an import stops the run before the plan starts. The result names the problem and holds no change.
+  - The plan keeps every pending value with its payload and its track until the commit.
+- A shared step finds the DJ libraries installed on this computer (IMPORT-1, #143).
+  - It lists the path, the format, the version where readable, and the last changed time of every library it finds.
+  - The DJ picks one. The step opens no file before that choice.
+  - The search walks the standard parent folders to a shallow depth and follows no link out of the profile.
+  - A folder declared for another platform never holds a candidate.
+  - The mounted drives come from the USB inspection layer. The drive class rule applies, and a fixed disk keeps its note.
+- The known library locations carry the vendor page that states the location (IMPORT-1, #143).
+  - Traktor, Serato, Mixxx, and rekordbox each name the folder per platform.
+  - The rekordbox USB export names the hidden device folder, PIONEER on FAT and .PIONEER on HFS. The device library and the OneLibrary database sit in a rekordbox folder inside it.
+  - The framework marks a location with no vendor page as observed. The entry names the version seen on.
+- Prefix mappings move a source library path onto this computer (IMPORT-1, #143).
+  - The framework reads four path styles. Windows drive letters, macOS and Linux slashes, URL-encoded file URLs, and the Traktor volume notation.
+  - The DJ names the folder the music lives in. Every imported file must resolve inside it.
+  - A path outside that folder stays unresolved. The import never reads it.
+  - A symbolic link inside the folder cannot carry a path out of it. The check runs again right before the read.
+  - The framework opens the file once and checks the file identity after the read. A file that changed during the read never reaches the app.
+  - The open compares the identity of the directory entry. No link follows that identity. A file that a link replaced never opens. The framework checks the path against the root again after the open. A folder swapped for a junction never reaches a file outside the root.
+  - The metadata reads from the same handle. The framework never opens the file a second time.
+  - The known library folders stay inside the profile folder. A folder that is a link holds no candidate at all.
+  - The step checks every candidate against the profile folder at the moment it looks at it. A folder that a link replaced after the walk holds no candidate.
+  - An imported track names the source group of its import. The group holds the tracks that came with it.
+  - A scan root that is a link holds no candidate. A scan root that resolves outside the profile folder holds no candidate either.
+  - The reverse mapping puts a local path back into the source layout for the exporters and EXPORT-7.
+  - The framework refuses a reverse mapping that climbs above the target prefix. The result stays under the source prefix.
+  - Both directions refuse a path that names a drive of its own.
+- A bounded search finds an audio file that moved (IMPORT-1, #143).
+  - The DJ picks a root. The search matches the file name and the size inside the root. A hash check confirms the match.
+  - The search visits a bounded number of folders as well as a bounded number of files.
+  - The search reads each candidate once, however many references name it. The search stops hashing at the work bound.
+  - The search hashes a candidate through a handle that stays inside the root. A file that a link replaced never sends the read outside the root.
+  - The search never leaves the root and follows no link out of the root.
+- The imported libraries and the path mappings reach the database through migration 4 (IMPORT-1, #143).
+- One production registry holds the importer of every format the app reads (IMPORT-1, #143).
+  - The desktop dialog and the headless conversion pass of EXPORT-7 both read libraries through it.
+  - A format with no importer raises a named error that lists the formats the registry holds.
+  - The error names the issue that adds the reader of the format.
+  - The dialog takes the formats the app can read. A library of another format stays out of the list. The production registry names those formats by default.
+  - A file the DJ names by hand carries the format of its header. The registry picks the reader that goes with it.
 
 ### Changed
 
@@ -44,7 +100,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - History uses plain copy (UI-2, #342, item 12).
   - Screen readers name the list of writes History.
   - A failed restore reads such as "Couldn't restore this file (disk full). It's unchanged. Check the backup drive and try again."
-- The version advances from 0.85.0 to 0.87.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.87.0 to 0.88.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 
