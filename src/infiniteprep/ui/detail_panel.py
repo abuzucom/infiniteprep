@@ -99,9 +99,9 @@ NOTHING_DETECTED_TEXT: Final[str] = "Nothing detected"
 PERCENT_SCALE: Final[int] = 100
 
 
-def format_match_percent(score: float | None) -> str:
+def format_match_percent(score: float) -> str:
     """Return a 0 to 1 match score as a whole percentage, such as "88% match"."""
-    return f"{round((score or 0.0) * PERCENT_SCALE)}% match"
+    return f"{round(score * PERCENT_SCALE)}% match"
 
 
 def format_header_text(file_name: str, *, write_supported: bool) -> str:
@@ -131,6 +131,9 @@ def format_candidate_row(
     track = f"{artist} - {title} ({mix_name or ORIGINAL_MIX_TEXT})"
     if release:
         track = f"{track}, {release}"
+    # A missing score shows no percentage, so it never reads as a real 0% match.
+    if match_score is None:
+        return f"{track}. From {provider}"
     return f"{track}. From {provider}, {format_match_percent(match_score)}"
 
 

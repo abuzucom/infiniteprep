@@ -70,7 +70,7 @@ def test_candidate_and_analysis_rows_read_plainly() -> None:
             catalog_number=None,
             match_score=None,
         )
-        == "A - T (Dub). From discogs, 0% match"
+        == "A - T (Dub). From discogs"
     )
     assert format_analysis_row("128", "8A") == "Detected: 128 BPM, key 8A"
     assert format_analysis_row(None, "8A") == "Detected: key 8A"
