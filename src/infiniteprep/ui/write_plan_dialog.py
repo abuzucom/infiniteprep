@@ -28,8 +28,10 @@ from infiniteprep.ui.accessible_names import announce
 from infiniteprep.ui.detail_panel import field_display_name
 from infiniteprep.ui.write_preview_model import (
     BACKUP_NOTE,
+    NO_FILES_BUTTON_LABEL,
     count_plans,
     format_apply_label,
+    format_count,
     format_summary_badges,
     plan_field_diff,
     plan_status_label,
@@ -46,9 +48,17 @@ COLUMN_PLAN_OLD: Final[int] = 1
 COLUMN_PLAN_NEW: Final[int] = 2
 COLUMN_PLAN_STATUS: Final[int] = 3
 RENAME_ARROW: Final[str] = " -> "
-NO_SAFE_PLANS_TEXT: Final[str] = (
-    "No file is ready for a safe write. Resolve the blocked rows, or close the preview."
-)
+NO_SAFE_PLANS_TEXT: Final[str] = "Nothing to save. Fix the skipped files or close this window."
+WINDOW_TITLE: Final[str] = "Review changes"
+RENAME_LABEL: Final[str] = "Rename files:"
+REFRESH_LABEL: Final[str] = "Refresh"
+PLAN_TREE_NAME: Final[str] = "Changes"
+SAVE_BLOCKED_TITLE: Final[str] = "Can't save yet"
+
+
+def format_saved_count(saved: int, total: int) -> str:
+    """Return the preview status line, such as "3 of 5 files will be saved."."""
+    return f"{saved} of {format_count(total, 'file', 'files')} will be saved."
 
 
 def format_plan_status(plan: FileWritePlan) -> str:
@@ -83,10 +93,10 @@ class WritePlanDialog(QDialog):
         self.submit_plans = submit_plans
         self.current_plans: list[FileWritePlan] = []
 
-        self.setWindowTitle("Preview & Apply Metadata Writes")
+        self.setWindowTitle(WINDOW_TITLE)
         self.resize(WRITE_PLAN_DIALOG_WIDTH, WRITE_PLAN_DIALOG_HEIGHT)
 
-        self.rename_checkbox = QCheckBox("Rename files using template:", self)
+        self.rename_checkbox = QCheckBox(RENAME_LABEL, self)
         self.template_input = QLineEdit(default_template, self)
         self.change_badge = QLabel("", self)
         self.loss_badge = QLabel("", self)
@@ -94,8 +104,8 @@ class WritePlanDialog(QDialog):
         self.backup_note = QLabel(BACKUP_NOTE, self)
         self.plan_tree = QTreeWidget(self)
         self.status_label = QLabel("", self)
-        self.refresh_btn = QPushButton("Refresh Preview", self)
-        self.apply_btn = QPushButton("Apply Safe Writes", self)
+        self.refresh_btn = QPushButton(REFRESH_LABEL, self)
+        self.apply_btn = QPushButton(NO_FILES_BUTTON_LABEL, self)
         self.close_btn = QPushButton("Cancel", self)
 
         self._build_layout()
@@ -131,7 +141,7 @@ class WritePlanDialog(QDialog):
         # The rows preview computed plans. An edit in a cell changed nothing and was lost.
         self.plan_tree.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.plan_tree.setTabKeyNavigation(False)
-        self.plan_tree.setAccessibleName("Write plan")
+        self.plan_tree.setAccessibleName(PLAN_TREE_NAME)
         self.template_input.setAccessibleName("Rename template")
         root.addWidget(self.plan_tree, stretch=1)
 
@@ -165,10 +175,7 @@ class WritePlanDialog(QDialog):
         self.skipped_badge.setText(skipped_text)
         self.skipped_badge.setVisible(counts.skipped > 0)
         self.apply_btn.setText(format_apply_label(counts))
-        safe_count = counts.will_change
-        self._show_status(
-            f"{safe_count} of {len(self.current_plans)} files ready for safe backed-up write."
-        )
+        self._show_status(format_saved_count(counts.will_change, len(self.current_plans)))
 
     @staticmethod
     def _build_plan_item(plan: FileWritePlan) -> QTreeWidgetItem:
@@ -216,6 +223,6 @@ class WritePlanDialog(QDialog):
             self._apply_or_submit(safe_plans)
         except PendingRecoveryError as exc:
             # The dialog stays open, because no file changed.
-            QMessageBox.warning(self, "Writes Blocked", str(exc))
+            QMessageBox.warning(self, SAVE_BLOCKED_TITLE, str(exc))
             return
         self.accept()

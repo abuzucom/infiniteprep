@@ -29,6 +29,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Each stuck prompt names its limit, says what stays done, and offers the two choices in plain words. The save prompt says InfinitePrep offers to restore or finish the file at the next start.
   - The import stuck prompt follows the same shape.
   - Batch states, result counts, and failure lines stay as they were.
+- The write preview uses plain copy (UI-2, #342, item 12).
+  - The window title reads Review changes. The controls read Rename files, Refresh, and Save changes.
+  - The status line reads such as "3 of 5 files will be saved.".
+  - With nothing to save, the preview says "Nothing to save. Fix the skipped files or close this window."
+  - A blocked save shows the title "Can't save yet".
+  - Rename template placeholders such as {artist} stay, since the renamer reads them.
 - The version advances from 0.85.0 to 0.86.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ## [0.85.0] (2026-11-23)

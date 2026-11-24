@@ -107,7 +107,7 @@ def test_write_preview_count_is_announced(qtbot: Any, announcements: list[str]) 
 
     dialog.execute_safe_writes()
 
-    assert announcements[0] == "0 of 0 files ready for safe backed-up write."
+    assert announcements[0] == "0 of 0 files will be saved."
     assert announcements[-1] == dialog.status_label.text()
 
 
