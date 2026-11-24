@@ -125,25 +125,26 @@ from infiniteprep.ui.workflow import (
     matches_library_filter,
 )
 from infiniteprep.ui.workflow_bar import WorkflowBar, stage_shortcut
+from infiniteprep.ui.write_preview_model import format_count
 
 TABLE_COLUMNS: Final[tuple[str, ...]] = (
     "Filename",
     "Format",
     "Duration",
-    "Artist (Cur -> Prop)",
-    "Title (Cur -> Prop)",
-    "Mix / Version",
+    "Artist",
+    "Title",
+    "Mix",
     "Label / Cat#",
     "BPM",
     "Key",
-    "Review Status",
-    "Hardware / Rip Warnings",
+    "Status",
+    "Issues",
 )
 MAIN_WINDOW_WIDTH: Final[int] = 1360
 MAIN_WINDOW_HEIGHT: Final[int] = 820
 if len(TABLE_COLUMNS) != SORT_COLUMN_COUNT or len(TABLE_COLUMNS) != len(LibraryColumn):
     raise RuntimeError("The library table columns and the sort kinds must stay aligned.")
-WARNINGS_COLUMN: Final[int] = TABLE_COLUMNS.index("Hardware / Rip Warnings")
+WARNINGS_COLUMN: Final[int] = int(LibraryColumn.WARNINGS)
 # Filename, Artist, and Title share the spare width equally. Every other column fits
 # its cells.
 LIBRARY_COLUMN_WEIGHTS: Final[dict[int, int]] = {
@@ -163,12 +164,20 @@ WARNING_LINE_SEPARATOR: Final[str] = "\n"
 
 
 def format_warning_summary(warnings: list[str]) -> str:
-    """Return the warnings cell text: a count such as "2 warnings", or nothing for none."""
-    count = len(warnings)
-    if count == 0:
+    """Return the Issues cell text: a count such as "2 issues", or nothing for none."""
+    if not warnings:
         return ""
-    noun = "warning" if count == 1 else "warnings"
-    return f"{count} {noun}"
+    return format_count(len(warnings), "issue", "issues")
+
+
+def format_approved_count(count: int) -> str:
+    """Return the Approve all matches result, such as "Approved 3 fields."."""
+    return f"Approved {format_count(count, 'field', 'fields')}."
+
+
+def format_analyze_label(count: int) -> str:
+    """Return the queue name of an Analyze batch, such as "Analyze 3 files"."""
+    return f"Analyze {format_count(count, 'file', 'files')}"
 
 
 # The status cell label of each review status value.
@@ -177,15 +186,18 @@ STATUS_FILTER_VALUES: Final[dict[str, str]] = {
 }
 # Milliseconds after the last column resize before the layout saves.
 LAYOUT_SAVE_DELAY_MS: Final[int] = 300
-NO_VISIBLE_FILES_TEXT: Final[str] = (
-    "No files are visible. Import a folder, or clear the filter and the status choice."
-)
-ANALYZE_TITLE: Final[str] = "Identify & Analyze All"
-BULK_APPROVE_TITLE: Final[str] = "Bulk Approve Non-Conflicting"
-BULK_APPROVE_RESULT_TEMPLATE: Final[str] = "Approved {count} field(s) where every proposal agreed."
-WRITE_TITLE: Final[str] = "Preview & Apply Writes"
-TRANSCODE_TITLE: Final[str] = "Transcode to XDJ"
-EXPORT_TITLE: Final[str] = "Export Playlist (.m3u8)"
+NO_VISIBLE_FILES_TEXT: Final[str] = "Nothing here yet. Add a folder or clear your filters."
+ANALYZE_TITLE: Final[str] = "Analyze"
+BULK_APPROVE_TITLE: Final[str] = "Approve all matches"
+WRITE_TITLE: Final[str] = "Review changes"
+TRANSCODE_TITLE: Final[str] = "Transcode"
+EXPORT_TITLE: Final[str] = "Export playlist"
+BATCH_RESULT_TITLE: Final[str] = "Results"
+IMPORT_FAILED_TITLE: Final[str] = "Import failed"
+CHOOSE_FOLDER_TITLE: Final[str] = "Choose a music folder"
+PLAYLIST_FILE_FILTER: Final[str] = "Playlist (*.m3u8)"
+PLAYLIST_DEFAULT_NAME: Final[str] = "crate.m3u8"
+WINDOW_TITLE: Final[str] = "InfinitePrep"
 SORT_ASCENDING_TEXT: Final[str] = "Ascending"
 SORT_DESCENDING_TEXT: Final[str] = "Descending"
 # Screen readers announce these names. Placeholder text vanishes once a field holds text.
@@ -198,7 +210,7 @@ SIDEBAR_TOGGLE_NAME: Final[str] = "Show sidebar"
 SIDEBAR_TOGGLE_ICON: Final[str] = "folder"
 SIDEBAR_TOGGLE_ICON_SIZE: Final[int] = 20
 # A mnemonic label: the single ampersand marks the Alt key that focuses the picker.
-KEY_NOTATION_LABEL: Final[str] = "&Key Notation:"
+KEY_NOTATION_LABEL: Final[str] = "&Key format:"
 SETTINGS_SHORTCUT: Final[str] = "Ctrl+,"
 # Space stays with the focused button or field, so Play/Pause takes Ctrl+P.
 PLAY_PAUSE_SHORTCUT: Final[str] = "Ctrl+P"
@@ -213,11 +225,13 @@ CLOSE_STAY: Final[str] = "stay"
 IMPORT_FAILURE_TEXT: Final[str] = (
     "The import stopped and nothing was imported. Check the folder and try again."
 )
+CLOSE_PROMPT_TITLE: Final[str] = "Still working"
 CLOSE_PROMPT_TEXT: Final[str] = (
-    "A batch is still running or waiting. Keep working, or cancel and exit. "
-    "Cancel stops the running batch after its current file and drops every waiting batch. "
-    "A cancelled import keeps nothing."
+    "You still have work running. If you quit now, it stops after the current file "
+    "and anything waiting is dropped. A cancelled import saves nothing."
 )
+KEEP_WORKING_LABEL: Final[str] = "Keep working"
+QUIT_NOW_LABEL: Final[str] = "Quit now"
 # Runs a queued Analyze batch on a worker thread: file IDs, cancel check, progress report.
 AnalyzeRunner = Callable[[list[str], CancelCheck, ProgressReport], object]
 # The first column carries the file ID of the row.
@@ -363,7 +377,7 @@ class MainWindow(QMainWindow):
         self.visible_file_ids: list[str] = []
         self._init_sort_state()
 
-        self.setWindowTitle("InfinitePrep - DJ Music Metadata & Audio Preparation")
+        self.setWindowTitle(WINDOW_TITLE)
         self.setMinimumSize(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
         self.resize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
         self._create_widgets(enable_audio_backend)
@@ -1167,7 +1181,7 @@ class MainWindow(QMainWindow):
 
     def _prompt_import_folder(self) -> None:
         """Open a folder picker and import the chosen folder in the background."""
-        chosen = QFileDialog.getExistingDirectory(self, "Select Music Folder to Import")
+        chosen = QFileDialog.getExistingDirectory(self, CHOOSE_FOLDER_TITLE)
         if chosen:
             self.start_folder_import(Path(chosen))
 
@@ -1219,7 +1233,7 @@ class MainWindow(QMainWindow):
             return
         box = QMessageBox(
             QMessageBox.Icon.Information,
-            "Batch Result",
+            BATCH_RESULT_TITLE,
             format_batch_result(batch),
             QMessageBox.StandardButton.Ok,
             self,
@@ -1233,7 +1247,7 @@ class MainWindow(QMainWindow):
         """Warn that the import rolled back. The message holds no exception text."""
         box = QMessageBox(
             QMessageBox.Icon.Warning,
-            "Import Failed",
+            IMPORT_FAILED_TITLE,
             IMPORT_FAILURE_TEXT,
             QMessageBox.StandardButton.Ok,
             self,
@@ -1250,11 +1264,11 @@ class MainWindow(QMainWindow):
         name for existing callers.
         """
         box = QMessageBox(self)
-        box.setWindowTitle("Batch In Progress")
+        box.setWindowTitle(CLOSE_PROMPT_TITLE)
         box.setTextFormat(Qt.TextFormat.PlainText)
         box.setText(CLOSE_PROMPT_TEXT)
-        box.addButton("Keep Working", QMessageBox.ButtonRole.RejectRole)
-        cancel_button = box.addButton("Cancel and Exit", QMessageBox.ButtonRole.DestructiveRole)
+        box.addButton(KEEP_WORKING_LABEL, QMessageBox.ButtonRole.RejectRole)
+        cancel_button = box.addButton(QUIT_NOW_LABEL, QMessageBox.ButtonRole.DestructiveRole)
         box.exec()
         if box.clickedButton() is cancel_button:
             return CLOSE_CANCEL
@@ -1294,7 +1308,7 @@ class MainWindow(QMainWindow):
         if runner is not None:
             self.queue_batch(
                 BatchKind.ANALYZE,
-                f"Identify & Analyze {len(file_ids)} file(s)",
+                format_analyze_label(len(file_ids)),
                 lambda should_cancel, progress: runner(file_ids, should_cancel, progress),
             )
             return
@@ -1325,7 +1339,7 @@ class MainWindow(QMainWindow):
             self,
             QMessageBox.Icon.Information,
             BULK_APPROVE_TITLE,
-            BULK_APPROVE_RESULT_TEMPLATE.format(count=approved),
+            format_approved_count(approved),
         )
 
     def _trigger_open_write_dialog(self) -> None:
@@ -1344,7 +1358,7 @@ class MainWindow(QMainWindow):
         if self.on_export_playlist is None or not self._has_visible_files(EXPORT_TITLE):
             return
         chosen, _ = QFileDialog.getSaveFileName(
-            self, "Export Playlist", "crate.m3u8", "M3U8 Playlist (*.m3u8)"
+            self, EXPORT_TITLE, PLAYLIST_DEFAULT_NAME, PLAYLIST_FILE_FILTER
         )
         if not chosen:
             return

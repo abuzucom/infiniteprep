@@ -5,12 +5,50 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.85.1] (2026-11-24)
+## [0.87.0] (2026-11-24)
+
+### Changed
+
+- Review statuses show plain labels in the library Status column and the detail panel badge (UI-2, #342, item 12).
+  - The labels read Not analyzed, Analyzing, Has suggestions, Needs review, Conflicting matches, Partly matched, Partly approved, No match, Approved, Ready to save, Applied, Saved, and Failed.
+  - Needs review and Ready to save match the sidebar filters.
+  - Each label is unique, so the status filter maps a label back to one stored value.
+  - An unknown stored value shows as stored.
+- The detail panel and its player use plain copy (UI-2, #342, item 12).
+  - The Warnings section reads Issues. An empty list reads "No issues.".
+  - The header shows the file name. A file without tag support adds "(can't save tags to this file)".
+  - The Changes columns read Now, Suggested, Source, and New value. The Source cell reads such as "acoustid, 88% match".
+  - Candidate rows read such as "A - T (Original), Label CAT1. From discogs, 91% match". Analysis rows read such as "Detected: 128 BPM, key 8A".
+  - Buttons read Play, Load paused, and Lock field. With no track picked, the panel says "Pick a track to see its details."
+  - The player reads "No track loaded". Its playback and waveform failures use plain sentences and keep the reason.
+  - The binary tag summary in Other tags stays, since the tag reader stores binary frames in that form.
+- The batch queue and its stuck prompts use plain copy (UI-2, #342, item 12).
+  - The queue panel reads Queue. Its buttons read Move up, Move down, Cancel, See results, and Clear finished.
+  - A pending cancel reads "Stopping after the current file.".
+  - Stuck prompt titles read such as "Saving isn't responding". The buttons read Quit now and Keep waiting.
+  - Each stuck prompt names its limit, says what stays done, and offers the two choices in plain words. The save prompt says InfinitePrep offers to restore or finish the file at the next start.
+  - The import stuck prompt follows the same shape.
+  - Batch states, result counts, and failure lines stay as they were.
+- The write preview uses plain copy (UI-2, #342, item 12).
+  - The window title reads Review changes. The controls read Rename files, Refresh, and Save changes.
+  - The status line reads such as "3 of 5 files will be saved.".
+  - With nothing to save, the preview says "Nothing to save. Fix the skipped files or close this window."
+  - A blocked save shows the title "Can't save yet".
+  - Rename template placeholders such as {artist} stay, since the renamer reads them.
+- Settings uses plain copy (UI-2, #342, item 12).
+  - The window title reads Settings. The save button reads Save.
+  - Row labels name what each setting does, such as "Key format in tags", "Fake lossless check", "AI server address", and "Delete after (days)".
+  - The local AI option reads "Let a local AI pick between matches". The batch option reads "Stop when a file fails".
+  - USB recovery cleanup asks "Delete USB recovery data?" and reports such as "Deleted 3 USB recovery entries.".
+  - The hidden reserve row keeps its MiB unit, since the value counts mebibytes.
+- History uses plain copy (UI-2, #342, item 12).
+  - Screen readers name the list of writes History.
+  - A failed restore reads such as "Couldn't restore this file (disk full). It's unchanged. Check the backup drive and try again."
+- The version advances from 0.85.0 to 0.87.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed
 
 - A rescan in the USB export dialog drops the drive shown on Confirm. After Back and a rescan, no drive counts as confirmed until Next runs again, even when the listing fails.
-- The version advances from 0.85.0 to 0.85.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ## [0.85.0] (2026-11-23)
 
@@ -42,6 +80,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `platformdirs` moves to 4.14.8. The per-user folder paths stay the same on every platform.
 - `ruff` moves to 0.17.6. The lint and format checks pass on the current tree.
 - The SBOM tool `cyclonedx-bom` moves to 9.0.0. The release raises the `cyclonedx-python-lib` floor to 11.12, and the lock holds 11.12.0.
+- The main window and its sidebar use plain copy (UI-2, #342, item 12).
+  - Columns read Artist, Title, Mix, Status, and Issues. The Issues cell counts issues, such as "2 issues". Label / Cat# stays.
+  - The sidebar filters read With issues and Ready to save.
+  - The window title is InfinitePrep. The key picker reads Key format.
+  - Dialog titles read Analyze, Approve all matches, Review changes, Transcode, Export playlist, Results, Import failed, and Still working.
+  - Approve all matches reports "Approved 3 fields.". An Analyze batch reads "Analyze 3 files" in the queue.
+  - With no tracks shown, a message says "Nothing here yet. Add a folder or clear your filters."
+  - The quit prompt offers Keep working and Quit now.
 - The version advances from 0.83.0 to 0.85.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Fixed

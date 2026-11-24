@@ -36,11 +36,11 @@ logger = logging.getLogger(__name__)
 
 REPORT_DIALOG_WIDTH: Final[int] = 720
 REPORT_DIALOG_HEIGHT: Final[int] = 480
-CANCELLING_TEXT: Final[str] = "Cancelling after the current file. Nothing will be imported."
+CANCELLING_TEXT: Final[str] = "Stopping after the current file. Nothing will be imported."
 # One file (or the scan) running longer than this counts as stuck (D244).
 STUCK_FILE_TIMEOUT_MS: Final[int] = 120_000
 STUCK_EXIT_CODE: Final[int] = 1
-STUCK_TITLE: Final[str] = "Import Not Responding"
+STUCK_TITLE: Final[str] = "Import isn't responding"
 MS_PER_SECOND: Final[int] = 1000
 SECONDS_PER_MINUTE: Final[int] = 60
 
@@ -60,9 +60,9 @@ def stuck_import_text(timeout_ms: int) -> str:
     A fixed "2 minutes" stated the wrong duration whenever a caller passed another timeout.
     """
     return (
-        f"One file has taken more than {_describe_timeout(timeout_ms)} and the import is not "
-        "responding. Quit Now ends InfinitePrep at once and keeps nothing from this import. "
-        "Keep Waiting lets the import continue."
+        f"One file has taken more than {_describe_timeout(timeout_ms)} to import. Quit now "
+        "closes InfinitePrep right away and keeps nothing from this import. Keep waiting "
+        "lets the import continue."
     )
 
 

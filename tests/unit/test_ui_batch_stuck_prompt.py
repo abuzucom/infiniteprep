@@ -157,5 +157,8 @@ def test_limits_and_wording_follow_kind() -> None:
     assert WRITE_STUCK_PROMPT.timeout_ms == two_minutes_ms
     assert "5 minutes" in ANALYZE_STUCK_PROMPT.text
     assert "2 minutes" in WRITE_STUCK_PROMPT.text
-    assert "Recover Interrupted Writes" in WRITE_STUCK_PROMPT.text
-    assert "Files written so far stay written." in WRITE_STUCK_PROMPT.text
+    assert (
+        "Next time InfinitePrep starts, it offers to restore or finish this file."
+        in WRITE_STUCK_PROMPT.text
+    )
+    assert "Files already saved stay saved." in WRITE_STUCK_PROMPT.text

@@ -211,21 +211,32 @@ STATUS_STATES: Final[dict[ReviewStatus, tuple[str, StatusRole]]] = {
 }
 WARNING_ICON: Final[str] = "triangle-exclamation-point"
 MINOR_MODE_SUFFIX: Final[str] = "m"
-# Words that stay lower case inside a status label, as in "Ready to Write".
-STATUS_LABEL_MINOR_WORDS: Final[frozenset[str]] = frozenset({"to", "for"})
+# The plain label of each review status. Each label is unique, so the status filter
+# maps a label back to one stored value.
+STATUS_LABELS: Final[dict[ReviewStatus, str]] = {
+    ReviewStatus.UNPROCESSED: "Not analyzed",
+    ReviewStatus.PROCESSING: "Analyzing",
+    ReviewStatus.PROPOSED: "Has suggestions",
+    ReviewStatus.READY_FOR_REVIEW: "Needs review",
+    ReviewStatus.CONFLICTING_CANDIDATES: "Conflicting matches",
+    ReviewStatus.PARTIALLY_IDENTIFIED: "Partly matched",
+    ReviewStatus.PARTIALLY_APPROVED: "Partly approved",
+    ReviewStatus.NO_MATCH: "No match",
+    ReviewStatus.APPROVED: "Approved",
+    ReviewStatus.READY_TO_WRITE: "Ready to save",
+    ReviewStatus.APPLIED: "Applied",
+    ReviewStatus.WRITTEN: "Saved",
+    ReviewStatus.ERROR: "Failed",
+}
 
 
 def format_status_label(status: ReviewStatus) -> str:
-    """Return the label of one review status, such as "Ready for Review"."""
-    words = status.value.split("_")
-    return " ".join(
-        word if index and word in STATUS_LABEL_MINOR_WORDS else word.capitalize()
-        for index, word in enumerate(words)
-    )
+    """Return the plain label of one review status, such as "Needs review"."""
+    return STATUS_LABELS[status]
 
 
 def format_status_cell(value: str) -> str:
-    """Return the label a status shows, such as "Ready to Write".
+    """Return the label a stored status shows, such as "Ready to save".
 
     An unknown stored value shows as stored, so no row loses its status.
     """

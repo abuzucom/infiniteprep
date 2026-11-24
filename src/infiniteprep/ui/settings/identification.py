@@ -29,22 +29,22 @@ class IdentificationTab(FormSettingsTab):
         self.creds = credential_store
         # Credential store entry name for each masked input.
         self._masked_inputs: dict[str, QLineEdit] = {}
-        self.acoustid_key_input = self._add_masked_row("AcoustID API Key:", "acoustid_api_key")
-        self.discogs_token_input = self._add_masked_row("Discogs Personal Token:", "discogs_token")
+        self.acoustid_key_input = self._add_masked_row("AcoustID key:", "acoustid_api_key")
+        self.discogs_token_input = self._add_masked_row("Discogs token:", "discogs_token")
 
-        self.enable_llm_checkbox = QCheckBox("Enable Closed-World LLM Arbitration", self)
+        self.enable_llm_checkbox = QCheckBox("Let a local AI pick between matches", self)
         self.enable_llm_checkbox.setChecked(settings.enable_llm_arbitration)
-        self.form.addRow("Optional Local LLM:", self.enable_llm_checkbox)
+        self.form.addRow("Local AI:", self.enable_llm_checkbox)
 
         self.ollama_url_input = QLineEdit(settings.ollama_base_url, self)
-        self.form.addRow("Ollama / OpenAI Base URL:", self.ollama_url_input)
+        self.form.addRow("AI server address:", self.ollama_url_input)
 
         self.ollama_model_combo = QComboBox(self)
         self.ollama_model_combo.setEditable(True)
         for model in RECOMMENDED_MODELS:
             self.ollama_model_combo.addItem(model)
         self.ollama_model_combo.setCurrentText(settings.ollama_model)
-        self.form.addRow("Ollama Model:", self.ollama_model_combo)
+        self.form.addRow("AI model:", self.ollama_model_combo)
 
         # The disclosure names the host and the data that leaves the machine.
         self.disclosure_label = QLabel(DISCLOSURE_TEXT, self)

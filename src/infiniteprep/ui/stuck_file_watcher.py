@@ -13,8 +13,8 @@ from PySide6.QtWidgets import QAbstractButton, QMessageBox, QWidget
 
 logger = logging.getLogger(__name__)
 
-QUIT_NOW_TEXT: Final[str] = "Quit Now"
-KEEP_WAITING_TEXT: Final[str] = "Keep Waiting"
+QUIT_NOW_TEXT: Final[str] = "Quit now"
+KEEP_WAITING_TEXT: Final[str] = "Keep waiting"
 
 
 @dataclass(frozen=True)

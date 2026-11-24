@@ -23,17 +23,17 @@ class TranscodeTab(FormSettingsTab):
         for mode in TranscodeMode:
             self.transcode_mode_combo.addItem(mode.value)
         self.transcode_mode_combo.setCurrentText(settings.transcode_mode)
-        self.form.addRow("XDJ Transcode Mode:", self.transcode_mode_combo)
+        self.form.addRow("Mode:", self.transcode_mode_combo)
 
         self.transcode_preset_combo = QComboBox(self)
         for preset in TranscodePreset:
             self.transcode_preset_combo.addItem(preset.value)
         self.transcode_preset_combo.setCurrentText(settings.transcode_preset)
-        self.form.addRow("XDJ Transcode Preset:", self.transcode_preset_combo)
+        self.form.addRow("Format:", self.transcode_preset_combo)
 
         self.playlist_relative_checkbox = QCheckBox("Write paths relative to the playlist", self)
         self.playlist_relative_checkbox.setChecked(settings.playlist_relative_paths)
-        self.form.addRow("Playlist Export:", self.playlist_relative_checkbox)
+        self.form.addRow("Playlists:", self.playlist_relative_checkbox)
 
     def apply_to(self, settings: AppSettings) -> None:
         """Copy the transcode and playlist export inputs into settings."""

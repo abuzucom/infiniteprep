@@ -33,7 +33,7 @@ from tests.fixtures.memory_settings import MemorySettingsManager
 from tests.fixtures.qt_dialogs import MESSAGE_ICON_INDEX, MESSAGE_TEXT_INDEX, MESSAGE_TITLE_INDEX
 from tests.fixtures.waveform_stub import keep_waveform_pool_idle
 
-STATUS_COLUMN: int = TABLE_COLUMNS.index("Review Status")
+STATUS_COLUMN: int = TABLE_COLUMNS.index("Status")
 PLAYBACK_ERROR: str = "Playback failed: decoder error."
 BATCH_LABEL: str = "Announce check"
 BATCH_TIMEOUT_MS: int = 10_000
@@ -97,7 +97,7 @@ def test_analysis_failure_is_announced(qtbot: Any, announcements: list[str]) -> 
 
     player.show_analysis_failure("file is unreadable")
 
-    assert announcements == ["Spectrum analysis failed: file is unreadable"]
+    assert announcements == ["Couldn't draw the waveform: file is unreadable"]
 
 
 def test_write_preview_count_is_announced(qtbot: Any, announcements: list[str]) -> None:
@@ -107,7 +107,7 @@ def test_write_preview_count_is_announced(qtbot: Any, announcements: list[str]) 
 
     dialog.execute_safe_writes()
 
-    assert announcements[0] == "0 of 0 files ready for safe backed-up write."
+    assert announcements[0] == "0 of 0 files will be saved."
     assert announcements[-1] == dialog.status_label.text()
 
 
@@ -169,17 +169,17 @@ def test_bulk_approve_reports_the_approved_count(
     assert len(messages) == 1
     icon, _title, text = messages[0]
     assert icon == QMessageBox.Icon.Information
-    assert text.startswith("Approved 0 field(s)")
+    assert text == "Approved 0 fields."
 
 
 def test_status_cell_shows_a_readable_label(
     qtbot: Any, tmp_path: Path, messages: list[tuple[QMessageBox.Icon, str, str]]
 ) -> None:
-    """The library shows "Unprocessed", not the stored value "unprocessed"."""
+    """The library shows "Not analyzed", not the stored value "unprocessed"."""
     window = build_window(qtbot, tmp_path, with_track=True)
 
-    assert window.file_table.item(0, STATUS_COLUMN).toolTip() == "Unprocessed"
-    assert format_status_cell("ready_to_write") == "Ready to Write"
+    assert window.file_table.item(0, STATUS_COLUMN).toolTip() == "Not analyzed"
+    assert format_status_cell("ready_to_write") == "Ready to save"
     assert format_status_cell("not_a_status") == "not_a_status"
 
 
@@ -199,4 +199,4 @@ def test_detail_header_says_yes_or_no_for_write_support(
 
     header = panel.header_label.text()
     assert "True" not in header and "False" not in header
-    assert "Write Supported: Yes" in header or "Write Supported: No" in header
+    assert header in ("a.wav", "a.wav (can't save tags to this file)")

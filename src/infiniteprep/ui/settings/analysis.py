@@ -10,7 +10,7 @@ from infiniteprep.config.settings import AppSettings
 from infiniteprep.services.fake_lossless import available_methods
 from infiniteprep.ui.settings.base import FormSettingsTab
 
-STOP_ON_FAILURE_LABEL: Final[str] = "Stop an Analyze or write batch at its first failed file"
+STOP_ON_FAILURE_LABEL: Final[str] = "Stop when a file fails"
 
 
 class AnalysisTab(FormSettingsTab):
@@ -27,13 +27,13 @@ class AnalysisTab(FormSettingsTab):
         super().__init__(parent)
         self.stop_on_failure_checkbox = QCheckBox(STOP_ON_FAILURE_LABEL, self)
         self.stop_on_failure_checkbox.setChecked(settings.stop_batch_on_first_failure)
-        self.form.addRow("Batch Queue:", self.stop_on_failure_checkbox)
+        self.form.addRow("Queue:", self.stop_on_failure_checkbox)
 
         self.fake_lossless_method_combo = QComboBox(self)
         for method in available_methods():
             self.fake_lossless_method_combo.addItem(method)
         self.fake_lossless_method_combo.setCurrentText(settings.fake_lossless_method)
-        self.form.addRow("Fake-Lossless Method:", self.fake_lossless_method_combo)
+        self.form.addRow("Fake lossless check:", self.fake_lossless_method_combo)
 
     def apply_to(self, settings: AppSettings) -> None:
         """Copy the batch stop rule and fake-lossless method into settings."""

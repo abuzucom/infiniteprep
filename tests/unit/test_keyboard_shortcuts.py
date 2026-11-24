@@ -85,7 +85,7 @@ def test_toolbar_picker_labels_move_focus_to_their_pickers(window: MainWindow) -
         if label.buddy() is not None
     }
 
-    assert buddies["Key Notation:"] == ("K", window.key_notation_combo)
+    assert buddies["Key format:"] == ("K", window.key_notation_combo)
 
 
 def test_import_shortcut_opens_the_folder_picker(
