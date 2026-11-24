@@ -27,16 +27,24 @@ from infiniteprep.services.usb.recovery import UsbRecoveryJournalStore
 from infiniteprep.ui.action_handlers import ask_plain_question, show_plain_message
 from infiniteprep.ui.settings.base import FormSettingsTab
 
-CLEANUP_BUTTON_LABEL: Final[str] = "Delete InfinitePrep Data..."
-RECOVERY_CLEANUP_BUTTON_LABEL: Final[str] = "Clean Up USB Recovery Journal..."
-RECOVERY_CLEANUP_TITLE: Final[str] = "Clean Up USB Recovery Journal"
+CLEANUP_BUTTON_LABEL: Final[str] = "Delete app data..."
+RECOVERY_CLEANUP_BUTTON_LABEL: Final[str] = "Clear USB recovery data..."
+RECOVERY_CLEANUP_TITLE: Final[str] = "Clear USB recovery data"
 RECOVERY_CLEANUP_QUESTION: Final[str] = (
-    "Delete every unresolved USB recovery entry?\n\n"
-    "An interrupted USB export can no longer be resumed or restored after this. "
-    "This cannot be undone."
+    "Delete USB recovery data?\n\n"
+    "You won't be able to resume or undo an interrupted USB export. "
+    "This can't be undone."
 )
+RECOVERY_READ_ERROR_TITLE: Final[str] = "Couldn't clear USB recovery data"
+RECOVERY_READ_ERROR_TEXT: Final[str] = "Couldn't read the USB recovery data. Nothing was deleted."
 USB_RESERVE_PERCENT_DECIMALS: Final[int] = 1
 logger = logging.getLogger(__name__)
+
+
+def format_removed_count(count: int) -> str:
+    """Return the cleanup result, such as "Deleted 3 USB recovery entries."."""
+    entries = "entry" if count == 1 else "entries"
+    return f"Deleted {count} USB recovery {entries}."
 
 
 class StorageTab(FormSettingsTab):
@@ -73,13 +81,13 @@ class StorageTab(FormSettingsTab):
         self.usb_reserve_percent_spin.setDecimals(USB_RESERVE_PERCENT_DECIMALS)
         self.usb_reserve_percent_spin.setRange(0.0, MAX_USB_RESERVE_PERCENT)
         self.usb_reserve_percent_spin.setValue(settings.usb_reserve_percent)
-        self.form.addRow("USB Export Reserve (% of export size):", self.usb_reserve_percent_spin)
+        self.form.addRow("Extra USB space (%):", self.usb_reserve_percent_spin)
 
         self.usb_reserve_mib_spin = QSpinBox(self)
         self.usb_reserve_mib_spin.setRange(0, MAX_USB_RESERVE_MIB)
         # A partial MiB rounds up. A save never shrinks the stored reserve.
         self.usb_reserve_mib_spin.setValue(-(-settings.usb_reserve_bytes // BYTES_PER_MIB))
-        self.form.addRow("USB Export Reserve (MiB):", self.usb_reserve_mib_spin)
+        self.form.addRow("Extra USB space (MiB):", self.usb_reserve_mib_spin)
         # USB export has no entry point yet. The reserve rows stay hidden until then.
         # The hidden inputs still hold the stored values. A save keeps those values.
         self.form.setRowVisible(self.usb_reserve_percent_spin, False)
@@ -90,7 +98,7 @@ class StorageTab(FormSettingsTab):
             self,
         )
         self.usb_recovery_expiry_checkbox.setChecked(settings.usb_recovery_expiry_enabled)
-        self.form.addRow("USB Recovery Expiry:", self.usb_recovery_expiry_checkbox)
+        self.form.addRow("Auto-delete:", self.usb_recovery_expiry_checkbox)
 
         self.usb_recovery_expiry_days_spin = QSpinBox(self)
         self.usb_recovery_expiry_days_spin.setRange(
@@ -98,15 +106,15 @@ class StorageTab(FormSettingsTab):
             MAX_USB_RECOVERY_EXPIRY_DAYS,
         )
         self.usb_recovery_expiry_days_spin.setValue(settings.usb_recovery_expiry_days)
-        self.form.addRow("USB Recovery Expiry (days):", self.usb_recovery_expiry_days_spin)
+        self.form.addRow("Delete after (days):", self.usb_recovery_expiry_days_spin)
 
         self.usb_recovery_cleanup_btn = QPushButton(RECOVERY_CLEANUP_BUTTON_LABEL, self)
         self.usb_recovery_cleanup_btn.clicked.connect(self._cleanup_usb_recovery_journal)
-        self.form.addRow("USB Recovery Journal:", self.usb_recovery_cleanup_btn)
+        self.form.addRow("USB recovery data:", self.usb_recovery_cleanup_btn)
 
         self.cleanup_btn = QPushButton(CLEANUP_BUTTON_LABEL, self)
         self.cleanup_btn.setEnabled(cleanup_enabled)
-        self.form.addRow("Application Data:", self.cleanup_btn)
+        self.form.addRow("App data:", self.cleanup_btn)
 
     def clean_usb_recovery_journal(
         self,
@@ -120,17 +128,14 @@ class StorageTab(FormSettingsTab):
             removed = store.cleanup_unresolved()
         except (OSError, ValueError) as exc:
             logger.warning("Manual USB recovery cleanup failed: %s", type(exc).__name__)
-            message = "Unable to read the USB recovery journal. Existing data was preserved."
-            self.usb_recovery_cleanup_btn.setToolTip(message)
+            self.usb_recovery_cleanup_btn.setToolTip(RECOVERY_READ_ERROR_TEXT)
             if show_error is not None:
-                show_error("USB Recovery Journal Error", message)
+                show_error(RECOVERY_READ_ERROR_TITLE, RECOVERY_READ_ERROR_TEXT)
             else:
-                QMessageBox.warning(self, "USB Recovery Journal Error", message)
+                QMessageBox.warning(self, RECOVERY_READ_ERROR_TITLE, RECOVERY_READ_ERROR_TEXT)
             return None
         count = len(removed)
-        self.usb_recovery_cleanup_btn.setToolTip(
-            f"Removed {count} unresolved USB recovery entry(s)."
-        )
+        self.usb_recovery_cleanup_btn.setToolTip(format_removed_count(count))
         return count
 
     def _cleanup_usb_recovery_journal(self) -> None:
@@ -149,7 +154,7 @@ class StorageTab(FormSettingsTab):
             self,
             QMessageBox.Icon.Information,
             RECOVERY_CLEANUP_TITLE,
-            f"Removed {count} unresolved USB recovery entry(s).",
+            format_removed_count(count),
         )
 
     def apply_to(self, settings: AppSettings) -> None:

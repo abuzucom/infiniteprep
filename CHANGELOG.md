@@ -35,6 +35,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - With nothing to save, the preview says "Nothing to save. Fix the skipped files or close this window."
   - A blocked save shows the title "Can't save yet".
   - Rename template placeholders such as {artist} stay, since the renamer reads them.
+- Settings uses plain copy (UI-2, #342, item 12).
+  - The window title reads Settings. The save button reads Save.
+  - Row labels name what each setting does, such as "Key format in tags", "Fake lossless check", "AI server address", and "Delete after (days)".
+  - The local AI option reads "Let a local AI pick between matches". The batch option reads "Stop when a file fails".
+  - USB recovery cleanup asks "Delete USB recovery data?" and reports such as "Deleted 3 USB recovery entries.".
+  - The hidden reserve row keeps its MiB unit, since the value counts mebibytes.
 - The version advances from 0.85.0 to 0.86.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ## [0.85.0] (2026-11-23)
