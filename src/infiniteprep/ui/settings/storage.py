@@ -26,6 +26,7 @@ from infiniteprep.config.settings import (
 from infiniteprep.services.usb.recovery import UsbRecoveryJournalStore
 from infiniteprep.ui.action_handlers import ask_plain_question, show_plain_message
 from infiniteprep.ui.settings.base import FormSettingsTab
+from infiniteprep.ui.write_preview_model import format_count
 
 CLEANUP_BUTTON_LABEL: Final[str] = "Delete app data..."
 RECOVERY_CLEANUP_BUTTON_LABEL: Final[str] = "Clear USB recovery data..."
@@ -43,8 +44,7 @@ logger = logging.getLogger(__name__)
 
 def format_removed_count(count: int) -> str:
     """Return the cleanup result, such as "Deleted 3 USB recovery entries."."""
-    entries = "entry" if count == 1 else "entries"
-    return f"Deleted {count} USB recovery {entries}."
+    return f"Deleted {format_count(count, 'USB recovery entry', 'USB recovery entries')}."
 
 
 class StorageTab(FormSettingsTab):

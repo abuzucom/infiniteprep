@@ -25,7 +25,7 @@ from infiniteprep.services.usb.recovery import (
     UsbRecoveryJournalStore,
 )
 from infiniteprep.services.usb.targets import TargetCandidate
-from infiniteprep.ui.settings.storage import StorageTab
+from infiniteprep.ui.settings.storage import RECOVERY_READ_ERROR_TITLE, StorageTab
 from infiniteprep.ui.settings_dialog import SettingsDialog
 from infiniteprep.ui.usb_recovery_dialog import (
     UsbRecoveryDialog,
@@ -275,7 +275,7 @@ class StorageTabUsbRecoverySettingsTests(unittest.TestCase):
             )
             self.assertIsNone(removed_count)
             self.assertEqual(len(cleanup_errors), 1)
-            self.assertIn("Error", cleanup_errors[0][0])
+            self.assertEqual(cleanup_errors[0][0], RECOVERY_READ_ERROR_TITLE)
             self.assertEqual(journal_path.read_text(encoding="utf-8"), corrupt_text)
 
 
