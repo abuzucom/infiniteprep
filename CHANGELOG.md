@@ -14,6 +14,14 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Needs review and Ready to save match the sidebar filters.
   - Each label is unique, so the status filter maps a label back to one stored value.
   - An unknown stored value shows as stored.
+- The detail panel and its player use plain copy (UI-2, #342, item 12).
+  - The Warnings section reads Issues. An empty list reads "No issues.".
+  - The header shows the file name. A file without tag support adds "(can't save tags to this file)".
+  - The Changes columns read Now, Suggested, Source, and New value. The Source cell reads such as "acoustid, 88% match".
+  - Candidate rows read such as "A - T (Original), Label CAT1. From discogs, 91% match". Analysis rows read such as "Detected: 128 BPM, key 8A".
+  - Buttons read Play, Load paused, and Lock field. With no track picked, the panel says "Pick a track to see its details."
+  - The player reads "No track loaded". Its playback and waveform failures use plain sentences and keep the reason.
+  - The binary tag summary in Other tags stays, since the tag reader stores binary frames in that form.
 - The version advances from 0.85.0 to 0.86.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ## [0.85.0] (2026-11-23)

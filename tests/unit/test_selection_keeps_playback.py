@@ -167,7 +167,7 @@ def test_the_player_starts_empty(library: Library) -> None:
     panel = library.window.detail_panel
 
     assert panel.loaded_file_id is None
-    assert panel.audio_player.loaded_track_label.text() == "Loaded: none"
+    assert panel.audio_player.loaded_track_label.text() == "No track loaded"
     assert panel.play_selected_btn.isEnabled() is False
 
 
@@ -378,7 +378,7 @@ def test_the_warning_names_both_tracks(library: Library) -> None:
     assert f"'{SECOND_NAME}' stops it and starts the new track paused." in box.text()
     labels = [button.text() for button in box.buttons()]
     assert "Cancel" in labels
-    assert "Load Paused" in labels
+    assert "Load paused" in labels
     assert box.defaultButton().text() == "Cancel"
 
 

@@ -59,7 +59,7 @@ DISPLAY_FIELDS: Final[tuple[FieldName, ...]] = tuple(FieldName)
 FIELDS_TABLE_COLUMN_COUNT: Final[int] = 6
 PLAYER_SECTION_TITLE: Final[str] = "Waveform and player"
 CHANGES_SECTION_TITLE: Final[str] = "Changes"
-WARNINGS_SECTION_TITLE: Final[str] = "Warnings"
+WARNINGS_SECTION_TITLE: Final[str] = "Issues"
 OTHER_TAGS_SECTION_TITLE: Final[str] = "Other tags"
 CANDIDATES_SECTION_TITLE: Final[str] = "Candidates"
 TECHNICAL_SECTION_TITLE: Final[str] = "Technical details"
@@ -77,11 +77,75 @@ CHANGED_ROW_ROLE: Final[int] = Qt.ItemDataRole.UserRole + 1
 OTHER_TAGS_COLUMN_COUNT: Final[int] = 2
 COLUMN_OTHER_KEY: Final[int] = 0
 COLUMN_OTHER_VALUE: Final[int] = 1
-PLAY_SELECTED_LABEL: Final[str] = "Play Selected"
-NO_SELECTION_TEXT: Final[str] = "Select a track to inspect metadata and proposals."
+PLAY_SELECTED_LABEL: Final[str] = "Play"
+NO_SELECTION_TEXT: Final[str] = "Pick a track to see its details."
+NO_WARNINGS_TEXT: Final[str] = "No issues."
 REPLACE_TRACK_TITLE: Final[str] = "Replace the playing track?"
 REPLACE_TRACK_CANCEL_LABEL: Final[str] = "Cancel"
-REPLACE_TRACK_CONFIRM_LABEL: Final[str] = "Load Paused"
+REPLACE_TRACK_CONFIRM_LABEL: Final[str] = "Load paused"
+FIELD_TABLE_HEADERS: Final[tuple[str, ...]] = (
+    "Field",
+    "Now",
+    "Suggested",
+    "Source",
+    "New value",
+    "Actions",
+)
+FIELDS_TABLE_NAME: Final[str] = "Changes"
+CANDIDATES_LIST_NAME: Final[str] = "Possible matches"
+NO_SAVE_SUFFIX: Final[str] = " (can't save tags to this file)"
+ORIGINAL_MIX_TEXT: Final[str] = "Original"
+NOTHING_DETECTED_TEXT: Final[str] = "Nothing detected"
+PERCENT_SCALE: Final[int] = 100
+
+
+def format_match_percent(score: float | None) -> str:
+    """Return a 0 to 1 match score as a whole percentage, such as "88% match"."""
+    return f"{round((score or 0.0) * PERCENT_SCALE)}% match"
+
+
+def format_header_text(file_name: str, *, write_supported: bool) -> str:
+    """Return the panel header: the file name, and a note when tags can't be saved."""
+    return file_name if write_supported else f"{file_name}{NO_SAVE_SUFFIX}"
+
+
+def format_source_cell(provider: str, match_score: float | None) -> str:
+    """Return the Source cell: the provider and, when known, its match percentage."""
+    if match_score is None:
+        return provider
+    return f"{provider}, {format_match_percent(match_score)}"
+
+
+def format_candidate_row(
+    *,
+    provider: str,
+    artist: str,
+    title: str,
+    mix_name: str | None,
+    label: str | None,
+    catalog_number: str | None,
+    match_score: float | None,
+) -> str:
+    """Return one candidate row, such as "A - T (Dub), Label CAT1. From discogs, 91% match"."""
+    release = " ".join(part for part in (label, catalog_number) if part)
+    track = f"{artist} - {title} ({mix_name or ORIGINAL_MIX_TEXT})"
+    if release:
+        track = f"{track}, {release}"
+    return f"{track}. From {provider}, {format_match_percent(match_score)}"
+
+
+def format_analysis_row(bpm: str | None, key_text: str | None) -> str:
+    """Return one analysis row, such as "Detected: 128 BPM, key 8A"."""
+    parts = []
+    if bpm:
+        parts.append(f"{bpm} BPM")
+    if key_text:
+        parts.append(f"key {key_text}")
+    if not parts:
+        return NOTHING_DETECTED_TEXT
+    return "Detected: " + ", ".join(parts)
+
+
 # Stored in the fake-lossless record configuration when the newest run fails.
 FAKE_LOSSLESS_FAILED_STATUS: Final[str] = "failed"
 # Longer values show cut short in the cell. The tooltip holds the full text.
@@ -147,7 +211,7 @@ ROLE_LOCK: Final[str] = "lock"
 ROW_FIELD_PROPERTY: Final[str] = "field_name"
 LOADED_TEXT_PROPERTY: Final[str] = "loaded_text"
 ROW_NAME_SEPARATOR: Final[str] = ":"
-LOCK_TITLE: Final[str] = "Lock Field"
+LOCK_TITLE: Final[str] = "Lock field"
 LOCK_NEEDS_VALUE_TEXT: Final[str] = (
     "The {field} field has no approved value to lock. Save or accept a value first."
 )
@@ -355,7 +419,7 @@ class DetailPanel(QWidget):
         root.addWidget(self.badges_row)
         self._setup_fields_table()
         self._setup_other_tags_table()
-        self.candidates_list.setAccessibleName("Candidate releases and analysis evidence")
+        self.candidates_list.setAccessibleName(CANDIDATES_LIST_NAME)
         self.warnings_label.setWordWrap(True)
         self.technical_label = QLabel("", self)
         self.technical_label.setTextFormat(Qt.TextFormat.PlainText)
@@ -378,16 +442,7 @@ class DetailPanel(QWidget):
 
     def _setup_fields_table(self) -> None:
         """Set the headers, sizing, and keyboard behavior of the field table."""
-        self.fields_table.setHorizontalHeaderLabels(
-            [
-                "Field",
-                "Existing Tag",
-                "Top Proposal",
-                "Source & Score",
-                "Approved / Edit",
-                "Actions",
-            ]
-        )
+        self.fields_table.setHorizontalHeaderLabels(list(FIELD_TABLE_HEADERS))
         self.fields_sizer = WeightedColumnSizer(
             self.fields_table, FIELDS_TABLE_WEIGHTS, FIELDS_TABLE_MIN_SHARE_PX
         )
@@ -396,7 +451,7 @@ class DetailPanel(QWidget):
         self.fields_table.setTabKeyNavigation(False)
         # Edits go through the edit box of each row. A typed cell value was discarded.
         self.fields_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.fields_table.setAccessibleName("Field proposals")
+        self.fields_table.setAccessibleName(FIELDS_TABLE_NAME)
 
     def _setup_other_tags_table(self) -> None:
         """Set the headers and the read-only behavior of the Other tags table."""
@@ -432,7 +487,7 @@ class DetailPanel(QWidget):
         """Show that no file is selected and leave the player untouched.
 
         A cleared table selection leaves no file behind in the panel. The loaded
-        track stays in the player, and the `Play Selected` button turns off.
+        track stays in the player, and the Play button turns off.
         """
         self.current_file_id = None
         self.header_label.setText(NO_SELECTION_TEXT)
@@ -465,8 +520,9 @@ class DetailPanel(QWidget):
             return None
 
         self.header_label.setText(
-            f"File: {Path(asset.current_path).name} | Format: {asset.format} | "
-            f"Write Supported: {'Yes' if asset.is_write_supported else 'No'}"
+            format_header_text(
+                Path(asset.current_path).name, write_supported=asset.is_write_supported
+            )
         )
         self._populate_warnings(asset)
         self._populate_fields_table(asset)
@@ -750,9 +806,8 @@ class DetailPanel(QWidget):
         warnings: list[str] = list(technical_tags.get("warnings", []))
         for analysis in self.repo.list_analysis_results(asset.id):
             warnings.extend(analysis.warnings)
-        no_warnings = "No hardware warnings."
         self.warnings_label.setText(
-            WARNING_LINE_SEPARATOR.join(warnings) if warnings else no_warnings
+            WARNING_LINE_SEPARATOR.join(warnings) if warnings else NO_WARNINGS_TEXT
         )
 
     def _populate_fields_table(self, asset: FileAsset) -> None:
@@ -892,7 +947,7 @@ class DetailPanel(QWidget):
         edit_box.setObjectName(row_widget_name(field_name, ROLE_EDIT))
         edit_box.setProperty(ROW_FIELD_PROPERTY, field_name)
         edit_box.setProperty(LOADED_TEXT_PROPERTY, approved_value)
-        edit_box.setAccessibleName(f"Approved value for {field_label(field_name)}")
+        edit_box.setAccessibleName(f"New value for {field_label(field_name)}")
         self.fields_table.setCellWidget(row_index, COLUMN_APPROVED_EDIT, edit_box)
 
         action_widget = self._create_row_action_widget(
@@ -920,7 +975,7 @@ class DetailPanel(QWidget):
 
         if top_proposal is not None:
             accept_button = self._add_row_button(layout, field_name, ROLE_ACCEPT, "Accept")
-            accept_button.setAccessibleName(f"Accept proposal for {field_label(field_name)}")
+            accept_button.setAccessibleName(f"Accept suggestion for {field_label(field_name)}")
             accept_button.clicked.connect(
                 lambda _c=False, field_name=field_name, proposal_id=top_proposal.id: (
                     self._accept_row_proposal(field_name, proposal_id)
@@ -990,18 +1045,8 @@ class DetailPanel(QWidget):
         return format_canonical_key(parsed[0], parsed[1], self.key_notation)
 
     def _format_proposal_source(self, proposal: FieldProposal) -> str:
-        """Format provider attribution, provider confidence, and application match score."""
-        confidence_text = (
-            f"{proposal.provider_confidence:.2f}"
-            if proposal.provider_confidence is not None
-            else "-"
-        )
-        m_score = (
-            f"{proposal.application_match_score:.2f}"
-            if proposal.application_match_score is not None
-            else "-"
-        )
-        return f"{proposal.provider} (conf={confidence_text}, match={m_score})"
+        """Return the provider of a proposal and its match percentage."""
+        return format_source_cell(proposal.provider, proposal.application_match_score)
 
     def _populate_candidates_list(self, file_id: str) -> None:
         """Populate candidate matches and analysis results in the bottom evidence list."""
@@ -1009,20 +1054,24 @@ class DetailPanel(QWidget):
         for candidate in self.repo.list_candidate_matches(file_id):
             release = candidate.release_details
             self.candidates_list.addItem(
-                f"[{candidate.provider}] {candidate.artist} - {candidate.title} "
-                f"({candidate.mix_name or 'Original'}) | Label: {release.label or '-'} "
-                f"| Cat#: {release.catalog_number or '-'} "
-                f"| Score: {candidate.match_score or 0.0:.2f}"
+                format_candidate_row(
+                    provider=candidate.provider,
+                    artist=candidate.artist,
+                    title=candidate.title,
+                    mix_name=candidate.mix_name,
+                    label=release.label,
+                    catalog_number=release.catalog_number,
+                    match_score=candidate.match_score,
+                )
             )
         for analysis in self.repo.list_analysis_results(file_id):
-            key_text = "-"
+            key_text = None
             if analysis.key_tonic and analysis.key_mode:
                 key_text = format_canonical_key(
                     analysis.key_tonic, analysis.key_mode, self.key_notation
                 )
-            self.candidates_list.addItem(
-                f"[Analyzer: {analysis.analyzer_name}] BPM: {analysis.bpm or '-'} | Key: {key_text}"
-            )
+            bpm_text = str(analysis.bpm) if analysis.bpm else None
+            self.candidates_list.addItem(format_analysis_row(bpm_text, key_text))
 
     def accept_first_proposal_for_field(self, field_name: str) -> bool:
         """Programmatically accept the top proposal for field_name on the current file."""

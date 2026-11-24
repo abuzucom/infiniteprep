@@ -83,7 +83,7 @@ def test_player_error_shows_text_and_resets(
     preview._on_player_error(QMediaPlayer.Error.FormatError, "<b>decoder missing</b>")
 
     assert preview.status_label.textFormat() == Qt.TextFormat.PlainText
-    assert "Playback failed: <b>decoder missing</b>" in preview.status_label.text()
+    assert "This track won't play (<b>decoder missing</b>)." in preview.status_label.text()
     assert preview.play_btn.text() == "Play"
 
 

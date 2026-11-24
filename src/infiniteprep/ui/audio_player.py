@@ -105,11 +105,21 @@ DROP_HIGHLIGHT_COLOR: Final[str] = "#f59e0b"
 DROP_HIGHLIGHT_INSET_PX: Final[int] = 1
 DROP_HIGHLIGHT_BORDER_PX: Final[int] = 2
 LOADED_TRACK_LABEL_PREFIX: Final[str] = "Loaded: "
-LOADED_TRACK_NONE_TEXT: Final[str] = "Loaded: none"
+LOADED_TRACK_NONE_TEXT: Final[str] = "No track loaded"
 BACKEND_UNAVAILABLE_TEXT: Final[str] = (
-    "Audio playback is unavailable on this system. Check the audio device and the Qt "
-    "multimedia backend, then restart the app."
+    "Audio playback isn't available. Check your audio device, then restart InfinitePrep."
 )
+UNKNOWN_PLAYBACK_ERROR: Final[str] = "unknown error"
+
+
+def format_playback_failure(detail: str) -> str:
+    """Return the status line for a track that won't play, with the player's reason."""
+    return f"This track won't play ({detail}). Check that it plays in another app, then try again."
+
+
+def format_analysis_failure(message: str) -> str:
+    """Return the status line for a waveform that couldn't be drawn."""
+    return f"Couldn't draw the waveform: {message}"
 
 
 def compute_cue_jump_positions(duration_sec: float) -> dict[str, float]:
@@ -703,10 +713,7 @@ class AudioPreviewWidget(QWidget):
 
     def _on_player_error(self, _error: QMediaPlayer.Error, error_string: str) -> None:
         """Report a playback failure and return the transport to its stopped state."""
-        detail = error_string or "unknown error"
-        self.show_status(
-            f"Playback failed: {detail}. Check that the file plays in another app, then retry."
-        )
+        self.show_status(format_playback_failure(error_string or UNKNOWN_PLAYBACK_ERROR))
         self.play_btn.setText("Play")
 
     def _on_playback_state_changed(self, state: QMediaPlayer.PlaybackState) -> None:
@@ -778,7 +785,7 @@ class AudioPreviewWidget(QWidget):
 
     def show_analysis_failure(self, message: str) -> None:
         """Report and announce analysis failure while retaining the current overview."""
-        text = f"Spectrum analysis failed: {message}"
+        text = format_analysis_failure(message)
         self.analysis_status_label.setText(text)
         announce(self.analysis_status_label, text)
 

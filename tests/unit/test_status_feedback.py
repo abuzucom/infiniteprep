@@ -97,7 +97,7 @@ def test_analysis_failure_is_announced(qtbot: Any, announcements: list[str]) -> 
 
     player.show_analysis_failure("file is unreadable")
 
-    assert announcements == ["Spectrum analysis failed: file is unreadable"]
+    assert announcements == ["Couldn't draw the waveform: file is unreadable"]
 
 
 def test_write_preview_count_is_announced(qtbot: Any, announcements: list[str]) -> None:
@@ -199,4 +199,4 @@ def test_detail_header_says_yes_or_no_for_write_support(
 
     header = panel.header_label.text()
     assert "True" not in header and "False" not in header
-    assert "Write Supported: Yes" in header or "Write Supported: No" in header
+    assert header in ("a.wav", "a.wav (can't save tags to this file)")
