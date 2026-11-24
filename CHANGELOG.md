@@ -5,6 +5,17 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.86.0] (2026-11-24)
+
+### Changed
+
+- Review statuses show plain labels in the library Status column and the detail panel badge (UI-2, #342, item 12).
+  - The labels read Not analyzed, Analyzing, Has suggestions, Needs review, Conflicting matches, Partly matched, Partly approved, No match, Approved, Ready to save, Applied, Saved, and Failed.
+  - Needs review and Ready to save match the sidebar filters.
+  - Each label is unique, so the status filter maps a label back to one stored value.
+  - An unknown stored value shows as stored.
+- The version advances from 0.85.0 to 0.86.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
 ## [0.85.0] (2026-11-23)
 
 ### Added

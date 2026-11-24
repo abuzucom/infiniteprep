@@ -211,8 +211,8 @@ def test_status_cell(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 
     assert item.text() == ""
     assert not item.icon().isNull()
-    assert item.toolTip() == "Unprocessed"
-    assert item.data(Qt.ItemDataRole.AccessibleTextRole) == "Unprocessed"
+    assert item.toolTip() == "Not analyzed"
+    assert item.data(Qt.ItemDataRole.AccessibleTextRole) == "Not analyzed"
 
 
 def test_key_cell_color(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
