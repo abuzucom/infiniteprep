@@ -50,6 +50,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The decision register records D408. USB Update matches by verified stable ID, then exact normalized path. Relative path, title, and artist only propose a match the DJ confirms (#309).
 - History lists past tag writes on the left and the chosen write on the right (UI-2, #342).
   - Each write shows when it ran, the file, and a plain status such as Saved, Undone, or Stopped partway.
   - The right side lists each field the write changed, with its value before and after.
