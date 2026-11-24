@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.86.0] (2026-11-24)
+## [0.87.0] (2026-11-24)
 
 ### Changed
 
@@ -44,12 +44,23 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - History uses plain copy (UI-2, #342, item 12).
   - Screen readers name the list of writes History.
   - A failed restore reads such as "Couldn't restore this file (disk full). It's unchanged. Check the backup drive and try again."
-- The version advances from 0.85.0 to 0.86.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.85.0 to 0.87.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
+### Fixed
+
+- A rescan in the USB export dialog drops the drive shown on Confirm. After Back and a rescan, no drive counts as confirmed until Next runs again, even when the listing fails.
 
 ## [0.85.0] (2026-11-23)
 
 ### Added
 
+- A USB export dialog walks through two steps, Choose drive and then Confirm (UI-2, #342).
+  - Choose drive lists USB drives and memory cards. Next turns on for a drive that passed inspection.
+  - Confirm names the drive and the players. Drive details hold the location, model, device ID, serial number, and each fact the check could not confirm. The details start closed.
+  - A space bar shows the share of free space the export needs, with a line such as "1.2 GB needed of 16.0 GB free".
+  - What happens on the drive lists the planned changes, or says nothing on the drive changes.
+  - Export turns on only when the drive passes every check. Enter cancels. A drive that must never take an export hides its identity and space.
+  - No window opens the dialog yet. The older drive picker and confirm dialog stay as they were.
 - The decision register records D408. USB Update matches by verified stable ID, then exact normalized path. Relative path, title, and artist only propose a match the DJ confirms (#309).
 - History lists past tag writes on the left and the chosen write on the right (UI-2, #342).
   - Each write shows when it ran, the file, and a plain status such as Saved, Undone, or Stopped partway.
