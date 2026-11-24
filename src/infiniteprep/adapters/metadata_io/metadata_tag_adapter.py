@@ -15,7 +15,7 @@ import struct
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, BinaryIO, Final
 
 from infiniteprep import __version__
 from infiniteprep.adapters.metadata_io.audio_payload import (
@@ -63,7 +63,7 @@ from infiniteprep.adapters.metadata_io.id3v2 import (
 )
 from infiniteprep.adapters.metadata_io.mp4_reader import read_mp4
 from infiniteprep.adapters.metadata_io.no_clobber_move import move_to_new_path
-from infiniteprep.adapters.metadata_io.ogg_reader import read_ogg
+from infiniteprep.adapters.metadata_io.ogg_reader import OggMetadata, read_ogg, read_ogg_from_handle
 from infiniteprep.domain.enums import (
     WRITE_SUPPORTED_FORMATS,
     AudioFormat,
@@ -484,6 +484,21 @@ def _parse_audio_file(file_path: Path, audio_format: AudioFormat) -> _ParsedAudi
         return parser(mapped)
 
 
+def _parse_audio_handle(handle: BinaryIO, audio_format: AudioFormat) -> _ParsedAudio:
+    """Read properties and tags from an open file, mapping it read-only.
+
+    The map comes from the handle, so the file cannot be replaced between the
+    check and the read.
+    """
+    if audio_format == AudioFormat.OGG:
+        return _parse_ogg_handle(handle)
+    parser = MAPPED_PARSERS.get(audio_format)
+    if parser is None:
+        raise ValueError(f"No codec reads the {audio_format} format.")
+    with mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
+        return parser(mapped)
+
+
 def _parse_mp3(data: bytes) -> _ParsedAudio:
     """Read MP3 timing from its frames and tags from the leading ID3v2 tag."""
     standard, raw = _classify_id3_tag(read_mp3_tag(data))
@@ -552,6 +567,20 @@ def _parse_ogg(file_path: Path) -> _ParsedAudio:
     read_ogg maps the file from the path and touches only the pages it parses.
     """
     info = read_ogg(file_path)
+    return _ogg_metadata(info)
+
+
+def _parse_ogg_handle(handle: BinaryIO) -> _ParsedAudio:
+    """Read Ogg key and tempo from an open file.
+
+    The map comes from the handle, so the file cannot be replaced between the
+    check and the read.
+    """
+    return _ogg_metadata(read_ogg_from_handle(handle))
+
+
+def _ogg_metadata(info: OggMetadata) -> _ParsedAudio:
+    """Return the parsed Ogg properties and tags."""
     properties = AudioProperties(
         info.duration, info.sample_rate, info.channels, info.bitrate or None, None
     )
@@ -851,18 +880,57 @@ class MetadataTagAdapter:
         try:
             parsed = _parse_audio_file(file_path, audio_format)
         except READ_ERRORS as exc:
+            return self._damaged_metadata(audio_format, exc)
+
+        return self._metadata_from_parsed(parsed, audio_format)
+
+    def read_metadata_from_handle(
+        self, handle: BinaryIO, file_path: Path
+    ) -> TechnicalAndTagMetadata:
+        """Read the metadata of an open file without modifying the file.
+
+        The read comes from the handle, so a file that is replaced while it
+        is read cannot substitute another file for it.
+        """
+        audio_format = self.detect_format(file_path)
+        if audio_format == AudioFormat.UNSUPPORTED:
+            message = f"Unsupported file extension: {file_path.suffix}; use a supported format."
             return TechnicalAndTagMetadata(
-                format=audio_format,
+                format=AudioFormat.UNSUPPORTED,
                 duration=None,
                 sample_rate=None,
                 channels=None,
                 bitrate=None,
-                warnings=[
-                    f"Damaged or unreadable audio container ({exc.__class__.__name__}: {exc}); "
-                    "check source file."
-                ],
+                warnings=[message],
             )
 
+        try:
+            parsed = _parse_audio_handle(handle, audio_format)
+        except READ_ERRORS as exc:
+            return self._damaged_metadata(audio_format, exc)
+
+        return self._metadata_from_parsed(parsed, audio_format)
+
+    def _damaged_metadata(
+        self, audio_format: AudioFormat, exc: Exception
+    ) -> TechnicalAndTagMetadata:
+        """Return the metadata of a file the parser could not read."""
+        return TechnicalAndTagMetadata(
+            format=audio_format,
+            duration=None,
+            sample_rate=None,
+            channels=None,
+            bitrate=None,
+            warnings=[
+                f"Damaged or unreadable audio container ({exc.__class__.__name__}: {exc}); "
+                "check source file."
+            ],
+        )
+
+    def _metadata_from_parsed(
+        self, parsed: _ParsedAudio, audio_format: AudioFormat
+    ) -> TechnicalAndTagMetadata:
+        """Return the metadata of a file the parser read."""
         properties = parsed.properties
         raw_custom_tags = bound_raw_tag_values(parsed.raw_custom_tags)
         if properties.bits_per_sample is not None:

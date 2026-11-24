@@ -7,7 +7,7 @@ import os
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import BinaryIO, Final
 
 from infiniteprep.adapters.metadata_io.flac_vorbis import (
     VorbisComment,
@@ -289,3 +289,16 @@ def _read_ogg_data(raw: bytes | mmap.mmap) -> OggMetadata:
 def read_ogg_metadata(source: bytes | Path | str) -> OggMetadata:
     """Read metadata, codec parameters, and comments from Ogg Vorbis or Opus data."""
     return read_ogg(source)
+
+
+def read_ogg_from_handle(handle: BinaryIO) -> OggMetadata:
+    """Read Ogg metadata from an open file.
+
+    The map comes from the handle, so the file cannot be replaced between the
+    check and the read.
+    """
+    if os.fstat(handle.fileno()).st_size == 0:
+        # mmap refuses an empty file. An empty file holds no Ogg page.
+        raise OggFormatError("Ogg file is empty.")
+    with mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
+        return _read_ogg_data(mapped)

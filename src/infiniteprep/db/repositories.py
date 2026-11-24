@@ -33,6 +33,8 @@ from infiniteprep.domain.models import (
     ChangeRecord,
     FieldProposal,
     FileAsset,
+    ImportedLibrary,
+    LibraryPathMapping,
     ReleaseDetails,
     SourceGroup,
     utc_now_iso,
@@ -983,6 +985,117 @@ class Repository:
             approved_at=row["approved_at"],
             locked=bool(row["locked"]),
             provider_attribution=json.loads(row["provider_attribution"] or "{}"),
+        )
+
+    # ------------------------------------------------------------------
+    # Imported Libraries & Path Mappings
+    # ------------------------------------------------------------------
+    def upsert_imported_library(self, library: ImportedLibrary) -> ImportedLibrary:
+        """Insert or update an ImportedLibrary row."""
+        conn = self.db.connect()
+        conn.execute(
+            """
+            INSERT INTO imported_libraries (
+                id, format_id, source_path, detected_version, imported_at
+            )
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                format_id = excluded.format_id,
+                source_path = excluded.source_path,
+                detected_version = excluded.detected_version,
+                imported_at = excluded.imported_at
+            """,
+            (
+                library.id,
+                library.format_id,
+                library.source_path,
+                library.detected_version,
+                library.imported_at,
+            ),
+        )
+        self._commit(conn)
+        return library
+
+    def get_imported_library(self, library_id: str) -> ImportedLibrary | None:
+        """Return one imported library, or None when it does not exist."""
+        row = (
+            self.db.connect()
+            .execute("SELECT * FROM imported_libraries WHERE id = ?", (library_id,))
+            .fetchone()
+        )
+        return self._row_to_imported_library(row) if row else None
+
+    def list_imported_libraries(self) -> list[ImportedLibrary]:
+        """Return the imported libraries, newest import first."""
+        rows = (
+            self.db.connect()
+            .execute("SELECT * FROM imported_libraries ORDER BY imported_at DESC, id")
+            .fetchall()
+        )
+        return [self._row_to_imported_library(row) for row in rows]
+
+    def upsert_path_mapping(self, mapping: LibraryPathMapping) -> LibraryPathMapping:
+        """Insert or update a LibraryPathMapping row."""
+        conn = self.db.connect()
+        conn.execute(
+            """
+            INSERT INTO library_path_mappings (
+                id, library_id, source_prefix, target_prefix, root_path
+            )
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                library_id = excluded.library_id,
+                source_prefix = excluded.source_prefix,
+                target_prefix = excluded.target_prefix,
+                root_path = excluded.root_path
+            """,
+            (
+                mapping.id,
+                mapping.library_id,
+                mapping.source_prefix,
+                mapping.target_prefix,
+                mapping.root_path,
+            ),
+        )
+        self._commit(conn)
+        return mapping
+
+    def list_path_mappings(self, library_id: str) -> list[LibraryPathMapping]:
+        """Return the path mappings of one imported library."""
+        rows = (
+            self.db.connect()
+            .execute(
+                "SELECT * FROM library_path_mappings WHERE library_id = ? ORDER BY source_prefix",
+                (library_id,),
+            )
+            .fetchall()
+        )
+        return [self._row_to_path_mapping(row) for row in rows]
+
+    def delete_path_mapping(self, mapping_id: str) -> None:
+        """Delete one path mapping."""
+        conn = self.db.connect()
+        conn.execute("DELETE FROM library_path_mappings WHERE id = ?", (mapping_id,))
+        self._commit(conn)
+
+    @staticmethod
+    def _row_to_imported_library(row: Any) -> ImportedLibrary:
+        return ImportedLibrary(
+            id=row["id"],
+            format_id=row["format_id"],
+            source_path=row["source_path"],
+            detected_version=row["detected_version"],
+            imported_at=row["imported_at"],
+        )
+
+    @staticmethod
+    def _row_to_path_mapping(row: Any) -> LibraryPathMapping:
+        return LibraryPathMapping(
+            id=row["id"],
+            library_id=row["library_id"],
+            source_prefix=row["source_prefix"],
+            target_prefix=row["target_prefix"],
+            root_path=row["root_path"],
         )
 
     @staticmethod

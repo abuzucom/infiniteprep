@@ -213,6 +213,28 @@ class ApprovedField:
     provider_attribution: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class ImportedLibrary:
+    """A DJ library that was imported into the app."""
+
+    id: str
+    format_id: str
+    source_path: str
+    detected_version: str = ""
+    imported_at: str = ""
+
+
+@dataclass(frozen=True)
+class LibraryPathMapping:
+    """A saved prefix mapping between a source library and this machine."""
+
+    id: str
+    library_id: str
+    source_prefix: str
+    target_prefix: str
+    root_path: str
+
+
 @dataclass
 class ChangeRecord:
     """Journal record tracking a tag write and/or rename operation."""
