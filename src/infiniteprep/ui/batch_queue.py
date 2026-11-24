@@ -32,32 +32,31 @@ ProgressReport = Callable[[int, int, str], None]
 # A batch body. It runs on a worker thread and returns the batch result.
 BatchRun = Callable[[CancelCheck, ProgressReport], object]
 
-CANCELLING_TEXT: Final[str] = "Cancelling after the current file."
+CANCELLING_TEXT: Final[str] = "Stopping after the current file."
 # Analysis decodes and processes whole tracks, so one long mix needs more time than a
 # write or an import read.
 ANALYZE_STUCK_TIMEOUT_MS: Final[int] = 300_000
 WRITE_STUCK_TIMEOUT_MS: Final[int] = 120_000
 ANALYZE_STUCK_PROMPT: Final[StuckPrompt] = StuckPrompt(
-    "Analysis Not Responding",
-    "One file has taken more than 5 minutes and the analysis is not responding. "
-    "Quit Now ends InfinitePrep at once. Files analyzed so far keep their results. "
-    "Keep Waiting lets the analysis continue.",
+    "Analysis isn't responding",
+    "One file has taken more than 5 minutes to analyze. Quit now closes InfinitePrep "
+    "right away. Files already analyzed keep their results. Keep waiting lets the "
+    "analysis continue.",
     ANALYZE_STUCK_TIMEOUT_MS,
 )
 WRITE_STUCK_PROMPT: Final[StuckPrompt] = StuckPrompt(
-    "Write Not Responding",
-    "One file has taken more than 2 minutes and the write is not responding. "
-    "Quit Now ends InfinitePrep at once. Files written so far stay written. "
-    "At the next launch, Recover Interrupted Writes offers to restore or finish the "
-    "interrupted file. Keep Waiting lets the write continue.",
+    "Saving isn't responding",
+    "One file has taken more than 2 minutes to save. Quit now closes InfinitePrep "
+    "right away. Files already saved stay saved. Next time InfinitePrep starts, it "
+    "offers to restore or finish this file. Keep waiting lets the save continue.",
     WRITE_STUCK_TIMEOUT_MS,
 )
 # A transcode decodes, resamples, and encodes a whole track, so it gets the analysis limit.
 TRANSCODE_STUCK_PROMPT: Final[StuckPrompt] = StuckPrompt(
-    "Transcode Not Responding",
-    "One file has taken more than 5 minutes and the transcode is not responding. "
-    "Quit Now ends InfinitePrep at once. Files transcoded so far stay transcoded. "
-    "Keep Waiting lets the transcode continue.",
+    "Transcode isn't responding",
+    "One file has taken more than 5 minutes to transcode. Quit now closes InfinitePrep "
+    "right away. Files already transcoded stay transcoded. Keep waiting lets the "
+    "transcode continue.",
     ANALYZE_STUCK_TIMEOUT_MS,
 )
 MAX_LISTED_FAILURES: Final[int] = 10

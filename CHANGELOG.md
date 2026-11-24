@@ -22,6 +22,13 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Buttons read Play, Load paused, and Lock field. With no track picked, the panel says "Pick a track to see its details."
   - The player reads "No track loaded". Its playback and waveform failures use plain sentences and keep the reason.
   - The binary tag summary in Other tags stays, since the tag reader stores binary frames in that form.
+- The batch queue and its stuck prompts use plain copy (UI-2, #342, item 12).
+  - The queue panel reads Queue. Its buttons read Move up, Move down, Cancel, See results, and Clear finished.
+  - A pending cancel reads "Stopping after the current file.".
+  - Stuck prompt titles read such as "Saving isn't responding". The buttons read Quit now and Keep waiting.
+  - Each stuck prompt names its limit, says what stays done, and offers the two choices in plain words. The save prompt says InfinitePrep offers to restore or finish the file at the next start.
+  - The import stuck prompt follows the same shape.
+  - Batch states, result counts, and failure lines stay as they were.
 - The version advances from 0.85.0 to 0.86.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ## [0.85.0] (2026-11-23)

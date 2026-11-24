@@ -14,21 +14,20 @@ from infiniteprep.ui.folder_import import (
 from infiniteprep.ui.time_format import split_time_seconds
 
 PREVIOUS_STUCK_TEXT = (
-    "One file has taken more than 2 minutes and the import is not responding. "
-    "Quit Now ends InfinitePrep at once and keeps nothing from this import. "
-    "Keep Waiting lets the import continue."
+    "One file has taken more than 2 minutes to import. Quit now closes InfinitePrep "
+    "right away and keeps nothing from this import. Keep waiting lets the import continue."
 )
 
 
 @pytest.mark.parametrize(
     ("timeout_ms", "expected"),
     [
-        (120_000, "more than 2 minutes and"),
-        (60_000, "more than 1 minute and"),
-        (90_000, "more than 90 seconds and"),
-        (5_000, "more than 5 seconds and"),
-        (1_000, "more than 1 second and"),
-        (400, "more than 1 second and"),
+        (120_000, "more than 2 minutes to import."),
+        (60_000, "more than 1 minute to import."),
+        (90_000, "more than 90 seconds to import."),
+        (5_000, "more than 5 seconds to import."),
+        (1_000, "more than 1 second to import."),
+        (400, "more than 1 second to import."),
     ],
 )
 def test_stuck_import_text_names_the_timeout(timeout_ms: int, expected: str) -> None:

@@ -42,18 +42,18 @@ class BatchQueueDock(QDockWidget):
 
     def __init__(self, controller: BatchQueueController, parent: QWidget | None = None) -> None:
         """Build the list and its buttons, and follow the controller's state changes."""
-        super().__init__("Batch Queue", parent)
+        super().__init__("Queue", parent)
         self.setObjectName("batch_queue_dock")
         self.controller = controller
         self._refreshing = False
         self._drag_sync_pending = False
         self.batch_list = QListWidget(self)
         self.batch_list.setAccessibleName("Batch queue")
-        self.move_up_btn = QPushButton("Move Up", self)
-        self.move_down_btn = QPushButton("Move Down", self)
-        self.cancel_btn = QPushButton("Cancel Batch", self)
-        self.view_result_btn = QPushButton("View Result", self)
-        self.clear_finished_btn = QPushButton("Clear Finished", self)
+        self.move_up_btn = QPushButton("Move up", self)
+        self.move_down_btn = QPushButton("Move down", self)
+        self.cancel_btn = QPushButton("Cancel", self)
+        self.view_result_btn = QPushButton("See results", self)
+        self.clear_finished_btn = QPushButton("Clear finished", self)
         self._build_layout()
         self._connect_signals()
         self.refresh()
