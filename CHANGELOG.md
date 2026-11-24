@@ -5,6 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.85.1] (2026-11-24)
+
+### Fixed
+
+- A rescan in the USB export dialog drops the drive shown on Confirm. After Back and a rescan, no drive counts as confirmed until Next runs again, even when the listing fails.
+- The version advances from 0.85.0 to 0.85.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
 ## [0.85.0] (2026-11-23)
 
 ### Added

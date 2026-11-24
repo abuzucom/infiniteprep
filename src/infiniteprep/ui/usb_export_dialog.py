@@ -221,9 +221,13 @@ class UsbExportDialog(QDialog):
         self.next_btn.setVisible(not on_confirm)
 
     def reload(self) -> None:
-        """Load the drive list again and drop the current choice."""
+        """Load the drive list again and drop the current choice and the confirmed drive.
+
+        The confirmed drive clears before the loader runs, so a failed listing leaves none.
+        """
         self.drive_list.clear()
         self._candidates = ()
+        self._confirmed = None
         try:
             candidates = self._loader()
         except DriveInspectionError as exc:
