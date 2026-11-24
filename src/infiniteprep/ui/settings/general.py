@@ -58,7 +58,7 @@ class GeneralTab(FormSettingsTab):
         self.theme_combo = QComboBox(self)
         fill_theme_picker(self.theme_combo, get_theme_choices())
         select_theme(self.theme_combo, theme)
-        self.form.addRow("UI Theme:", self.theme_combo)
+        self.form.addRow("Theme:", self.theme_combo)
         self._add_text_size_control((settings or AppSettings()).text_size)
         self.unsorted_rows_placement_combo = QComboBox(self)
         for label, value in UNSORTED_PLACEMENT_LABELS:
@@ -67,7 +67,7 @@ class GeneralTab(FormSettingsTab):
         if placement_index < 0:
             placement_index = self.unsorted_rows_placement_combo.findData(UNSORTED_PLACEMENT_FIRST)
         self.unsorted_rows_placement_combo.setCurrentIndex(placement_index)
-        self.form.addRow("Unsorted Rows:", self.unsorted_rows_placement_combo)
+        self.form.addRow("Empty values sort:", self.unsorted_rows_placement_combo)
         self._add_tag_output_controls(settings or AppSettings())
 
     def _add_text_size_control(self, text_size: str) -> None:
@@ -79,7 +79,7 @@ class GeneralTab(FormSettingsTab):
         if size_index < 0:
             size_index = self.text_size_combo.findData(TEXT_SIZE_STANDARD)
         self.text_size_combo.setCurrentIndex(size_index)
-        self.form.addRow("Text Size:", self.text_size_combo)
+        self.form.addRow("Text size:", self.text_size_combo)
 
     def _add_tag_output_controls(self, settings: AppSettings) -> None:
         """Add a tag format independent of the key notation used in the library."""
@@ -90,20 +90,20 @@ class GeneralTab(FormSettingsTab):
         self.tag_key_notation_combo.setCurrentIndex(
             self.tag_key_notation_combo.findData(settings.tag_key_notation)
         )
-        self.form.addRow("Written Key Notation:", self.tag_key_notation_combo)
+        self.form.addRow("Key format in tags:", self.tag_key_notation_combo)
 
         self.tag_key_leading_zero_checkbox = QCheckBox("Pad Camelot and Open Key with a zero", self)
         self.tag_key_leading_zero_checkbox.setChecked(settings.tag_key_leading_zero)
         self.form.addRow(self.tag_key_leading_zero_checkbox)
 
         self.tag_bpm_decimals_combo = QComboBox(self)
-        labels = ("Integer", "1 decimal", "2 decimals")
+        labels = ("Whole number", "1 decimal", "2 decimals")
         for decimals, label in zip(BPM_DECIMAL_PLACES, labels, strict=True):
             self.tag_bpm_decimals_combo.addItem(label, decimals)
         self.tag_bpm_decimals_combo.setCurrentIndex(
             self.tag_bpm_decimals_combo.findData(settings.tag_bpm_decimals)
         )
-        self.form.addRow("Written BPM Precision:", self.tag_bpm_decimals_combo)
+        self.form.addRow("BPM in tags:", self.tag_bpm_decimals_combo)
 
     def set_theme(self, theme: str) -> None:
         """Point the theme picker at the given theme."""

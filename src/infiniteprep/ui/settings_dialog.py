@@ -89,7 +89,7 @@ class SettingsDialog(QDialog):
         self.cleanup_choice: CleanupChoice | None = None
         self.current_settings: AppSettings = self.settings_mgr.load()
 
-        self.setWindowTitle("InfinitePrep Settings & Providers")
+        self.setWindowTitle("Settings")
         self.resize(SETTINGS_DIALOG_WIDTH, SETTINGS_DIALOG_HEIGHT)
 
         self.tabs = SettingsSectionView(self)
@@ -105,7 +105,7 @@ class SettingsDialog(QDialog):
                 tab.hide()
         self._expose_tab_widgets()
 
-        self.save_btn = QPushButton("Save Settings", self)
+        self.save_btn = QPushButton("Save", self)
         self.cancel_btn = QPushButton("Cancel", self)
         self._build_layout()
 

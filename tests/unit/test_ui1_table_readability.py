@@ -98,10 +98,10 @@ def section_widths(table: QTableWidget) -> list[int]:
 
 
 def test_format_warning_summary_counts_warnings() -> None:
-    """The warnings cell shows a count, and nothing when a file has no warnings."""
+    """The Issues cell shows a count, and nothing when a file has no issues."""
     assert format_warning_summary([]) == ""
-    assert format_warning_summary(["clipping"]) == "1 warning"
-    assert format_warning_summary(["a", "b", "c"]) == "3 warnings"
+    assert format_warning_summary(["clipping"]) == "1 issue"
+    assert format_warning_summary(["a", "b", "c"]) == "3 issues"
 
 
 def test_library_table_does_not_stretch_the_last_section(

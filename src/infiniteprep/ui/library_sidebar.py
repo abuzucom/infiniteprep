@@ -30,8 +30,8 @@ LISTS_HEADING: Final[str] = "Playlists and crates"
 FILTER_LABELS: Final[dict[LibraryFilter, str]] = {
     LibraryFilter.ALL: "All tracks",
     LibraryFilter.NEEDS_REVIEW: "Needs review",
-    LibraryFilter.HAS_WARNINGS: "Has warnings",
-    LibraryFilter.READY_TO_WRITE: "Ready to write",
+    LibraryFilter.HAS_WARNINGS: "With issues",
+    LibraryFilter.READY_TO_WRITE: "Ready to save",
 }
 NO_FOLDERS_TEXT: Final[str] = "No folders yet"
 PLANNED_LISTS: Final[tuple[str, ...]] = ("Playlists (coming later)", "Crates (coming later)")

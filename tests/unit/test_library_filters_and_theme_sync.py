@@ -58,8 +58,8 @@ def visible_names(window: MainWindow) -> list[str]:
 def test_status_filter_offers_every_review_status() -> None:
     """Each review status has one filter entry, with readable labels."""
     assert set(STATUS_FILTER_VALUES.values()) == {status.value for status in ReviewStatus}
-    assert format_status_label(ReviewStatus.READY_FOR_REVIEW) == "Ready for Review"
-    assert format_status_label(ReviewStatus.READY_TO_WRITE) == "Ready to Write"
+    assert format_status_label(ReviewStatus.READY_FOR_REVIEW) == "Needs review"
+    assert format_status_label(ReviewStatus.READY_TO_WRITE) == "Ready to save"
 
 
 def test_status_filter_shows_a_pipeline_status(
