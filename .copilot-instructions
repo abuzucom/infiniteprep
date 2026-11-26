@@ -1317,11 +1317,10 @@ consent. Workflows the gate allows run without consent.
 
 Do not touch without active human approval:
 
-- `ci/` holds verbatim foucault review adapters.
 - `.github/workflows/security-review-pr.yml` and
-  `quality-review-pr.yml` pin review workflows.
-- `tests/test_review_wiring.py` asserts those pins and digests.
-- `scripts/check_pr_review_response.py` follows the foucault copy.
+  `quality-review-pr.yml` pin the `abuzucom/agents-personas` review
+  wrappers.
+- `tests/test_review_wiring.py` asserts those pins.
 
 Ruff skips the copied gate files. The agents lint covers those files.
 

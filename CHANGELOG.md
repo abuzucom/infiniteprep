@@ -5,12 +5,26 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.88.1] (2026-11-26)
+## [0.89.0] (2026-11-26)
 
 ### Changed
 
 - `README.md`, `docs/project-orientation.md`, and earlier `CHANGELOG.md` entries drop the wording that the agents prose checks flag. The facts, versions, and issue numbers stay the same.
-- The version advances from 0.88.0 to 0.88.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- `security-review-pr.yml` calls the `abuzucom/agents-personas` `foucault-security-review.yml` wrapper. `quality-review-pr.yml` calls the `euler-quality-review.yml` wrapper.
+  - Both pin `uses:` and `personas_ref` to agents-personas commit `c43f4592191b42b9f66072622b082fc2f4dc3217` (0.22.0).
+  - The `abuzucom/foucault` and `abuzucom/euler` pins are gone.
+- The review check runs carry the names `foucault / security` and `euler / quality`. Branch protection that requires `security-review` or `quality-review` needs the new names.
+- The engine publishes the skipped check for a fork pull request. Each caller drops its fork job. The classify job keeps the same-repository guard.
+- Every completed `ci` run gets a review. No existing check run skips it, since any workflow with `checks: write` can publish a check with any title.
+- `tests/test_review_wiring.py` covers the wrapper pins, the permissions, the secret mapping, and the check names.
+- `ci/README.md` keeps the `ci` path that the CodeQL configuration declares. The default setup reads that configuration from `main`.
+- The version advances from 0.88.0 to 0.89.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
+### Removed
+
+- The foucault adapter copies `ci/build_pr_case.py`, `ci/build_retry_case.py`, `ci/call_model.py`, `ci/model_providers.json`, and `ci/run_model_command.py`. The agents-personas engine supplies the adapter.
+- `scripts/check_pr_review_response.py`. The engine validates each reply.
+- The `ci/call_model.py` entry in `hooks/workflow-scripts.txt`.
 
 ## [0.88.0] (2026-11-24)
 

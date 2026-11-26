@@ -73,4 +73,3 @@ consent-read packaging/release.py check-assets <path> <revision> --require-bundl
 consent-read packaging/check_bundle.py <path> <path>
 consent-write packaging/release.py checksums <path>
 consent-write packaging/release.py notes <revision> <path>
-consent-write ci/call_model.py

@@ -30,10 +30,7 @@ FETCH_COMMAND = 'fetch --no-tags origin "$HEAD_SHA"'
 PULL_REF = "refs/pull/1/head"
 SECURITY_CLASSIFY_GUARDS = (
     "needs.resolve-pr.result == 'success'",
-    "needs.resolve-pr.outputs.already_reviewed != 'true'",
     "needs.resolve-pr.outputs.same_repository == 'true'",
-    "needs.resolve-pr.outputs.fork_review_approved == 'true'",
-    "needs.resolve-pr.outputs.compliance_passed == 'true'",
 )
 CLASS_OUTPUT = "${{ steps.classify.outputs.change_class }}"
 NOT_CANCELLED = "!cancelled()"
@@ -59,15 +56,15 @@ CALLERS = (
     ReviewCaller(
         workflow="security-review-pr.yml",
         resolve_job="resolve-pr",
-        review_jobs=("review", "fork-review"),
-        check_name="security-review",
+        review_jobs=("review",),
+        check_name="foucault / security",
         resolved_condition="needs.resolve-pr.result == 'success'",
     ),
     ReviewCaller(
         workflow="quality-review-pr.yml",
         resolve_job="resolve",
         review_jobs=("review",),
-        check_name="quality-review",
+        check_name="euler / quality",
         resolved_condition="needs.resolve.outputs.found == 'true'",
     ),
 )

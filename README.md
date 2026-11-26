@@ -60,8 +60,8 @@ These modules exist under `src/infiniteprep/` with tests. The desktop launcher a
 
 Every pull request receives two model reviews:
 
-- `abuzucom/foucault` security review through the `security-review` check.
-- `abuzucom/euler` code quality review through the `quality-review` check.
+- The `abuzucom/agents-personas` foucault security review through the `foucault / security` check.
+- The `abuzucom/agents-personas` euler code quality review through the `euler / quality` check.
 
 Both reviews run after the `ci` workflow completes. A human approval remains required. See [`docs/pr-review.md`](docs/pr-review.md) for pins, settings, and upgrades.
 
