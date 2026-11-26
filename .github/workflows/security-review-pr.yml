@@ -32,12 +32,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      checks: read
       contents: read
       pull-requests: read
     outputs:
       same_repository: ${{ steps.resolve.outputs.same_repository }}
-      already_reviewed: ${{ steps.resolve.outputs.already_reviewed }}
       pr_number: ${{ steps.resolve.outputs.pr_number }}
       base_sha: ${{ steps.resolve.outputs.base_sha }}
       head_sha: ${{ steps.resolve.outputs.head_sha }}
@@ -87,27 +85,11 @@ jobs:
             const sameRepository =
               headRepository.full_name.toLowerCase() === baseRepository.toLowerCase();
 
-            // One model call per head revision. The engine reruns a passing
-            // review. The caller therefore skips a head with an Actions check
-            // that already carries a verdict title. A run that ends before a
-            // verdict uses another title, and the next ci run retries it.
-            const checkRuns = await github.paginate(
-              github.rest.checks.listForRef,
-              {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                ref: headSha,
-                check_name: "foucault / security",
-                per_page: 100,
-              },
-            );
-            const alreadyReviewed = checkRuns.some((run) =>
-              run.app?.slug === "github-actions" &&
-              run.status === "completed" &&
-              /^VERDICT: (APPROVE|BLOCK|NEEDS-HUMAN)$/.test(run.output?.title || "")
-            );
+            // Every completed ci run gets a review. A check run carries no
+            // trusted producer, since any workflow with checks: write can
+            // publish one with any name and title. A prior verdict check
+            // therefore never skips the review.
             core.setOutput("same_repository", sameRepository ? "true" : "false");
-            core.setOutput("already_reviewed", alreadyReviewed ? "true" : "false");
             core.setOutput("pr_number", String(pullRequest.number));
             core.setOutput("base_sha", pullRequest.base.sha);
             core.setOutput("head_sha", pullRequest.head.sha);
@@ -124,7 +106,6 @@ jobs:
     needs: resolve-pr
     if: >-
       ${{ needs.resolve-pr.result == 'success' &&
-      needs.resolve-pr.outputs.already_reviewed != 'true' &&
       needs.resolve-pr.outputs.same_repository == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -170,7 +151,6 @@ jobs:
     needs: [resolve-pr, classify]
     if: >-
       ${{ !cancelled() && needs.resolve-pr.result == 'success' &&
-      needs.resolve-pr.outputs.already_reviewed != 'true' &&
       needs.classify.outputs.change_class != 'docs' }}
     # The wrapper posts a pull request comment and publishes a check run.
     permissions:

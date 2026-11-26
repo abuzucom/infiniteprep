@@ -30,7 +30,6 @@ FETCH_COMMAND = 'fetch --no-tags origin "$HEAD_SHA"'
 PULL_REF = "refs/pull/1/head"
 SECURITY_CLASSIFY_GUARDS = (
     "needs.resolve-pr.result == 'success'",
-    "needs.resolve-pr.outputs.already_reviewed != 'true'",
     "needs.resolve-pr.outputs.same_repository == 'true'",
 )
 CLASS_OUTPUT = "${{ steps.classify.outputs.change_class }}"

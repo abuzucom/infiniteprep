@@ -26,13 +26,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      checks: read
       contents: read
       pull-requests: read
     outputs:
       found: ${{ steps.pr.outputs.found }}
       same_repo: ${{ steps.pr.outputs.same_repo }}
-      already_reviewed: ${{ steps.pr.outputs.already_reviewed }}
       number: ${{ steps.pr.outputs.number }}
       base_sha: ${{ steps.pr.outputs.base_sha }}
       head_sha: ${{ steps.pr.outputs.head_sha }}
@@ -64,21 +62,13 @@ jobs:
               return;
             }
 
-            // The engine reruns a passing review. The caller skips a head
-            // with an Actions check that already carries a verdict title.
-            const existingChecks = await github.paginate(
-              github.rest.checks.listForRef,
-              { ...context.repo, ref: headSha, check_name: 'euler / quality', per_page: 100 },
-            );
-            const alreadyReviewed = existingChecks.some((check) =>
-              check.app?.slug === 'github-actions' &&
-              check.status === 'completed' &&
-              /^VERDICT: (APPROVE|BLOCK|NEEDS-HUMAN)$/.test(check.output?.title || ''));
-
+            // Every completed ci run gets a review. A check run carries no
+            // trusted producer, since any workflow with checks: write can
+            // publish one with any name and title. A prior verdict check
+            // therefore never skips the review.
             core.setOutput('found', 'true');
             const sameRepo = headRepository.full_name === pull.base.repo.full_name;
             core.setOutput('same_repo', String(sameRepo));
-            core.setOutput('already_reviewed', alreadyReviewed ? 'true' : 'false');
             core.setOutput('number', String(pull.number));
             core.setOutput('base_sha', pull.base.sha);
             core.setOutput('head_sha', pull.head.sha);
@@ -95,7 +85,6 @@ jobs:
     needs: resolve
     if: >-
       needs.resolve.outputs.found == 'true' &&
-      needs.resolve.outputs.already_reviewed != 'true' &&
       needs.resolve.outputs.same_repo == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -146,7 +135,6 @@ jobs:
       pull-requests: write
     if: >-
       ${{ !cancelled() && needs.resolve.outputs.found == 'true' &&
-      needs.resolve.outputs.already_reviewed != 'true' &&
       needs.classify.outputs.change_class != 'docs' }}
     # agents-personas 0.22.0. Keep the uses: pin and personas_ref on the same commit.
     uses: abuzucom/agents-personas/.github/workflows/euler-quality-review.yml@c43f4592191b42b9f66072622b082fc2f4dc3217

@@ -25,10 +25,11 @@ to the same full commit SHA. Upgrade both values together.
 2. `security-review-pr.yml` and `quality-review-pr.yml` trigger on completion
    of `ci`.
 3. Each caller resolves the pull request from the workflow run head.
-4. Each caller skips a head with an Actions check that already carries a
-   `VERDICT:` title.
-5. A docs-only pull request gets a skipped check and no model call.
-6. Each caller calls its pinned wrapper.
+4. A docs-only pull request gets a skipped check and no model call.
+5. Each caller calls its pinned wrapper.
+
+Every completed `ci` run gets a review. No existing check run skips it. Any
+workflow with `checks: write` can publish a check with any name and title.
 
 `workflow_run` runs only from the default branch. Both reviews start after
 this wiring reaches `main`. Renaming the `ci` workflow stops both reviews.

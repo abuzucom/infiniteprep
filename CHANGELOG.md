@@ -15,7 +15,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The `abuzucom/foucault` and `abuzucom/euler` pins are gone.
 - The review check runs carry the names `foucault / security` and `euler / quality`. Branch protection that requires `security-review` or `quality-review` needs the new names.
 - The engine publishes the skipped check for a fork pull request. Each caller drops its fork job. The classify job keeps the same-repository guard.
-- Each caller skips a head with an Actions check that already carries a `VERDICT:` title.
+- Every completed `ci` run gets a review. No existing check run skips it, since any workflow with `checks: write` can publish a check with any title.
 - `tests/test_review_wiring.py` covers the wrapper pins, the permissions, the secret mapping, and the check names.
 - `ci/README.md` keeps the `ci` path that the CodeQL configuration declares. The default setup reads that configuration from `main`.
 - The version advances from 0.88.0 to 0.89.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.

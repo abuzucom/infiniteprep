@@ -18,6 +18,9 @@ FOUCAULT_CHECK = "foucault / security"
 EULER_CHECK = "euler / quality"
 PROVIDER_SECRET_MAPPING = "MODEL_API_KEY: ${{ secrets.OLLAMA_API_KEY }}"
 REVIEW_PERMISSIONS = ("checks: write", "contents: read", "pull-requests: write")
+# A caller that reads existing check runs to skip a review trusts a check that
+# any workflow with checks: write can publish.
+UNTRUSTED_PREFILTER_MARKERS = ("already_reviewed", "checks.listForRef", "checks: read")
 # The engine supplies the adapter. These copies left the repository.
 RETIRED_ADAPTER_FILES = (
     "ci/build_pr_case.py",
@@ -118,14 +121,15 @@ class SecurityReviewWiringTest(unittest.TestCase):
         self.assertNotIn("fork_review:", self.text)
 
     def test_checks_use_persona_name(self) -> None:
-        self.assertIn(f'check_name: "{FOUCAULT_CHECK}"', self.text)
         skip_job = extract_job_block(self.text, "docs-only-skipped")
         self.assertIn(f"name: '{FOUCAULT_CHECK}'", skip_job)
         self.assertNotIn("security-review'", self.text)
 
-    def test_prefilter_reads_verdict_title(self) -> None:
-        self.assertIn('run.app?.slug === "github-actions"', self.text)
-        self.assertIn("run.output?.title", self.text)
+    def test_no_check_skips_review(self) -> None:
+        # Any workflow with checks: write can publish a verdict-titled check.
+        for marker in UNTRUSTED_PREFILTER_MARKERS:
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, self.text)
 
 
 class QualityReviewWiringTest(unittest.TestCase):
@@ -164,10 +168,15 @@ class QualityReviewWiringTest(unittest.TestCase):
         self.assertNotIn("fork_review:", self.text)
 
     def test_checks_use_persona_name(self) -> None:
-        self.assertIn(f"check_name: '{EULER_CHECK}'", self.text)
         skip_job = extract_job_block(self.text, "docs-only-skipped")
         self.assertIn(f"name: '{EULER_CHECK}'", skip_job)
         self.assertNotIn("quality-review'", self.text)
+
+    def test_no_check_skips_review(self) -> None:
+        # Any workflow with checks: write can publish a verdict-titled check.
+        for marker in UNTRUSTED_PREFILTER_MARKERS:
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, self.text)
 
 
 class RetiredReviewerTest(unittest.TestCase):
