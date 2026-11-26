@@ -328,7 +328,9 @@ class LibraryImportDialog(QDialog):
     def _build_review_plan(self) -> bool:
         """Build the pending plan and fill the Review lists, or warn on error."""
         if self._chosen is None:
-            show_plain_message(self, QMessageBox.Icon.Warning, WINDOW_TITLE, "Pick a library first.")
+            show_plain_message(
+                self, QMessageBox.Icon.Warning, WINDOW_TITLE, "Pick a library first."
+            )
             return False
         root_text = self.chosen_root()
         if not root_text:

@@ -15,9 +15,9 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.job_orchestrator import BatchKind
 from infiniteprep.services.library_import import (
     FormatId,
-    ImporterRegistry,
     ImportedTrack,
     ImportedValue,
+    ImporterRegistry,
     LibraryImportService,
     LocatedLibrary,
     NoImporterError,
@@ -112,7 +112,7 @@ def test_busy_queue_locks_library_button(
     qtbot.waitUntil(lambda: not window.import_library_btn.isEnabled())
 
     gate = True
-    qtbot.waitUntil(lambda: window.import_library_btn.isEnabled())
+    qtbot.waitUntil(window.import_library_btn.isEnabled)
 
 
 def test_dialog_builds_plan_before_review(qtbot: Any, tmp_path: Path) -> None:
