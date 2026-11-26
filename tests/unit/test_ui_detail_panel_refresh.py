@@ -121,7 +121,7 @@ def test_selecting_another_file_keeps_playback(panel_parts: Any) -> None:
     assert panel.audio_player.play_btn.text() == "Pause"
 
 
-def test_every_field_name_has_a_row(panel_parts: Any) -> None:
+def test_every_field_name_has_row(panel_parts: Any) -> None:
     """The fields table lists every FieldName in enum order, by its readable name."""
     panel, _repository, first_id, _second_id = panel_parts
     panel.load_file_asset(first_id)
@@ -152,7 +152,7 @@ def _other_tag_cells(panel: DetailPanel) -> list[tuple[str, str, str]]:
     ]
 
 
-def test_other_tags_show_sorted_without_internal_keys(panel_parts: Any) -> None:
+def test_other_tags_sorted_hide_internal(panel_parts: Any) -> None:
     """Other Tags lists the file's custom tags by key and hides app-internal keys (D245)."""
     panel, repository, first_id, _second_id = panel_parts
     asset = repository.get_file_by_id(first_id)
@@ -196,7 +196,7 @@ def test_long_tag_value_truncates(panel_parts: Any) -> None:
     assert tooltip == long_value
 
 
-def test_binary_other_tag_value_shows_size_and_digest() -> None:
+def test_binary_tag_shows_size_digest() -> None:
     """Bytes show as their size and SHA-256 rather than raw content."""
     digest = hashlib.sha256(BINARY_SAMPLE).hexdigest()
     expected = f"<{len(BINARY_SAMPLE)} bytes, sha256 {digest}>"

@@ -118,7 +118,7 @@ class ClassifyJobTest(unittest.TestCase):
         """Parse each review caller once. No test changes the parsed data."""
         cls.jobs_by_workflow = load_jobs_by_caller()
 
-    def test_classify_job_is_read_only_no_secret(self) -> None:
+    def test_classify_job_read_only_secretless(self) -> None:
         """The job that reads pull request objects cannot write and sees no secret."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
@@ -128,7 +128,7 @@ class ClassifyJobTest(unittest.TestCase):
                 self.assertEqual(list_needs(job), [caller.resolve_job])
                 self.assertEqual(job["outputs"], {"change_class": CLASS_OUTPUT})
 
-    def test_trusted_checkout_takes_the_default_branch(self) -> None:
+    def test_trusted_checkout_takes_default_branch(self) -> None:
         """The first checkout names no ref, so a workflow_run job gets the default branch."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
@@ -192,7 +192,7 @@ class ReviewSkipTest(unittest.TestCase):
         """Parse each review caller once. No test changes the parsed data."""
         cls.jobs_by_workflow = load_jobs_by_caller()
 
-    def test_review_jobs_run_unless_the_class_is_docs(self) -> None:
+    def test_review_jobs_run_unless_docs(self) -> None:
         """A failed classify job yields no class, and the review runs."""
         for caller in CALLERS:
             jobs = self.jobs_by_workflow[caller.workflow]
@@ -205,7 +205,7 @@ class ReviewSkipTest(unittest.TestCase):
                     self.assertIn(NOT_DOCS, job["if"])
                     self.assertIn(caller.resolved_condition, job["if"])
 
-    def test_skip_job_runs_for_the_docs_class_only(self) -> None:
+    def test_skip_job_runs_docs_only(self) -> None:
         """Website and mixed changes keep both reviews."""
         for caller in CALLERS:
             with self.subTest(workflow=caller.workflow):
@@ -285,18 +285,18 @@ class FetchedCommitClassificationTest(unittest.TestCase):
         )
         return result.stdout.splitlines()[0]
 
-    def test_fetched_docs_commit_classifies_as_docs(self) -> None:
+    def test_fetched_docs_commit_is_docs(self) -> None:
         """Only the commit objects arrive, and the working tree stays on the base."""
         head_sha = self.publish_head(("docs/guide.md", "Guide\n"))
         self.assertEqual(self.classify(head_sha), "change_class=docs")
         self.assertFalse((self.trusted / "docs" / "guide.md").exists())
 
-    def test_fetched_website_commit_keeps_the_reviews(self) -> None:
+    def test_fetched_website_commit_keeps_reviews(self) -> None:
         """A landing site change is not in the docs class."""
         head_sha = self.publish_head(("website/index.html", "<p>Site</p>\n"))
         self.assertEqual(self.classify(head_sha), "change_class=website")
 
-    def test_fetched_code_commit_classifies_as_full(self) -> None:
+    def test_fetched_code_commit_is_full(self) -> None:
         """A code change beside a docs change keeps both reviews."""
         head_sha = self.publish_head(("docs/guide.md", "Guide\n"), ("src/app.py", "VALUE = 2\n"))
         self.assertEqual(self.classify(head_sha), "change_class=full")

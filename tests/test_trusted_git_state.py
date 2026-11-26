@@ -31,7 +31,7 @@ class TrustedGitRunnerTest(unittest.TestCase):
             nested.mkdir(parents=True)
             self.assertEqual(trusted_git._workspace_root(nested), root.resolve())
 
-    def test_runner_decodes_malformed_output_with_utf8_replacement(self):
+    def test_runner_malformed_output(self):
         def runner(_command, **kwargs):
             return subprocess.run(
                 [sys.executable, "-c",
@@ -48,7 +48,7 @@ class TrustedGitRunnerTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout, "\ufffd")
 
-    def test_transport_clone_is_narrow_and_workspace_bound(self):
+    def test_transport_clone_bounds(self):
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary)
             self.assertEqual(
@@ -131,7 +131,7 @@ class GitStateTextTest(unittest.TestCase):
             "<redacted>@example.com:organization/repository.git",
         )
 
-    def test_scp_style_account_before_path_at_sign_is_redacted(self):
+    def test_scp_path_at_sign_redacted(self):
         url = "user@host:path/with@symbol"
         self.assertEqual(
             read_git_state.redact_remote_url(url),
@@ -142,7 +142,7 @@ class GitStateTextTest(unittest.TestCase):
 class GitStateParsingTest(unittest.TestCase):
     """Structured state excludes raw paths and diagnostics."""
 
-    def test_detached_branch_has_no_branch_name(self):
+    def test_detached_no_branch_name(self):
         state = read_git_state.parse_branch(returncode=1, stdout="")
         self.assertEqual(
             state,

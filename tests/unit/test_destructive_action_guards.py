@@ -92,7 +92,7 @@ def journal_store(tmp_path: Path) -> UsbRecoveryJournalStore:
     return store
 
 
-def test_enter_in_usb_preflight_cancels_the_export(qtbot: Any) -> None:
+def test_usb_preflight_enter_cancels_export(qtbot: Any) -> None:
     """Enter in the USB confirm dialog cancels. Only an explicit choice confirms."""
     inspection = build_inspection()
     request = build_request()
@@ -116,7 +116,7 @@ def test_usb_recovery_enter_keeps_drive(qtbot: Any) -> None:
     assert dialog.selected_choice is ReconnectChoice.LEAVE_UNCHANGED
 
 
-def test_declined_journal_cleanup_keeps_every_entry(
+def test_declined_journal_cleanup_keeps_entries(
     qtbot: Any, journal_store: UsbRecoveryJournalStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """No to the cleanup question removes nothing and reports nothing."""
@@ -153,7 +153,7 @@ def test_journal_cleanup_reports_count(
     assert "1" in messages[0][1]
 
 
-def test_no_safe_plans_keeps_preview_open(qtbot: Any) -> None:
+def test_unsafe_plans_keep_preview_open(qtbot: Any) -> None:
     """Apply with no safe plan says so and leaves the preview open."""
     dialog = WritePlanDialog(WriteService(Repository(DatabaseManager(":memory:"))), [])
     qtbot.addWidget(dialog)

@@ -107,7 +107,7 @@ def opened(library: Path) -> Iterator[sqlite3.Connection]:
         yield conn
 
 
-def test_migration_one_is_the_current_schema() -> None:
+def test_migration_one_is_current_schema() -> None:
     """The registry starts at version 1 and stays in strict ascending order."""
     versions = [migration.version for migration in MIGRATIONS]
 
@@ -116,7 +116,7 @@ def test_migration_one_is_the_current_schema() -> None:
     assert versions[-1] == LATEST_VERSION
 
 
-def test_fresh_library_reaches_latest_without_backup(library: Path) -> None:
+def test_fresh_library_latest_without_backup(library: Path) -> None:
     """A new library gets every table and the latest version, and needs no backup."""
     with DatabaseManager(library):
         pass
@@ -140,7 +140,7 @@ def test_in_memory_library_reaches_latest() -> None:
     assert tables >= SCHEMA_TABLES
 
 
-def test_v0_library_keeps_data_and_backup(library: Path) -> None:
+def test_v0_library_keeps_data_backup(library: Path) -> None:
     """A pre-D349 library reaches version 1 unchanged and leaves a verified version-0 backup."""
     library.parent.mkdir(parents=True)
     _create_version_zero_library(library)
@@ -157,7 +157,7 @@ def test_v0_library_keeps_data_and_backup(library: Path) -> None:
         assert conn.execute("SELECT COUNT(*) FROM source_groups").fetchone()[0] == 1
 
 
-def test_next_clean_open_removes_the_backup(library: Path) -> None:
+def test_next_clean_open_removes_backup(library: Path) -> None:
     """The start after a migrating start finds nothing pending and deletes the backup."""
     library.parent.mkdir(parents=True)
     _create_version_zero_library(library)
@@ -172,7 +172,7 @@ def test_next_clean_open_removes_the_backup(library: Path) -> None:
     assert not sidecar_path_for(library).exists()
 
 
-def test_two_step_migration_runs_in_order(library: Path, opened: sqlite3.Connection) -> None:
+def test_two_step_migration_runs_ordered(library: Path, opened: sqlite3.Connection) -> None:
     """Steps 2 and 3 run in order in one start, after one backup of version 0."""
     steps = (MIGRATIONS[0], Migration(2, _add_notes_table), Migration(3, _add_notes_column))
 
@@ -185,9 +185,7 @@ def test_two_step_migration_runs_in_order(library: Path, opened: sqlite3.Connect
     assert "crate_notes" not in _table_names(backup_path_for(library))
 
 
-def test_failed_migration_rolls_back_and_keeps_backup(
-    library: Path, opened: sqlite3.Connection
-) -> None:
+def test_failed_migration_rollback_keeps_backup(library: Path, opened: sqlite3.Connection) -> None:
     """A step that fails undoes every step of the run and leaves the backup intact."""
     steps = (MIGRATIONS[0], Migration(2, _add_notes_table), Migration(3, _fail_after_ddl))
 
@@ -227,7 +225,7 @@ def test_newer_library_is_refused_untouched(library: Path) -> None:
     assert backup_path_for(library).is_file()
 
 
-def test_newer_library_no_backup_offers_none(library: Path) -> None:
+def test_newer_library_offers_no_backup(library: Path) -> None:
     """A backup that is itself newer than the app is never offered."""
     library.parent.mkdir(parents=True)
     newer_version = LATEST_VERSION + 2
@@ -243,7 +241,7 @@ def test_newer_library_no_backup_offers_none(library: Path) -> None:
     assert caught.value.backup_path is None
 
 
-def test_refused_open_releases_the_library_file(library: Path) -> None:
+def test_refused_open_releases_library_file(library: Path) -> None:
     """A refused open closes its connection. A later rename of the file succeeds."""
     library.parent.mkdir(parents=True)
     with closing(sqlite3.connect(library)) as conn, conn:
@@ -257,7 +255,7 @@ def test_refused_open_releases_the_library_file(library: Path) -> None:
     assert moved.is_file()
 
 
-def test_backup_verification_rejects_a_mismatched_copy(
+def test_backup_verification_rejects_mismatched_copy(
     library: Path, opened: sqlite3.Connection, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Verification rejects a copy whose row counts differ from the source. No backup remains."""

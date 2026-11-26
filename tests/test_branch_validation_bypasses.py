@@ -24,32 +24,32 @@ class BranchValidationBypassTest(unittest.TestCase):
 
     def test_invocation_alias_rejects_prohibited_target(self):
         command = 'git -c alias.x="push origin claude/x" x'
-        self.assertTrue(hook.command_names_prohibited_branch(command))
+        self.assertIn("prohibited", hook.command_execution_violation(command, "", "Bash")[1])
 
-    def test_unrelated_incomplete_text_is_not_a_literal_branch_match(self):
+    def test_incomplete_text_not_branch_match(self):
         command = 'printf "claude/x'
-        self.assertFalse(hook.command_names_prohibited_branch(command))
+        self.assertNotIn("prohibited", hook.command_execution_violation(command, "", "Bash")[1])
 
-    def test_unrelated_incomplete_text_is_not_a_git_write(self):
+    def test_incomplete_text_not_git_write(self):
         self.assertEqual(hook.blocked_command('printf "unfinished'), [])
 
-    def test_incomplete_git_still_produces_a_blocking_context(self):
+    def test_incomplete_git_blocks(self):
         contexts = hook.blocked_command('git push origin "unfinished')
         self.assertTrue(contexts)
         self.assertTrue(any(context.get("error") for context in contexts))
 
-    def test_metadata_read_is_not_a_metadata_write(self):
+    def test_metadata_read_not_write(self):
         command = 'printf "%s" ".git/HEAD claude/x"'
-        self.assertFalse(hook.command_names_prohibited_metadata(command))
+        self.assertNotIn("prohibited", hook.command_execution_violation(command, "", "Bash")[1])
 
-    def test_document_content_is_not_a_metadata_destination(self):
+    def test_document_not_metadata_destination(self):
         payload = {
             "file_path": "notes.txt",
             "content": "Example .git/HEAD with ref: refs/heads/claude/x",
         }
         self.assertFalse(hook.file_write_names_prohibited_metadata(payload, "."))
 
-    def test_target_checkout_cannot_supply_checker_code(self):
+    def test_target_checkout_checker_isolated(self):
         with tempfile.TemporaryDirectory() as directory:
             scripts = Path(directory) / "scripts"
             scripts.mkdir()

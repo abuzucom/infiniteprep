@@ -53,13 +53,13 @@ def write_year(tmp_path: Path, file_name: str, year: str) -> tuple[Path, Operati
         ("Remaster 1994", "Remaster 1994"),
     ],
 )
-def test_v23_date_text_keeps_the_parts_v23_can_hold(year: str, expected: str) -> None:
+def test_v23_date_keeps_holdable_parts(year: str, expected: str) -> None:
     """The comparison value matches what TYER, TDAT, and TIME read back as."""
     assert v23_date_text(year) == expected
 
 
 @pytest.mark.parametrize("year", ["2020-05", "2020-05-17T10:20:30Z"])
-def test_partial_or_precise_year_writes_to_mp3(tmp_path: Path, year: str) -> None:
+def test_any_year_precision_writes_mp3(tmp_path: Path, year: str) -> None:
     """A YEAR that v2.3 cannot hold whole still writes. It reads back as the held part."""
     written_path, status = write_year(tmp_path, "track.mp3", year)
 
@@ -87,7 +87,7 @@ def test_backup_name_replaces_bad_chars(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows refuses a colon in a file name.")
-def test_file_name_with_a_colon_writes(tmp_path: Path) -> None:
+def test_file_name_with_colon_writes(tmp_path: Path) -> None:
     """macOS stores a Finder slash as a colon. Such a file writes with a backup."""
     written_path, status = write_year(tmp_path, "AC:DC - Track.mp3", "1980")
 

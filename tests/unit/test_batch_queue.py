@@ -21,7 +21,7 @@ def enqueue_three(queue: BatchQueue) -> tuple[QueuedBatch, QueuedBatch, QueuedBa
     )
 
 
-def test_batches_start_in_arrival_order_one_at_a_time() -> None:
+def test_batches_run_singly_arrival_order() -> None:
     """Only one batch runs. The next starts after the running one ends, in FIFO order."""
     queue = BatchQueue()
     first, second, third = enqueue_three(queue)
@@ -114,7 +114,7 @@ def test_cancel_all_waiting_keeps_running() -> None:
     assert queue.is_busy()
 
 
-def test_clear_finished_forgets_only_finished_batches() -> None:
+def test_clear_finished_forgets_only_finished() -> None:
     """Clear Finished keeps the running and waiting batches."""
     queue = BatchQueue()
     first, second, third = enqueue_three(queue)

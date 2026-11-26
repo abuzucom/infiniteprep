@@ -76,7 +76,7 @@ def visible_names(window: MainWindow) -> list[str]:
     return [window.file_table.item(row, 0).text() for row in range(window.file_table.rowCount())]
 
 
-def test_every_main_window_focus_target_has_a_name(
+def test_main_window_focus_targets_named(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """A screen reader names every control that Tab reaches in the main window."""
@@ -85,7 +85,7 @@ def test_every_main_window_focus_target_has_a_name(
     assert unnamed_focus_targets(window) == []
 
 
-def test_every_dialog_focus_target_has_a_name(qtbot: Any) -> None:
+def test_dialog_focus_targets_named(qtbot: Any) -> None:
     """A screen reader names every control that Tab reaches in the write and journal dialogs."""
     repository = Repository(DatabaseManager(":memory:"))
     write_service = WriteService(repository)
@@ -100,7 +100,7 @@ def test_every_dialog_focus_target_has_a_name(qtbot: Any) -> None:
     assert [unnamed_focus_targets(dialog) for dialog in dialogs] == [[], [], []]
 
 
-def test_double_click_opens_no_cell_editor(
+def test_double_click_opens_no_editor(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """A double-click selects a library row and opens no editor for its computed value."""
@@ -116,7 +116,7 @@ def test_double_click_opens_no_cell_editor(
     assert table.item(0, 0).text() == "a.wav"
 
 
-def test_dialog_tables_are_read_only_and_leave_on_tab(qtbot: Any) -> None:
+def test_dialog_tables_uneditable_tab_leaves(qtbot: Any) -> None:
     """The write, journal, and recovery tables open no editor and pass Tab to the next control."""
     repository = Repository(DatabaseManager(":memory:"))
     write_service = WriteService(repository)
@@ -153,7 +153,7 @@ def test_space_on_direction_reverses_sort(
     assert window.sort_direction_btn.text() == SORT_DESCENDING_TEXT
 
 
-def test_sort_picker_sorts_by_the_chosen_column(
+def test_sort_picker_sorts_chosen_column(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """Choosing Duration in the sort picker sorts ascending by length and marks the header."""
@@ -167,7 +167,7 @@ def test_sort_picker_sorts_by_the_chosen_column(
     assert window.sort_direction_btn.text() == SORT_ASCENDING_TEXT
 
 
-def test_header_click_moves_the_sort_picker(
+def test_header_click_moves_sort_picker(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """A header click and the sort controls show the same column and direction."""

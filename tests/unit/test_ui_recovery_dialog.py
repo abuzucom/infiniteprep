@@ -75,7 +75,7 @@ def test_restore_button_restores_and_closes(qtbot, interrupted: Any) -> None:
     assert dialog.table.rowCount() == 0
 
 
-def test_keep_button_marks_the_write_finished(
+def test_keep_button_marks_write_finished(
     qtbot, interrupted: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Clicking Mark as finished and answering Yes keeps the file and completes the record."""
@@ -117,7 +117,7 @@ def test_declined_finish_keeps_write_pending(
     assert dialog.table.rowCount() == 1
 
 
-def test_a_failed_restore_warns_and_keeps_the_row(
+def test_failed_restore_warns_keeps_row(
     qtbot, interrupted: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A tampered backup shows a plain-text warning, and the write stays listed."""

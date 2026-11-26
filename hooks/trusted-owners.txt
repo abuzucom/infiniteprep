@@ -1,0 +1,5 @@
+# GitHub owners whose repositories may run test runners without a prompt.
+# Test runners execute repository code such as conftest.py, a Makefile, or
+# package scripts. List one owner per line. Each adopter keeps its own list.
+# A missing, empty, or malformed file trusts nobody.
+abuzucom

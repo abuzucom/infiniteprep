@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Run trusted compliance checks against one immutable Git tree."""
+import hashlib
 import importlib.util
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 
@@ -16,6 +20,11 @@ MAX_TREE_ENTRIES = 100_000
 MAX_VIOLATIONS = 1_000
 MAX_TREE_OUTPUT = 64 * 1024 * 1024
 MAX_GIT_DIAGNOSTIC = 64 * 1024
+# A runner event payload stays far below this bound. The cap bounds the read.
+MAX_EVENT_PAYLOAD_BYTES = 1024 * 1024
+# check_conflict_markers keeps its own _sanitize copy capped at 200, so each
+# file stays standalone. tests/test_tree_checker_parity.py pins the shared
+# rendering below both caps.
 MAX_DIAGNOSTIC_LENGTH = 500
 MAX_LATIN1_CODE_POINT = 0xFF
 UTF32_UNIT_BYTES = 4
@@ -41,6 +50,12 @@ TRUSTED_REQUIREMENTS_COMMAND = (
     "python -m pip install --requirement "
     "trusted-base/requirements-checkers.txt"
 )
+# The wheel-only form keeps a Python with no PyYAML wheel from building the
+# sdist. No hash covers the sdist build backend. The privileged job must use it,
+# so a pull request cannot drop back to a source build.
+TRUSTED_WHEEL_COMMAND = TRUSTED_REQUIREMENTS_COMMAND + " --only-binary :all:"
+TRUSTED_REQUIREMENTS_COMMANDS = (TRUSTED_WHEEL_COMMAND,)
+INSTALL_STEP_INDEX = 3
 TRUSTED_SCAN_COMMAND = (
     'python "$TRUSTED_CHECKER" --repo "$PR_REPO" --tree "$PR_HEAD_SHA" '
     '--base "$PR_BASE_SHA" --branch "$PR_HEAD_BRANCH" '
@@ -82,6 +97,82 @@ CHECKER_NAMES = (
     "check_local_paths",
 )
 BOT_REGISTRY_NAME = "trusted_bot_identities"
+PULL_TARGET_TOP_KEYS = frozenset(
+    {"name", True, "on", "concurrency", "permissions", "env", "jobs"})
+# The exemption manifest sits beside the trusted base checker, like the
+# local-path allowlist, so a pull request cannot widen its own exemptions.
+EXEMPTIONS_FILE = ".compliance-tree-exemptions.json"
+MAX_EXEMPTIONS_BYTES = 64 * 1024
+EXEMPTIONS_VERSION = 1
+EXEMPTION_KEYS = frozenset(("version", "pull_request_target", "rule7_excluded_trees"))
+REVIEWED_REQUIRED_KEYS = frozenset(("secrets", "sha256"))
+REVIEWED_ENTRY_KEYS = frozenset(("secrets", "sha256", "reusable_workflows", "permissions"))
+# Structural rules cannot judge script text, so each reviewed caller and
+# each local reusable target is pinned to the exact reviewed blob bytes.
+SHA256_PATTERN = re.compile(r"[0-9a-f]{64}\Z")
+LOCAL_TARGET_PREFIX = "./"
+# A bound reusable workflow is a local workflow file or a remote one pinned
+# to a full commit SHA, so a pull request cannot substitute its target.
+LOCAL_REUSABLE_PATTERN = re.compile(r"\./\.github/workflows/[A-Za-z0-9_-][A-Za-z0-9._-]*\.ya?ml\Z")
+REMOTE_REUSABLE_PATTERN = re.compile(
+    r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/\.github/workflows/[A-Za-z0-9_-][A-Za-z0-9._-]*\.ya?ml"
+    r"@[0-9a-fA-F]{40}\Z")
+REVIEWED_WORKFLOW_PATTERN = re.compile(r"\.github/workflows/[A-Za-z0-9_-][A-Za-z0-9._-]*\.ya?ml\Z")
+SECRET_NAME_PATTERN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+# Segments that start with a dot are refused, which also refuses `.` and
+# `..` traversal and every client configuration directory.
+TREE_SEGMENT_PATTERN = re.compile(r"[A-Za-z0-9_-][A-Za-z0-9._-]*\Z")
+TREE_WILDCARD = "*"
+PROTECTED_TREE_ROOTS = frozenset(("scripts", "hooks"))
+REVIEWED_TOP_PERMISSIONS = ({}, {"contents": "read"})
+SECRET_REFERENCE_PATTERN = re.compile(r"secrets\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)", re.IGNORECASE)
+SECRET_INDEX_PATTERN = re.compile(r"secrets\s*\[", re.IGNORECASE)
+# The whole secrets context, not followed by a property access, carries every
+# secret past the named allowlist. The pattern runs on one expression body.
+WHOLE_SECRETS_PATTERN = re.compile(r"\bsecrets\b(?!\s*\.)", re.IGNORECASE)
+# Event fields such as titles and branch names carry attacker text. The
+# word boundary leaves github.event_name, which carries no such text.
+# Any use of the whole github context, not followed by a property access,
+# reaches the same fields. The pattern runs on one expression body at a time.
+EVENT_CONTEXT_PATTERN = re.compile(
+    r"\bgithub(?:\.event\b|\.head_ref\b|\b(?!\s*\.))", re.IGNORECASE)
+EXPRESSION_OPEN = "${{"
+EXPRESSION_CLOSE = "}}"
+# A condition or a concurrency group evaluates event data without passing it
+# to a step, an action input, or the environment. Only these structural
+# fields qualify. A nested key with the same name gains no exemption.
+WORKFLOW_SAFE_KEYS = frozenset(("concurrency",))
+JOB_SAFE_KEYS = frozenset(("if", "concurrency"))
+STEP_SAFE_KEYS = frozenset(("if",))
+PERMISSION_SCOPES = frozenset((
+    "actions", "attestations", "checks", "contents", "deployments", "discussions",
+    "id-token", "issues", "models", "packages", "pages", "pull-requests",
+    "repository-projects", "security-events", "statuses",
+))
+PERMISSION_LEVELS = frozenset(("none", "read", "write"))
+WRITE_LEVEL = "write"
+
+
+@dataclass(frozen=True)
+class ReviewedWorkflow:
+    """Secret names and reusable workflows that one reviewed caller may use."""
+
+    secrets: frozenset
+    reusable_workflows: frozenset
+    write_scopes: frozenset = frozenset()
+    caller_digest: str = ""
+    local_digests: tuple = ()
+
+
+@dataclass(frozen=True)
+class TreeExemptions:
+    """Reviewed exemptions that the trusted base branch declares."""
+
+    pull_target: dict
+    rule7_trees: tuple
+
+
+NO_EXEMPTIONS = TreeExemptions({}, ())
 
 
 def _sanitize(value: object) -> str:
@@ -123,6 +214,172 @@ def _load_checkers() -> dict[str, ModuleType]:
     return {name: _load_trusted(name) for name in CHECKER_NAMES}
 
 
+def _trusted_root() -> Path:
+    """Return the repository root of the trusted checker copy."""
+    return Path(__file__).resolve().parent.parent
+
+
+def _manifest_error(detail: str) -> RuntimeError:
+    """Build one fail-closed manifest error with its recovery action."""
+    return RuntimeError(
+        f"{EXEMPTIONS_FILE} is invalid: {detail}. Fix: correct the manifest "
+        "on the base branch through a reviewed gate change.")
+
+
+def _read_exemptions_text(path: Path) -> str | None:
+    """Return the ASCII manifest text, or None when the manifest is absent."""
+    if path.is_symlink():
+        raise _manifest_error("the manifest must not be a symlink")
+    if not path.exists():
+        return None
+    if not path.is_file() or path.stat().st_size > MAX_EXEMPTIONS_BYTES:
+        raise _manifest_error(f"the manifest must be a regular file of at most {MAX_EXEMPTIONS_BYTES} bytes")
+    try:
+        return path.read_bytes().decode("ascii")
+    except UnicodeDecodeError as error:
+        raise _manifest_error("the manifest must be ASCII") from error
+
+
+def _parse_reviewed_workflows(value: object) -> dict:
+    """Map each reviewed workflow path to its allowed secret names."""
+    if not isinstance(value, dict):
+        raise _manifest_error("pull_request_target must be an object")
+    reviewed = {}
+    for path, entry in value.items():
+        if not REVIEWED_WORKFLOW_PATTERN.fullmatch(path):
+            raise _manifest_error(f"{_sanitize(path)} is not a workflow path")
+        if (not isinstance(entry, dict) or not REVIEWED_REQUIRED_KEYS <= set(entry)
+                or not set(entry) <= REVIEWED_ENTRY_KEYS):
+            raise _manifest_error(
+                f"{_sanitize(path)} must hold a secrets list and optional "
+                "reusable_workflows and permissions values")
+        targets, local_digests = _parse_reusable_workflows(
+            path, entry.get("reusable_workflows", []))
+        reviewed[path] = ReviewedWorkflow(
+            _parse_secret_names(path, entry["secrets"]), targets,
+            _parse_write_scopes(path, entry.get("permissions", {})),
+            _parse_digest(path, entry["sha256"]), local_digests)
+    return reviewed
+
+
+def _parse_digest(path: str, digest: object) -> str:
+    """Return one lowercase SHA-256 hex digest from the manifest."""
+    if not isinstance(digest, str) or not SHA256_PATTERN.fullmatch(digest):
+        raise _manifest_error(f"{_sanitize(path)} needs a lowercase 64-character sha256")
+    return digest
+
+
+def _parse_write_scopes(path: str, permissions: object) -> frozenset:
+    """Return the token scopes that a reviewed caller's jobs may set to write."""
+    if not isinstance(permissions, dict) or not all(
+            scope in PERMISSION_SCOPES and level == WRITE_LEVEL
+            for scope, level in permissions.items()):
+        raise _manifest_error(
+            f"{_sanitize(path)} permissions must map known scopes to write")
+    return frozenset(permissions)
+
+
+def _parse_secret_names(path: str, names: object) -> frozenset:
+    """Return the upper-case secret names one reviewed caller may reference."""
+    if not isinstance(names, list) or not all(
+            isinstance(name, str) and SECRET_NAME_PATTERN.fullmatch(name) for name in names):
+        raise _manifest_error(f"{_sanitize(path)} secrets must be secret names")
+    return frozenset(name.upper() for name in names)
+
+
+def _parse_reusable_workflows(path: str, targets: object) -> tuple:
+    """Return the allowed job-level `uses:` values and each local target's pin.
+
+    A list names remote targets only. An object maps each local target to its
+    sha256 and each remote target to null, since its commit SHA already pins it.
+    """
+    if isinstance(targets, list):
+        targets = dict.fromkeys(targets)
+    if not isinstance(targets, dict):
+        raise _manifest_error(f"{_sanitize(path)} reusable_workflows must be a list or an object")
+    local_digests = []
+    for target, digest in targets.items():
+        if isinstance(target, str) and REMOTE_REUSABLE_PATTERN.fullmatch(target) and digest is None:
+            continue
+        if isinstance(target, str) and LOCAL_REUSABLE_PATTERN.fullmatch(target):
+            local_digests.append((target, _parse_digest(path, digest)))
+            continue
+        raise _manifest_error(
+            f"{_sanitize(path)} reusable_workflows must map local workflow paths to a "
+            "sha256 and remote workflows pinned to a full commit SHA to null")
+    return frozenset(targets), tuple(local_digests)
+
+
+def _parse_tree_pattern(pattern: object) -> tuple:
+    """Split one `segment/.../` fixture tree pattern into checked segments."""
+    if not isinstance(pattern, str) or not pattern.endswith("/"):
+        raise _manifest_error("each excluded tree must be text that ends with /")
+    segments = tuple(pattern[:-1].split("/"))
+    for segment in segments:
+        if segment != TREE_WILDCARD and not TREE_SEGMENT_PATTERN.fullmatch(segment):
+            raise _manifest_error(f"{_sanitize(pattern)} holds an unsafe segment")
+    if segments[0] == TREE_WILDCARD or segments[0] in PROTECTED_TREE_ROOTS:
+        raise _manifest_error(f"{_sanitize(pattern)} must start below a literal unprotected directory")
+    return segments
+
+
+def load_exemptions(root: Path) -> TreeExemptions:
+    """Load the exemption manifest from one trusted root, or none when absent."""
+    text = _read_exemptions_text(root / EXEMPTIONS_FILE)
+    if text is None:
+        return NO_EXEMPTIONS
+    try:
+        document = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise _manifest_error("the manifest is not JSON") from error
+    if not isinstance(document, dict) or not set(document) <= EXEMPTION_KEYS:
+        raise _manifest_error(f"the manifest allows only {sorted(EXEMPTION_KEYS)}")
+    version = document.get("version")
+    if type(version) is not int or version != EXEMPTIONS_VERSION:
+        raise _manifest_error(f"version must be {EXEMPTIONS_VERSION}")
+    trees = document.get("rule7_excluded_trees", [])
+    if not isinstance(trees, list):
+        raise _manifest_error("rule7_excluded_trees must be a list")
+    return TreeExemptions(
+        _parse_reviewed_workflows(document.get("pull_request_target", {})),
+        tuple(_parse_tree_pattern(pattern) for pattern in trees))
+
+
+def _pinned_digest_violations(exemptions: TreeExemptions | None, digests: dict) -> list[str]:
+    """Compare head blob digests with every caller and local target pin."""
+    violations = []
+    for path, reviewed in sorted((exemptions or NO_EXEMPTIONS).pull_target.items()):
+        if path not in digests:
+            continue
+        prefix = f"{path}: "
+        if digests[path] != reviewed.caller_digest:
+            violations.append(
+                prefix + "reviewed pull_request_target content does not match the manifest sha256")
+        for target, expected in reviewed.local_digests:
+            actual = digests.get(target[len(LOCAL_TARGET_PREFIX):])
+            if actual is None:
+                violations.append(f"{prefix}bound reusable workflow {target} is absent from the tree")
+            elif actual != expected:
+                violations.append(
+                    f"{prefix}bound reusable workflow {target} does not match the manifest sha256")
+    return violations
+
+
+def _tree_matches(segments: tuple, pattern: tuple) -> bool:
+    """Return whether a file path sits below one excluded tree pattern."""
+    if len(segments) <= len(pattern):
+        return False
+    return all(expected in (TREE_WILDCARD, actual) for expected, actual in zip(pattern, segments))
+
+
+def _rule7_excluded(path: str, exemptions: TreeExemptions | None) -> bool:
+    """Return whether the base manifest excludes a path from the Rule 7 scan."""
+    if exemptions is None:
+        return False
+    segments = tuple(path.split("/"))
+    return any(_tree_matches(segments, pattern) for pattern in exemptions.rule7_trees)
+
+
 def _is_within(path: Path, parent: Path) -> bool:
     """Return True when path resolves to parent or one of its descendants."""
     try:
@@ -132,10 +389,14 @@ def _is_within(path: Path, parent: Path) -> bool:
 
 
 def _safe_search_path(repo: Path) -> str:
-    """Return PATH without directories controlled by the candidate repo."""
+    """Return PATH without relative entries or directories in the candidate repo.
+
+    A relative entry resolves against the process working directory. A
+    caller can point that directory into the candidate repo.
+    """
     safe_entries = []
     for raw_entry in os.environ.get("PATH", "").split(os.pathsep):
-        if not raw_entry:
+        if not raw_entry or not Path(raw_entry).is_absolute():
             continue
         try:
             entry = Path(raw_entry).resolve(strict=False)
@@ -148,9 +409,7 @@ def _safe_search_path(repo: Path) -> str:
 
 def _safe_execution_directory(repo: Path, executable: str) -> Path:
     """Return an existing process directory outside the candidate repo."""
-    for candidate in (Path(os.getenv("TEMP", "")), Path(executable).parent):
-        if not str(candidate):
-            continue
+    for candidate in (Path(tempfile.gettempdir()), Path(executable).parent):
         try:
             resolved = candidate.resolve(strict=True)
         except OSError:
@@ -184,6 +443,8 @@ def _resolve_git(repo: Path) -> tuple[str, str]:
         if not callable(resolve_git):
             raise RuntimeError("trusted_git.py does not define resolve_git")
         return _validate_executable(resolve_git(repo), repo), safe_path
+    # The search covers only absolute entries outside the candidate repo, and
+    # _validate_executable re-checks the result.
     executable = shutil.which("git", path=safe_path)
     if executable is None:
         raise RuntimeError("could not find Git outside the candidate repo")
@@ -191,7 +452,12 @@ def _resolve_git(repo: Path) -> tuple[str, str]:
 
 
 def _git_environment(safe_path: str) -> dict[str, str]:
-    """Return a noninteractive Git environment with unsafe features disabled."""
+    """Return a noninteractive Git environment with unsafe features disabled.
+
+    This stays a denylist. The immutable compliance workflow passes the
+    candidate objects through GIT_ALTERNATE_OBJECT_DIRECTORIES. The
+    trusted_git allowlist would drop that variable.
+    """
     environment = os.environ.copy()
     for name in (
         "GIT_COMMON_DIR", "GIT_CONFIG", "GIT_CONFIG_COUNT",
@@ -239,9 +505,6 @@ def _capture_bounded(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
-    if process.stdout is None:
-        _stop_process(process)
-        raise RuntimeError("could not capture Git output")
     try:
         output = process.stdout.read(limit + 1)
         if len(output) > limit:
@@ -299,7 +562,10 @@ def _run_git(
 def _validate_object_id(object_id: str) -> str:
     """Return a normalized 40- or 64-character hexadecimal object ID."""
     if not OBJECT_ID_PATTERN.fullmatch(object_id):
-        raise RuntimeError("--tree requires 40 or 64 hexadecimal characters")
+        raise RuntimeError(
+            "--tree requires a validated hexadecimal object id "
+            "with 40 or 64 characters"
+        )
     return object_id.lower()
 
 
@@ -316,7 +582,11 @@ def _validate_tree_path(raw_path: bytes) -> str:
 
 
 def _parse_tree_entries(raw_output: bytes) -> list[tuple[str, str, str]]:
-    """Parse complete ls-tree records into supported tracked blobs."""
+    """Parse complete ls-tree records into supported tracked blobs.
+
+    check_conflict_markers keeps its own copy so each file stays standalone.
+    tests/test_tree_parser_parity.py pins both copies to one record grammar.
+    """
     if raw_output and not raw_output.endswith(b"\x00"):
         raise RuntimeError("truncated git ls-tree output")
     records = raw_output[:-1].split(b"\x00") if raw_output else []
@@ -408,7 +678,7 @@ def _zero_ratio(content: bytes, offset: int, width: int) -> float:
 
 
 def _decode_bomless_unicode(content: bytes) -> str | None:
-    """Decode UTF-16/32 text whose byte-position NUL pattern identifies it."""
+    """Decode UTF-16/32 text identified by its byte-position NUL pattern."""
     candidates = []
     if len(content) % UTF32_UNIT_BYTES == 0 and len(content) >= UTF32_UNIT_BYTES:
         ratios = [_zero_ratio(content, offset, UTF32_UNIT_BYTES) for offset in range(UTF32_UNIT_BYTES)]
@@ -429,6 +699,30 @@ def _decode_bomless_unicode(content: bytes) -> str | None:
         except UnicodeDecodeError:
             continue
     return None
+
+
+def _expression_bodies(value: str):
+    """Yield each `${{ ... }}` body in one linear pass.
+
+    An opening without a close extends to the end of the text. No later
+    close can exist after it, so the scan stops there.
+    """
+    position = value.find(EXPRESSION_OPEN)
+    while position != -1:
+        start = position + len(EXPRESSION_OPEN)
+        end = value.find(EXPRESSION_CLOSE, start)
+        if end == -1:
+            yield value[start:]
+            return
+        yield value[start:end]
+        position = value.find(EXPRESSION_OPEN, end + len(EXPRESSION_CLOSE))
+
+
+def _has_event_expression(value: object) -> bool:
+    """Return whether a text value interpolates event data or the whole github context."""
+    if not isinstance(value, str):
+        return False
+    return any(EVENT_CONTEXT_PATTERN.search(body) for body in _expression_bodies(value))
 
 
 def _walk_values(root: object):
@@ -491,8 +785,11 @@ def _checkout_step(base: bool) -> dict:
     }
 
 
-def _trusted_steps() -> list[dict]:
-    """Return the exact privileged step sequence allowed for promotion."""
+def _trusted_steps(install_command: str = TRUSTED_WHEEL_COMMAND) -> list[dict]:
+    """Return the exact privileged step sequence allowed for promotion.
+
+    `install_command` must be one of TRUSTED_REQUIREMENTS_COMMANDS.
+    """
     return [
         _checkout_step(True),
         _checkout_step(False),
@@ -503,7 +800,7 @@ def _trusted_steps() -> list[dict]:
         },
         {
             "name": "Install trusted checker dependencies",
-            "run": TRUSTED_REQUIREMENTS_COMMAND,
+            "run": install_command,
         },
         {
             "name": "Scan immutable pull request objects with the trusted checker",
@@ -513,18 +810,163 @@ def _trusted_steps() -> list[dict]:
     ]
 
 
-def _pull_target_violations(document: dict, text: str, path: str) -> list[str]:
+def _candidate_install_command(candidate_job) -> str:
+    """Return the candidate's install command when it is an accepted form.
+
+    Any other command falls back to the wheel-only form, so the exact
+    schema comparison still rejects it.
+    """
+    steps = candidate_job.get("steps") if isinstance(candidate_job, dict) else None
+    if not isinstance(steps, list) or len(steps) != TRUSTED_STEP_COUNT:
+        return TRUSTED_WHEEL_COMMAND
+    install_step = steps[INSTALL_STEP_INDEX]
+    command = install_step.get("run") if isinstance(install_step, dict) else None
+    if command in TRUSTED_REQUIREMENTS_COMMANDS:
+        return command
+    return TRUSTED_WHEEL_COMMAND
+
+
+def _reviewed_secret_messages(jobs: dict, text: str, allowed: frozenset) -> list[str]:
+    """Allow only secret references that the base manifest lists."""
+    messages = []
+    if SECRET_INDEX_PATTERN.search(text):
+        messages.append("indexes secrets")
+    if any(isinstance(job, dict) and job.get("secrets") == "inherit" for job in jobs.values()):
+        messages.append("inherits secrets")
+    if any(WHOLE_SECRETS_PATTERN.search(body) for body in _expression_bodies(text)):
+        messages.append("references the whole secrets context")
+    referenced = {match.group(1).upper() for match in SECRET_REFERENCE_PATTERN.finditer(text)}
+    messages.extend(f"references unlisted secret {name}" for name in sorted(referenced - allowed))
+    return messages
+
+
+def _reviewed_step_messages(step: object) -> set:
+    """Refuse code checkout and event interpolation in one step."""
+    if not isinstance(step, dict):
+        return {"has a non-mapping step"}
+    messages = set()
+    uses = step.get("uses")
+    if isinstance(uses, str) and uses.lower().startswith("actions/checkout"):
+        messages.add("checks out code")
+    for value in _walk_values([step.get("run"), step.get("with")]):
+        if _has_event_expression(value):
+            messages.add("interpolates event data in a step")
+    return messages
+
+
+def _reviewed_call_messages(job: dict, reusable_workflows: frozenset) -> set:
+    """Bind a job-level reusable workflow call and refuse event data in its inputs."""
+    messages = set()
+    target = job.get("uses")
+    if target is not None and not isinstance(target, str):
+        messages.add("has a non-text job uses value")
+    elif target is not None and target not in reusable_workflows:
+        messages.add(f"calls unbound reusable workflow {target}")
+    for value in _walk_values(job.get("with")):
+        if _has_event_expression(value):
+            messages.add("interpolates event data in job inputs")
+    return messages
+
+
+def _event_scan_roots(document: dict) -> list:
+    """Return every workflow value outside the structural condition and concurrency fields."""
+    roots = [item for key, item in document.items() if key not in WORKFLOW_SAFE_KEYS | {"jobs"}]
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict):
+        return roots + [jobs]
+    for job in jobs.values():
+        if not isinstance(job, dict):
+            roots.append(job)
+            continue
+        roots.extend(item for key, item in job.items() if key not in JOB_SAFE_KEYS | {"steps"})
+        steps = job.get("steps")
+        if not isinstance(steps, list):
+            roots.append(steps)
+            continue
+        for step in steps:
+            if isinstance(step, dict):
+                roots.extend(item for key, item in step.items() if key not in STEP_SAFE_KEYS)
+            else:
+                roots.append(step)
+    return roots
+
+
+def _event_data_outside_safe_keys(document: dict) -> bool:
+    """Return whether event data appears anywhere but a condition or concurrency group."""
+    return any(_has_event_expression(value) for value in _walk_values(_event_scan_roots(document)))
+
+
+def _reviewed_permission_messages(name: object, job: dict, write_scopes: frozenset) -> set:
+    """Keep one job's token permissions within the manifest's write scopes."""
+    if "permissions" not in job:
+        return set()
+    permissions = job["permissions"]
+    label = f"job {_sanitize(name)}"
+    if not isinstance(permissions, dict):
+        return {f"{label} permissions are not a scope mapping"}
+    messages = set()
+    for scope, level in permissions.items():
+        if level not in PERMISSION_LEVELS:
+            messages.add(f"{label} sets an invalid level for {_sanitize(scope)}")
+        elif level == WRITE_LEVEL and scope not in write_scopes:
+            messages.add(f"{label} grants unlisted write scope {_sanitize(scope)}")
+    return messages
+
+
+def _reviewed_job_messages(jobs: dict, reviewed: ReviewedWorkflow) -> list[str]:
+    """Apply the reviewed call, permission, and step rules to every job."""
+    messages = set()
+    for name, job in jobs.items():
+        if isinstance(job, dict):
+            messages.update(_reviewed_call_messages(job, reviewed.reusable_workflows))
+            messages.update(_reviewed_permission_messages(name, job, reviewed.write_scopes))
+        steps = job.get("steps", []) if isinstance(job, dict) else []
+        if not isinstance(steps, list):
+            messages.add("has a non-list steps value")
+            continue
+        for step in steps:
+            messages.update(_reviewed_step_messages(step))
+    return sorted(messages)
+
+
+def _reviewed_pull_target_violations(
+    document: dict, text: str, path: str, reviewed: ReviewedWorkflow,
+) -> list[str]:
+    """Apply the documented rule set to a workflow the base manifest reviews."""
+    messages = []
+    if not set(document).issubset(PULL_TARGET_TOP_KEYS):
+        messages.append("has unsupported top-level keys")
+    if document.get("permissions") not in REVIEWED_TOP_PERMISSIONS:
+        messages.append("top-level permissions are not empty or contents: read")
+    jobs = document.get("jobs")
+    if not isinstance(jobs, dict) or not jobs:
+        messages.append("has no jobs mapping")
+        jobs = {}
+    messages.extend(_reviewed_secret_messages(jobs, text, reviewed.secrets))
+    messages.extend(_reviewed_job_messages(jobs, reviewed))
+    if _event_data_outside_safe_keys(document):
+        messages.append("interpolates event data outside if and concurrency")
+    return [f"{path}: reviewed pull_request_target {message}" for message in messages]
+
+
+def _pull_target_violations(
+    document: dict, text: str, path: str, exemptions: TreeExemptions | None = None,
+) -> list[str]:
     """Require the exact closed privileged workflow execution surface."""
     if not _pull_target_trigger(document):
         return []
+    reviewed = (exemptions or NO_EXEMPTIONS).pull_target.get(path)
+    if reviewed is not None:
+        return _reviewed_pull_target_violations(document, text, path, reviewed)
+    raw_jobs = document.get("jobs")
+    candidate_job = raw_jobs.get("immutable-compliance") if isinstance(raw_jobs, dict) else None
+    install_command = _candidate_install_command(candidate_job)
     expected_job = {
         "runs-on": "ubuntu-latest",
         "permissions": {"contents": "read"},
-        "steps": _trusted_steps(),
+        "steps": _trusted_steps(install_command),
     }
     trusted_job = dict(expected_job)
-    raw_jobs = document.get("jobs")
-    candidate_job = raw_jobs.get("immutable-compliance") if isinstance(raw_jobs, dict) else None
     if isinstance(candidate_job, dict):
         candidate_job = dict(candidate_job)
         candidate_steps = candidate_job.get("steps")
@@ -540,7 +982,7 @@ def _pull_target_violations(document: dict, text: str, path: str) -> list[str]:
                 python_step["with"] = {"python-version": version_text}
                 candidate_steps[SETUP_PYTHON_STEP_INDEX] = python_step
                 candidate_job["steps"] = candidate_steps
-                trusted_steps = _trusted_steps()
+                trusted_steps = _trusted_steps(install_command)
                 trusted_steps[SETUP_PYTHON_STEP_INDEX] = dict(trusted_steps[SETUP_PYTHON_STEP_INDEX])
                 trusted_steps[SETUP_PYTHON_STEP_INDEX]["with"] = {"python-version": version_text}
                 trusted_job["steps"] = trusted_steps
@@ -554,9 +996,8 @@ def _pull_target_violations(document: dict, text: str, path: str) -> list[str]:
         {"immutable-compliance": expected_job},
         {"immutable-compliance": trusted_job},
     )
-    allowed_top_keys = {"name", True, "on", "concurrency", "permissions", "env", "jobs"}
     checks = (
-        (set(document).issubset(allowed_top_keys), "has unsupported top-level keys"),
+        (set(document).issubset(PULL_TARGET_TOP_KEYS), "has unsupported top-level keys"),
         (document.get("permissions") == {"contents": "read"}, "permissions are not read-only"),
         (document.get("env") == TRUSTED_ENVIRONMENT, "does not bind exact trusted inputs"),
         (job_schema_ok, "job schema is not trusted"),
@@ -570,22 +1011,24 @@ def _pull_target_violations(document: dict, text: str, path: str) -> list[str]:
 
 def _workflow_violations(
     text: str, path: str, persist_checker: ModuleType,
+    exemptions: TreeExemptions | None = None,
 ) -> list[str]:
     """Check immutable actions and privileged workflow execution policy."""
     try:
-        documents = list(persist_checker.yaml.safe_load_all(text))
-    except Exception:
+        documents = persist_checker.load_documents(text)
+    except persist_checker.yaml.YAMLError:
         return [f"{path}: malformed workflow YAML cannot be checked"]
     violations = []
     for document in documents:
         violations.extend(_action_violations(document, path))
         if isinstance(document, dict):
-            violations.extend(_pull_target_violations(document, text, path))
+            violations.extend(_pull_target_violations(document, text, path, exemptions))
     return violations
 
 
 def _scan_blob(
     path: str, text: str, mode: str, checkers: dict[str, ModuleType],
+    exemptions: TreeExemptions | None = None,
 ) -> list[str]:
     """Dispatch one decoded tracked blob to every applicable checker."""
     violations = list(
@@ -610,8 +1053,8 @@ def _scan_blob(
         violations.extend(
             checkers["check_persist_credentials"].find_violations(text, path))
         violations.extend(_workflow_violations(
-            text, path, checkers["check_persist_credentials"]))
-    if Path(lower_path).suffix in CODE_SUFFIXES:
+            text, path, checkers["check_persist_credentials"], exemptions))
+    if Path(lower_path).suffix in CODE_SUFFIXES and not _rule7_excluded(path, exemptions):
         violations.extend(
             checkers["check_weak_hashing"].find_violations(text, path))
     is_dockerfile = name in ("dockerfile", "containerfile") or name.startswith(
@@ -668,7 +1111,7 @@ def _local_path_violations(findings: list) -> list[str]:
 
 def _scan_tree(
     repo: Path, object_id: str, checkers: dict[str, ModuleType],
-    local_scanner: object | None = None,
+    local_scanner: object | None = None, exemptions: TreeExemptions | None = None,
 ) -> list[str]:
     """Scan all supported blobs and conflict markers in one exact object."""
     executable, safe_path = _resolve_git(repo)
@@ -686,17 +1129,20 @@ def _scan_tree(
     violations = []
     total_bytes = 0
     blobs = {}
+    workflow_digests = {}
     for path, blob_id, mode in entries:
         content = blobs.get(blob_id)
         if content is None:
             content = _read_blob(prefix, repo, environment, path, blob_id)
             blobs[blob_id] = content
+        if path.startswith(".github/workflows/") and mode != "120000":
+            workflow_digests[path] = hashlib.sha256(content).hexdigest()
         total_bytes += len(content)
         if total_bytes > MAX_TOTAL_BLOB_BYTES:
             raise RuntimeError(
                 f"tree content exceeds limit ({MAX_TOTAL_BLOB_BYTES} bytes)")
         text = _decode_blob(content)
-        violations.extend(_scan_blob(path, text, mode, checkers))
+        violations.extend(_scan_blob(path, text, mode, checkers, exemptions))
         if local_scanner is not None:
             violations.extend(_local_path_violations(
                 local_scanner.scan_text(text, path)
@@ -706,6 +1152,7 @@ def _scan_tree(
             violations.append(
                 f"reached violation limit ({MAX_VIOLATIONS}), stopping")
             return violations
+    violations.extend(_pinned_digest_violations(exemptions, workflow_digests))
     violations.extend(_scan_conflicts(
         checkers["check_conflict_markers"], repo, object_id,
         executable, safe_path))
@@ -735,6 +1182,20 @@ def _scan_metadata(
     return violations
 
 
+def _has_pull_request_payload(event_path: str) -> bool:
+    """Return whether the runner event file contains pull request data."""
+    if not event_path:
+        return False
+    try:
+        path = Path(event_path)
+        if not path.is_file() or path.stat().st_size > MAX_EVENT_PAYLOAD_BYTES:
+            return False
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return isinstance(payload, dict) and isinstance(payload.get("pull_request"), dict)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+
+
 def _local_path_metadata(
     values: dict[str, str], repo: Path, checkers: dict[str, ModuleType],
     local_scanner: object,
@@ -748,7 +1209,7 @@ def _local_path_metadata(
             repo, ["--end-of-options", f"{base}..{values['--tree']}"])
         findings += local_paths.scan_log(local_scanner, log)
     event_path = os.environ.get("GITHUB_EVENT_PATH", "")
-    if event_path:
+    if event_path and _has_pull_request_payload(event_path):
         findings += local_paths.scan_event(local_scanner, event_path)
     return _local_path_violations(findings)
 
@@ -792,21 +1253,22 @@ def _scan_commit_range(
     head = values["--tree"]
     commits = banned.load_commits(base, head, repo)
     violations.extend(banned.find_violations(commits))
-    attribution = checkers.get("check_commit_attribution")
-    if attribution is not None:
-        violations.extend(attribution.trailer_violations(commits))
-        repository_name = os.environ.get("PR_BASE_REPOSITORY", "")
-        if repository_name:
-            try:
-                violations.extend(
-                    attribution.github_identity_violations(
-                        commits, repository_name, str(repo)
-                    )
+    # _load_checkers raises for any missing CHECKER_NAMES module, so the
+    # attribution checker is always present here.
+    attribution = checkers["check_commit_attribution"]
+    violations.extend(attribution.trailer_violations(commits))
+    repository_name = os.environ.get("PR_BASE_REPOSITORY", "")
+    if repository_name:
+        try:
+            violations.extend(
+                attribution.github_identity_violations(
+                    commits, repository_name, str(repo)
                 )
-            except (OSError, RuntimeError, subprocess.SubprocessError, ValueError) as error:
-                violations.append(
-                    "commit attribution lookup failed: " + _sanitize(error)
-                )
+            )
+        except (OSError, RuntimeError, subprocess.SubprocessError, ValueError) as error:
+            violations.append(
+                "commit attribution lookup failed: " + _sanitize(error)
+            )
     identity = checkers["check_git_identity"]
     identities = identity.log_identities(
         ["--end-of-options", f"{base}..{head}"], repo)
@@ -884,7 +1346,8 @@ def main() -> int:
         values["--tree"] = object_id
         checkers = _load_checkers()
         local_scanner = _local_path_scanner(checkers)
-        violations = _scan_tree(repo, object_id, checkers, local_scanner)
+        exemptions = load_exemptions(_trusted_root())
+        violations = _scan_tree(repo, object_id, checkers, local_scanner, exemptions)
         violations.extend(_scan_metadata(values, repo, checkers, local_scanner))
         return _report(violations)
     except (Exception, KeyboardInterrupt) as error:

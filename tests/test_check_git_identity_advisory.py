@@ -32,7 +32,7 @@ class MissingCandidateAdvisoryTest(unittest.TestCase):
                       self.advisory)
         self.assertIn("request approval", self.advisory)
 
-    def test_advisory_does_not_ask_for_values(self):
+    def test_advisory_omits_value_request(self):
         self.assertNotIn("ask for a repository-local name and email", self.advisory)
 
 

@@ -29,7 +29,7 @@ CHECKER = _load_checker()
 class NoticeFileTest(unittest.TestCase):
     """A notice name alone is not enough. The notice must resolve to a file."""
 
-    def test_dangling_notice_links_are_missing_notices(self) -> None:
+    def test_dangling_notice_links_count_missing(self) -> None:
         """Three broken notice links fail as missing, and stay in the inventory."""
         with tempfile.TemporaryDirectory() as temp:
             bundle = Path(temp) / "InfinitePrep"
@@ -46,7 +46,7 @@ class NoticeFileTest(unittest.TestCase):
         for notice in NOTICES:
             self.assertIn(notice, files)
 
-    def test_notice_links_to_real_files_count(self) -> None:
+    def test_notice_links_real_files_count(self) -> None:
         """A notice link that resolves to a file satisfies the notice check."""
         with tempfile.TemporaryDirectory() as temp:
             bundle = Path(temp) / "InfinitePrep"

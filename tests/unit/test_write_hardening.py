@@ -41,9 +41,7 @@ def library(tmp_path: Path) -> tuple[WriteService, str, Path, str]:
     return write_svc, asset.id, source, original_hash
 
 
-def test_failed_swap_keeps_original_drops_copy(
-    library: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_failed_swap_keeps_original(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """A swap that fails after verification leaves the original bytes and no staged copy."""
     write_svc, file_id, source, original_hash = library
     real_replace = os.replace
@@ -79,7 +77,7 @@ def test_a_symlinked_file_is_refused(library: Any, tmp_path: Path) -> None:
     assert any("symbolic link" in error for error in plan.validation_errors)
 
 
-def test_apply_rechecks_hard_links_added_after_preview(library: Any) -> None:
+def test_apply_rechecks_links_after_preview(library: Any) -> None:
     """A hard link made after preview stops the write before any file change."""
     write_svc, file_id, source, original_hash = library
     plan = write_svc.build_batch_preview([file_id])[0]
@@ -99,7 +97,7 @@ def test_backup_names_refuse_directory_parts(tmp_path: Path, bad_part: str) -> N
         operation_backup_path(tmp_path, "file", "operation", bad_part)
 
 
-def test_a_new_backup_never_replaces_an_existing_file(tmp_path: Path) -> None:
+def test_new_backup_never_replaces_file(tmp_path: Path) -> None:
     """Exclusive creation refuses an existing destination and leaves its bytes alone."""
     source = tmp_path / "source.bin"
     source.write_bytes(b"new")
@@ -113,7 +111,7 @@ def test_a_new_backup_never_replaces_an_existing_file(tmp_path: Path) -> None:
     assert existing.read_bytes() == b"older backup"
 
 
-def test_a_backup_that_fails_verification_is_removed(tmp_path: Path) -> None:
+def test_unverified_backup_is_removed(tmp_path: Path) -> None:
     """A copy whose hash does not match raises, and no unverified backup stays behind."""
     source = tmp_path / "source.bin"
     source.write_bytes(b"content")

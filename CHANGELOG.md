@@ -5,10 +5,24 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.89.0] (2026-11-26)
+## [0.90.0] (2026-11-26)
+
+### Added
+
+- The agents policy template moves from `abuzucom/agents` `88f58b5` to `4797f14` (v2.46.0).
+  - The template adds the session zone, single question, prose option, anti-delegation, pull request base, and GitHub MCP write hooks. Each hook brings its shared modules, checkers, and tests.
+  - The template adds the client skills under `skills/`, `.claude/skills/`, and `.agents/skills/`, plus `docs/enforcement-matrix.md`.
+  - The template adds `policy-size-report.yml`, `policy-digests.json`, and the test name checker `scripts/check_test_names.py`.
+  - `docs/template-drift.md` lists the taken and declined files and the local differences.
 
 ### Changed
 
+- Every taken hook, checker, test, client setting, and policy document matches the template revision. The policy copies come from `scripts/sync.py`.
+- The `pr-checks` job of `agents-compliance.yml` runs on draft pull requests. `agents-md-compliance.yml` has no branch filter and also runs on the `edited` event.
+- `sync-check.yml` runs on pull requests only and adds the delegated recovery command check.
+- Every workflow keeps its current action pins.
+- Every test name follows the five-word rule of `scripts/check_test_names.py`. The renames change no test body.
+- The README handoff note uses the template term "active human request".
 - `README.md`, `docs/project-orientation.md`, and earlier `CHANGELOG.md` entries drop the wording that the agents prose checks flag. The facts, versions, and issue numbers stay the same.
 - `security-review-pr.yml` calls the `abuzucom/agents-personas` `foucault-security-review.yml` wrapper. `quality-review-pr.yml` calls the `euler-quality-review.yml` wrapper.
   - Both pin `uses:` and `personas_ref` to agents-personas commit `c43f4592191b42b9f66072622b082fc2f4dc3217` (0.22.0).
@@ -18,7 +32,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Every completed `ci` run gets a review. No existing check run skips it, since any workflow with `checks: write` can publish a check with any title.
 - `tests/test_review_wiring.py` covers the wrapper pins, the permissions, the secret mapping, and the check names.
 - `ci/README.md` keeps the `ci` path that the CodeQL configuration declares. The default setup reads that configuration from `main`.
-- The version advances from 0.88.0 to 0.89.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.88.0 to 0.90.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 

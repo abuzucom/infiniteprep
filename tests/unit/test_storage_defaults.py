@@ -32,7 +32,7 @@ def configured(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> StorageLocati
     return locations
 
 
-def test_settings_save_into_the_configured_folder(configured: StorageLocations) -> None:
+def test_settings_save_into_configured_folder(configured: StorageLocations) -> None:
     """SettingsManager() with no path reads and writes settings.json in config_dir."""
     manager = SettingsManager()
     settings = AppSettings()
@@ -45,7 +45,7 @@ def test_settings_save_into_the_configured_folder(configured: StorageLocations) 
     assert SettingsManager().load().theme == "light_blue.xml"
 
 
-def test_services_default_to_the_configured_folders(configured: StorageLocations) -> None:
+def test_services_default_to_configured_folders(configured: StorageLocations) -> None:
     """Backups and the fpcalc tool default to the configured folders."""
     repository = Repository(DatabaseManager(":memory:"))
 

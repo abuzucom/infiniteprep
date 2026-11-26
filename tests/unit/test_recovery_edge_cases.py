@@ -45,9 +45,7 @@ def fail_write_after_corrupting(write_svc: WriteService, monkeypatch: Any) -> No
     monkeypatch.setattr(write_svc.tag_adapter, "_write_tags_by_format", corrupt_then_fail)
 
 
-def test_a_failed_rollback_stays_in_startup_recovery(
-    library: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_failed_rollback_stays_in_recovery(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """The half-written file stays listed for recovery, and new writes stay blocked."""
     _, write_svc, file_id, _ = library
     fail_write_after_corrupting(write_svc, monkeypatch)
@@ -68,7 +66,7 @@ def test_a_failed_rollback_stays_in_startup_recovery(
         write_svc.apply_batch([plan])
 
 
-def test_an_unreadable_backup_keeps_the_original_error(
+def test_unreadable_backup_keeps_original_error(
     library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A backup read error during rollback cannot replace the write error."""

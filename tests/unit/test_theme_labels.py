@@ -26,12 +26,12 @@ def test_known_themes_have_readable_labels() -> None:
         assert "_" not in label
 
 
-def test_an_unknown_theme_shows_as_stored() -> None:
+def test_unknown_theme_shows_as_stored() -> None:
     """A theme without a label shows its identifier, so no picker item is blank."""
     assert theme_label("custom_theme.xml") == "custom_theme.xml"
 
 
-def test_settings_picker_shows_labels_and_stores_identifiers(qtbot: Any) -> None:
+def test_picker_shows_labels_stores_identifiers(qtbot: Any) -> None:
     """The General tab picker shows labels, and a save stores the theme identifier."""
     tab = GeneralTab(DEFAULT_LIGHT_THEME)
     qtbot.addWidget(tab)
@@ -47,7 +47,7 @@ def test_settings_picker_shows_labels_and_stores_identifiers(qtbot: Any) -> None
     assert settings.theme == DEFAULT_LIGHT_THEME
 
 
-def test_playback_tab_stays_out_of_the_dialog() -> None:
+def test_playback_tab_absent_from_dialog() -> None:
     """The Playback tab holds no setting, so the dialog leaves it out."""
     assert PlaybackTab.SHOWN is False
     assert GeneralTab.SHOWN is True

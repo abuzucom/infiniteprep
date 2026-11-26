@@ -29,7 +29,7 @@ from infiniteprep.ui.theme import (
 )
 
 
-def test_get_available_themes_contains_dark_and_light() -> None:
+def test_available_themes_include_dark_light() -> None:
     """Verify available themes list includes dark and light theme options."""
     themes = get_available_themes()
     assert DEFAULT_DARK_THEME in themes
@@ -54,14 +54,14 @@ def test_resolve_theme_system_detection() -> None:
         assert resolve_theme("system") == DEFAULT_LIGHT_THEME
 
 
-def test_apply_application_theme_native_clears_stylesheet() -> None:
+def test_native_theme_clears_stylesheet() -> None:
     """Verify applying the native theme clears any custom stylesheet on QApplication."""
     app = MagicMock(spec=QApplication)
     apply_application_theme(app, "native")
     app.setStyleSheet.assert_called_once_with("")
 
 
-def test_apply_application_theme_qt_material_fallback() -> None:
+def test_apply_theme_qt_material_fallback() -> None:
     """Verify apply_application_theme falls back gracefully when qt-material is missing."""
     app = MagicMock(spec=QApplication)
     with patch("infiniteprep.ui.theme._has_qt_material", return_value=False):
@@ -84,7 +84,7 @@ def test_settings_theme_persistence_roundtrip(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("window_kind", ["settings"])
-def test_theme_selectors_use_shared_default_for_legacy_settings(
+def test_theme_selectors_share_legacy_default(
     window_kind: str, qtbot: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Legacy settings select the shared default in both application windows."""

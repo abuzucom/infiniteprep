@@ -14,7 +14,7 @@ DENIED_COMMANDS = (
 class MasterBranchTest(unittest.TestCase):
     """Relay the conversion requirement and never perform the conversion."""
 
-    def test_ordinary_tools_are_denied_with_conversion_message(self):
+    def test_ordinary_tools_denied(self):
         fixture = BranchFixture(self, "master")
         for tool, tool_input in (("Read", {"file_path": str(fixture.root / "README.md")}),
                                  ("Write", {"file_path": str(fixture.root / "x"), "content": ""}),
@@ -29,7 +29,7 @@ class MasterBranchTest(unittest.TestCase):
         fixture = BranchFixture(self, "master")
         self.assertEqual(decision(fixture.run("AskUserQuestion", {"questions": []})), "allow")
 
-    def test_switch_to_existing_main_requests_consent(self):
+    def test_switch_to_main_consent(self):
         fixture = BranchFixture(self, "master")
         self.assertEqual(decision(fixture.shell("git switch main")), "deny")
         fixture.add_local_branch("main")

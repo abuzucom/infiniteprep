@@ -29,7 +29,7 @@ class SpecExcludesTestToolsTest(unittest.TestCase):
         """The Pillow exclusion (D393) stays in place beside the new entries."""
         self.assertIn("PIL", read_spec_excludes())
 
-    def test_app_code_never_imports_test_tools(self) -> None:
+    def test_app_never_imports_test_tools(self) -> None:
         """No module under src/infiniteprep imports pytest or pygments."""
         importers = sorted(
             f"{path.relative_to(ROOT)}: {package}"

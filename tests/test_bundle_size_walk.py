@@ -67,7 +67,7 @@ class SingleWalkTest(unittest.TestCase):
         self.assertEqual(report.folders, expected_folders)
         self.assertEqual(scandir.call_count, count_folders(bundle))
 
-    def test_macos_contents_layout_uses_one_walk(self) -> None:
+    def test_macos_contents_layout_one_walk(self) -> None:
         """A folders root below the bundle groups folders without a second walk."""
         with tempfile.TemporaryDirectory() as directory:
             bundle = make_tree(Path(directory), MACOS_FILES)
@@ -113,7 +113,7 @@ class PruneNameCacheTest(unittest.TestCase):
         self.assertEqual([entry[0] for entry in kept], ["app"])
         self.assertEqual(classify.call_count, len(entries))
 
-    def test_macos_framework_parts_are_a_module_constant(self) -> None:
+    def test_macos_framework_parts_module_constant(self) -> None:
         """The orphan framework folder names live in one module constant."""
         expected = frozenset(f"{name}.framework" for name in FILTERS.MACOS_ORPHAN_FRAMEWORKS)
         self.assertEqual(FILTERS.MACOS_ORPHAN_FRAMEWORK_PARTS, expected)

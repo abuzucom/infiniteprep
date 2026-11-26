@@ -36,13 +36,13 @@ DEFAULT_PADDING = 1024
 OLD_COMMENT = vorbis_body("reference libFLAC 1.4.3", "TITLE=Old", "ARTIST=Someone")
 
 
-def test_file_without_comment_block_reads_none() -> None:
+def test_missing_comment_block_reads_none() -> None:
     """A FLAC with only STREAMINFO and padding has no Vorbis comment."""
     data = flac_file(flac_block(PADDING, bytes(64), last=True))
     assert read_flac_comment(data) is None
 
 
-def test_comment_reads_vendor_and_fields_in_order() -> None:
+def test_comment_reads_vendor_fields_ordered() -> None:
     """Fields keep their written order, key case, and repeated values."""
     body = vorbis_body("vendor 1", "TITLE=Song", "Genre=House", "GENRE=Techno")
     comment = read_flac_comment(flac_file(flac_block(VORBIS_COMMENT, body, last=True)))
@@ -52,7 +52,7 @@ def test_comment_reads_vendor_and_fields_in_order() -> None:
     assert get_field_values(comment, "genre") == ["House", "Techno"]
 
 
-def test_entry_without_separator_is_reported_not_kept() -> None:
+def test_entry_without_separator_reported_dropped() -> None:
     """An entry with no '=' is listed in dropped_entries instead of becoming a field."""
     comment = parse_vorbis_comment(vorbis_body("v", "TITLE=Song", "BROKEN"))
     assert comment.fields == (("TITLE", "Song"),)
@@ -65,7 +65,7 @@ def test_render_round_trips_utf8_values() -> None:
     assert parse_vorbis_comment(render_vorbis_comment(comment)) == comment
 
 
-def test_small_comment_keeps_audio_in_place() -> None:
+def test_small_comment_keeps_audio_position() -> None:
     """When the new comment fits in the old comment plus padding, the file size stays."""
     source = flac_file(
         flac_block(VORBIS_COMMENT, OLD_COMMENT),
@@ -88,7 +88,7 @@ def test_large_comment_moves_audio_intact() -> None:
     assert get_field_values(read_flac_comment(written), "TITLE") == [long_title]
 
 
-def test_exact_fit_writes_no_padding_block() -> None:
+def test_exact_fit_writes_no_padding() -> None:
     """A same-size comment with no padding leaves no padding block and the same size."""
     source = flac_file(flac_block(VORBIS_COMMENT, OLD_COMMENT, last=True))
     same_size = replace_field(read_flac_comment(source), "TITLE", ["Odd"])
@@ -97,7 +97,7 @@ def test_exact_fit_writes_no_padding_block() -> None:
     assert [header[0] for header in block_headers(written)] == [STREAMINFO, VORBIS_COMMENT]
 
 
-def test_other_blocks_keep_their_bytes_and_order() -> None:
+def test_other_blocks_keep_bytes_order() -> None:
     """APPLICATION, SEEKTABLE, and PICTURE blocks stay byte for byte, in order."""
     others = [
         flac_block(APPLICATION, b"riff" + bytes(12)),
@@ -134,7 +134,7 @@ def test_duplicate_comment_blocks_become_one() -> None:
     assert types[:3] == [STREAMINFO, VORBIS_COMMENT, SEEKTABLE]
 
 
-def test_only_the_final_block_carries_the_last_flag() -> None:
+def test_only_final_block_flagged_last() -> None:
     """Every rewritten block except the final one has its last-block flag clear."""
     source = flac_file(
         flac_block(VORBIS_COMMENT, OLD_COMMENT),
@@ -145,7 +145,7 @@ def test_only_the_final_block_carries_the_last_flag() -> None:
     assert flags == [False] * (len(flags) - 1) + [True]
 
 
-def test_leading_id3v2_tag_stays_in_front() -> None:
+def test_leading_id3v2_tag_stays_first() -> None:
     """An ID3v2 tag before the fLaC magic stays byte for byte."""
     id3 = tag_bytes(3, v23_frame("TIT2", b"\x00Id3"))
     source = flac_file(flac_block(VORBIS_COMMENT, OLD_COMMENT, last=True), prefix=id3)
@@ -169,7 +169,7 @@ def test_damaged_or_foreign_data_raises(data: bytes) -> None:
         read_flac_comment(data)
 
 
-def test_entry_count_larger_than_the_body_raises() -> None:
+def test_entry_count_exceeding_body_raises() -> None:
     """A declared entry count that the body cannot hold raises before any entry is read."""
     body = struct.pack("<I", 1) + b"v" + struct.pack("<I", 0xFFFFFFFF)
     with pytest.raises(FlacFormatError):
@@ -183,13 +183,13 @@ def test_invalid_field_names_raise(key: str) -> None:
         replace_field(VorbisComment(), key, ["x"])
 
 
-def test_replace_field_matches_keys_case_insensitively() -> None:
+def test_replace_field_ignores_key_case() -> None:
     """Replacing a key removes every case variant and appends the new values."""
     comment = VorbisComment("v", (("Genre", "House"), ("TITLE", "Song"), ("GENRE", "Techno")))
     replaced = replace_field(comment, "GENRE", ["Deep", "Minimal"])
     assert replaced.fields == (("TITLE", "Song"), ("GENRE", "Deep"), ("GENRE", "Minimal"))
 
 
-def test_flac_format_error_is_a_value_error() -> None:
+def test_format_error_is_value_error() -> None:
     """Callers that catch ValueError also catch FLAC damage."""
     assert issubclass(FlacFormatError, ValueError)

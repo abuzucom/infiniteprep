@@ -61,7 +61,7 @@ class FailOnceJournalStore(UsbRecoveryJournalStore):
 class UsbRecoveryRetryTests(unittest.TestCase):
     """A Resume interrupted by a journal failure can run again."""
 
-    def test_resume_retries_after_the_journal_write_fails(self) -> None:
+    def test_resume_retries_after_journal_failure(self) -> None:
         """A Resume that fails on the journal save keeps the manifest and succeeds on retry."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
@@ -123,7 +123,7 @@ class CleanIntTests(unittest.TestCase):
 class BoundedRunnerDrainTests(unittest.TestCase):
     """A child that floods stderr before it writes stdout finishes without a stall."""
 
-    def test_stderr_flood_before_stdout_does_not_stall(self) -> None:
+    def test_early_stderr_flood_never_stalls(self) -> None:
         """The runner drains a stderr flood and still returns stdout in time."""
         script = (
             "import sys\n"
@@ -143,7 +143,7 @@ class BoundedRunnerDrainTests(unittest.TestCase):
 class WindowsOutputEncodingTests(unittest.TestCase):
     """Each PowerShell command sets UTF-8 output before it runs."""
 
-    def test_every_command_sets_utf8_output_first(self) -> None:
+    def test_every_command_sets_utf8_output(self) -> None:
         """The disk, partition, and volume commands all start with the UTF-8 prefix."""
         for text in (DISK_COMMAND_TEXT, PARTITION_COMMAND_TEXT, VOLUME_COMMAND_TEXT):
             with self.subTest(text=text):
@@ -154,7 +154,7 @@ class WindowsOutputEncodingTests(unittest.TestCase):
 class Win32ErrorTests(unittest.TestCase):
     """A Win32 code keeps its own meaning instead of a C errno meaning."""
 
-    def test_sharing_violation_maps_to_permission_error(self) -> None:
+    def test_sharing_violation_maps_permission_error(self) -> None:
         """A sharing violation becomes a PermissionError that keeps the Win32 code."""
         error = win32_error(WIN32_SHARING_VIOLATION, Path("C:/usb/meta.json"))
 

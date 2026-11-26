@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Enforce a configured git identity through Claude Code hooks.
 
-Not part of AGENTS.md, which stays tool-agnostic and is synced to non-Claude
-tools verbatim. This is a Claude-Code-specific hook under hooks/, wired via
+Not part of AGENTS.md. AGENTS.md stays independent of any one tool.
+Synchronization copies it unchanged to non-Claude tools. This is a Claude-Code-specific hook under hooks/, wired via
 `.claude/settings.json` (live in this repo) or
 hooks/claude-code-settings.example.json (for adopting repos). One file serves
 two hook events, dispatched on `hook_event_name` in the stdin payload:
@@ -15,7 +15,7 @@ from a SessionStart hook, so injected context is the only lever it has.
 `PreToolUse` on the `Bash` matcher is the blocking half: it exits 2 on a
 `git commit` while the identity is unset or disallowed, and on a `git push`
 while either the working-tree config or any commit that push would publish
-fails the same check. It never runs `--advise`, which makes a network call.
+fails the same check. It skips `--advise` because that mode makes a network call.
 
 The two events cover a failure no instruction fixes: with `user.email` unset,
 git builds an identity from the account name and hostname, prints its
@@ -28,12 +28,11 @@ tool call: this hook reads config state before the shell runs, so a chained
 
 Known gap: `git merge`, `git revert`, `git cherry-pick`, `git rebase`, and
 `git am` also write commits and are not matched. Matching them would block
-`git merge --ff-only` and most rebases, which create no commit.
+`git merge --ff-only` and most rebases. Those commands create no commit.
 
 This repository-controlled hook is a defense-in-depth workflow prompt, not an
 authorization boundary. A repository writer can alter it or its registration.
 """
-import json
 import os
 import subprocess
 import sys
@@ -44,25 +43,21 @@ POLICY_DENIAL_EXIT_CODE = 2
 
 try:
     import _gate_core as core
+    # core.blocked_command parses with this module. Importing it here makes
+    # a missing parser deny at startup instead of mid-check.
     import _bash_parser as bash_parser
-except ImportError as error:  # pragma: no cover (exercised by the adoption test)
-    print(f"the shared hook parser or core could not be imported ({error})",
+except ImportError as error:  # The adoption test exercises this import failure.
+    print(f"the shared hook parser or core could not be imported ({error})"
+          ". Stop. Report this denial to the active human. Do not retry "
+          "a variant or propose a gate change.",
           file=sys.stderr)
     sys.exit(POLICY_DENIAL_EXIT_CODE)
 
 CHECKER_PATH = os.path.join("scripts", "check_git_identity.py")
 PUSH_LABEL = "git push"
-
-
-def _read_payload() -> dict:
-    """Return the hook's stdin JSON, or an empty dict when it carries none.
-
-    A SessionStart invocation arrives with empty stdin, and this hook
-    informs rather than blocks, so an unreadable payload is an empty dict
-    rather than a refusal.
-    """
-    payload = core.read_payload(empty_is_session_start=True)
-    return payload if payload is not None else {}
+# Below the 30-second hook registration, so the hook names a slow checker
+# instead of the client killing it. Leaves room for the account lookup.
+CHECKER_TIMEOUT_SECONDS = 20
 
 
 def run_checker(project_dir: str, extra_args: list, invocation: dict = None):
@@ -86,7 +81,14 @@ def run_checker(project_dir: str, extra_args: list, invocation: dict = None):
         text=True,
         check=False,
         env=environment,
+        timeout=CHECKER_TIMEOUT_SECONDS,
     )
+
+
+def checker_timeout_message() -> str:
+    """Return the report for an identity checker that ran past its bound."""
+    return (f"the identity checker timed out after {CHECKER_TIMEOUT_SECONDS} "
+            "seconds. Re-run once Git and the account lookup respond.")
 
 
 def find_violation(project_dir: str, extra_args: list,
@@ -97,14 +99,17 @@ def find_violation(project_dir: str, extra_args: list,
     scripts/check_git_identity.py has no identity policy for this hook to
     enforce.
     """
-    result = run_checker(project_dir, extra_args, invocation)
+    try:
+        result = run_checker(project_dir, extra_args, invocation)
+    except subprocess.TimeoutExpired:
+        return checker_timeout_message()
     if result is None or result.returncode == 0:
         return ""
     return result.stderr.strip() or "the git identity does not meet this repo's policy"
 
 
 def check_args(label: str) -> list:
-    """Return the checker invocations that gate `label`."""
+    """Return the checker commands that gate `label`."""
     if label == PUSH_LABEL:
         return [[], ["--unpushed"]]
     return [[]]
@@ -113,8 +118,8 @@ def check_args(label: str) -> list:
 def build_warning(violation: str, advisory: str) -> str:
     """Return the session-context text for a bad or unset git identity.
 
-    The checker's output carries commit author and committer fields,
-    which whoever wrote the commit chose. Splicing that into a block of
+    The checker's output carries commit author and committer fields. The
+    commit's writer chose those fields. Splicing that into a block of
     imperative instructions lets an attacker write instructions into the
     context this hook exists to make the model obey. Keep the two apart:
     fixed text above, every untrusted value escaped inside one labeled
@@ -156,54 +161,50 @@ def build_warning(violation: str, advisory: str) -> str:
     return "\n".join(instructions)
 
 
-def blocked_command(command: str, project_dir: str = "") -> list:
-    """Return every effective or ambiguous Git write context in `command`."""
-    return bash_parser.git_write_operation(
-        command, core.git_write_context, project_dir)
+# The shared parser entry point, kept under this name for callers and tests.
+blocked_command = core.blocked_command
+
+
+def _session_warning(project_dir: str) -> str:
+    """Return the SessionStart advisory, or an empty string when the identity passes."""
+    try:
+        result = run_checker(project_dir, ["--advise"])
+    except subprocess.TimeoutExpired:
+        return build_warning(checker_timeout_message(), "")
+    if result is None or result.returncode == 0:
+        return ""
+    violation = result.stderr.strip() or "the git identity does not meet this repo's policy"
+    return build_warning(violation, result.stdout.strip())
 
 
 def _handle_session_start(project_dir: str) -> int:
     """Inject a stop-and-ask instruction into the session context."""
-    result = run_checker(project_dir, ["--advise"])
-    if result is None or result.returncode == 0:
+    warning = _session_warning(project_dir)
+    if not warning:
         return 0
-    violation = result.stderr.strip() or "the git identity does not meet this repo's policy"
-    warning = build_warning(violation, result.stdout.strip())
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": warning,
-        },
-        "systemMessage": warning,
-    }
-    print(json.dumps(output))
-    return 0
+    return core.emit_context("SessionStart", warning)
 
 
 def _blocks_invocation(project_dir: str, invocation: dict) -> bool:
     """Report and return True when one effective Git write must block."""
     label = invocation["label"]
     if invocation.get("error"):
-        print(
+        print(core.with_denial_response(
             f"blocked by hooks/enforce_git_identity.py: {label}: "
-            f"{invocation['error']}.",
-            file=sys.stderr,
-        )
+            f"{invocation['error']}."), file=sys.stderr)
         return True
     for extra_args in check_args(label):
         violation = find_violation(project_dir, extra_args, invocation)
         if not violation:
             continue
-        print(
+        print(core.with_denial_response(
             f"blocked by hooks/enforce_git_identity.py: {label} with an unset or "
             f"disallowed git identity.\n"
             f"{violation}\n"
             f"Derive the name and email from an authenticated account source and "
             f"confirm them with the active human. Never ask the active human to "
             f"supply the values. Set them with git config as a separate tool call. "
-            f"Do not invent an identity.",
-            file=sys.stderr,
-        )
+            f"Do not invent an identity."), file=sys.stderr)
         return True
     return False
 
@@ -214,10 +215,16 @@ def _handle_pre_tool_use(payload: dict, project_dir: str) -> int:
         return 0
     tool_input = payload.get("tool_input")
     if not isinstance(tool_input, dict):
-        print("blocked by hooks/enforce_git_identity.py: malformed tool input.",
+        print(core.with_denial_response(
+            "blocked by hooks/enforce_git_identity.py: malformed tool input."),
               file=sys.stderr)
         return POLICY_DENIAL_EXIT_CODE
     command = tool_input.get("command", "")
+    if not isinstance(command, str):
+        print(core.with_denial_response(
+            "blocked by hooks/enforce_git_identity.py: malformed tool input: "
+            "command is not a string."), file=sys.stderr)
+        return POLICY_DENIAL_EXIT_CODE
     for invocation in blocked_command(command, project_dir):
         if _blocks_invocation(project_dir, invocation):
             return POLICY_DENIAL_EXIT_CODE
@@ -225,7 +232,9 @@ def _handle_pre_tool_use(payload: dict, project_dir: str) -> int:
 
 
 def main() -> int:
-    payload = _read_payload()
+    # SessionStart arrives with empty stdin. This hook informs and does not
+    # block there, so an unreadable payload counts as an empty one.
+    payload = core.read_payload(empty_is_session_start=True) or {}
     project_dir = core.project_dir(payload)
     event = payload.get("hook_event_name", "SessionStart")
     if event == "PreToolUse":

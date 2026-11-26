@@ -89,7 +89,7 @@ def load_event_author(path: str) -> EventAuthor | None:
     """Return the pull request author, or None when no event path exists.
 
     Error messages name the failing field only. Payload values can hold pull
-    request text or personal data, so they never reach a message.
+    request text or personal data, so they stay out of every message.
     """
     if not path:
         return None
@@ -142,7 +142,7 @@ def _expected_bot_id(author: str, events: LazyEventAuthor) -> int | None:
 
 
 def _bot_email_problem(email: str, author: str, events: LazyEventAuthor) -> str | None:
-    """Return why a bot-suffixed email is invalid for this pull request."""
+    """Return why a bot email is invalid for this pull request."""
     match = BOT_NOREPLY_PATTERN.fullmatch(email)
     if match is None:
         return f"'{email}' names a bot without the numbered <id>+<login>[bot] form"

@@ -3,6 +3,8 @@
 import os
 import shlex
 
+from _gate_core import MAX_COMMAND_CHARACTERS
+
 OPERATOR_CHARS = frozenset("&|;")
 # A brace group and a backtick substitution both put a command where a
 # program name goes. Reading "{" or a backtick as the program name sees
@@ -11,7 +13,6 @@ GROUPING = frozenset({"(", ")", "{", "}", "`", "\n"})
 # shlex's default punctuation set plus the backtick, so `cmd` splits
 # into its own tokens instead of arriving glued to the words beside it.
 PUNCTUATION_CHARS = "();<>|&`"
-MAX_COMMAND_CHARACTERS = 65536
 # A redirection operator and its target occupy two tokens.
 REDIRECTION_WITH_TARGET_TOKEN_COUNT = 2
 # An option and its separate value occupy two tokens.

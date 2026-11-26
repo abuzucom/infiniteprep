@@ -32,7 +32,7 @@ def test_field_table_headers_are_plain() -> None:
     assert FIELD_TABLE_HEADERS[1:5] == ("Now", "Suggested", "Source", "New value")
 
 
-def test_header_names_the_file_and_a_save_limit() -> None:
+def test_header_names_file_save_limit() -> None:
     """The header shows the file name, and says so when tags can't be saved."""
     assert format_header_text("a.wav", write_supported=True) == "a.wav"
     assert format_header_text("a.ogg", write_supported=False) == (
@@ -40,13 +40,13 @@ def test_header_names_the_file_and_a_save_limit() -> None:
     )
 
 
-def test_source_cell_shows_provider_and_match() -> None:
+def test_source_cell_shows_provider_match() -> None:
     """The source cell shows the provider and its match as a percentage."""
     assert format_source_cell("acoustid", 0.88) == "acoustid, 88% match"
     assert format_source_cell("acoustid", None) == "acoustid"
 
 
-def test_candidate_and_analysis_rows_read_plainly() -> None:
+def test_candidate_analysis_rows_read_plainly() -> None:
     """Candidate rows name the release and its source. Analysis rows say what was detected."""
     assert (
         format_candidate_row(

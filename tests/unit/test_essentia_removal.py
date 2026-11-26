@@ -17,13 +17,13 @@ def test_essentia_adapter_module_is_gone() -> None:
     assert importlib.util.find_spec("infiniteprep.adapters.analyzers.essentia_ext") is None
 
 
-def test_app_settings_has_no_essentia_fields() -> None:
+def test_app_settings_lacks_essentia_fields() -> None:
     """AppSettings no longer declares the two Essentia fields."""
     names = {field.name for field in fields(AppSettings)}
     assert names.isdisjoint(ESSENTIA_SETTING_KEYS)
 
 
-def test_old_settings_file_with_essentia_fields_loads(tmp_path: Path) -> None:
+def test_old_essentia_settings_file_loads(tmp_path: Path) -> None:
     """A settings file saved before the removal loads, and its other values survive."""
     path = tmp_path / "settings.json"
     stored = {
@@ -38,7 +38,7 @@ def test_old_settings_file_with_essentia_fields_loads(tmp_path: Path) -> None:
     assert settings.theme == "light_blue.xml"
 
 
-def test_saving_old_settings_drops_essentia_fields(tmp_path: Path) -> None:
+def test_saving_old_settings_drops_essentia(tmp_path: Path) -> None:
     """The next save after loading an old settings file writes no Essentia keys."""
     path = tmp_path / "settings.json"
     path.write_text(json.dumps({"prefer_essentia_cli": True}), encoding="utf-8")

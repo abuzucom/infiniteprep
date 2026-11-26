@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests that the status query never runs repository-configured programs."""
+"""Tests that the status query skips repository-configured programs."""
 import subprocess
 import sys
 import tempfile
@@ -24,7 +24,7 @@ def _git(repository: Path, *arguments: str) -> None:
 
 def _build_filtered_repository(root: Path, attributes_path: str,
                                driver: str) -> tuple[Path, Path]:
-    """Return a repository whose dirty tracked file maps to a marker filter."""
+    """Return a repository with a dirty tracked file mapped to a marker filter."""
     repository = root / "repository"
     repository.mkdir()
     marker = root / "filter-ran"
@@ -68,7 +68,7 @@ class StatusFilterDriverTest(unittest.TestCase):
     def test_info_attributes_filter_never_runs(self):
         self._assert_filter_never_runs(".git/info/attributes", "probe")
 
-    def test_driver_name_with_dots_and_equals_never_runs(self):
+    def test_dotted_driver_not_executed(self):
         self._assert_filter_never_runs(".git/info/attributes", "a.b=c")
 
 

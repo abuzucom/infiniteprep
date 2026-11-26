@@ -39,30 +39,34 @@ class BranchFailureTest(unittest.TestCase):
                     hook._valid_recovery(command, "claude/x", str(REPO_ROOT)))
         for command in ("env -S 'unfinished", "env -u GIT_DIR git status"):
             with self.subTest(command=command):
-                self.assertTrue(hook.command_execution_reason(command, str(REPO_ROOT), "Bash"))
+                self.assertTrue(hook.command_execution_violation(command, str(REPO_ROOT), "Bash")[1])
         self.assertFalse(hook._segment_names_prohibited_metadata([">", "output"]))
         self.assertEqual(hook._segment_execution_reason([">", "output"], str(REPO_ROOT)), "")
 
-    def test_parser_recovers_only_git_literal_targets(self):
-        self.assertFalse(hook.command_names_prohibited_branch("env -S 'unfinished"))
-        self.assertFalse(hook.command_names_prohibited_branch("git status"))
+    def test_parser_literal_targets(self):
+        for command in ("env -S 'unfinished", "git status"):
+            with self.subTest(command=command):
+                self.assertNotIn("prohibited", hook.command_execution_violation(command, str(REPO_ROOT), "Bash")[1])
 
-    def test_alias_compatibility_helper_and_bounds(self):
+    def test_environment_alias_and_depth_bound(self):
         environment = {
             "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "alias.branchtest",
             "GIT_CONFIG_VALUE_0": "branch claude/x",
         }
         with patch.dict(os.environ, environment):
-            self.assertTrue(hook.alias_names_prohibited_branch(str(REPO_ROOT), "branchtest", []))
-        self.assertFalse(hook.alias_names_prohibited_branch("", "x", [], depth=hook.MAX_ALIAS_DEPTH))
+            context = hook.core.git_branch_context(["branchtest"], str(REPO_ROOT), [])
+            self.assertTrue(hook._context_names_prohibited_branch(context))
+        entries = {f"alias.step{index}": f"step{index + 1}"
+                   for index in range(hook.core.MAX_GIT_ALIAS_DEPTH)}
+        self.assertIn("limit", hook.core.resolve_branch_alias("step0", [], entries)[2])
 
-    def test_actual_git_directory_selects_branch_metadata(self):
+    def test_git_directory_metadata_selection(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             (root / "HEAD").write_text("ref: refs/heads/claude/x\n", encoding="utf-8")
             self.assertTrue(hook.find_violation(str(REPO_ROOT), {"cwd": str(REPO_ROOT), "git_dir": directory}))
 
-    def test_explicit_git_directory_reaches_native_config(self):
+    def test_explicit_git_directory_config(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             (root / "HEAD").write_text("ref: refs/heads/fix/example\n", encoding="utf-8")
@@ -73,7 +77,7 @@ class BranchFailureTest(unittest.TestCase):
             self.assertEqual(context["error"], "")
             self.assertEqual(context["subcommand"], "status")
 
-    def test_native_config_failure_never_becomes_an_allow(self):
+    def test_config_failure_not_allowed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             config = root / "invalid.config"
@@ -82,7 +86,7 @@ class BranchFailureTest(unittest.TestCase):
                 ["status"], directory, [["GIT_CONFIG_GLOBAL", str(config)]])
             self.assertIn("inspection failed", context["error"])
 
-    def test_config_reader_reports_a_closed_descriptor(self):
+    def test_config_reader_closed_descriptor(self):
         with subprocess.Popen([sys.executable, "-c", "print('config')"], stdout=subprocess.PIPE) as process:
             process.wait(timeout=PROCESS_EXIT_TIMEOUT_SECONDS)
             os.close(process.stdout.fileno())
@@ -92,7 +96,7 @@ class BranchFailureTest(unittest.TestCase):
             with self.assertRaises(OSError):
                 process.stdout.close()
 
-    def test_config_program_cannot_come_from_target_checkout(self):
+    def test_config_program_outside_checkout(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             name = "git.exe" if os.name == "nt" else "git"
@@ -124,10 +128,10 @@ class AdditionalBoundaryTest(unittest.TestCase):
 
     def test_recovered_wrappers_and_dynamic_arguments(self) -> None:
         self.assertIn("wrapper", hook._segment_execution_reason(["env", "-S", "'"], str(REPO_ROOT)))
-        self.assertIn("unresolved", hook.command_execution_reason("echo $value", str(REPO_ROOT), "Bash"))
+        self.assertIn("unresolved", hook.command_execution_violation("echo $value", str(REPO_ROOT), "Bash")[1])
         self.assertFalse(hook.bash_parser.has_quoted_redirects(r"echo a\b"))
 
-    def test_empty_common_directory_and_literal_metadata(self) -> None:
+    def test_empty_common_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             git_dir = root / ".git"
@@ -138,7 +142,7 @@ class AdditionalBoundaryTest(unittest.TestCase):
                 {"file_path": ".git/HEAD", "content": "ref: refs/heads/claude/x\n"}, directory)
             self.assertIn("prohibited claude/", reason)
 
-    def test_missing_metadata_and_ordinary_file_write(self) -> None:
+    def test_missing_metadata_file_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             self.assertEqual(hook._metadata_roots(directory), ())
             self.assertEqual(hook._file_metadata_reason(
@@ -148,14 +152,14 @@ class AdditionalBoundaryTest(unittest.TestCase):
         self.assertFalse(hook._push_has_literal_target(["--repo"]))
         self.assertTrue(hook._push_has_literal_target(["--", "origin", "HEAD"]))
 
-    def test_quoted_redirect_data_has_no_git_reason(self):
+    def test_quoted_redirect_data(self):
         for command in (
             "printf '%s' '>' .git/HEAD refs/heads/claude/x",
             "printf '%s' \\> .git/HEAD refs/heads/claude/x",
         ):
             with self.subTest(command=command):
-                self.assertFalse(hook.command_names_prohibited_metadata(command))
-                reason = hook.command_execution_reason(command, str(REPO_ROOT), "Bash")
+                reason = hook.command_execution_violation(command, str(REPO_ROOT), "Bash")[1]
+                self.assertNotIn("prohibited", reason)
                 self.assertNotIn("Git", reason)
 
 

@@ -45,7 +45,7 @@ classifier = load_classifier()
 class ClassifyPathsTest(unittest.TestCase):
     """The path sets decide the class, and any other path selects full CI."""
 
-    def test_each_path_set_maps_to_its_class(self) -> None:
+    def test_path_sets_map_to_classes(self) -> None:
         """Docs, website, mixed, and code path sets map to four classes."""
         cases = (
             (["README.md"], "docs"),
@@ -61,7 +61,7 @@ class ClassifyPathsTest(unittest.TestCase):
             with self.subTest(paths=paths):
                 self.assertEqual(classifier.classify_paths(paths), expected)
 
-    def test_policy_inputs_and_other_prose_select_full(self) -> None:
+    def test_policy_and_prose_select_full(self) -> None:
         """Policy inputs and prose outside the docs set keep full CI."""
         full_paths = (
             "AGENTS.md",
@@ -80,7 +80,7 @@ class ClassifyPathsTest(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(classifier.classify_paths([path]), "full")
 
-    def test_version_files_count_only_when_verified(self) -> None:
+    def test_version_files_count_when_verified(self) -> None:
         """A version file is light only after its diff passed the version check."""
         paths = ["docs/guide.md", "pyproject.toml", "src/infiniteprep/__init__.py"]
         self.assertEqual(classifier.classify_paths(paths), "full")
@@ -93,7 +93,7 @@ class ClassifyPathsTest(unittest.TestCase):
 class VersionOnlyEditTest(unittest.TestCase):
     """Only the version value may differ between the two file states."""
 
-    def test_pyproject_version_change_is_version_only(self) -> None:
+    def test_pyproject_version_change_version_only(self) -> None:
         """A new project version with no other change passes."""
         new_text = PYPROJECT_TEXT.replace('version = "1.0.0"', 'version = "1.0.1"')
         self.assertTrue(classifier.is_version_only_edit("pyproject.toml", PYPROJECT_TEXT, new_text))
@@ -119,7 +119,7 @@ class VersionOnlyEditTest(unittest.TestCase):
             classifier.is_version_only_edit("pyproject.toml", PYPROJECT_TEXT, "[project\n")
         )
 
-    def test_package_version_change_is_version_only(self) -> None:
+    def test_package_version_change_version_only(self) -> None:
         """A new package version line with no other change passes."""
         new_text = PACKAGE_INIT_TEXT.replace("1.0.0", "1.0.1")
         path = "src/infiniteprep/__init__.py"
@@ -134,7 +134,7 @@ class VersionOnlyEditTest(unittest.TestCase):
             with self.subTest(new_text=new_text):
                 self.assertFalse(classifier.is_version_only_edit(path, PACKAGE_INIT_TEXT, new_text))
 
-    def test_other_files_are_never_version_only(self) -> None:
+    def test_other_files_never_version_only(self) -> None:
         """The check covers the two version files and nothing else."""
         self.assertFalse(classifier.is_version_only_edit("setup.py", "a\n", "a\n"))
 
@@ -197,7 +197,7 @@ class ClassifyRangeTest(unittest.TestCase):
         """Classify the range from the base commit to the given head."""
         return classifier.classify_range(str(self.root), self.base, head)
 
-    def test_docs_change_with_version_bump_is_docs(self) -> None:
+    def test_version_bump_keeps_docs_class(self) -> None:
         """A prose change plus the three version edits stays in the docs class."""
         head = self.commit_files(
             {
@@ -214,7 +214,7 @@ class ClassifyRangeTest(unittest.TestCase):
         head = self.commit_files({"website/index.html": "<p>New site</p>\n"})
         self.assertEqual(self.classify(head), "website")
 
-    def test_dependency_change_beside_docs_is_full(self) -> None:
+    def test_dependency_beside_docs_is_full(self) -> None:
         """A dependency edit in pyproject.toml selects full CI."""
         head = self.commit_files(
             {
@@ -224,7 +224,7 @@ class ClassifyRangeTest(unittest.TestCase):
         )
         self.assertEqual(self.classify(head), "full")
 
-    def test_rename_out_of_the_docs_set_is_full(self) -> None:
+    def test_rename_out_of_docs_full(self) -> None:
         """A rename reports both paths, and the code path selects full CI."""
         self.run_git("mv", "docs/guide.md", "src/infiniteprep/guide.md")
         self.run_git("commit", "--quiet", "--message", "move")
@@ -244,7 +244,7 @@ class ClassifyRangeTest(unittest.TestCase):
         self.assertEqual(classifier.main(arguments, str(output)), 0)
         self.assertEqual(output.read_text(encoding="utf-8"), "change_class=docs\nlight=true\n")
 
-    def test_main_selects_full_for_bad_range(self) -> None:
+    def test_main_selects_full_bad_range(self) -> None:
         """An unknown commit selects full CI and still exits with success."""
         output = self.root / "outputs.txt"
         missing = "1" * 40

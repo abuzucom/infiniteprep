@@ -65,7 +65,7 @@ def _write_limits(path: Path, measured: dict[str, int | None]) -> Path:
 class MeasurementTest(unittest.TestCase):
     """The report measures the files of a built bundle."""
 
-    def test_counts_the_regular_files_below_the_bundle(self) -> None:
+    def test_counts_regular_files_below_bundle(self) -> None:
         """Every file below the bundle root adds its size to the total."""
         with tempfile.TemporaryDirectory() as directory:
             bundle = _make_bundle(Path(directory), {"app.exe": 100, "_internal/lib.dll": 250})
@@ -82,7 +82,7 @@ class MeasurementTest(unittest.TestCase):
                 self.skipTest(f"the platform denies symbolic links: {error}")
             self.assertEqual(SCRIPT.directory_bytes(bundle), 250)
 
-    def test_largest_folders_hold_the_recursive_totals(self) -> None:
+    def test_largest_folders_hold_recursive_totals(self) -> None:
         """Each folder holds the total size of the files below it."""
         with tempfile.TemporaryDirectory() as directory:
             bundle = _make_bundle(
@@ -93,7 +93,7 @@ class MeasurementTest(unittest.TestCase):
             self.assertEqual([folder.name for folder in folders], ["Qt", "_internal"])
             self.assertEqual([folder.bytes for folder in folders], [300, 150])
 
-    def test_largest_folders_stop_at_the_ten_largest(self) -> None:
+    def test_largest_folders_stop_at_ten(self) -> None:
         """The list holds ten folders even when the bundle holds more."""
         with tempfile.TemporaryDirectory() as directory:
             files = {f"folder{index}/file.dll": index for index in range(12)}
@@ -106,13 +106,13 @@ class MeasurementTest(unittest.TestCase):
 class LimitTest(unittest.TestCase):
     """The limit comes from the measured size in the limits file."""
 
-    def test_limit_is_the_measured_size_plus_half(self) -> None:
+    def test_limit_measured_size_plus_half(self) -> None:
         """The limit is the measured size plus 50 percent, rounded up."""
         self.assertEqual(SCRIPT.derive_limit(100), 150)
         self.assertEqual(SCRIPT.derive_limit(101), 152)
         self.assertEqual(SCRIPT.derive_limit(0), 0)
 
-    def test_limits_file_names_every_operating_system(self) -> None:
+    def test_limits_file_names_every_os(self) -> None:
         """The limits file holds a record for each operating system."""
         limits = SCRIPT.load_limits(LIMITS_PATH)
         self.assertEqual(sorted(limits), sorted(OPERATING_SYSTEMS))
@@ -126,7 +126,7 @@ class LimitTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 SCRIPT.load_limits(path)
 
-    def test_a_missing_operating_system_is_rejected(self) -> None:
+    def test_missing_operating_system_is_rejected(self) -> None:
         """A limits file without a record for every operating system is an error."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "limits.json"
@@ -148,7 +148,7 @@ class LimitTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 SCRIPT.load_limits(path)
 
-    def test_a_record_without_a_byte_count_is_rejected(self) -> None:
+    def test_record_without_byte_count_rejected(self) -> None:
         """A record without a byte count is an error, so no limit is skipped."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "limits.json"
@@ -161,13 +161,13 @@ class LimitTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 SCRIPT.load_limits(path)
 
-    def test_a_null_record_has_no_measured_size(self) -> None:
+    def test_null_record_no_measured_size(self) -> None:
         """A record of null means the size was not measured yet."""
         with tempfile.TemporaryDirectory() as directory:
             path = _write_limits(Path(directory) / "limits.json", {"windows": None})
             self.assertIsNone(SCRIPT.load_limits(path)["windows"])
 
-    def test_a_record_may_hold_the_measurement_date(self) -> None:
+    def test_record_may_hold_measurement_date(self) -> None:
         """A record may name the day of the measurement."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "limits.json"
@@ -179,7 +179,7 @@ class LimitTest(unittest.TestCase):
             path.write_text(json.dumps(document), encoding="utf-8")
             self.assertEqual(SCRIPT.load_limits(path)["windows"], 100)
 
-    def test_a_wrong_measurement_date_is_rejected(self) -> None:
+    def test_wrong_measurement_date_is_rejected(self) -> None:
         """A measurement date that is not a calendar date is an error."""
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "limits.json"
@@ -196,7 +196,7 @@ class LimitTest(unittest.TestCase):
 class ReportTest(unittest.TestCase):
     """The report names the sizes of the bundle and its packages."""
 
-    def test_report_names_the_bundle_and_package_sizes(self) -> None:
+    def test_report_names_bundle_package_sizes(self) -> None:
         """The report holds the bundle size and the size of every package."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -211,7 +211,7 @@ class ReportTest(unittest.TestCase):
             self.assertFalse(report.over_limit)
             self.assertEqual([package.name for package in report.packages], ["zip"])
 
-    def test_report_marks_a_bundle_past_the_limit(self) -> None:
+    def test_report_marks_bundle_past_limit(self) -> None:
         """A bundle larger than its limit is marked as over the limit."""
         with tempfile.TemporaryDirectory() as directory:
             bundle = _make_bundle(Path(directory), {"app.exe": 100})
@@ -267,7 +267,7 @@ class CommandTest(unittest.TestCase):
             self.assertIn("over the limit", output)
             self.assertIn("past the limit of 15 bytes", output)
 
-    def test_command_reports_without_a_measured_size(self) -> None:
+    def test_command_reports_without_measured_size(self) -> None:
         """A missing measured size reports the sizes and passes."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -364,7 +364,7 @@ class WorkflowTest(unittest.TestCase):
         """Return every step that runs the size report."""
         return [step for step in self.steps if REPORT_SCRIPT in step.get("run", "")]
 
-    def test_each_operating_system_reports_its_sizes(self) -> None:
+    def test_each_os_reports_its_sizes(self) -> None:
         """One size step names the bundle and the packages of every operating system."""
         steps = self._size_steps()
         self.assertEqual(len(steps), 1)
@@ -375,7 +375,7 @@ class WorkflowTest(unittest.TestCase):
         systems = re.findall(r"--os ([a-z]+)", run)
         self.assertEqual(sorted(systems), sorted(OPERATING_SYSTEMS))
 
-    def test_the_macos_step_reports_the_folders_of_the_app(self) -> None:
+    def test_macos_step_reports_app_folders(self) -> None:
         """The macOS step names the folder that holds the parts of the app."""
         run = next(step["run"] for step in self._size_steps() if "--os macos" in step["run"])
         self.assertIn("--folders-root dist/InfinitePrep.app/Contents", run)
@@ -387,7 +387,7 @@ class WorkflowTest(unittest.TestCase):
         for step in self._size_steps():
             self.assertGreater(names.index(step["name"]), last_package)
 
-    def test_the_report_uploads_with_the_other_artifacts(self) -> None:
+    def test_report_uploads_with_other_artifacts(self) -> None:
         """The report uploads as an artifact and keeps it for three days."""
         uploads = [
             step

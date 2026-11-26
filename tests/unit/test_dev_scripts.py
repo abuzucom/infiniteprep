@@ -92,9 +92,7 @@ def run_bash(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
 
 
 @needs_bash
-def test_update_script_refuses_a_dirty_tree(
-    tmp_path: Path, repo_templates: dict[str, Path]
-) -> None:
+def test_update_script_refuses_dirty_tree(tmp_path: Path, repo_templates: dict[str, Path]) -> None:
     """Uncommitted changes stop the run before anything is pulled or installed."""
     repo = make_repo(tmp_path, repo_templates)
     (repo / "notes.txt").write_text("local edit", encoding="utf-8")
@@ -140,9 +138,7 @@ def test_update_script_rejects_unknown_options(
 
 
 @needs_bash
-def test_copy_caps_per_format_keeps_sources(
-    tmp_path: Path, repo_templates: dict[str, Path]
-) -> None:
+def test_copy_caps_format_keeps_sources(tmp_path: Path, repo_templates: dict[str, Path]) -> None:
     """The copy helper takes at most PER_FORMAT files of each format and never edits sources."""
     repo = make_repo(tmp_path, repo_templates)
     source = tmp_path / "music"
@@ -161,7 +157,7 @@ def test_copy_caps_per_format_keeps_sources(
 
 
 @needs_bash
-def test_copy_script_rejects_a_missing_folder(
+def test_copy_script_rejects_missing_folder(
     tmp_path: Path, repo_templates: dict[str, Path]
 ) -> None:
     """A source folder that does not exist stops the helper before it creates anything."""
@@ -172,7 +168,7 @@ def test_copy_script_rejects_a_missing_folder(
 
 
 @needs_bash
-def test_copy_takes_dash_folder_as_path(tmp_path: Path, repo_templates: dict[str, Path]) -> None:
+def test_copy_takes_dash_folder_path(tmp_path: Path, repo_templates: dict[str, Path]) -> None:
     """A source folder named like a find option is copied from, never run as an option."""
     repo = make_repo(tmp_path, repo_templates)
     work = tmp_path / "work"
@@ -194,7 +190,7 @@ def test_copy_takes_dash_folder_as_path(tmp_path: Path, repo_templates: dict[str
 
 @needs_bash
 @pytest.mark.parametrize("per_format", ["0", "1001", "x"])
-def test_copy_rejects_out_of_range_count(
+def test_copy_rejects_count_beyond_range(
     tmp_path: Path, repo_templates: dict[str, Path], per_format: str
 ) -> None:
     """PER_FORMAT outside 1 to 1000 stops the helper before it creates anything."""

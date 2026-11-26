@@ -24,7 +24,7 @@ from infiniteprep.ui.folder_import import FolderImportController, stuck_import_t
 TWO_MINUTES_MS = 120_000
 
 
-def test_stuck_buttons_and_titles_are_plain() -> None:
+def test_stuck_buttons_titles_are_plain() -> None:
     """The stuck prompts use sentence-case buttons and plain titles."""
     assert watcher_module.QUIT_NOW_TEXT == "Quit now"
     assert watcher_module.KEEP_WAITING_TEXT == "Keep waiting"

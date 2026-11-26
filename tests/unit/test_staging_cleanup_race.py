@@ -67,7 +67,7 @@ def test_cleanup_removes_files_and_folder(tmp_path: Path) -> None:
 
 
 @posix_only
-def test_link_loop_in_the_library_path_raises_eloop(tmp_path: Path) -> None:
+def test_library_link_loop_raises_eloop(tmp_path: Path) -> None:
     """A link cycle stops the folder walk with ELOOP after the hop limit."""
     first = tmp_path / "first"
     second = tmp_path / "second"

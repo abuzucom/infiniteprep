@@ -22,9 +22,7 @@ SMALL_FRAME_CAP = 1_000
 RATE_CAP_BELOW_FIXTURE = SAMPLE_RATE - 1
 
 
-def test_known_length_decode_never_joins_chunks(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_known_length_decode_no_join(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A stream of known length fills one buffer, so the mono mix never exists twice."""
     path = write_stereo_wav(tmp_path / "stereo.wav", ONE_SECOND * 3)
     whole, _ = sf.read(str(path), dtype="float64", always_2d=True)
@@ -40,7 +38,7 @@ def test_known_length_decode_never_joins_chunks(
     assert np.array_equal(mono, expected)
 
 
-def test_short_stream_returns_only_the_decoded_frames(tmp_path: Path) -> None:
+def test_short_stream_returns_decoded_frames(tmp_path: Path) -> None:
     """A buffer larger than the stream shrinks to the decoded frames and owns its memory."""
     path = write_stereo_wav(tmp_path / "stereo.wav", ONE_SECOND)
 
@@ -50,9 +48,7 @@ def test_short_stream_returns_only_the_decoded_frames(tmp_path: Path) -> None:
     assert mono.base is None
 
 
-def test_analyzer_decode_stops_at_the_frame_cap(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_analyzer_decode_stops_frame_cap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The mono frame cap limits the decode below the duration limit."""
     path = write_stereo_wav(tmp_path / "stereo.wav", ONE_SECOND)
     monkeypatch.setattr(local_dsp, "MAX_DSP_MONO_FRAMES", SMALL_FRAME_CAP)

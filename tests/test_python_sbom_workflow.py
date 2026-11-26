@@ -28,7 +28,7 @@ class PythonSbomWorkflowTest(unittest.TestCase):
         """Return every step of the bundle job."""
         return self.workflow["jobs"]["bundle"]["steps"]
 
-    def test_sbom_tool_scans_the_app_python_environment(self) -> None:
+    def test_sbom_scans_app_python_environment(self) -> None:
         """The isolated tool inspects the package environment, not its own venv."""
         steps = self._steps()
         sbom_step = next(step for step in steps if step.get("name") == "Generate Python SBOM")
@@ -57,7 +57,7 @@ class PythonSbomWorkflowTest(unittest.TestCase):
         self.assertLess(check_index, steps.index(sbom_step))
         self.assertLess(steps.index(sbom_step), build_index)
 
-    def test_sbom_uses_a_separate_short_lived_artifact(self) -> None:
+    def test_sbom_uses_short_lived_artifact(self) -> None:
         """The SBOM upload stays separate from the application bundle upload."""
         uploads = [step for step in self._steps() if step.get("uses", "") == UPLOAD_ARTIFACT]
         sbom_uploads = [step for step in uploads if "python-sbom" in step["with"]["name"]]

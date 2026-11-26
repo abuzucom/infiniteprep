@@ -60,7 +60,7 @@ def list_texts(widget: QListWidget) -> list[str]:
     return [widget.item(row).text() for row in range(widget.count())]
 
 
-def test_dialog_starts_on_the_find_step(qtbot) -> None:
+def test_dialog_starts_on_find_step(qtbot) -> None:
     """The dialog opens on the step that lists the libraries."""
     dialog = open_dialog(qtbot, [build_library()])
 
@@ -70,14 +70,14 @@ def test_dialog_starts_on_the_find_step(qtbot) -> None:
     assert list_texts(dialog.found_list) == ["collection.nml"]
 
 
-def test_dialog_shows_a_fixed_line_when_no_library_was_found(qtbot) -> None:
+def test_dialog_notes_no_library_found(qtbot) -> None:
     """An empty list shows one fixed line instead of an empty box."""
     dialog = open_dialog(qtbot, [])
 
     assert list_texts(dialog.found_list) == [EMPTY_LIST_TEXT]
 
 
-def test_dialog_shows_the_details_of_the_picked_library(qtbot) -> None:
+def test_dialog_shows_picked_library_details(qtbot) -> None:
     """Picking a row shows its format, version, and path as plain text."""
     dialog = open_dialog(qtbot, [build_library()])
 
@@ -88,7 +88,7 @@ def test_dialog_shows_the_details_of_the_picked_library(qtbot) -> None:
     assert "3.5.1" in dialog.found_details.text()
 
 
-def test_dialog_moves_through_the_three_steps(qtbot) -> None:
+def test_dialog_moves_through_three_steps(qtbot) -> None:
     """Next moves from find to map to review, and back returns to the earlier step."""
     dialog = open_dialog(qtbot, [build_library()])
 
@@ -100,7 +100,7 @@ def test_dialog_moves_through_the_three_steps(qtbot) -> None:
     assert dialog.steps.currentIndex() == STEP_MAP
 
 
-def test_dialog_hides_next_on_the_review_step(qtbot) -> None:
+def test_dialog_hides_next_on_review(qtbot) -> None:
     """The review step offers the commit action instead of the next action."""
     dialog = open_dialog(qtbot, [build_library()])
 
@@ -112,7 +112,7 @@ def test_dialog_hides_next_on_the_review_step(qtbot) -> None:
     assert dialog.commit_btn.isHidden() is False
 
 
-def test_dialog_keeps_the_mappings_the_dj_entered(qtbot) -> None:
+def test_dialog_keeps_entered_mappings(qtbot) -> None:
     """A mapping row becomes a saved mapping with both prefixes."""
     dialog = open_dialog(qtbot, [build_library()])
     dialog.next_btn.click()
@@ -129,7 +129,7 @@ def test_dialog_keeps_the_mappings_the_dj_entered(qtbot) -> None:
     assert mappings[0].target_prefix == "/Users/user/Music"
 
 
-def test_dialog_keeps_the_root_the_dj_entered(qtbot) -> None:
+def test_dialog_keeps_entered_root(qtbot) -> None:
     """The root the DJ entered reaches the caller."""
     dialog = open_dialog(qtbot, [build_library()])
     dialog.next_btn.click()
@@ -138,7 +138,7 @@ def test_dialog_keeps_the_root_the_dj_entered(qtbot) -> None:
     assert dialog.chosen_root() == "/Users/user/Music"
 
 
-def test_dialog_reports_no_root_when_the_dj_left_it_empty(qtbot) -> None:
+def test_dialog_empty_root_reports_none(qtbot) -> None:
     """An empty root field reports an empty root."""
     dialog = open_dialog(qtbot, [build_library()])
     dialog.next_btn.click()
@@ -146,7 +146,7 @@ def test_dialog_reports_no_root_when_the_dj_left_it_empty(qtbot) -> None:
     assert dialog.chosen_root() == ""
 
 
-def test_dialog_keeps_a_file_the_dj_named_by_hand(qtbot, tmp_path: Path) -> None:
+def test_dialog_keeps_hand_named_file(qtbot, tmp_path: Path) -> None:
     """A file the DJ named becomes a located library the import can read."""
     chosen = tmp_path / "collection.nml"
     chosen.write_text('<HEAD PROGRAM="fake"/>', encoding="utf-8")
@@ -161,7 +161,7 @@ def test_dialog_keeps_a_file_the_dj_named_by_hand(qtbot, tmp_path: Path) -> None
     assert dialog.found_list.count() == 2
 
 
-def test_dialog_names_the_format_of_a_file_the_dj_named(qtbot, tmp_path: Path) -> None:
+def test_dialog_detects_hand_named_format(qtbot, tmp_path: Path) -> None:
     """A hand-picked file carries the format the registry can pick a reader for."""
     chosen = tmp_path / "collection.nml"
     chosen.write_text('<HEAD PROGRAM="fake"/>', encoding="utf-8")
@@ -175,7 +175,7 @@ def test_dialog_names_the_format_of_a_file_the_dj_named(qtbot, tmp_path: Path) -
     assert picked.format_id is FormatId.TRAKTOR
 
 
-def test_dialog_skips_a_mapping_row_with_an_empty_prefix(qtbot) -> None:
+def test_dialog_skips_empty_prefix_mapping(qtbot) -> None:
     """A row with no target prefix is not a mapping."""
     dialog = open_dialog(qtbot, [build_library()])
     dialog.next_btn.click()
@@ -185,7 +185,7 @@ def test_dialog_skips_a_mapping_row_with_an_empty_prefix(qtbot) -> None:
     assert dialog.saved_mappings() == []
 
 
-def test_dialog_removes_the_selected_mapping_row(qtbot) -> None:
+def test_dialog_removes_selected_mapping_row(qtbot) -> None:
     """The remove action drops the selected mapping row."""
     dialog = open_dialog(qtbot, [build_library()])
     dialog.next_btn.click()
@@ -197,7 +197,7 @@ def test_dialog_removes_the_selected_mapping_row(qtbot) -> None:
     assert dialog.mappings_table.rowCount() == 0
 
 
-def test_dialog_shows_the_conflicts_the_merge_found(qtbot) -> None:
+def test_dialog_shows_merge_conflicts(qtbot) -> None:
     """The conflict list holds one line per conflict."""
     dialog = open_dialog(qtbot, [build_library()])
 
@@ -206,7 +206,7 @@ def test_dialog_shows_the_conflicts_the_merge_found(qtbot) -> None:
     assert list_texts(dialog.conflicts_list) == ["title: library has New, app has Old"]
 
 
-def test_dialog_shows_a_fixed_line_when_no_value_conflicts(qtbot) -> None:
+def test_dialog_notes_no_value_conflicts(qtbot) -> None:
     """An empty conflict list shows one fixed line."""
     dialog = open_dialog(qtbot, [build_library()])
 
@@ -215,7 +215,7 @@ def test_dialog_shows_a_fixed_line_when_no_value_conflicts(qtbot) -> None:
     assert list_texts(dialog.conflicts_list) == [EMPTY_CONFLICT_TEXT]
 
 
-def test_dialog_reports_the_import_request_to_the_caller(qtbot) -> None:
+def test_dialog_reports_import_request(qtbot) -> None:
     """The commit action reports that the DJ asked for the import."""
     dialog = open_dialog(qtbot, [build_library()])
     reported: list[bool] = []
@@ -226,7 +226,7 @@ def test_dialog_reports_the_import_request_to_the_caller(qtbot) -> None:
     assert reported == [True]
 
 
-def test_the_details_line_renders_markup_as_plain_text(qtbot) -> None:
+def test_details_line_renders_markup_plainly(qtbot) -> None:
     """A format name with markup does not render as markup."""
     library = build_library(path="/music/collection.nml")
     dialog = open_dialog(qtbot, [library])
@@ -237,7 +237,7 @@ def test_the_details_line_renders_markup_as_plain_text(qtbot) -> None:
     assert dialog.found_details.text() == MARKUP_LABEL
 
 
-def test_the_row_model_shows_the_version_and_marks_an_observed_one() -> None:
+def test_row_model_marks_observed_version() -> None:
     """The row model names the version and marks an observed location."""
     rows = build_rows([build_library(), build_library(observed=True)])
 
@@ -246,13 +246,13 @@ def test_the_row_model_shows_the_version_and_marks_an_observed_one() -> None:
     assert rows[0].format_text == "Traktor"
 
 
-def test_the_row_model_names_an_unknown_version() -> None:
+def test_row_model_names_unknown_version() -> None:
     """A library with no readable version shows a fixed line."""
     rows = build_rows([build_library(version=None)])
 
     assert rows[0].version_text == VERSION_UNKNOWN_TEXT
 
 
-def test_the_timestamp_format_names_an_unknown_time() -> None:
+def test_timestamp_format_names_unknown_time() -> None:
     """A library with no readable time shows a fixed line."""
     assert format_timestamp(None) == VERSION_UNKNOWN_TEXT

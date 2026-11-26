@@ -8,14 +8,9 @@ import sys
 from pathlib import Path
 
 try:
-    from scripts.prose_policy import find_violations, mask_markdown_code
+    from scripts.prose_policy import find_violations
 except ModuleNotFoundError:
-    from prose_policy import find_violations, mask_markdown_code
-
-
-def strip_code(line: str) -> str:
-    """Preserve the legacy helper through shared Markdown masking."""
-    return mask_markdown_code(line)
+    from prose_policy import find_violations
 
 
 def main() -> int:

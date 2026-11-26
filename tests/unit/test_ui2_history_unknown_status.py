@@ -31,7 +31,7 @@ def make_record(status: str) -> ChangeRecord:
     )
 
 
-def test_unknown_status_reads_plainly_and_blocks_restore() -> None:
+def test_unknown_status_plain_blocks_restore() -> None:
     """An unknown status shows as stored, says the state is unknown, and keeps Restore off."""
     record = make_record(UNKNOWN_STATUS)
 

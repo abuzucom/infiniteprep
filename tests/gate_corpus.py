@@ -4,13 +4,13 @@
 Each round of review on these hooks found forms that passed while the
 tests written alongside them stayed green. Recording those forms as prose
 in a commit message loses them; recording them as another test class
-grows a file nobody rereads. They live here as rows instead, so a round's
+grows a file nobody rereads. This file keeps them as rows instead, so a round's
 findings arrive as data and every suite that imports this file asserts
 them.
 
 Both repositories import this file. A fix landing in one and not the
-other fails the other's suite, which is the only mechanism watching the
-two copies of these gates.
+other fails the other's suite. Nothing else watches the two copies of
+these gates.
 
 Rows carry the reason they exist. A row without one is a row nobody can
 judge when the expected verdict changes.
@@ -20,7 +20,10 @@ try:
 except ImportError:
     from json_line_worker import JsonLineWorkerProcess
 
-DEFAULT_REQUEST_TIMEOUT_SECONDS = 5.0
+# A gate that sweeps a large repository reads thousands of files before it
+# answers. The budget leaves room for a sweep on a slow host while a stuck
+# worker still fails within the shard timeout.
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 30.0
 
 
 class HookWorker:
@@ -100,7 +103,7 @@ BASH_CASES = (
     ("git push origin :main", ASK, "an empty refspec deletes the ref"),
     ("git push --prune origin", ASK, "prune deletes every unmatched ref"),
 
-    # Roots deny rather than ask. Offering the choice is not consent.
+    # Roots deny instead of asking. Offering the choice is not consent.
     ("rm -rf /", DENY, "the filesystem root"),
     ("rm -rf /etc", DENY, "a system directory"),
     ("rm -rf /usr", DENY, "posixpath normalization, which os.path broke on Windows"),

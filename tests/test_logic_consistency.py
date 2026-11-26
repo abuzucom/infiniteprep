@@ -26,7 +26,7 @@ class TestLogicConsistency(unittest.TestCase):
         self.assertTrue(core.is_root_target("//"))
         self.assertTrue(core.is_root_target("/*"))
 
-    def test_forge_verdict_does_not_repeat_github_cli_verdict(self) -> None:
+    def test_forge_verdict_single_evaluation(self) -> None:
         """Verify forge_verdict evaluates github_cli_verdict at most once."""
         args = ["scripts/trusted_gh.py", "run", "repo", "view"]
         with mock.patch.object(core, "github_cli_verdict", return_value=("", "")) as mock_verdict:
@@ -35,7 +35,7 @@ class TestLogicConsistency(unittest.TestCase):
             self.assertEqual(reason, "")
             self.assertEqual(mock_verdict.call_count, 1)
 
-    def test_external_target_verdict_ignores_lowercase_r(self) -> None:
+    def test_external_target_lowercase_r(self) -> None:
         """Verify gh pr create -r reviewer does not match repository target."""
         args = ["pr", "create", "-r", "external_org/team"]
         command = ["pr", "create", "-r", "external_org/team"]
@@ -45,7 +45,7 @@ class TestLogicConsistency(unittest.TestCase):
         self.assertEqual(decision, "")
         self.assertEqual(reason, "")
 
-    def test_external_target_verdict_matches_uppercase_r(self) -> None:
+    def test_external_target_uppercase_r(self) -> None:
         """Verify gh pr create -R owner/repo identifies external repository."""
         args = ["pr", "create", "-R", "external_org/repo"]
         command = ["pr", "create"]
@@ -55,7 +55,7 @@ class TestLogicConsistency(unittest.TestCase):
         self.assertEqual(decision, "ask")
         self.assertIn("external_org", reason)
 
-    def test_compliance_tree_pull_target_handles_non_dict_jobs(self) -> None:
+    def test_pull_target_non_dict_jobs(self) -> None:
         """Verify _pull_target_violations handles null or invalid jobs mapping."""
         doc_null = {"on": "pull_request_target", "jobs": None}
         violations_null = check_compliance_tree._pull_target_violations(
@@ -102,7 +102,7 @@ class TestLogicConsistency(unittest.TestCase):
         )
         self.assertIsNone(skipped)
 
-    def test_conflict_markers_check_all_skips_absent_tracked_files(self) -> None:
+    def test_conflict_check_skips_absent_files(self) -> None:
         """Verify _check_all skips worktree files absent from disk without error."""
         with tempfile.TemporaryDirectory() as tmpdir:
             readable = [("present.txt", "sha1"), ("absent.txt", "sha2")]

@@ -19,7 +19,7 @@ def _quit_button(prompt: Any) -> Any:
     return button
 
 
-def test_prompt_shows_the_folder_as_plain_text(qtbot: Any) -> None:
+def test_prompt_shows_folder_plain_text(qtbot: Any) -> None:
     """The folder path shows literally, and Quit is the default button."""
     prompt = build_fallback_prompt(FOLDER)
     qtbot.addWidget(prompt.box)

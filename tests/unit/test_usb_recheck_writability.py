@@ -49,14 +49,14 @@ class FreshPathWritabilityTests(unittest.TestCase):
         self.assertEqual(self.recheck_with_mounts((MOUNT_PATH,), check), ())
         self.assertEqual(check.paths, [MOUNT_PATH])
 
-    def test_changed_unwritable_path_reports_both_reasons(self) -> None:
+    def test_unwritable_path_reports_both_reasons(self) -> None:
         """A moved unwritable mount aborts for the path change and for writability."""
         check = RecordingWritabilityCheck(writable=False)
         codes = self.recheck_with_mounts((OTHER_MOUNT_PATH,), check)
         self.assertEqual(codes[:2], (AbortCode.MOUNT_PATH_CHANGED, AbortCode.NOT_WRITABLE))
         self.assertEqual(check.paths, [OTHER_MOUNT_PATH])
 
-    def test_changed_writable_path_has_no_reason(self) -> None:
+    def test_changed_writable_path_no_reason(self) -> None:
         """A moved writable mount aborts for the path change alone."""
         check = RecordingWritabilityCheck(writable=True)
         codes = self.recheck_with_mounts((OTHER_MOUNT_PATH,), check)

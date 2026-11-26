@@ -74,7 +74,7 @@ def wait_for_prompt(qtbot: Any, controller: BatchQueueController) -> Any:
 @pytest.mark.parametrize(
     "kind_case", [(BatchKind.ANALYZE, ANALYZE_TEXT), (BatchKind.WRITE, WRITE_TEXT)]
 )
-def test_a_stuck_file_offers_quit_now(
+def test_stuck_file_offers_quit_now(
     qtbot: Any, stuck_parts: StuckParts, kind_case: tuple[BatchKind, str]
 ) -> None:
     """A file past the limit raises the prompt for its batch kind, and Quit Now exits."""
@@ -106,7 +106,7 @@ def test_keep_waiting_restarts_the_limit(qtbot: Any, stuck_parts: StuckParts) ->
     assert exit_codes == []
 
 
-def test_the_prompt_closes_when_the_batch_ends(qtbot: Any, stuck_parts: StuckParts) -> None:
+def test_prompt_closes_when_batch_ends(qtbot: Any, stuck_parts: StuckParts) -> None:
     """A batch that finishes while its prompt is open closes the prompt and stops the limit."""
     controller, jobs, exit_codes = stuck_parts
     batch = controller.enqueue_job(BatchKind.WRITE, "stuck", jobs.make("stuck"))
@@ -121,7 +121,7 @@ def test_the_prompt_closes_when_the_batch_ends(qtbot: Any, stuck_parts: StuckPar
     assert exit_codes == []
 
 
-def test_a_cancelled_batch_still_gets_the_prompt(qtbot: Any, stuck_parts: StuckParts) -> None:
+def test_cancelled_batch_still_gets_prompt(qtbot: Any, stuck_parts: StuckParts) -> None:
     """Cancel waits for the current file, so a hung file after Cancel still raises the prompt."""
     controller, jobs, exit_codes = stuck_parts
     batch = controller.enqueue_job(BatchKind.ANALYZE, "stuck", jobs.make("stuck"))
@@ -135,7 +135,7 @@ def test_a_cancelled_batch_still_gets_the_prompt(qtbot: Any, stuck_parts: StuckP
     assert exit_codes == [STUCK_EXIT_CODE]
 
 
-def test_a_quick_batch_raises_no_prompt(qtbot: Any, stuck_parts: StuckParts) -> None:
+def test_quick_batch_raises_no_prompt(qtbot: Any, stuck_parts: StuckParts) -> None:
     """A batch that ends inside its limit never opens the prompt."""
     controller, jobs, exit_codes = stuck_parts
     jobs.gate.set()

@@ -93,7 +93,7 @@ class SyncSecurityTest(unittest.TestCase):
 
         self.assertNotEqual(result, 0)
 
-    def test_oversized_supporting_file_fails_before_copy(self):
+    def test_oversized_supporting_file(self):
         self.source.write_text("new source\n", encoding="utf-8")
         supporting = self.root / sync.SUPPORTING_POLICY_FILES[0]
         supporting.write_bytes(b"x" * (sync.MAX_POLICY_BYTES + 1))
@@ -110,7 +110,7 @@ class SyncSecurityTest(unittest.TestCase):
         self.assertIn("prefix", output.getvalue())
         self.assertIn("detail", output.getvalue())
 
-    def test_source_only_supporting_policy_is_not_adoptable(self):
+    def test_source_only_policy_excluded(self):
         self.source.write_text(
             f"prefix\n{sync.REPOSITORY_ONLY_START}\n"
             f"{sync.REPOSITORY_ONLY_END}\nsuffix\n",
@@ -126,7 +126,7 @@ class SyncSecurityTest(unittest.TestCase):
             self.assertEqual(sync.print_adoptable(self.root), 0)
         self.assertNotIn("source facts", output.getvalue())
 
-    def test_failed_copy_does_not_replace_old_destination(self):
+    def test_failed_copy_keeps_destination(self):
         self.source.write_text("new source\n", encoding="utf-8")
         self.target.write_text("old destination\n", encoding="utf-8")
 
@@ -151,7 +151,7 @@ class SyncSecurityTest(unittest.TestCase):
         self.source.write_text("source\n", encoding="utf-8")
         self.assertNotEqual(self.run_sync("COPY.md"), 0)
 
-    def test_non_ascii_supporting_file_fails_closed(self):
+    def test_non_ascii_supporting_file(self):
         self.source.write_text("source\n", encoding="utf-8")
         (self.root / sync.SUPPORTING_POLICY_FILES[0]).write_bytes(b"bad\xc3\xa9\n")
         self.assertNotEqual(self.run_sync("COPY.md"), 0)

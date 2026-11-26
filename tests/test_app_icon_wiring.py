@@ -54,17 +54,17 @@ def read_step_run(name: str) -> str:
 class AppIconWiringTest(unittest.TestCase):
     """The logo is the app icon, the packaged icon, and the favicon."""
 
-    def test_the_app_icon_is_a_256_pixel_png(self) -> None:
+    def test_app_icon_256_pixel_png(self) -> None:
         """The app ships the logo at the largest Windows icon size."""
         self.assertEqual(read_png_size(APP_ICON_PATH), APP_ICON_SIZE)
 
-    def test_the_spec_bundles_the_icon_file(self) -> None:
+    def test_spec_bundles_icon_file(self) -> None:
         """The frozen app finds the icon beside the app_icon module."""
         spec = SPEC_PATH.read_text(encoding="utf-8")
         self.assertIn('(str(APP_ICON_SOURCE), "infiniteprep/ui")', spec)
         self.assertIn('APP_ICON_SOURCE = src_dir / "infiniteprep" / "ui" / "app-icon.png"', spec)
 
-    def test_the_exe_and_app_bundle_use_the_logo(self) -> None:
+    def test_exe_app_bundle_use_logo(self) -> None:
         """PyInstaller converts the PNG for the Windows exe and the macOS app."""
         spec = SPEC_PATH.read_text(encoding="utf-8")
         self.assertEqual(spec.count("icon=str(APP_ICON_SOURCE),"), 2)
@@ -76,7 +76,7 @@ class AppIconWiringTest(unittest.TestCase):
                 lines = (ALLOWLIST_DIR / name).read_text(encoding="utf-8").splitlines()
                 self.assertIn(BUNDLED_ICON, lines)
 
-    def test_the_appimage_icon_comes_from_the_logo(self) -> None:
+    def test_appimage_icon_comes_from_logo(self) -> None:
         """The AppImage step converts the logo instead of drawing a placeholder."""
         run = read_step_run(APPIMAGE_STEP)
         self.assertIn(
@@ -86,14 +86,14 @@ class AppIconWiringTest(unittest.TestCase):
         self.assertNotIn('chunk(b"IHDR"', run)
         self.assertNotIn("<<'PY'", run)
 
-    def test_the_installer_build_converts_the_logo(self) -> None:
+    def test_installer_build_converts_logo(self) -> None:
         """The installer step makes an ICO and passes it to makensis."""
         run = read_step_run(INSTALLER_STEP)
         self.assertIn("packaging\\make_icon.py ico src\\infiniteprep\\ui\\app-icon.png $icon", run)
         self.assertIn('"/DICON_FILE=$icon"', run)
         self.assertLess(run.index("make_icon.py"), run.index("& $makensis"))
 
-    def test_the_installer_and_uninstaller_show_the_logo(self) -> None:
+    def test_installer_uninstaller_show_logo(self) -> None:
         """installer.nsi requires the ICO and sets it before the first page."""
         script = INSTALLER_SCRIPT.read_text(encoding="utf-8")
         self.assertIn("!ifndef ICON_FILE", script)
@@ -102,7 +102,7 @@ class AppIconWiringTest(unittest.TestCase):
                 self.assertIn(define, script)
                 self.assertLess(script.index(define), script.index("!insertmacro MUI_PAGE_LICENSE"))
 
-    def test_pillow_is_a_pinned_build_dependency(self) -> None:
+    def test_pillow_pinned_build_dependency(self) -> None:
         """PyInstaller needs Pillow to convert the PNG icon."""
         self.assertIn(f'"{PILLOW_PIN}"', PYPROJECT_PATH.read_text(encoding="utf-8"))
         lock_text = LOCKFILE_PATH.read_text(encoding="utf-8")

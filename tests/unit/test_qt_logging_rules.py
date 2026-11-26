@@ -11,7 +11,7 @@ from infiniteprep.qt_logging import (
 USER_RULE = "qt.network.ssl.warning=false"
 
 
-def test_silence_sets_the_rule_when_none_exist() -> None:
+def test_silence_sets_rule_when_absent() -> None:
     """With no rules set, the FFmpeg rule becomes the only rule."""
     environ: dict[str, str] = {}
 
@@ -29,7 +29,7 @@ def test_silence_keeps_rules_already_set() -> None:
     assert environ[QT_LOGGING_RULES_VAR] == f"{USER_RULE};{SILENCE_FFMPEG_RULE}"
 
 
-def test_silence_twice_adds_the_rule_once() -> None:
+def test_silence_twice_adds_rule_once() -> None:
     """A second call leaves the rules unchanged."""
     environ = {QT_LOGGING_RULES_VAR: f"{USER_RULE};"}
 

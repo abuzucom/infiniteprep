@@ -77,19 +77,19 @@ def read_marker_text(mount_root: Path, text: str) -> None:
     read_in_progress_manifest(mount_root)
 
 
-def test_deeply_nested_marker_raises_value_error(tmp_path: Path) -> None:
+def test_deep_marker_raises_value_error(tmp_path: Path) -> None:
     """A marker nested past the recursion limit fails as malformed, not with RecursionError."""
     with pytest.raises(ValueError, match="malformed"):
         read_marker_text(tmp_path, DEEPLY_NESTED_JSON)
 
 
-def test_deeply_nested_journal_raises_value_error(tmp_path: Path) -> None:
+def test_deep_journal_raises_value_error(tmp_path: Path) -> None:
     """A journal nested past the recursion limit fails as malformed."""
     with pytest.raises(ValueError, match="malformed"):
         load_journal_text(tmp_path, DEEPLY_NESTED_JSON)
 
 
-def test_out_of_range_marker_time_raises(tmp_path: Path) -> None:
+def test_marker_time_outside_range_raises(tmp_path: Path) -> None:
     """A timestamp that overflows on conversion to UTC fails with ValueError."""
     payload = marker_payload(tmp_path)
     payload["started_at_utc"] = OUT_OF_RANGE_TIMESTAMP
@@ -98,7 +98,7 @@ def test_out_of_range_marker_time_raises(tmp_path: Path) -> None:
         read_marker_text(tmp_path, json.dumps(payload))
 
 
-def test_out_of_range_journal_time_raises(tmp_path: Path) -> None:
+def test_journal_time_outside_range_raises(tmp_path: Path) -> None:
     """A journal entry timestamp that overflows on conversion fails with ValueError."""
     payload = journal_payload(tmp_path)
     payload["entries"][0]["started_at_utc"] = OUT_OF_RANGE_TIMESTAMP
@@ -172,7 +172,7 @@ def test_journal_accepts_both_mount_styles(tmp_path: Path) -> None:
         " /media/stick",
     ],
 )
-def test_unsafe_mount_point_is_rejected_not_rewritten(raw_mount: str) -> None:
+def test_unsafe_mount_rejected_not_rewritten(raw_mount: str) -> None:
     """A cleaned copy could name another volume, so an unsafe mount point yields None."""
     assert sanitize_mount_point(raw_mount) is None
 
@@ -181,6 +181,6 @@ def test_unsafe_mount_point_is_rejected_not_rewritten(raw_mount: str) -> None:
     "raw_mount",
     ["/media/dj/STICK", "/Volumes/My Stick ", "/media/" + "x" * (MAX_METADATA_TEXT_LENGTH + 10)],
 )
-def test_safe_mount_point_is_returned_unchanged(raw_mount: str) -> None:
+def test_safe_mount_point_returned_unchanged(raw_mount: str) -> None:
     """A safe mount point comes back exactly, with no strip and no truncation."""
     assert sanitize_mount_point(raw_mount) == raw_mount

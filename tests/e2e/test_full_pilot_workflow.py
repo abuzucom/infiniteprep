@@ -78,7 +78,7 @@ def test_cli_evaluate_writes_metrics_report(tmp_path: Path) -> None:
         run_evaluation_sample(tmp_path / "missing_dir")
 
 
-def test_end_to_end_core_loop_and_edge_cases(tmp_path: Path) -> None:
+def test_core_loop_and_edge_cases(tmp_path: Path) -> None:
     """Verify full core loop (Import -> Propose -> Approve -> Preview -> Apply -> Restore)."""
     db = DatabaseManager(tmp_path / "e2e.sqlite3")
     repo = Repository(db)

@@ -44,7 +44,7 @@ class BranchReviewTest(unittest.TestCase):
             env=self.environment, capture_output=True, text=True, timeout=HOOK_TIMEOUT_SECONDS, check=False,
         )
 
-    def test_rejected_commands_cannot_write_trace_or_redirect_files(self) -> None:
+    def test_rejected_commands_write_nothing(self) -> None:
         destination = self.root / "output.txt"
         for variable in ("GIT_TRACE", "GIT_TRACE_SETUP", "GIT_TRACE2", "GIT_TRACE2_EVENT",
                          "GIT_TRACE2_PERF", "GIT_REDIRECT_STDOUT", "GIT_REDIRECT_STDERR"):
@@ -55,7 +55,7 @@ class BranchReviewTest(unittest.TestCase):
                 self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertEqual(destination.read_text(encoding="utf-8"), "unchanged")
 
-    def test_configuration_trace_targets_cannot_create_files(self) -> None:
+    def test_config_trace_creates_nothing(self) -> None:
         for setting in ("normalTarget", "eventTarget", "perfTarget"):
             with self.subTest(setting=setting):
                 destination = self.root / setting
@@ -65,7 +65,7 @@ class BranchReviewTest(unittest.TestCase):
                 self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertFalse(destination.exists())
 
-    def test_safe_aliases_still_resolve_without_trace_side_effects(self) -> None:
+    def test_safe_aliases_resolve_cleanly(self) -> None:
         destination = self.root / "trace.txt"
         self.environment["GIT_TRACE2_EVENT"] = str(destination)
         self.global_config.write_text("[alias]\ninspect = status --short\n", encoding="utf-8")
@@ -73,7 +73,7 @@ class BranchReviewTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(destination.exists())
 
-    def test_directory_copy_destinations_protect_metadata_roots(self) -> None:
+    def test_directory_copy_protects_metadata(self) -> None:
         for command in ("cp -r claude/ .git/refs/heads/", "cp -r heads .git/refs",
                         "cp -r payload .git/worktrees", "cp payload .git"):
             with self.subTest(command=command):
@@ -83,7 +83,7 @@ class BranchReviewTest(unittest.TestCase):
         result = self.run_candidate("cp notes.txt docs")
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_linked_metadata_root_copy_is_protected(self) -> None:
+    def test_linked_metadata_copy_protected(self) -> None:
         administration = self.root / "administration"
         administration.mkdir()
         (administration / "HEAD").write_text("ref: refs/heads/fix/example\n", encoding="utf-8")
@@ -103,7 +103,7 @@ class BranchReviewTest(unittest.TestCase):
         result = self.run_candidate("cp -t docs .git/HEAD")
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_directory_copies_cannot_reach_metadata_through_ancestors(self) -> None:
+    def test_ancestor_copy_protects_metadata(self) -> None:
         for command in ("cp -r payload/. .", "cp -r -- payload .", "mv payload/ .",
                         "cp -rt .. payload", "Copy-Item payload . -Recurse"):
             with self.subTest(command=command):
@@ -130,7 +130,7 @@ class BranchReviewTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.strip(), "")
 
-    def test_workflow_consent_never_clears_opaque_or_chained_commands(self) -> None:
+    def test_consent_rejects_opaque_chains(self) -> None:
         for command in ("python -c 'print(1)'", "python other.py", "make lint SHELL=sh",
                         "rg --pre=sh pattern README.md", "python scripts/run_tests.py; git branch claude/x",
                         "python scripts/run_tests.py > .git/HEAD",
@@ -142,7 +142,7 @@ class BranchReviewTest(unittest.TestCase):
         result = self.run_candidate("python scripts/run_tests.py", mode="dontAsk")
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
 
-    def test_workflow_consent_uses_each_client_response(self) -> None:
+    def test_consent_per_client_response(self) -> None:
         command = "python scripts/run_tests.py"
         for client in ("gemini", "antigravity", "codex"):
             with self.subTest(client=client):

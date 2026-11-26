@@ -47,7 +47,7 @@ class FailureClassificationTest(unittest.TestCase):
                     trusted_gh.authenticated_account(Path(tempfile.gettempdir()))
         return context.exception
 
-    def test_auth_required_exit_code_is_authentication(self):
+    def test_auth_exit_code_classified(self):
         error = self.classify(completed(GH_AUTH_REQUIRED_EXIT_CODE, "To get started with GitHub CLI"))
         self.assertEqual(error.category, "authentication")
 
@@ -67,7 +67,7 @@ class FailureClassificationTest(unittest.TestCase):
         self.assertEqual(error.returncode, 1)
         self.assertNotIn(STDERR_SECRET, str(error))
 
-    def test_access_error_remains_an_os_error(self):
+    def test_access_error_stays_os_error(self):
         self.assertTrue(issubclass(trusted_gh.GitHubAccessError, OSError))
 
 
@@ -85,7 +85,7 @@ class FailureMessageTest(unittest.TestCase):
         self.assertEqual(result, 1)
         return output.getvalue()
 
-    def test_network_message_names_variables_not_values(self):
+    def test_network_message_hides_values(self):
         message = self.message_for(trusted_gh.GitHubAccessError("network", 1))
         self.assertIn("could not reach GitHub", message)
         self.assertIn("HTTPS_PROXY", message)

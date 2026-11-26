@@ -50,7 +50,7 @@ def make_library(tracks: tuple[ImportedTrack, ...]) -> SourceLibrary:
     )
 
 
-def test_merge_stores_a_new_value_as_an_approved_field() -> None:
+def test_merge_stores_new_value_approved() -> None:
     """A value with no stored counterpart becomes an approved field."""
     library = make_library(
         (ImportedTrack(source_path=TRACK_PATH, values=(ImportedValue("title", "Song"),)),)
@@ -66,7 +66,7 @@ def test_merge_stores_a_new_value_as_an_approved_field() -> None:
     assert outcome.conflicts == []
 
 
-def test_merge_reports_a_conflict_and_keeps_the_stored_value() -> None:
+def test_merge_conflict_keeps_stored_value() -> None:
     """A value that differs from the stored one becomes a proposal and a conflict."""
     library = make_library(
         (ImportedTrack(source_path=TRACK_PATH, values=(ImportedValue("title", "New"),)),)
@@ -88,7 +88,7 @@ def test_merge_reports_a_conflict_and_keeps_the_stored_value() -> None:
     assert outcome.conflicts[0].imported_value == "New"
 
 
-def test_merge_skips_a_value_that_matches_the_stored_one() -> None:
+def test_merge_skips_matching_stored_value() -> None:
     """A value equal to the stored one raises neither a proposal nor a conflict."""
     library = make_library(
         (ImportedTrack(source_path=TRACK_PATH, values=(ImportedValue("title", "Same"),)),)
@@ -105,7 +105,7 @@ def test_merge_skips_a_value_that_matches_the_stored_one() -> None:
     assert outcome.conflicts == []
 
 
-def test_merge_holds_an_unsupported_field_as_pending() -> None:
+def test_merge_holds_unsupported_field_pending() -> None:
     """A field with no storage yet stays pending instead of being approved."""
     library = make_library(
         (
@@ -126,7 +126,7 @@ def test_merge_holds_an_unsupported_field_as_pending() -> None:
     assert outcome.proposals == []
 
 
-def test_merge_holds_a_value_without_a_file_as_pending() -> None:
+def test_merge_holds_fileless_value_pending() -> None:
     """A track with no file row keeps its values pending."""
     library = make_library(
         (
@@ -143,7 +143,7 @@ def test_merge_holds_a_value_without_a_file_as_pending() -> None:
     assert outcome.tracks[0].pending_fields == ["title", "cues"]
 
 
-def test_commit_writes_every_pending_change_in_one_transaction(
+def test_commit_writes_pending_changes_atomically(
     repository: Repository,
 ) -> None:
     """The commit stores the library row, the file row, and the approved value."""
@@ -166,7 +166,7 @@ def test_commit_writes_every_pending_change_in_one_transaction(
     assert approved.approved_value == "Song"
 
 
-def test_commit_keeps_a_value_that_changed_after_the_merge(
+def test_commit_keeps_later_changed_value(
     repository: Repository,
 ) -> None:
     """A value another process changed while the import waited survives the commit."""
@@ -199,7 +199,7 @@ def test_commit_keeps_a_value_that_changed_after_the_merge(
     assert [item.proposed_value for item in proposals] == ["Song"]
 
 
-def test_commit_leaves_the_database_empty_when_the_plan_is_cancelled(
+def test_cancelled_commit_leaves_database_empty(
     repository: Repository,
 ) -> None:
     """A cancelled plan writes nothing, so the database holds no trace of it."""
@@ -215,7 +215,7 @@ def test_commit_leaves_the_database_empty_when_the_plan_is_cancelled(
     assert repository.approved_fields_by_file() == {}
 
 
-def test_commit_rolls_back_when_one_write_fails(repository: Repository) -> None:
+def test_commit_rolls_back_failed_write(repository: Repository) -> None:
     """A failure inside the commit leaves the database without the change."""
     library = make_library(
         (ImportedTrack(source_path=TRACK_PATH, values=(ImportedValue("title", "Song"),)),)

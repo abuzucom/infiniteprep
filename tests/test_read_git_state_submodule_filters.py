@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests that the status query never runs a submodule's filter drivers."""
+"""Tests that the status query skips a submodule's filter drivers."""
 import subprocess
 import sys
 import tempfile
@@ -35,7 +35,7 @@ def _commit_tracked_file(repository: Path) -> None:
 
 
 def _build_superproject(root: Path) -> tuple[Path, Path]:
-    """Return a superproject whose dirty submodule maps to a marker filter."""
+    """Return a superproject with a dirty submodule mapped to a marker filter."""
     source = root / "source"
     _commit_tracked_file(source)
     superproject = root / "superproject"

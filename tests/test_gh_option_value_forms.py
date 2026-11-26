@@ -31,7 +31,7 @@ class OptionValueFormTest(unittest.TestCase):
     def test_absent_option_is_empty(self):
         self.assertEqual(_gate_core._option_value(["pr", "view"], REPO_OPTIONS), "")
 
-    def test_lowercase_short_option_does_not_match(self):
+    def test_lowercase_short_option(self):
         self.assertEqual(_gate_core._option_value(["-r", "team"], REPO_OPTIONS), "")
 
 

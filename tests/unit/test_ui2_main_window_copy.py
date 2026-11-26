@@ -56,7 +56,7 @@ def test_sidebar_filters_are_plain() -> None:
     }
 
 
-def test_action_titles_and_messages_are_plain() -> None:
+def test_action_titles_messages_are_plain() -> None:
     """Dialog titles, the empty message, and the close prompt use plain copy."""
     module = main_window_module
     assert module.ANALYZE_TITLE == "Analyze"
@@ -79,7 +79,7 @@ def test_action_titles_and_messages_are_plain() -> None:
     )
 
 
-def test_counts_read_with_the_right_noun() -> None:
+def test_counts_use_right_noun() -> None:
     """The approve result and the Analyze batch name fit their counts."""
     assert format_approved_count(1) == "Approved 1 field."
     assert format_approved_count(3) == "Approved 3 fields."
@@ -87,7 +87,7 @@ def test_counts_read_with_the_right_noun() -> None:
     assert format_analyze_label(3) == "Analyze 3 files"
 
 
-def test_window_title_is_the_app_name(qtbot: Any, tmp_path: Path) -> None:
+def test_window_title_is_app_name(qtbot: Any, tmp_path: Path) -> None:
     """The main window title is the app name alone."""
     repository = Repository(DatabaseManager(tmp_path / "copy.sqlite3"))
     window = MainWindow(

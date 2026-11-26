@@ -136,7 +136,7 @@ class CheckerBehaviorTest(unittest.TestCase):
         payload["pull_request"]["body"] = None
         self.assert_clean(payload)
 
-    def test_markdown_link_to_external_pull_request_blocks(self):
+    def test_external_markdown_link_blocks(self):
         self.assert_blocked(
             build_event("feat: add checker",
                         f"Ports [upstream 16]({EXTERNAL_URL}).")
@@ -155,7 +155,7 @@ class CheckerBehaviorTest(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("error:", output)
 
-    def test_finding_output_holds_one_line_per_finding(self):
+    def test_finding_output_lines(self):
         output = self.assert_blocked(
             build_event("feat: add checker",
                         f"Line one\n{EXTERNAL_REFERENCE}\nline two")
@@ -178,7 +178,7 @@ class OwnerResolutionTest(unittest.TestCase):
             "", {"GITHUB_REPOSITORY_OWNER": "fromenv"}, REPO_ROOT)
         self.assertEqual(resolved, "fromenv")
 
-    def test_origin_remote_used_as_last_source(self):
+    def test_origin_remote_fallback(self):
         resolved = check_external_pr_refs.resolve_owner("", {}, REPO_ROOT)
         self.assertEqual(resolved, OWNER)
 
@@ -197,7 +197,7 @@ class OwnerResolutionTest(unittest.TestCase):
             "https://github.com/abuzucom/agents")
         self.assertEqual(parsed, OWNER)
 
-    def test_non_github_remote_yields_no_owner(self):
+    def test_non_github_remote_no_owner(self):
         parsed = check_external_pr_refs.parse_remote_owner(
             "https://gitlab.com/abuzucom/agents")
         self.assertEqual(parsed, "")
@@ -208,7 +208,7 @@ class OwnerResolutionTest(unittest.TestCase):
             "https://attacker-github.com/victim/repo")
         self.assertEqual(parsed, "")
 
-    def test_lookalike_scp_host_yields_no_owner(self):
+    def test_lookalike_scp_no_owner(self):
         parsed = check_external_pr_refs.parse_remote_owner(
             "git@attacker-github.com:victim/repo.git")
         self.assertEqual(parsed, "")
@@ -223,7 +223,7 @@ class OwnerResolutionTest(unittest.TestCase):
             "https://github.com:443/abuzucom/agents")
         self.assertEqual(parsed, OWNER)
 
-    def test_remote_with_extra_path_yields_no_owner(self):
+    def test_extra_path_no_owner(self):
         parsed = check_external_pr_refs.parse_remote_owner(
             "https://github.com/abuzucom/agents/extra")
         self.assertEqual(parsed, "")
@@ -289,18 +289,18 @@ class CommitRangeTest(unittest.TestCase):
 class WiringTest(unittest.TestCase):
     """CI and pre-commit configuration run the new checker."""
 
-    def test_workflow_runs_checker_in_blocking_job(self):
+    def test_blocking_job_runs_checker(self):
         text = WORKFLOW_PATH.read_text(encoding="utf-8")
         self.assertIn("python scripts/check_external_pr_refs.py", text)
         blocking = text.split("  pr-checks:")[1].split("\n  static-checks:")[0]
         self.assertIn("check_external_pr_refs.py", blocking)
 
-    def test_pull_request_workflow_runs_the_checker(self):
+    def test_pr_workflow_runs_checker(self):
         text = SYNC_WORKFLOW_PATH.read_text(encoding="utf-8")
         self.assertIn("pull_request:", text)
         self.assertIn("python scripts/check_external_pr_refs.py", text)
 
-    def test_pre_commit_runs_tests_for_the_checker(self):
+    def test_pre_commit_runs_tests(self):
         text = PRE_COMMIT_PATH.read_text(encoding="utf-8")
         self.assertIn("external_pr_refs", text)
 

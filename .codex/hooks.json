@@ -11,6 +11,18 @@
             "commandWindows": "python hooks/reinject_agents_policy.py --client codex",
             "timeout": 30,
             "additionalContextLimit": 0
+          },
+          {
+            "type": "command",
+            "command": "python hooks/enforce_anti_delegation.py --client codex",
+            "commandWindows": "python hooks/enforce_anti_delegation.py --client codex",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "python hooks/prepare_session_workspace.py",
+            "commandWindows": "python hooks/prepare_session_workspace.py",
+            "timeout": 30
           }
         ]
       }
@@ -42,6 +54,12 @@
             "type": "command",
             "command": "python hooks/enforce_branch_name.py --client codex",
             "commandWindows": "python hooks/enforce_branch_name.py --client codex",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "python hooks/enforce_anti_delegation.py --client codex",
+            "commandWindows": "python hooks/enforce_anti_delegation.py --client codex",
             "timeout": 30
           }
         ]

@@ -40,7 +40,7 @@ def test_window_and_buttons_are_plain(qtbot: Any, tmp_path: Path) -> None:
     assert dialog.save_btn.text() == "Save"
 
 
-def test_general_and_analysis_rows_are_plain(qtbot: Any, tmp_path: Path) -> None:
+def test_general_analysis_rows_are_plain(qtbot: Any, tmp_path: Path) -> None:
     """General and Analysis rows read in plain words."""
     dialog = open_dialog(qtbot, tmp_path)
     general = dialog.general_tab
@@ -59,7 +59,7 @@ def test_general_and_analysis_rows_are_plain(qtbot: Any, tmp_path: Path) -> None
     assert row_label(analysis, analysis.fake_lossless_method_combo) == "Fake lossless check:"
 
 
-def test_identification_and_transcode_rows_are_plain(qtbot: Any, tmp_path: Path) -> None:
+def test_identification_transcode_rows_are_plain(qtbot: Any, tmp_path: Path) -> None:
     """Identification and Transcode rows name what each item does."""
     dialog = open_dialog(qtbot, tmp_path)
     ident = dialog.identification_tab
@@ -80,7 +80,7 @@ def test_identification_and_transcode_rows_are_plain(qtbot: Any, tmp_path: Path)
     ] == ["Mode:", "Format:", "Playlists:"]
 
 
-def test_storage_rows_and_messages_are_plain(qtbot: Any, tmp_path: Path) -> None:
+def test_storage_rows_messages_are_plain(qtbot: Any, tmp_path: Path) -> None:
     """Storage rows, buttons, and messages use plain words."""
     dialog = open_dialog(qtbot, tmp_path)
     storage = dialog.storage_tab

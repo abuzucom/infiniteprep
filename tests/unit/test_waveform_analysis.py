@@ -19,7 +19,7 @@ from infiniteprep.services.waveform_analysis import (
 # A lowered duration cap and the lowest sample rate the analyzer accepts.
 CAP_SECONDS = 2
 CAP_SAMPLE_RATE = 8000
-# One tone per band. The read-only tests share their analyses.
+# One tone per band. The read-only tests share the computed analyses.
 MID_TONE_HZ = 1000
 SHARED_TONE_FREQUENCIES = (60, MID_TONE_HZ, 8000)
 
@@ -32,7 +32,7 @@ def write_tone(path: Path, frequency: float, seconds: float = 1.25) -> Path:
     return path
 
 
-def test_cancelled_analysis_exits_before_file_access(tmp_path: Path) -> None:
+def test_cancelled_analysis_skips_file_access(tmp_path: Path) -> None:
     """A canceled worker does not continue hashing or decoding its stale path."""
     cancel_event = threading.Event()
     cancel_event.set()
@@ -165,7 +165,7 @@ def test_file_size_cap(tmp_path: Path) -> None:
     assert not (tmp_path / "cache").exists()
 
 
-def test_non_file_source_is_rejected_before_hashing(tmp_path: Path) -> None:
+def test_non_file_rejected_before_hashing(tmp_path: Path) -> None:
     """A directory cannot be used as a waveform source."""
     source = tmp_path / "folder"
     source.mkdir()
@@ -194,7 +194,7 @@ def test_waveform_rejects_inconsistent_shapes(invalid: np.ndarray) -> None:
 
 
 @pytest.mark.parametrize("width", [1, 2, 3, 4, 5, 7, 19])
-def test_overview_retains_final_peak_and_immutability(width: int) -> None:
+def test_overview_keeps_final_peak_immutable(width: int) -> None:
     """Downsampling and expansion retain the final sample in immutable arrays."""
     samples = np.array([0.0, 0.2, 0.1, 1.0], dtype=np.float32)
     waveform = SpectrumWaveform(samples, samples, samples, samples, 1.0)
@@ -221,7 +221,7 @@ def test_insufficient_budget_skips_cache_creation(tmp_path: Path, budget: int) -
     assert not cache.exists()
 
 
-def test_hashing_rechecks_bytes_after_file_growth(
+def test_hashing_rechecks_after_file_growth(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Real file growth after stat must not defeat the streaming byte cap."""
@@ -246,7 +246,7 @@ def test_hashing_rechecks_bytes_after_file_growth(
     assert grew
 
 
-def test_failed_eviction_stops_new_cache_writes(
+def test_failed_eviction_stops_cache_writes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A denied filesystem deletion preserves analysis without growing the cache."""

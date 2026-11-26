@@ -50,7 +50,7 @@ class PillowVersionTest(unittest.TestCase):
         self.assertIn("12.9.0", message)
         self.assertIn("requirements-lock.txt", message)
 
-    def test_the_expected_release_matches_the_lock(self) -> None:
+    def test_expected_release_matches_lock(self) -> None:
         """The converter expects the release that the lockfile pins."""
         lock_text = (ROOT / "requirements-lock.txt").read_text(encoding="utf-8")
         pin = f"pillow=={self.converter.EXPECTED_PILLOW_VERSION}"
@@ -64,7 +64,7 @@ class ConversionTest(unittest.TestCase):
         self.converter = load_converter()
         self.folder = Path(tempfile.mkdtemp())
 
-    def test_png_mode_writes_a_256_pixel_icon(self) -> None:
+    def test_png_mode_writes_256px_icon(self) -> None:
         """The AppImage icon is a 256x256 PNG."""
         output = self.folder / "infiniteprep.png"
         self.assertEqual(self.converter.main(["png", str(APP_ICON_PATH), str(output)]), 0)
@@ -72,7 +72,7 @@ class ConversionTest(unittest.TestCase):
             self.assertEqual(icon.format, "PNG")
             self.assertEqual(icon.size, APPIMAGE_ICON_SIZE)
 
-    def test_ico_mode_writes_every_installer_size(self) -> None:
+    def test_ico_mode_writes_installer_sizes(self) -> None:
         """The installer ICO holds sizes from 16 to 256 pixels."""
         output = self.folder / "installer.ico"
         self.assertEqual(self.converter.main(["ico", str(APP_ICON_PATH), str(output)]), 0)
@@ -82,7 +82,7 @@ class ConversionTest(unittest.TestCase):
         self.assertIn(SMALLEST_ICO_SIZE, sizes)
         self.assertIn(APPIMAGE_ICON_SIZE, sizes)
 
-    def test_an_unknown_mode_is_a_usage_error(self) -> None:
+    def test_unknown_mode_is_usage_error(self) -> None:
         """A mode other than png or ico writes nothing and returns 2."""
         output = self.folder / "icon.bmp"
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:

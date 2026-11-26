@@ -31,7 +31,7 @@ class LiveRepositoryTest(unittest.TestCase):
         code, output = _run(REPOSITORY_ROOT)
         self.assertEqual(code, 0, output)
 
-    def test_every_required_registration_names_a_present_hook(self):
+    def test_registrations_name_present_hooks(self):
         """A table entry naming an absent hook would never fail."""
         for hook in check_gate_adoption.REQUIRED_REGISTRATIONS:
             with self.subTest(hook=hook):
@@ -50,8 +50,10 @@ class PartialAdoptionTest(unittest.TestCase):
     def _copy_full_tree(self) -> Path:
         """Copy the live gate set into the temporary adopter root."""
         for relative in (
+            "docs",
             "hooks",
             "scripts",
+            "skills",
             "tests",
             ".claude",
             ".codex",
@@ -77,7 +79,7 @@ class PartialAdoptionTest(unittest.TestCase):
         code, output = _run(self._copy_full_tree())
         self.assertEqual(code, 0, output)
 
-    def test_hooks_only_copy_reports_registrations_and_checkers(self):
+    def test_hooks_only_copy_reported(self):
         shutil.copytree(REPOSITORY_ROOT / "hooks", self.root / "hooks")
         code, output = _run(self.root)
         self.assertEqual(code, 1)
@@ -86,7 +88,7 @@ class PartialAdoptionTest(unittest.TestCase):
         self.assertIn(f"{LIVE_SETTINGS} is absent or unreadable", output)
         self.assertIn("forbids partial hook or gate adoption", output)
 
-    def test_absent_shared_module_reports_importing_gate(self):
+    def test_absent_shared_module_reported(self):
         self._copy_full_tree()
         (self.root / "hooks" / "_gate_core.py").unlink()
         code, output = _run(self.root)
@@ -95,7 +97,7 @@ class PartialAdoptionTest(unittest.TestCase):
         self.assertIn("imports hooks/_gate_core.py", output)
         self.assertIn("exits 2 at run time", output)
 
-    def test_removed_registration_reports_hook_and_event(self):
+    def test_removed_registration_reported(self):
         self._copy_full_tree()
         document = self._settings_document()
         groups = document["hooks"]["PreToolUse"]
@@ -109,7 +111,7 @@ class PartialAdoptionTest(unittest.TestCase):
         self.assertIn("does not register require_consent.py under "
                       "PreToolUse", output)
 
-    def test_narrowed_matcher_reports_the_expected_matcher(self):
+    def test_narrowed_matcher_reported(self):
         self._copy_full_tree()
         document = self._settings_document()
         for group in document["hooks"]["PreToolUse"]:
@@ -127,7 +129,7 @@ class PartialAdoptionTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn(f"{LIVE_SETTINGS} is absent or unreadable", output)
 
-    def test_non_mapping_configuration_reports_the_type(self):
+    def test_non_mapping_configuration(self):
         """A top-level array registers no hook and must not raise."""
         self._copy_full_tree()
         path = self.root / LIVE_SETTINGS
@@ -136,8 +138,8 @@ class PartialAdoptionTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("holds list at the top level", output)
 
-    def test_null_hooks_property_reports_every_registration(self):
-        """A null hooks branch reports findings rather than raising."""
+    def test_null_hooks_property(self):
+        """A null hooks branch reports findings and returns normally."""
         self._copy_full_tree()
         path = self.root / LIVE_SETTINGS
         path.write_text(json.dumps({"hooks": None}), encoding="utf-8")
@@ -145,7 +147,7 @@ class PartialAdoptionTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("does not register require_consent.py", output)
 
-    def test_malformed_event_and_group_shapes_report_findings(self):
+    def test_malformed_event_group_shapes(self):
         """A mistyped event branch or group entry must not raise."""
         self._copy_full_tree()
         document = {"hooks": {"PreToolUse": {"matcher": "Bash"},
@@ -162,7 +164,7 @@ class PartialAdoptionTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("shared-files.json is absent", output)
 
-    def test_non_mapping_shared_manifest_reports_the_type(self):
+    def test_non_mapping_shared_manifest(self):
         """A top-level array lists no shared file and must not raise."""
         self._copy_full_tree()
         path = self.root / check_gate_adoption.SHARED_MANIFEST

@@ -96,7 +96,7 @@ def test_refused_rename_rollback_keeps_file(tagged_library: Any) -> None:
     assert compute_sha256(source) == original_hash
 
 
-def test_rename_refuses_file_missed_by_check(
+def test_rename_refuses_unchecked_file(
     tagged_library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A file that appears between the check and the rename is kept, not replaced.
@@ -136,7 +136,7 @@ def test_restore_after_crash_keeps_existing(
     assert compute_sha256(source) == original_hash
 
 
-def test_mark_finished_after_crash_keeps_source(
+def test_finished_after_crash_keeps_source(
     tagged_library: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The record and the asset point at the source, not at the file at the planned name."""
@@ -232,7 +232,7 @@ def test_failed_write_keeps_old_playlist(tmp_path: Path) -> None:
     assert [path.name for path in destination.parent.iterdir()] == ["crate.m3u8"]
 
 
-def test_extinf_text_holds_no_line_separator(tmp_path: Path) -> None:
+def test_extinf_holds_no_line_separator(tmp_path: Path) -> None:
     """Vertical tab, NEL, and the Unicode line separator do not split the #EXTINF line."""
     repo = Repository(DatabaseManager(":memory:"))
     source = create_wav_fixture(tmp_path / "crate" / "track.wav", duration_sec=0.5)

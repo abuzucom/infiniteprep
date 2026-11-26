@@ -22,9 +22,11 @@ try:
     import _bash_parser as bash_parser
     import _cmd_parser as cmd_parser
     import _command_execution_gate as command_gate
-except ImportError as error:  # pragma: no cover (exercised by the adoption test)
+except ImportError as error:  # The adoption test exercises this import failure.
     print(f"shared hook parser, core, or command gate import failed ({error}). "
-          "Restore the missing file.", file=sys.stderr)
+          "Restore the missing file. Stop. Report this denial to the active "
+          "human. Do not retry a variant or propose a gate change.",
+          file=sys.stderr)
     sys.exit(POLICY_DENIAL_EXIT_CODE)
 
 CHECKER_PATH = os.path.join("scripts", "check_branch_name.py")
@@ -32,7 +34,6 @@ ALLOWED_PREFIXES = "feat/, fix/, chore/, docs/, test/"
 GATE = "enforce_branch_name.py"
 MAX_GIT_POINTER_BYTES = 4096
 MAX_HEAD_BYTES = 1024
-MAX_ALIAS_DEPTH = 8
 CHECKER_TIMEOUT_SECONDS = 10
 PROHIBITED_AGENT_PREFIX = "claude/"
 REBASE_DIRECTORIES = ("rebase-merge", "rebase-apply")
@@ -73,7 +74,8 @@ INSPECTABLE_PROGRAMS = command_gate.INSPECTABLE_PROGRAMS
 WORKFLOW_SCRIPT_ARGUMENTS = command_gate.WORKFLOW_SCRIPT_ARGUMENTS
 SEARCH_FLAGS = command_gate.SEARCH_FLAGS
 MAX_WORKFLOW_ARGUMENTS = command_gate.MAX_WORKFLOW_ARGUMENTS
-# The primary branch and a detached HEAD permit inspection and planning only.
+# Stable branches and a detached HEAD permit inspection and planning only.
+# The stable branches are the primary branch, test, and develop.
 DEFAULT_PRIMARY_BRANCH = "main"
 PRIMARY_BRANCH_FILE = "hooks/primary-branch.txt"
 MAX_PRIMARY_BRANCH_BYTES = 256
@@ -93,6 +95,11 @@ PLAN_WRITE_TOOLS = frozenset({
     "Edit", "MultiEdit", "Write", "write_file", "replace", "write_to_file",
     "replace_file_content",
 })
+# Plan mode forbids the branch rename. On an invalid branch a session may
+# always enter plan mode. Inside plan mode it may also leave plan mode and
+# load tool schemas. None of these tools reads or writes the repository.
+PLAN_ENTRY_TOOL = "EnterPlanMode"
+PLAN_EXIT_TOOLS = frozenset({"ExitPlanMode", "ToolSearch"})
 BASH_READ_PROGRAMS = frozenset({
     "echo", "printf", "pwd", "cat", "head", "tail", "wc", "ls", "dir",
 })
@@ -127,16 +134,6 @@ MASTER_BRANCH_MESSAGE = (
     "creating `main`, are active-human decisions. Relay this message to the "
     "active human and stop."
 )
-
-
-def _read_payload() -> dict:
-    """Return the hook's stdin JSON, or an empty dict when it carries none.
-
-    A SessionStart invocation arrives with empty stdin. This hook informs
-    rather than blocks. An unreadable payload becomes an empty dict.
-    """
-    payload = core.read_payload(empty_is_session_start=True)
-    return payload if payload is not None else {}
 
 
 def _read_regular(path: str, limit: int) -> str:
@@ -204,7 +201,11 @@ def rebase_is_active(project_dir: str) -> bool:
 
 
 def check_branch(branch: str, strict: bool = True, project_dir: str = "") -> str:
-    """Return the portable checker's complaint for one explicit branch."""
+    """Return the portable checker's complaint for one explicit branch.
+
+    `project_dir` is accepted for existing callers and ignored. The checker
+    always runs from the installed policy root.
+    """
     if strict and not branch:
         return "branch name is empty"
     root = core.policy_root()
@@ -275,30 +276,6 @@ def normalize_branch_candidate(candidate: str) -> str:
     return normalized_candidate
 
 
-def alias_names_prohibited_branch(
-    project_dir: str,
-    subcommand: str,
-    arguments: list,
-    depth: int = 0,
-    visited: frozenset = frozenset(),
-) -> bool:
-    """Return whether a bounded Git alias expansion names a prohibited ref."""
-    if depth >= MAX_ALIAS_DEPTH or subcommand in visited:
-        return False
-    context = core.git_branch_context([subcommand, *arguments], project_dir, [])
-    return _context_names_prohibited_branch(context)
-
-
-def command_names_prohibited_metadata(command_text: str, project_dir: str = "") -> bool:
-    """Return whether a command writes a prohibited ref through Git metadata."""
-    if bash_parser.has_quoted_redirects(command_text):
-        return False
-    segments, _complete = bash_parser.command_segments(command_text)
-    roots = _metadata_roots(project_dir) if project_dir else ()
-    return any(_segment_names_prohibited_metadata(segment, project_dir, roots)
-               for segment in segments)
-
-
 def _metadata_roots(project_dir: str) -> tuple:
     """Resolve worktree and common administration directories once per call."""
     try:
@@ -340,7 +317,7 @@ def _metadata_path(path: str, project_dir: str = "", roots: tuple = ()) -> bool:
 
 
 def _metadata_copy_ancestor(program: str, path: str, project_dir: str, roots: tuple) -> bool:
-    """Reject directory merges whose contents could reach Git administration paths."""
+    """Reject directory merges with contents that could reach Git administration paths."""
     if program not in ("cp", "mv", "copy", "move", "copy-item", "move-item"):
         return False
     destination = os.path.realpath(os.path.join(project_dir, path)).replace("\\", "/").casefold()
@@ -355,7 +332,7 @@ def _content_names_prohibited_ref(content: str) -> bool:
 
 
 def _metadata_write_targets(program: str, arguments: list, redirects: list) -> list:
-    """Honor copy target-directory options before classifying positional operands."""
+    """Honor copy options naming a target directory before classifying positional operands."""
     if program == "tee":
         targets = list(redirects)
         options = True
@@ -418,43 +395,6 @@ def _parsed_command_segments(command_text: str, tool_name: str) -> tuple:
     return [list(segment) for segment in result.segments], result.status == "complete"
 
 
-def command_names_prohibited_branch(
-    command_text: str,
-    project_dir: str = "",
-    tool_name: str = "Bash",
-) -> bool:
-    """Return whether a Git branch mutation names a prohibited branch."""
-    command_segments, _parsed_completely = _parsed_command_segments(
-        command_text, tool_name)
-    for command_segment in command_segments:
-        executable_tokens, assignments, prefixes_complete = (
-            bash_parser.strip_prefixes(command_segment)
-        )
-        if not prefixes_complete or not executable_tokens:
-            continue
-        program_name = core.normalize_windows_command_name(executable_tokens[0])
-        if program_name != "git":
-            continue
-        context = core.git_branch_context(executable_tokens[1:], project_dir, assignments)
-        if _context_names_prohibited_branch(context):
-            return True
-    return False
-
-
-def _write_content(tool_input: dict) -> str:
-    """Return text introduced by one supported file-write tool call."""
-    values = []
-    for key in ("content", "new_string", "new_source"):
-        value = tool_input.get(key)
-        if isinstance(value, str):
-            values.append(value)
-    edits = tool_input.get("edits", [])
-    if isinstance(edits, list):
-        for edit in edits:
-            if isinstance(edit, dict) and isinstance(edit.get("new_string"), str):
-                values.append(edit["new_string"])
-    return " ".join(values)
-
 
 def file_write_names_prohibited_metadata(tool_input: dict, project_dir: str) -> bool:
     """Return whether a file tool writes a prohibited Git metadata ref."""
@@ -465,7 +405,7 @@ def file_write_names_prohibited_metadata(tool_input: dict, project_dir: str) -> 
     if not _metadata_path(raw_path, project_dir, roots):
         return False
     return (_metadata_relative_path(raw_path, project_dir, roots).startswith("refs/heads/claude/")
-            or _content_names_prohibited_ref(_write_content(tool_input)))
+            or _content_names_prohibited_ref(core.write_content(tool_input)))
 
 
 def _file_metadata_reason(tool_input: dict, project_dir: str) -> str:
@@ -534,10 +474,8 @@ def build_warning(violation: str) -> str:
     return "\n".join(lines)
 
 
-def blocked_command(command: str, project_dir: str = "") -> list:
-    """Return every effective or ambiguous Git write context in `command`."""
-    return bash_parser.git_write_operation(
-        command, core.git_write_context, project_dir)
+# The shared parser entry point, kept under this name for callers and tests.
+blocked_command = core.blocked_command
 
 
 def _handle_session_start(project_dir: str) -> int:
@@ -546,16 +484,7 @@ def _handle_session_start(project_dir: str) -> int:
     if not violation:
         return 0
     _state, message = _lifecycle_message(branch_name, project_dir)
-    warning = message or build_warning(violation)
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
-            "additionalContext": warning,
-        },
-        "systemMessage": warning,
-    }
-    print(json.dumps(output))
-    return 0
+    return core.emit_context("SessionStart", message or build_warning(violation))
 
 
 def _push_has_literal_target(arguments: list) -> bool:
@@ -651,11 +580,6 @@ def command_execution_violation(command: str, project_dir: str, tool_name: str) 
     return GATE, ""
 
 
-def command_execution_reason(command: str, project_dir: str, tool_name: str) -> str:
-    """Parse once and return the first established execution violation."""
-    return command_execution_violation(command, project_dir, tool_name)[1]
-
-
 def _powershell_array_arguments(tokens: list) -> list:
     """Group unquoted comma-separated arguments while retaining literal commas."""
     groups = []
@@ -676,27 +600,12 @@ def _powershell_array_arguments(tokens: list) -> list:
 
 
 def _powershell_array_targets(program: str, groups: list) -> list:
-    """Separate named output arrays from source arrays and content values."""
-    targets = []
-    operands = []
-    index = 0
-    while index < len(groups):
-        group = groups[index]
-        flag, separator, attached = group[0].partition(":")
-        parameter = core._powershell_write_parameter(program, flag.lower())
-        if parameter:
-            if not separator and len(group) > 1:
-                raise ValueError("PowerShell parameter array requires an explicit value")
-            values = [attached, *group[1:]] if separator else []
-            if not separator and index + 1 < len(groups):
-                index += 1
-                values = groups[index]
-            _canonical, _minimum, names_target = parameter
-            if names_target:
-                targets.extend(values)
-        elif not group[0].startswith("-"):
-            operands.append(group)
-        index += 1
+    """Return every named and positional destination in comma-joined arrays.
+
+    An empty value stays as an empty target. The metadata checks treat it
+    as unresolvable.
+    """
+    targets, operands = core.powershell_write_groups(program, groups, keep_empty=True)
     if operands:
         targets.extend(operands[core.WRITE_PROGRAMS[program]])
     return targets
@@ -733,7 +642,7 @@ def _tool_call(payload: dict, client: str) -> tuple:
     return payload.get("tool_name"), payload.get("tool_input")
 
 
-def _command_text(tool_name: str, tool_input: dict) -> str:
+def _command_text(tool_input: dict) -> str:
     """Return a shell command from supported client argument spellings."""
     for key in ("command", "CommandLine"):
         command = tool_input.get(key)
@@ -775,9 +684,7 @@ def _valid_recovery(
     _program, *operation, target = tokens
     if check_branch(target, strict=True):
         return False
-    if branch in ("main", "master", "HEAD"):
-        return operation == ["switch", "-c"]
-    return operation == ["branch", "-m"]
+    return operation == recovery_command(branch, False).split()[1:]
 
 
 def _valid_bootstrap(command: str, project_dir: str) -> bool:
@@ -794,6 +701,19 @@ def _valid_bootstrap(command: str, project_dir: str) -> bool:
 _python_workflow = command_gate._python_workflow
 
 
+def recovery_command(branch_name: str, rebase_active: bool) -> str:
+    """Return the recovery command family for one failed preflight.
+
+    A rebase allows only its own continuation commands. A stable branch
+    and a detached HEAD need a new branch. Any other name needs a rename.
+    """
+    if rebase_active:
+        return "git rebase --abort, git rebase --continue, or git rebase --skip"
+    if branch_name in ("main", "master", "HEAD", *core.EXTRA_STABLE_BRANCHES):
+        return "git switch -c"
+    return "git branch -m"
+
+
 def recovery_authorization_reason(branch_name: str, rebase_active: bool = False) -> str:
     """Return the mandatory recovery instruction for one invalid branch."""
     if rebase_active:
@@ -802,21 +722,17 @@ def recovery_authorization_reason(branch_name: str, rebase_active: bool = False)
             "git rebase --continue, or git rebase --skip for authorization. "
             "Do not create or switch branches while the rebase remains active."
         )
-    recovery_command = (
-        "git switch -c fix/describe-the-actual-change"
-        if branch_name in ("main", "master", "HEAD")
-        else "git branch -m fix/describe-the-actual-change"
-    )
+    example = f"{recovery_command(branch_name, False)} fix/describe-the-actual-change"
     return (
         "MANDATORY BRANCH CORRECTION. Execute the selected compliant "
-        f"recovery command ({recovery_command}). Do not refuse Git work, "
+        f"recovery command ({example}). Do not refuse Git work, "
         "delegate branch selection, or request hook deletion."
     )
 
 
 def _deny(client: str, reason: str, gate: str = GATE) -> int:
     """Emit one native client denial that names the deciding gate file."""
-    message = f"blocked by hooks/{gate}: {reason}"
+    message = core.with_denial_response(f"blocked by hooks/{gate}: {reason}")
     if client in ("gemini", "antigravity"):
         print(json.dumps({"decision": "deny", "reason": message}))
         return 0
@@ -874,17 +790,27 @@ def _primary_branch_failure(error: PrimaryBranchError) -> str:
             "active human repairs the file.")
 
 
-def branch_state(branch_name: str, project_dir: str) -> str:
-    """Classify a failed preflight as read-only, master, or invalid."""
+def read_rebase_state(project_dir: str) -> tuple:
+    """Return (rebase active, lookup error) from one rebase metadata read."""
     try:
-        if rebase_is_active(project_dir):
-            return "invalid"
-    except OSError:
+        return rebase_is_active(project_dir), None
+    except OSError as error:
+        return False, error
+
+
+def branch_state(branch_name: str, project_dir: str, rebase_state: tuple = None) -> str:
+    """Classify a failed preflight as read-only, master, or invalid.
+
+    `rebase_state` takes a read_rebase_state result. A caller that already
+    read the rebase metadata passes it. One call then reads it once.
+    """
+    rebase_active, lookup_error = rebase_state or read_rebase_state(project_dir)
+    if rebase_active or lookup_error is not None:
         return "invalid"
     primary = primary_branch_name(project_dir)
     if branch_name == "master":
         return "master"
-    if branch_name in (primary, "HEAD"):
+    if branch_name in (primary, "HEAD", *core.EXTRA_STABLE_BRANCHES):
         return "read-only"
     return "invalid"
 
@@ -1131,7 +1057,7 @@ def _existing_branch_switch(command: str, project_dir: str) -> bool:
 def _read_only_shell(payload: dict, project_dir: str, client: str, branch_name: str,
                      tool_name: str, tool_input: dict) -> int:
     """Allow inspection, route branch creation and workflows, and deny writes."""
-    command = _command_text(tool_name, tool_input)
+    command = _command_text(tool_input)
     if _valid_bootstrap(command, project_dir) or _existing_branch_switch(command, project_dir):
         return 0
     if _topic_branch_creation(command, project_dir):
@@ -1174,7 +1100,7 @@ def _handle_master_branch(payload: dict, project_dir: str, client: str) -> int:
     if tool_name in QUESTION_TOOLS:
         return 0
     if tool_name in SHELL_TOOLS and isinstance(tool_input, dict):
-        tokens = _git_tokens(_command_text(tool_name, tool_input), project_dir)
+        tokens = _git_tokens(_command_text(tool_input), project_dir)
         if tokens == ["git", "switch", "main"] and _local_branch_exists(project_dir, "main"):
             return _request_authorization(client, payload, MASTER_BRANCH_MESSAGE)
     return _deny(client, MASTER_BRANCH_MESSAGE)
@@ -1183,21 +1109,24 @@ def _handle_master_branch(payload: dict, project_dir: str, client: str) -> int:
 def _handle_failed_preflight(payload: dict, project_dir: str, client: str,
                              branch_violation: str, branch_name: str) -> int:
     """Route a failed preflight to read-only, master, or strict recovery handling."""
+    rebase_state = read_rebase_state(project_dir)
     try:
-        state = branch_state(branch_name, project_dir)
+        state = branch_state(branch_name, project_dir, rebase_state)
     except PrimaryBranchError as error:
         return _deny(client, _primary_branch_failure(error))
     if state == "read-only":
         return _handle_read_only_branch(payload, project_dir, client, branch_name)
     if state == "master":
         return _handle_master_branch(payload, project_dir, client)
-    return _handle_invalid_branch(payload, project_dir, client, branch_violation, branch_name)
+    return _handle_invalid_branch(payload, project_dir, client, branch_violation, branch_name,
+                                  rebase_state)
 
 
 def _lifecycle_message(branch_name: str, project_dir: str) -> tuple:
     """Return the lifecycle state and message for a failed preflight."""
+    rebase_state = read_rebase_state(project_dir)
     try:
-        state = branch_state(branch_name, project_dir)
+        state = branch_state(branch_name, project_dir, rebase_state)
     except PrimaryBranchError as error:
         return "failed", _primary_branch_failure(error)
     if state == "read-only":
@@ -1207,12 +1136,9 @@ def _lifecycle_message(branch_name: str, project_dir: str) -> tuple:
         return state, MASTER_BRANCH_MESSAGE
     # The tool gate allows only rebase commands during a rebase, so the
     # lifecycle message must not name branch recovery then. An unreadable
-    # gitdir keeps the branch lookup failure message, which names the cause.
-    try:
-        rebase_active = rebase_is_active(project_dir)
-    except OSError:
-        return state, ""
-    if rebase_active:
+    # gitdir keeps the branch lookup failure message. That message states the cause.
+    rebase_active, lookup_error = rebase_state
+    if lookup_error is None and rebase_active:
         return state, recovery_authorization_reason(branch_name, rebase_active=True)
     return state, ""
 
@@ -1223,25 +1149,29 @@ def _handle_invalid_branch(
     client: str,
     branch_violation: str,
     branch_name: str = "",
+    rebase_state: tuple = None,
 ) -> int:
-    """Allow only questions and exact recovery while preflight fails."""
-    if not branch_name:
-        recovered_branch, lookup_violation = read_branch_preflight(project_dir)
-        branch_name = recovered_branch
-        if lookup_violation:
-            branch_violation = lookup_violation
+    """Allow only questions and exact recovery while preflight fails.
+
+    The caller already ran the branch lookup, so its violation stands. A
+    caller that already read the rebase metadata passes `rebase_state`.
+    """
     tool_name, tool_input = _tool_call(payload, client)
     if not isinstance(tool_name, str):
         return _deny(client, "Tool name is missing or malformed")
-    if tool_name in QUESTION_TOOLS:
+    if tool_name in QUESTION_TOOLS or tool_name == PLAN_ENTRY_TOOL:
+        return 0
+    if tool_name in PLAN_EXIT_TOOLS and payload.get("permission_mode") == core.PLAN_MODE:
+        return 0
+    if (tool_name in PLAN_WRITE_TOOLS and isinstance(tool_input, dict)
+            and _plan_write_allowed(tool_input, project_dir, client)):
         return 0
     label = str(tool_name or "tool")
-    try:
-        rebase_active = rebase_is_active(project_dir)
-    except OSError as error:
-        return _deny(client, f"rebase lookup failed: {core.sanitize(error)}")
+    rebase_active, lookup_error = rebase_state or read_rebase_state(project_dir)
+    if lookup_error is not None:
+        return _deny(client, f"rebase lookup failed: {core.sanitize(lookup_error)}")
     if tool_name in SHELL_TOOLS and isinstance(tool_input, dict):
-        command_text = _command_text(tool_name, tool_input)
+        command_text = _command_text(tool_input)
         if _valid_bootstrap(command_text, project_dir):
             return 0
         if branch_name and _valid_recovery(
@@ -1250,18 +1180,12 @@ def _handle_invalid_branch(
         contexts = blocked_command(command_text, project_dir)
         if contexts:
             label = contexts[0].get("label") or label
-    recovery_command = (
-        "git rebase --abort, git rebase --continue, or git rebase --skip"
-        if rebase_active else
-        "git switch -c"
-        if branch_name in ("main", "master", "HEAD")
-        else "git branch -m"
-    )
+    command_family = recovery_command(branch_name, rebase_active)
     return _deny(
         client,
         f"{core.sanitize(label)} blocked because branch preflight failed. "
         f"{core.sanitize(branch_violation)} Select a compliant name and submit "
-        f"{recovery_command} <type>/<kebab-description> for authorization. "
+        f"{command_family} <type>/<kebab-description> for authorization. "
         "Do not refuse Git work or request hook deletion.",
     )
 
@@ -1286,10 +1210,12 @@ def _handle_pre_tool_use(payload: dict, project_dir: str, client: str) -> int:
             return _deny(client, reason)
     if tool_name not in SHELL_TOOLS or not isinstance(tool_input, dict):
         return 0
-    command_text = _command_text(tool_name, tool_input)
+    command_text = _command_text(tool_input)
     if _valid_bootstrap(command_text, project_dir):
         return 0
-    decision, reason = command_gate.workflow_decision(command_text, project_dir)
+    session_id = payload.get("session_id")
+    decision, reason = command_gate.workflow_decision(
+        command_text, project_dir, session_id=session_id if isinstance(session_id, str) else "")
     if decision == command_gate.ALLOW:
         return 0
     if decision == "ask":
@@ -1300,6 +1226,18 @@ def _handle_pre_tool_use(payload: dict, project_dir: str, client: str) -> int:
     if reason:
         return _deny(client, reason, gate)
     return 0
+
+
+def _rebase_assumed(project_dir: str) -> bool:
+    """Return whether recovery text must assume an active rebase.
+
+    The tool gate accepts only rebase commands during a rebase. An
+    unreadable lookup cannot rule one out, so it counts as a rebase.
+    """
+    try:
+        return rebase_is_active(project_dir)
+    except OSError:
+        return True
 
 
 def handle_stop_event(payload: dict, project_dir: str) -> int:
@@ -1315,8 +1253,13 @@ def handle_stop_event(payload: dict, project_dir: str) -> int:
     if message:
         reason = message
     else:
-        reason = (f"{recovery_authorization_reason(branch_name)} "
-                  f"{core.sanitize(branch_violation)}")
+        recovery = recovery_authorization_reason(branch_name, _rebase_assumed(project_dir))
+        reason = f"{recovery} {core.sanitize(branch_violation)}"
+    # Plan mode forbids the rename itself. A block there would only repeat a
+    # demand the session cannot meet. The turn ends with the reminder instead.
+    if payload.get("permission_mode") == core.PLAN_MODE:
+        print(json.dumps({"systemMessage": reason}))
+        return 0
     output = {
         "decision": "block",
         "reason": reason,
@@ -1333,20 +1276,12 @@ def handle_context_event(project_dir: str, event_name: str) -> int:
     state, message = _lifecycle_message(branch_name, project_dir)
     if state == "read-only":
         return 0
-    warning = message or build_warning(branch_violation)
-    output = {
-        "hookSpecificOutput": {
-            "hookEventName": event_name,
-            "additionalContext": warning,
-        },
-        "systemMessage": warning,
-    }
-    print(json.dumps(output))
-    return 0
+    return core.emit_context(event_name, message or build_warning(branch_violation))
 
 
 def main() -> int:
     """Run the branch gate, denying in the client's format on any unexpected error."""
+    core.reset_invocation_caches()
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--client",
@@ -1359,7 +1294,9 @@ def main() -> int:
 
 
 def _run(args: argparse.Namespace) -> int:
-    payload = _read_payload()
+    # SessionStart arrives with empty stdin. This hook informs and does not
+    # block there, so an unreadable payload counts as an empty one.
+    payload = core.read_payload(empty_is_session_start=True) or {}
     if args.client == "antigravity":
         workspaces = payload.get("workspacePaths", [])
         if not isinstance(workspaces, list) or len(workspaces) != 1:

@@ -56,7 +56,7 @@ def label_contrast(label: QLabel) -> float:
     return contrast_ratio(text, background)
 
 
-def test_contrast_ratio_spans_one_to_twenty_one() -> None:
+def test_contrast_ratio_spans_full_range() -> None:
     """Black on white gives 21:1, and a color against itself gives 1:1."""
     assert contrast_ratio(QColor("#000000"), QColor("#ffffff")) == pytest.approx(MAX_CONTRAST)
     assert contrast_ratio(QColor("#3b82f6"), QColor("#3b82f6")) == pytest.approx(1.0)
@@ -79,7 +79,7 @@ def test_warning_label_contrast_native_theme(qtbot: Any) -> None:
     assert label_contrast(panel.warnings_label) >= TEXT_CONTRAST_MINIMUM
 
 
-def test_warning_label_follows_a_dark_theme_sheet(qtbot: Any, dark_app_sheet: None) -> None:
+def test_warning_label_follows_dark_theme(qtbot: Any, dark_app_sheet: None) -> None:
     """Under a dark theme sheet the warnings label switches amber and keeps 4.5:1."""
     repository = Repository(DatabaseManager(":memory:"))
     panel = DetailPanel(repository, ReviewService(repository))
@@ -106,7 +106,7 @@ def test_spectrum_bands_graphic_contrast(band: str) -> None:
     assert contrast_ratio(blend_over(color, background), background) >= GRAPHIC_CONTRAST_MINIMUM
 
 
-def test_legend_names_bands_in_zoom_only(qtbot: Any) -> None:
+def test_legend_names_bands_zoom_only(qtbot: Any) -> None:
     """The zoom view shows a legend that names every band. The overview hides it."""
     player = AudioPreviewWidget()
     qtbot.addWidget(player)

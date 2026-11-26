@@ -60,7 +60,7 @@ def riff_chunk_ids(data: bytes) -> list[bytes]:
     return ids
 
 
-def test_untagged_mp3_gains_tag_before_audio() -> None:
+def test_untagged_mp3_gains_leading_tag() -> None:
     """Writing a tag to a bare MP3 prepends it and keeps every audio byte."""
     assert read_mp3_tag(MP3_AUDIO) is None
     written = write_mp3_tag(MP3_AUDIO, titled("New"))
@@ -68,7 +68,7 @@ def test_untagged_mp3_gains_tag_before_audio() -> None:
     assert title_of(read_mp3_tag(written)) == ["New"]
 
 
-def test_mp3_smaller_tag_reuses_the_old_space() -> None:
+def test_mp3_smaller_tag_reuses_space() -> None:
     """A tag that fits in the old tag's bytes keeps the file size, so the audio does not move."""
     source = TITLE_TAG + MP3_AUDIO
     written = write_mp3_tag(source, titled("New"))
@@ -78,7 +78,7 @@ def test_mp3_smaller_tag_reuses_the_old_space() -> None:
     assert title_of(read_mp3_tag(written)) == ["New"]
 
 
-def test_mp3_larger_tag_moves_the_audio_intact() -> None:
+def test_mp3_larger_tag_moves_audio() -> None:
     """A tag that outgrows the old space shifts the audio without changing it."""
     source = TITLE_TAG + MP3_AUDIO
     written = write_mp3_tag(source, titled("A much longer title " * 20))
@@ -86,13 +86,13 @@ def test_mp3_larger_tag_moves_the_audio_intact() -> None:
     assert title_of(read_mp3_tag(written)) == ["A much longer title " * 20]
 
 
-def test_mp3_keeps_a_trailing_id3v1_tag() -> None:
+def test_mp3_keeps_trailing_id3v1_tag() -> None:
     """An ID3v1 tag at the end of the file stays byte for byte."""
     written = write_mp3_tag(TITLE_TAG + MP3_AUDIO + ID3V1_TAG, titled("New"))
     assert written.endswith(MP3_AUDIO + ID3V1_TAG)
 
 
-def test_mp3_v24_footer_counts_toward_the_audio_offset() -> None:
+def test_v24_footer_counts_toward_offset() -> None:
     """A v2.4 tag with a footer ends after the footer, where the audio starts."""
     frames = v24_frame("TIT2", b"\x03Footer\x00")
     footer = b"3DI\x04\x00\x10" + synchsafe(len(frames))
@@ -101,7 +101,7 @@ def test_mp3_v24_footer_counts_toward_the_audio_offset() -> None:
     assert title_of(read_mp3_tag(source)) == ["Footer"]
 
 
-def test_mp3_stacked_tags_collapse_into_one() -> None:
+def test_mp3_stacked_tags_become_one() -> None:
     """Two leading tags in a row are both replaced, so the audio follows a single tag."""
     second = tag_bytes(3, v23_frame("TIT2", b"\x00Second"))
     written = write_mp3_tag(TITLE_TAG + second + MP3_AUDIO, titled("New"))
@@ -110,7 +110,7 @@ def test_mp3_stacked_tags_collapse_into_one() -> None:
     assert written[:offset].count(b"ID3") == 1
 
 
-def test_wav_gains_id3_chunk_and_riff_size() -> None:
+def test_wav_added_id3_resizes_riff() -> None:
     """Writing to a WAV with no tag appends an id3 chunk and updates the RIFF size."""
     source = basic_wav()
     assert read_wav_tag(source) is None
@@ -122,7 +122,7 @@ def test_wav_gains_id3_chunk_and_riff_size() -> None:
 
 
 @pytest.mark.parametrize("chunk_id", [b"id3 ", b"ID3 "])
-def test_wav_replaces_an_existing_id3_chunk_in_place(chunk_id: bytes) -> None:
+def test_wav_replaces_existing_id3_chunk(chunk_id: bytes) -> None:
     """Either id3 chunk spelling is read and replaced where it was, and other chunks stay."""
     list_chunk = riff_chunk(b"LIST", b"INFOINAM\x05\x00\x00\x00Odd!\x00")
     source = basic_wav(riff_chunk(chunk_id, TITLE_TAG), list_chunk)
@@ -133,14 +133,14 @@ def test_wav_replaces_an_existing_id3_chunk_in_place(chunk_id: bytes) -> None:
     assert title_of(read_wav_tag(written)) == ["New"]
 
 
-def test_wav_duplicate_id3_chunks_become_one() -> None:
+def test_wav_duplicate_id3_chunks_merge() -> None:
     """A WAV with two id3 chunks keeps only the first position after a write."""
     source = basic_wav(riff_chunk(b"id3 ", TITLE_TAG), riff_chunk(b"ID3 ", TITLE_TAG))
     written = write_wav_tag(source, titled("New"))
     assert riff_chunk_ids(written) == [b"fmt ", b"data", b"id3 "]
 
 
-def test_wav_chunk_before_data_keeps_samples() -> None:
+def test_wav_early_chunk_keeps_samples() -> None:
     """A smaller tag in an id3 chunk ahead of the data chunk keeps the sample offset unchanged."""
     source = wav_file(
         riff_chunk(b"fmt ", WAV_FMT_BODY),
@@ -153,7 +153,7 @@ def test_wav_chunk_before_data_keeps_samples() -> None:
 
 
 @pytest.mark.parametrize("form_type", [b"AIFF", b"AIFC"])
-def test_aiff_reads_and_replaces_the_id3_chunk(form_type: bytes) -> None:
+def test_aiff_reads_replaces_id3_chunk(form_type: bytes) -> None:
     """AIFF and AIFC files read and replace a big-endian ID3 chunk and update the FORM size."""
     source = basic_aiff(iff_chunk(b"ID3 ", TITLE_TAG), form_type=form_type)
     assert title_of(read_aiff_tag(source)) == ["Old Title"]
@@ -164,7 +164,7 @@ def test_aiff_reads_and_replaces_the_id3_chunk(form_type: bytes) -> None:
     assert title_of(read_aiff_tag(written)) == ["New"]
 
 
-def test_aiff_without_tag_gains_an_id3_chunk() -> None:
+def test_untagged_aiff_gains_id3_chunk() -> None:
     """Writing to an AIFF with no tag appends an ID3 chunk after the existing chunks."""
     source = basic_aiff()
     assert read_aiff_tag(source) is None
@@ -184,13 +184,13 @@ def test_aiff_without_tag_gains_an_id3_chunk() -> None:
         ),
     ],
 )
-def test_wrong_container_or_overrunning_chunk_raises(data: bytes) -> None:
+def test_wrong_container_or_overrun_raises(data: bytes) -> None:
     """A RIFF that is not WAVE, a FORM that is not AIFF, or a chunk past the end raises."""
     reader = read_aiff_tag if data.startswith(b"FORM") else read_wav_tag
     with pytest.raises(AudioContainerError):
         reader(data)
 
 
-def test_container_error_is_a_value_error() -> None:
+def test_container_error_is_value_error() -> None:
     """Callers that catch ValueError also catch container damage."""
     assert issubclass(AudioContainerError, ValueError)

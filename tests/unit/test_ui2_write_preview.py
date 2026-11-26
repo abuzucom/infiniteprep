@@ -107,7 +107,7 @@ def test_diff_lists_only_changed_fields() -> None:
     assert plan_field_diff(plan, str.upper) == [("ARTIST", "Old", "New"), ("MIX_NAME", "", "Dub")]
 
 
-def test_dialog_rows_expand_to_the_diff(qtbot: Any, tmp_path: Path) -> None:
+def test_dialog_rows_expand_to_diff(qtbot: Any, tmp_path: Path) -> None:
     """Each file row holds one child per changed field, and the button names the count."""
     repository = Repository(DatabaseManager(":memory:"))
     tag_adapter = MetadataTagAdapter()

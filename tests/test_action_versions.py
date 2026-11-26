@@ -56,12 +56,12 @@ class ActionVersionCheckerTest(unittest.TestCase):
         fields.update(overrides)
         return self.checker.Pin(**fields)
 
-    def test_a_pin_names_the_release_its_commit_carries(self):
+    def test_pin_names_release_commit_carries(self):
         pins = [self.pin(comment="# v7.0.1")]
         tags = {"actions/checkout": {"a" * 40: ["v7.0.1", "v7"]}}
         self.assertEqual(self.checker.find_violations(pins, tags, {}), [])
 
-    def test_a_comment_that_names_another_release_fails(self):
+    def test_comment_naming_other_release_fails(self):
         pins = [self.pin(comment="# v9.9.9")]
         tags = {"actions/checkout": {"a" * 40: ["v7.0.1", "v7"]}}
         violations = self.checker.find_violations(pins, tags, {})
@@ -69,16 +69,16 @@ class ActionVersionCheckerTest(unittest.TestCase):
         self.assertIn("9.9.9", violations[0])
         self.assertIn("7.0.1", violations[0])
 
-    def test_a_pin_without_a_release_fails(self):
+    def test_pin_without_release_fails(self):
         pins = [self.pin()]
         self.assertEqual(len(self.checker.find_violations(pins, {}, {})), 1)
 
-    def test_a_pin_without_a_comment_passes(self):
+    def test_pin_without_comment_passes(self):
         pins = [self.pin()]
         tags = {"actions/checkout": {"a" * 40: ["v7.0.1"]}}
         self.assertEqual(self.checker.find_violations(pins, tags, {}), [])
 
-    def test_moving_major_tag_is_not_a_release(self):
+    def test_moving_major_tag_not_release(self):
         pins = [self.pin(comment="# v7")]
         tags = {"actions/checkout": {"a" * 40: ["v7"]}}
         self.assertEqual(len(self.checker.find_violations(pins, tags, {})), 1)
@@ -111,7 +111,7 @@ class ActionVersionCheckerTest(unittest.TestCase):
         self.assertEqual(len(violations), 1)
         self.assertIn("3.5.0", violations[0])
 
-    def test_a_reusable_workflow_without_a_release_fails(self):
+    def test_reusable_workflow_without_release_fails(self):
         pins = [
             self.pin(
                 owner="abuzucom",
@@ -132,26 +132,26 @@ class ActionVersionCheckerTest(unittest.TestCase):
             ("abuzucom", "foucault", "/.github/workflows/security-review.yml"),
         )
 
-    def test_an_action_reference_parses_without_a_workflow(self):
+    def test_action_reference_parses_without_workflow(self):
         parsed = self.checker.parse_reference("actions/checkout@" + "a" * 40)
         self.assertEqual(parsed, ("actions", "checkout", ""))
 
-    def test_sub_path_action_parses_to_repo(self):
+    def test_subfolder_action_parses_to_repo(self):
         """An action in a repository subfolder pins the tags of that repository."""
         parsed = self.checker.parse_reference("github/codeql-action/upload-sarif@" + "c" * 40)
         self.assertEqual(parsed, ("github", "codeql-action", ""))
 
-    def test_a_reference_with_an_empty_part_is_not_a_pin(self):
+    def test_empty_part_reference_not_pin(self):
         """A malformed owner or repository part never becomes a pin."""
         self.assertIsNone(self.checker.parse_reference("github//upload-sarif@" + "c" * 40))
 
-    def test_a_local_reference_is_not_a_pin(self):
+    def test_local_reference_not_pin(self):
         self.assertIsNone(self.checker.parse_reference("./.github/workflows/agents-compliance.yml"))
 
-    def test_a_short_revision_is_not_a_pin(self):
+    def test_short_revision_not_pin(self):
         self.assertIsNone(self.checker.parse_reference("actions/checkout@v4"))
 
-    def test_every_owned_workflow_pin_names_a_release(self):
+    def test_owned_workflow_pins_name_release(self):
         """Every external action line in an owned workflow is a pin with a version comment.
 
         The raw line count catches a reference the parser skips. The claimed version

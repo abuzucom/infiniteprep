@@ -90,7 +90,7 @@ class MissingVersionFileTest(unittest.TestCase):
                 self.assertIn(missing, problems[0])
                 self.assertIn("missing", problems[0])
 
-    def test_malformed_pyproject_gives_a_problem_line(self) -> None:
+    def test_malformed_pyproject_gives_problem_line(self) -> None:
         """A pyproject.toml that does not parse states no version."""
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -103,7 +103,7 @@ class MissingVersionFileTest(unittest.TestCase):
 class EmptyVersionTest(unittest.TestCase):
     """An empty version never matches a tag."""
 
-    def test_bare_tag_fails_without_file_version(self) -> None:
+    def test_bare_tag_fails_without_versions(self) -> None:
         """The tag v fails even when all three files state no version."""
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -113,7 +113,7 @@ class EmptyVersionTest(unittest.TestCase):
         self.assertTrue(any("names no version" in problem for problem in problems), problems)
         self.assertEqual(sum("states no version" in problem for problem in problems), 3, problems)
 
-    def test_bare_prefix_tag_fails_from_the_command_line(self) -> None:
+    def test_command_rejects_bare_prefix_tag(self) -> None:
         """check-tag v returns the failure code."""
         exit_code, output = _run_main(["check-tag", "v"])
         self.assertEqual(exit_code, RELEASE.CHECK_FAILED)
@@ -123,7 +123,7 @@ class EmptyVersionTest(unittest.TestCase):
 class ChangelogEndTest(unittest.TestCase):
     """A heading on the last line without a newline does not crash."""
 
-    def test_last_heading_no_newline_empty_body(self) -> None:
+    def test_unterminated_last_heading_empty_body(self) -> None:
         """The section body is empty instead of raising ValueError."""
         changelog = f"# Changelog\n\n## [{VERSION}] (2026-11-09)"
         self.assertEqual(RELEASE.extract_changelog_section(VERSION, changelog).strip(), "")
@@ -180,7 +180,7 @@ class AssetNameTest(unittest.TestCase):
         self.assertEqual(len(problems), 1, problems)
         self.assertIn("stray.txt", problems[0])
 
-    def test_expected_package_and_bundle_names_pass(self) -> None:
+    def test_expected_package_bundle_names_pass(self) -> None:
         """The packages and the matching Sigstore bundles pass (D328)."""
         with tempfile.TemporaryDirectory() as folder:
             _make_assets(Path(folder), PACKAGES_AND_BUNDLES)
@@ -224,7 +224,7 @@ class ReleaseJobReviewFixTest(unittest.TestCase):
         self.assertIn(call, download)
         self.assertLess(download.rindex("gh run download"), download.index(call))
 
-    def test_upload_uses_a_fresh_folder_per_asset(self) -> None:
+    def test_upload_fresh_folder_per_asset(self) -> None:
         """Each existing asset downloads into a new mktemp folder."""
         upload = self._run("Upload to draft release")
         self.assertNotIn("rm -rf", upload)

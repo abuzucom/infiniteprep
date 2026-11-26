@@ -48,7 +48,7 @@ def library(tmp_path: Path) -> Path:
     return db_path
 
 
-def test_backup_holds_its_record_and_no_sidecar_exists(library: Path) -> None:
+def test_backup_holds_record_without_sidecar(library: Path) -> None:
     """The record travels inside the backup file. No second file needs publishing."""
     expected_counts = dict.fromkeys(MIGRATIONS[0].row_count_queries, 0)
     expected_counts["source_groups"] = 1
@@ -58,7 +58,7 @@ def test_backup_holds_its_record_and_no_sidecar_exists(library: Path) -> None:
     assert not sidecar_path_for(library).exists()
 
 
-def test_restored_library_carries_no_record_table(library: Path) -> None:
+def test_restored_library_lacks_record_table(library: Path) -> None:
     """Restore removes the record from the copy it installs."""
     with closing(sqlite3.connect(library)) as conn, conn:
         conn.execute(f"PRAGMA user_version = {LATEST_VERSION + 1}")

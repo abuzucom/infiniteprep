@@ -150,7 +150,7 @@ def test_table_refresh_queries_stay_flat(
     assert large == small
 
 
-def test_table_refresh_still_shows_approved_values(
+def test_table_refresh_shows_approved_values(
     qtbot: Any, tmp_path: Path, settings: CountingSettingsManager
 ) -> None:
     """The bulk reads give each row its own approved values."""
@@ -165,7 +165,7 @@ def test_table_refresh_still_shows_approved_values(
     assert window.file_table.rowCount() == SMALL_LIBRARY
 
 
-def test_bulk_readers_match_the_per_file_readers(tmp_path: Path) -> None:
+def test_bulk_readers_match_per_file(tmp_path: Path) -> None:
     """Each bulk reader returns what the per-file reader returns for every file."""
     repo, _importer, file_ids = build_library(tmp_path, SMALL_LIBRARY)
 
@@ -219,7 +219,7 @@ def test_interrupted_check_reads_in_progress(tmp_path: Path) -> None:
     assert [record.operation_id for record in pending] == ["op-1"]
 
 
-def test_a_column_drag_saves_the_layout_once(
+def test_column_drag_saves_layout_once(
     qtbot: Any, tmp_path: Path, settings: CountingSettingsManager
 ) -> None:
     """Many resize steps in a row write the settings file one time."""
@@ -237,7 +237,7 @@ def test_a_column_drag_saves_the_layout_once(
     assert settings.save_count == 1
 
 
-def test_closing_the_window_saves_a_pending_layout(
+def test_window_close_saves_pending_layout(
     qtbot: Any, tmp_path: Path, settings: CountingSettingsManager
 ) -> None:
     """A resize right before close still reaches the settings file."""
@@ -281,7 +281,7 @@ def test_transcode_cancel_skips_next_file(tmp_path: Path) -> None:
     assert seen == [1]
 
 
-def test_confirmed_transcode_runs_as_a_queued_batch(
+def test_confirmed_transcode_runs_queued_batch(
     qtbot: Any,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

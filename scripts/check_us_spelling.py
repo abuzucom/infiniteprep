@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """Warn about British spellings in the given files.
 
-Portable and path-generic (unlike lint_style.py, which is hardcoded to
-AGENTS.md in this repo): copy this single file into any repo and point it
-at that repo's own source globs and CI. Always exits 0, even when it finds
-violations; this check is advisory, not blocking.
+Works on any path (unlike lint_style.py, hardcoded to AGENTS.md in this
+repo): copy this file with scripts/prose_policy.py and
+scripts/handoff_policy.py into any repo and point it at that repo's own
+source globs and CI. Always exits 0, even when it finds violations; this
+check is advisory, not blocking.
 """
 import re
 import sys
 from pathlib import Path
 
-INLINE_CODE = re.compile(r"`[^`]*`")
+try:
+    from scripts.prose_policy import mask_markdown_code
+except ModuleNotFoundError:
+    from prose_policy import mask_markdown_code
 
 # -our -> -or
 # -ise/-isation -> -ize/-ization
@@ -20,7 +24,7 @@ INLINE_CODE = re.compile(r"`[^`]*`")
 # miscellaneous, plus contested pairs the user chose to enforce
 # (theatre/theater, catalogue/catalog, dialogue/dialog, analogue/analog)
 #
-# Deliberately excluded as ambiguous or dual-valid in American English:
+# Excluded as ambiguous, or valid in both spellings in American English:
 # glamour, burnt, learnt, disc, grey/gray, judgement/judgment,
 # acknowledgement/acknowledgment, moustache/mustache, and the whole class
 # of unstressed-final-syllable "-el"/"-ol" verb forms (cancelled/canceled,
@@ -64,21 +68,18 @@ BRITISH_PATTERN = re.compile(
 
 
 def strip_code(line: str) -> str:
-    """Remove inline code spans so illustrative Bad/Good examples are ignored."""
-    return INLINE_CODE.sub("", line)
+    """Mask inline code spans so illustrative Bad/Good examples are ignored."""
+    return mask_markdown_code(line)
 
 
 def find_violations(text: str, path: str) -> list[str]:
-    """Return one warning per British spelling found in the prose of `text`."""
+    """Return one warning per British spelling found in the prose of `text`.
+
+    The shared masker blanks backtick and tilde fences and inline code, so
+    line numbers stay aligned with the source.
+    """
     violations = []
-    in_fence = False
-    for number, raw in enumerate(text.splitlines(), start=1):
-        if raw.lstrip().startswith("```"):
-            in_fence = not in_fence
-            continue
-        if in_fence:
-            continue
-        prose = strip_code(raw)
+    for number, prose in enumerate(mask_markdown_code(text).splitlines(), start=1):
         for match in BRITISH_PATTERN.finditer(prose):
             word = match.group(1).lower()
             violations.append(

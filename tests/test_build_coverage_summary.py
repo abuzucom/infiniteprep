@@ -61,13 +61,13 @@ REPORT = """<?xml version="1.0" ?>
 class BuildCoverageSummaryTest(unittest.TestCase):
     """Cover the summary document built from one coverage report."""
 
-    def test_the_total_uses_the_lines_and_the_branches(self) -> None:
+    def test_total_uses_lines_and_branches(self) -> None:
         """The total holds the covered lines and branches over the measured ones."""
         summary = builder.read_summary(self.write_report(REPORT))
 
         self.assertEqual(summary["total"], 66.7)
 
-    def test_the_files_carry_the_path_and_the_percent(self) -> None:
+    def test_files_carry_path_and_percent(self) -> None:
         """Every file record holds its path and its percent."""
         summary = builder.read_summary(self.write_report(REPORT))
 
@@ -75,7 +75,7 @@ class BuildCoverageSummaryTest(unittest.TestCase):
         self.assertEqual(files[0], {"path": "src/a.py", "percent": 50.0})
         self.assertEqual(files[1], {"path": "src/b.py", "percent": 100.0})
 
-    def test_the_least_covered_file_comes_first(self) -> None:
+    def test_least_covered_file_comes_first(self) -> None:
         """The files sort by the percent and then by the path.
 
         Input order, path order, and percent order all differ, so only the
@@ -109,7 +109,7 @@ class BuildCoverageSummaryTest(unittest.TestCase):
 
         self.assertEqual(summary["files"][0]["path"], "src/infiniteprep/ui/theme.py")
 
-    def test_the_source_prefix_joins_a_relative_path(self) -> None:
+    def test_source_prefix_joins_relative_path(self) -> None:
         """A path relative to the measured source gains the prefix."""
         report = (
             '<coverage lines-covered="1" lines-valid="2" branches-covered="0" '

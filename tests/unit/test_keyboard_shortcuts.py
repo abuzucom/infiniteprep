@@ -77,7 +77,7 @@ def test_bar_spoken_names(window: MainWindow) -> None:
     assert names == list(EXPECTED_BAR_NAMES)
 
 
-def test_toolbar_picker_labels_move_focus_to_their_pickers(window: MainWindow) -> None:
+def test_picker_labels_focus_their_pickers(window: MainWindow) -> None:
     """The Key Notation and Theme labels carry an Alt key that focuses their picker."""
     buddies = {
         shown_text(label.text()).strip(): (mnemonic_key(label.text()), label.buddy())
@@ -88,7 +88,7 @@ def test_toolbar_picker_labels_move_focus_to_their_pickers(window: MainWindow) -
     assert buddies["Key format:"] == ("K", window.key_notation_combo)
 
 
-def test_import_shortcut_opens_the_folder_picker(
+def test_import_shortcut_opens_folder_picker(
     window: MainWindow, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The Open key sequence asks for a folder to import."""
@@ -121,7 +121,7 @@ def test_settings_shortcut_opens_settings(qtbot: Any, monkeypatch: pytest.Monkey
     assert opened == [True]
 
 
-def test_play_pause_shortcuts_press_the_player_button(window: MainWindow) -> None:
+def test_play_pause_shortcuts_press_button(window: MainWindow) -> None:
     """Ctrl+P and the media Play/Pause key both toggle the preview player."""
     play_button = window.detail_panel.audio_player.play_btn
 
@@ -134,7 +134,7 @@ def test_play_pause_shortcuts_press_the_player_button(window: MainWindow) -> Non
     assert (after_first, play_button.text()) == ("Pause", "Play")
 
 
-def test_play_pause_shortcut_is_named_in_the_button_tooltip(window: MainWindow) -> None:
+def test_play_pause_tooltip_names_shortcut(window: MainWindow) -> None:
     """The player button tooltip tells keyboard users the shortcut in platform notation."""
     play_button = window.detail_panel.audio_player.play_btn
     native = QKeySequence("Ctrl+P").toString(QKeySequence.SequenceFormat.NativeText)

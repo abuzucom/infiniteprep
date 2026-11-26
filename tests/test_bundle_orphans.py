@@ -39,7 +39,7 @@ class OrphanedQtFileTest(unittest.TestCase):
             with self.subTest(platform=platform, destination=destination):
                 self.assertFalse(FILTERS.is_orphaned_qt_component(destination, platform))
 
-    def test_linux_drops_pdf_eglfs_and_unused_bindings(self) -> None:
+    def test_linux_drops_pdf_eglfs_bindings(self) -> None:
         """QtPdf, its image plugin, the EGLFS pair, and two unused bindings go."""
         self._assert_dropped(
             "linux",
@@ -53,7 +53,7 @@ class OrphanedQtFileTest(unittest.TestCase):
             ),
         )
 
-    def test_linux_keeps_playback_and_qt_files(self) -> None:
+    def test_linux_keeps_playback_qt_files(self) -> None:
         """The FFmpeg plugin loads QML and Quick on Linux, and QtMultimedia loads Concurrent."""
         self._assert_kept(
             "linux",
@@ -76,7 +76,7 @@ class OrphanedQtFileTest(unittest.TestCase):
         """A sys.platform value such as linux2 uses the Linux list."""
         self.assertTrue(FILTERS.is_orphaned_qt_component("libQt6Pdf.so.6", "linux2"))
 
-    def test_macos_drops_pdf_qml_and_quick_frameworks(self) -> None:
+    def test_macos_drops_pdf_qml_quick(self) -> None:
         """Framework binaries, their resources, top-level symlinks, and the PDF plugin go."""
         self._assert_dropped(
             "darwin",
@@ -92,7 +92,7 @@ class OrphanedQtFileTest(unittest.TestCase):
             ),
         )
 
-    def test_macos_keeps_the_frameworks_the_app_loads(self) -> None:
+    def test_macos_keeps_loaded_frameworks(self) -> None:
         """Multimedia, Concurrent, Svg, and the FFmpeg plugin stay on macOS."""
         self._assert_kept(
             "darwin",
@@ -106,7 +106,7 @@ class OrphanedQtFileTest(unittest.TestCase):
             ),
         )
 
-    def test_windows_drops_pdf_qml_and_quick(self) -> None:
+    def test_windows_drops_pdf_qml_quick(self) -> None:
         """The Windows trial drops QtPdf, its plugin, QML, and Quick."""
         self._assert_dropped(
             "win32",
@@ -121,7 +121,7 @@ class OrphanedQtFileTest(unittest.TestCase):
             ),
         )
 
-    def test_windows_keeps_multimedia_and_its_plugin(self) -> None:
+    def test_windows_keeps_multimedia_plugin(self) -> None:
         """QtMultimedia, its FFmpeg plugin, and the QtQuick-named widgets library stay."""
         self._assert_kept(
             "win32",
@@ -134,14 +134,14 @@ class OrphanedQtFileTest(unittest.TestCase):
             ),
         )
 
-    def test_one_platform_list_never_applies_to_another(self) -> None:
+    def test_platform_list_never_crosses_platforms(self) -> None:
         """Each list applies to its own platform only, and an unknown platform keeps all."""
         self.assertFalse(FILTERS.is_orphaned_qt_component("libQt6Quick.so.6", "linux"))
         self.assertFalse(FILTERS.is_orphaned_qt_component("QtQuick", "win32"))
         self.assertFalse(FILTERS.is_orphaned_qt_component("PySide6\\Qt6Quick.dll", "darwin"))
         self.assertFalse(FILTERS.is_orphaned_qt_component("libQt6Pdf.so.6", "freebsd14"))
 
-    def test_drop_entries_removes_orphans_and_reports_them(self) -> None:
+    def test_drop_entries_remove_report_orphans(self) -> None:
         """drop_entries with the orphan filter keeps the rest in order."""
         core = ("PySide6/Qt/lib/libQt6Core.so.6", "/build/core", "BINARY")
         pdf = ("PySide6/Qt/lib/libQt6Pdf.so.6", "/build/pdf", "BINARY")
@@ -175,7 +175,7 @@ class SpecOrphanWiringTest(unittest.TestCase):
         self.assertLess(datas, prune)
         self.assertIn("is_orphaned_qt_component(destination, sys.platform)", self.spec)
 
-    def test_setuptools_and_pkg_resources_are_excluded(self) -> None:
+    def test_setuptools_pkg_resources_are_excluded(self) -> None:
         """The Analysis keeps the readline exclusion and adds setuptools and pkg_resources."""
         self.assertIn('UNUSED_PYTHON_PACKAGES = ["setuptools", "pkg_resources"]', self.spec)
         self.assertIn('excludes=["readline"] + UNUSED_PYTHON_PACKAGES', self.spec)

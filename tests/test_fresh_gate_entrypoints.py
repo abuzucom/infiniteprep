@@ -72,7 +72,7 @@ class FreshGateEntrypointTest(unittest.TestCase):
                 decision = output["hookSpecificOutput"]["permissionDecision"]
                 self.assertEqual(decision, "deny")
 
-    def test_github_routing_through_fresh_bash_processes(self):
+    def test_github_routing_fresh_bash(self):
         for command, expected_decision, expected_exit in GITHUB_CASES:
             with self.subTest(command=command):
                 payload = {

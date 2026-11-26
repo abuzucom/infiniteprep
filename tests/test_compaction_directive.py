@@ -72,7 +72,7 @@ class ClaudeCompactionDirectiveTest(unittest.TestCase):
         self.assertIn("Re-read the canonical AGENTS.md.", context)
         self.assertNotIn("reproduced below", context)
 
-    def test_non_compact_sessions_emit_no_directive(self):
+    def test_non_compact_no_directive(self):
         for source in ("startup", "resume", "clear", "fork"):
             with self.subTest(source=source):
                 context = self.run_claude(source)
@@ -97,7 +97,7 @@ class CodexCompactionDirectiveTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
 
-    def test_compact_session_emits_directive_with_complete_policy(self):
+    def test_compact_session_directive(self):
         context = self.run_codex("compact")
         self.assertTrue(context.startswith("COMPACTION EVENT DETECTED"))
         self.assertTrue(context.endswith(self.complete_policy))
@@ -105,7 +105,7 @@ class CodexCompactionDirectiveTest(unittest.TestCase):
         self.assertIn("Re-read the canonical AGENTS.md.", context)
         self.assertNotIn("reproduced below", context)
 
-    def test_non_compact_sessions_emit_no_directive(self):
+    def test_non_compact_no_directive(self):
         for source in ("startup", "resume", "clear"):
             with self.subTest(source=source):
                 context = self.run_codex(source)

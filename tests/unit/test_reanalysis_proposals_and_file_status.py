@@ -109,7 +109,7 @@ class FileStatusTests(LibraryTestCase):
             error_message=OLD_ERROR,
         )
 
-    def test_clear_error_removes_the_stored_message(self) -> None:
+    def test_clear_error_removes_stored_message(self) -> None:
         """clear_error drops the message and leaves the unnamed review status as it was."""
         self.mark_failed()
 
@@ -123,7 +123,7 @@ class FileStatusTests(LibraryTestCase):
         self.assertEqual(asset.task_status, TaskStatus.COMPLETED)
         self.assertEqual(asset.review_status, ReviewStatus.ERROR)
 
-    def test_update_without_clear_error_keeps_the_message(self) -> None:
+    def test_update_without_clear_keeps_message(self) -> None:
         """A task status update without clear_error keeps the stored error message."""
         self.mark_failed()
 
@@ -134,7 +134,7 @@ class FileStatusTests(LibraryTestCase):
         self.assertEqual(asset.error_message, OLD_ERROR)
         self.assertEqual(asset.review_status, ReviewStatus.ERROR)
 
-    def test_successful_processing_clears_the_old_error(self) -> None:
+    def test_successful_processing_clears_old_error(self) -> None:
         """A successful processing run completes the file and clears its old error."""
         self.mark_failed()
 

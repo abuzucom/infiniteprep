@@ -154,7 +154,7 @@ def test_overview_visible_without_spectrum(qtbot: Any) -> None:
     assert widget.status_label.text() == "Playback failed"
 
 
-def test_load_file_skips_ui_thread_scan(qtbot: Any, tmp_path: Path, monkeypatch: Any) -> None:
+def test_load_skips_ui_thread_scan(qtbot: Any, tmp_path: Path, monkeypatch: Any) -> None:
     """Loading a selected track displays fallback bars until the worker completes."""
     path = create_wav_fixture(tmp_path / "track.wav", duration_sec=TRACK_DURATION_SEC)
     widget = AudioPreviewWidget()
@@ -171,7 +171,7 @@ def test_load_file_skips_ui_thread_scan(qtbot: Any, tmp_path: Path, monkeypatch:
     assert widget.waveform_bar.isVisible()
 
 
-def test_zero_duration_spectrum_can_render_in_zoom(qtbot: Any) -> None:
+def test_empty_analysis_renders_zoom_safely(qtbot: Any) -> None:
     """An empty analysis keeps the zoom paint path safe with a fallback duration."""
     widget = AudioPreviewWidget()
     qtbot.addWidget(widget)
@@ -193,7 +193,7 @@ def test_zero_duration_spectrum_can_render_in_zoom(qtbot: Any) -> None:
     assert widget.waveform_bar.duration_sec == ZERO_DURATION_FALLBACK_SECONDS
 
 
-def test_zero_duration_zoom_fallback_paths_are_safe(qtbot: Any) -> None:
+def test_zero_duration_zoom_fallbacks_safe(qtbot: Any) -> None:
     """Zoom overview and capped fallback painting tolerate an unknown duration."""
     widget = AudioPreviewWidget()
     qtbot.addWidget(widget)

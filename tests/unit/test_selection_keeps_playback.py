@@ -137,7 +137,7 @@ def drop_event(file_id: str) -> tuple[QDropEvent, QMimeData]:
     return event, mime_data
 
 
-def test_a_row_click_keeps_the_playing_track(library: Library) -> None:
+def test_row_click_keeps_playing_track(library: Library) -> None:
     """A selection shows another file and leaves the playing track untouched."""
     panel = library.window.detail_panel
     panel.load_and_play_file_asset(library.first_id)
@@ -151,7 +151,7 @@ def test_a_row_click_keeps_the_playing_track(library: Library) -> None:
     assert panel.audio_player.play_btn.text() == "Pause"
 
 
-def test_the_loaded_label_names_the_loaded_file(library: Library) -> None:
+def test_loaded_label_names_loaded_file(library: Library) -> None:
     """The label names the track the player holds and not the selected file."""
     panel = library.window.detail_panel
     panel.load_and_play_file_asset(library.first_id)
@@ -183,7 +183,7 @@ def test_play_selected_plays_selection(library: Library) -> None:
     assert panel.audio_player.play_btn.text() == "Pause"
 
 
-def test_a_cleared_selection_empties_the_detail_panel(library: Library) -> None:
+def test_cleared_selection_empties_detail_panel(library: Library) -> None:
     """Clearing the table selection leaves no file in the panel and no play button."""
     panel = library.window.detail_panel
     select_row(library, FIRST_NAME)
@@ -196,7 +196,7 @@ def test_a_cleared_selection_empties_the_detail_panel(library: Library) -> None:
     assert FIRST_NAME not in panel.header_label.text()
 
 
-def test_ctrl_enter_after_clear_loads_nothing(library: Library, qtbot: Any) -> None:
+def test_cleared_ctrl_enter_loads_nothing(library: Library, qtbot: Any) -> None:
     """Ctrl+Enter loads no file when the table has no selected row."""
     panel = library.window.detail_panel
     select_row(library, FIRST_NAME)
@@ -247,7 +247,7 @@ def test_play_button_loads_new_selection(library: Library) -> None:
     assert panel.audio_player.play_btn.text() == "Pause"
 
 
-def test_ctrl_enter_loads_and_plays_the_selection(library: Library, qtbot: Any) -> None:
+def test_ctrl_enter_loads_plays_selection(library: Library, qtbot: Any) -> None:
     """Ctrl+Enter on the library table loads and plays the selected file."""
     panel = library.window.detail_panel
     select_row(library, SECOND_NAME)
@@ -286,9 +286,7 @@ def test_context_menu_play_plays_row(library: Library, monkeypatch: pytest.Monke
     assert panel.audio_player.play_btn.text() == "Pause"
 
 
-def test_a_context_menu_outside_a_row_opens_nothing(
-    library: Library, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_menu_outside_row_opens_nothing(library: Library, monkeypatch: pytest.MonkeyPatch) -> None:
     """A right-click on empty table space opens no menu and plays nothing."""
     panel = library.window.detail_panel
     menus: list[QMenu] = []
@@ -305,7 +303,7 @@ def test_a_context_menu_outside_a_row_opens_nothing(
     assert panel.audio_player.current_file_path is None
 
 
-def test_a_double_click_loads_and_plays_the_row(library: Library) -> None:
+def test_double_click_loads_plays_row(library: Library) -> None:
     """A double-click on a row loads and plays that file."""
     panel = library.window.detail_panel
 
@@ -382,7 +380,7 @@ def test_the_warning_names_both_tracks(library: Library) -> None:
     assert box.defaultButton().text() == "Cancel"
 
 
-def test_the_drag_carries_the_file_id(library: Library) -> None:
+def test_drag_carries_file_id(library: Library) -> None:
     """The drag payload holds the file ID of the dragged row."""
     select_row(library, SECOND_NAME)
 
@@ -393,7 +391,7 @@ def test_the_drag_carries_the_file_id(library: Library) -> None:
     assert bytes(mime_data.data(FILE_ID_MIME_TYPE)).decode("utf-8") == library.second_id
 
 
-def test_a_drop_from_outside_the_app_is_ignored(library: Library) -> None:
+def test_external_drop_is_ignored(library: Library) -> None:
     """A file from the file manager carries no file ID and changes nothing."""
     panel = library.window.detail_panel
     external = QMimeData()

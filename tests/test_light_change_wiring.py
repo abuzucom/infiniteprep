@@ -37,7 +37,7 @@ CLASSIFYING_JOBS = (
     ("security-devops.yml", "msdo"),
     ("dependency-review.yml", "dependency-review"),
 )
-# The scan jobs classify in their own steps, so each keeps a single checkout.
+# Each scan job classifies in its own steps and keeps a single checkout.
 SCAN_JOBS = CLASSIFYING_JOBS[1:]
 ALWAYS_RUNNING_CI_JOBS = ("changes", "checks", "lint-and-style", "agents-lint")
 
@@ -97,18 +97,18 @@ class TestMatrixSkipTest(unittest.TestCase):
         """Parse the ci jobs once. No test changes the parsed data."""
         cls.jobs = load_jobs("ci.yml")
 
-    def test_changes_job_exports_the_light_flag(self) -> None:
+    def test_changes_job_exports_light_flag(self) -> None:
         """The job output reads the light flag of the classify step."""
         self.assertEqual(self.jobs["changes"]["outputs"], {"light": LIGHT_OUTPUT})
 
-    def test_test_matrix_runs_unless_the_class_is_light(self) -> None:
+    def test_test_matrix_runs_unless_light(self) -> None:
         """A failed or skipped changes job yields no flag, and the matrix runs."""
         job = self.jobs["test-matrix"]
         self.assertEqual(job["needs"], ["changes", "lint-and-style"])
         self.assertIn(NOT_CANCELLED, job["if"])
         self.assertIn(JOB_NOT_LIGHT, job["if"])
 
-    def test_test_matrix_still_requires_a_clean_lint(self) -> None:
+    def test_test_matrix_requires_clean_lint(self) -> None:
         """The status function replaces the implicit success check, so lint is explicit."""
         self.assertIn(LINT_SUCCEEDED, self.jobs["test-matrix"]["if"])
 
@@ -129,7 +129,7 @@ class ScanSkipTest(unittest.TestCase):
         """Parse each scan workflow once. No test changes the parsed data."""
         cls.jobs_by_workflow = load_jobs_by_workflow(SCAN_JOBS)
 
-    def test_scan_jobs_carry_no_job_condition(self) -> None:
+    def test_scan_jobs_carry_no_condition(self) -> None:
         """The job runs on every change, so its check always reports a result."""
         for workflow_name, job_name in SCAN_JOBS:
             with self.subTest(workflow=workflow_name):
@@ -137,7 +137,7 @@ class ScanSkipTest(unittest.TestCase):
                 self.assertNotIn("if", job)
                 self.assertNotIn("needs", job)
 
-    def test_crashed_classification_fails_the_scan_job(self) -> None:
+    def test_crashed_classification_fails_scan_job(self) -> None:
         """A crashed classify step stops the job with a failure, never with a silent skip."""
         for workflow_name, job_name in SCAN_JOBS:
             with self.subTest(workflow=workflow_name):

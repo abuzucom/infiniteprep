@@ -34,7 +34,7 @@ class BundleReuseHardeningTest(unittest.TestCase):
         """Parse the step script once."""
         cls.script = _load_save_step_script()
 
-    def test_script_starts_in_strict_shell_mode(self) -> None:
+    def test_script_starts_strict_shell_mode(self) -> None:
         """The first script line enables errexit, nounset, and pipefail."""
         self.assertEqual(self.script.splitlines()[0].strip(), STRICT_MODE)
 
@@ -42,7 +42,7 @@ class BundleReuseHardeningTest(unittest.TestCase):
         """No command hides its failure behind an unconditional success."""
         self.assertNotIn("|| true", self.script)
 
-    def test_reused_bundle_is_verified_before_the_copy(self) -> None:
+    def test_reused_bundle_verified_before_copy(self) -> None:
         """A downloaded bundle passes gh attestation verify before it replaces the fresh one."""
         download = self.script.index(DOWNLOAD_COMMAND)
         verify = self.script.index(VERIFY_COMMAND)

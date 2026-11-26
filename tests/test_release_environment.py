@@ -25,11 +25,11 @@ class ReleaseEnvironmentTest(unittest.TestCase):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text(encoding="utf-8"))
         cls.jobs = workflow["jobs"]
 
-    def test_release_job_uses_the_release_environment(self) -> None:
+    def test_release_job_uses_release_environment(self) -> None:
         """The write token reaches the release job only through the release environment."""
         self.assertEqual(self.jobs[RELEASE_JOB].get("environment"), RELEASE_ENVIRONMENT)
 
-    def test_no_other_job_declares_an_environment(self) -> None:
+    def test_no_other_job_declares_environment(self) -> None:
         """Only the release job waits on an environment."""
         for name, job in self.jobs.items():
             if name == RELEASE_JOB:

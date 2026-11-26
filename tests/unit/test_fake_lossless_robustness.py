@@ -75,7 +75,7 @@ def test_smoothing_keeps_flat_edges_flat() -> None:
     assert np.max(np.abs(smoothed - STOPBAND_DB)) < EDGE_LEVEL_TOLERANCE_DB
 
 
-def test_spectral_cutoff_ignores_the_nyquist_edge_bin() -> None:
+def test_spectral_cutoff_ignores_nyquist_bin() -> None:
     """A deep stopband near Nyquist yields the passband edge as the cutoff."""
     freqs = _profile_freqs()
     profile = np.where(freqs < PASSBAND_EDGE_HZ, 0.0, STOPBAND_DB)

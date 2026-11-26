@@ -28,7 +28,7 @@ def build_candidate(inspection: DriveInspection) -> TargetCandidate:
     return TargetCandidate(name=inspection.drive.name, inspection=inspection, error=None)
 
 
-def test_confirm_dialog_lists_the_fixed_disk_note(qtbot) -> None:
+def test_confirm_lists_fixed_disk_note(qtbot) -> None:
     """A fixed USB disk shows the note and stays confirmable."""
     dialog = open_confirm_dialog(qtbot, build_fixed_inspection())
 
@@ -37,14 +37,14 @@ def test_confirm_dialog_lists_the_fixed_disk_note(qtbot) -> None:
     assert dialog.confirm_btn.isEnabled()
 
 
-def test_confirm_dialog_omits_note_for_stick(qtbot) -> None:
+def test_confirm_omits_note_for_stick(qtbot) -> None:
     """A stick with the removable flag shows an empty notes list."""
     dialog = open_confirm_dialog(qtbot, build_inspection())
 
     assert dialog.notes_list.count() == 0
 
 
-def test_picker_row_carries_the_fixed_disk_note() -> None:
+def test_picker_row_fixed_disk_note() -> None:
     """The picker row of a fixed USB disk names the note after the mount path."""
     row = describe_candidate(build_candidate(build_fixed_inspection()))
 
@@ -52,14 +52,14 @@ def test_picker_row_carries_the_fixed_disk_note() -> None:
     assert FIXED_DISK_NOTE_TEXT in row
 
 
-def test_picker_row_of_a_removable_stick_has_no_note() -> None:
+def test_stick_picker_row_lacks_note() -> None:
     """A stick with the removable flag gets no note in its row."""
     row = describe_candidate(build_candidate(build_inspection()))
 
     assert FIXED_DISK_NOTE_TEXT not in row
 
 
-def test_picker_lets_a_fixed_usb_disk_be_selected(qtbot) -> None:
+def test_picker_selects_fixed_usb_disk(qtbot) -> None:
     """A fixed USB disk row is enabled and selectable."""
     inspection = build_fixed_inspection()
     dialog = UsbDrivePickerDialog(lambda: (build_candidate(inspection),))

@@ -194,7 +194,7 @@ def test_sources_are_ascii_without_todos(
         )
 
 
-def test_functions_meet_size_and_doc_rules(
+def test_functions_meet_size_doc_rules(
     parsed_sources: list[ParsedSource],
 ) -> None:
     """Verify function length <= 60, locals <= 10, nesting <= 3, and return annotations."""
@@ -227,7 +227,7 @@ def test_functions_meet_size_and_doc_rules(
             )
 
 
-def test_no_assign_in_if_or_empty_except(
+def test_no_conditional_assignment_empty_except(
     parsed_sources: list[ParsedSource],
 ) -> None:
     """Verify no walrus assignments in conditionals and no empty except blocks."""
@@ -246,7 +246,7 @@ def test_no_assign_in_if_or_empty_except(
             )
 
 
-def test_no_weak_hashing_or_unsafe_execution_calls(parsed_sources: list[ParsedSource]) -> None:
+def test_no_weak_hashing_unsafe_execution(parsed_sources: list[ParsedSource]) -> None:
     """Verify no md5/sha1, eval/exec, or subprocess shell=True calls exist in src/."""
     for source in parsed_sources:
         file_path = source.path
@@ -279,7 +279,7 @@ def test_usb_worktree_lines_within_limit(file_path: Path) -> None:
     assert long_lines == [], f"Lines over {MAX_LINE_LENGTH} chars in {file_path.name}: {long_lines}"
 
 
-def test_ast_walks_stop_past_the_depth_cap() -> None:
+def test_ast_walks_respect_depth_cap() -> None:
     """A tree nested past MAX_AST_DEPTH raises ValueError that names the source."""
     deep_tree = ast.parse("x = 1")
     deep_tree.body[0].value = _wrap_in_unary_ops(deep_tree.body[0].value, MAX_AST_DEPTH + 1)

@@ -78,7 +78,7 @@ def test_long_whitespace_runs_parse_quickly(title_expression: str) -> None:
     run_child(f"parse_dj_title_and_mix({title_expression})\n")
 
 
-def test_paren_pattern_captures_match_the_reference() -> None:
+def test_paren_pattern_captures_match_reference() -> None:
     """The bracket split captures the same title and mix text as the reference."""
     for text in build_samples(TITLE_TOKENS):
         expected = capture_groups(REFERENCE_PAREN_PATTERN, text)

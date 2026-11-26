@@ -32,24 +32,24 @@ def test_windows_device_name_is_unsafe(relative_path: str) -> None:
 
 
 @pytest.mark.parametrize("relative_path", STREAM_PATHS)
-def test_stream_colon_is_not_a_safe_relative_path(relative_path: str) -> None:
+def test_stream_colon_relative_path_unsafe(relative_path: str) -> None:
     """A colon inside a component selects a Windows data stream, so it is refused."""
     assert not is_safe_relative_path(relative_path)
 
 
 @pytest.mark.parametrize("relative_path", NAMES_LIKE_DEVICES)
-def test_names_that_only_resemble_devices_stay_safe(relative_path: str) -> None:
+def test_device_lookalike_names_stay_safe(relative_path: str) -> None:
     """A longer name that starts like a device name, or holds two dots, stays valid."""
     assert is_safe_relative_path(relative_path)
 
 
 @pytest.mark.parametrize("raw_mount", ["/media/USB..2024", "/media/archive..backup/stick"])
-def test_mount_point_with_dots_inside_a_name_is_kept(raw_mount: str) -> None:
+def test_mount_point_inner_dots_kept(raw_mount: str) -> None:
     """Two dots inside a name are no parent segment, so the mount point stays."""
     assert sanitize_mount_point(raw_mount) == raw_mount
 
 
 @pytest.mark.parametrize("raw_mount", ["/media/..", "/media/../etc", "/media/stick/.."])
-def test_mount_point_with_a_parent_segment_is_rejected(raw_mount: str) -> None:
+def test_mount_point_parent_segment_rejected(raw_mount: str) -> None:
     """A parent segment anywhere in the mount point yields None."""
     assert sanitize_mount_point(raw_mount) is None

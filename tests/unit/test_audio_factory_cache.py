@@ -16,7 +16,7 @@ FIXTURE_SECONDS = 0.5
 CHANGED_BYTES = b"changed"
 
 
-def test_cached_rendering_matches_a_direct_file_write(tmp_path: Path) -> None:
+def test_cached_rendering_matches_direct_write(tmp_path: Path) -> None:
     """The cached bytes equal the WAV that soundfile writes straight to a file."""
     direct = tmp_path / "direct.wav"
     pcm = synthesize_rhythmic_chord_pcm(duration_sec=FIXTURE_SECONDS)
@@ -27,7 +27,7 @@ def test_cached_rendering_matches_a_direct_file_write(tmp_path: Path) -> None:
     assert fixture.read_bytes() == direct.read_bytes()
 
 
-def test_each_call_writes_its_own_file(tmp_path: Path) -> None:
+def test_each_call_writes_own_file(tmp_path: Path) -> None:
     """Two fixtures from one rendering are separate files that change independently."""
     first = create_wav_fixture(tmp_path / "first.wav", duration_sec=FIXTURE_SECONDS)
     second = create_wav_fixture(tmp_path / "second.wav", duration_sec=FIXTURE_SECONDS)
@@ -39,7 +39,7 @@ def test_each_call_writes_its_own_file(tmp_path: Path) -> None:
     assert first.read_bytes() == CHANGED_BYTES
 
 
-def test_tags_reach_only_the_tagged_copy(tmp_path: Path) -> None:
+def test_tags_reach_only_tagged_copy(tmp_path: Path) -> None:
     """A tagged fixture leaves the cached untagged rendering untouched."""
     plain_before = create_wav_fixture(tmp_path / "before.wav", duration_sec=FIXTURE_SECONDS)
     tagged = create_wav_fixture(

@@ -327,7 +327,7 @@ class UsbRecoveryMatchingTests(unittest.TestCase):
             self.assertTrue(match_mount.requires_confirmation)
             self.assertTrue(match_drive.requires_confirmation)
 
-    def test_empty_uuid_matches_serial_and_marker(self) -> None:
+    def test_empty_uuid_matches_serial_marker(self) -> None:
         """Without a volume id the serial and marker match only with confirmation."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             mount_root = Path(tmp_dir) / "usb"
@@ -416,7 +416,7 @@ class UsbReconnectChoiceTests(unittest.TestCase):
                 )
             self.assertIsNotNone(read_in_progress_manifest(mount_root))
 
-    def test_leave_unchanged_preserves_marker_and_journal(self) -> None:
+    def test_leave_unchanged_keeps_marker_journal(self) -> None:
         """Leave Unchanged records the choice and keeps the marker and the journal entry."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             store, mount_root, entry = self._setup_store(tmp_dir)
@@ -655,11 +655,11 @@ class UsbReconnectChoiceTests(unittest.TestCase):
 class UsbRecoveryExpiryTests(unittest.TestCase):
     """Verify 30-day default expiry, 1-day warning, overdue cleanup, and manual deletion."""
 
-    def test_default_recovery_expiry_constant_is_30_days(self) -> None:
+    def test_default_expiry_is_30_days(self) -> None:
         """Recovery entries expire after 30 days by default."""
         self.assertEqual(DEFAULT_RECOVERY_EXPIRY_DAYS, 30)
 
-    def test_expiry_warns_deletes_and_cleans_up(self) -> None:
+    def test_expiry_warns_deletes_cleans_up(self) -> None:
         """An entry warns a day before expiry and goes at expiry or at an overdue launch."""
         start = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
         with tempfile.TemporaryDirectory() as tmp_dir:

@@ -166,7 +166,7 @@ class LinuxProbeTests(unittest.TestCase):
             runner.calls, [list(LSBLK_FACTS_COMMAND), [*UDEVADM_COMMAND_PREFIX, "/dev/sdb"]]
         )
 
-    def test_probed_stick_passes_with_inferred_health(self) -> None:
+    def test_probed_stick_passes_inferred_health(self) -> None:
         """A probed stick passes preflight and lists health as unverified."""
         probe, _runner = build_linux_probe([build_lsblk_stick()])
         result = evaluate_preflight(probe.probe(build_unprobed_inspection()), build_request())
@@ -199,7 +199,7 @@ class LinuxProbeTests(unittest.TestCase):
                 probe, _runner = build_linux_probe([device])
                 self.assertIs(probe.probe(build_unprobed_inspection()).drive.is_system, True)
 
-    def test_read_only_mount_on_writable_media_is_an_error(self) -> None:
+    def test_writable_media_read_only_errors(self) -> None:
         """A read-only mount of writable media gives filesystem errors and a refusal."""
         probe, _runner = build_linux_probe([build_lsblk_stick()], READ_ONLY_MOUNT_TABLE)
         result = probe.probe(build_unprobed_inspection())
@@ -220,12 +220,12 @@ class LinuxProbeTests(unittest.TestCase):
         self.assertIsNone(result.partitions[0].filesystem_health)
         self.assertEqual(result.inferred_facts, frozenset())
 
-    def test_udevadm_failure_leaves_hardware_id_absent(self) -> None:
+    def test_udevadm_failure_omits_hardware_id(self) -> None:
         """A failed udevadm call leaves the hardware id unset."""
         probe, _runner = build_linux_probe([build_lsblk_stick()], failing=frozenset({"udevadm"}))
         self.assertIsNone(probe.probe(build_unprobed_inspection()).drive.hardware_id)
 
-    def test_unsafe_device_path_never_reaches_a_command(self) -> None:
+    def test_unsafe_path_never_reaches_command(self) -> None:
         """A traversal device path skips udevadm and leaves the hardware id unset."""
         probe, runner = build_linux_probe([build_lsblk_stick()])
         inspection = build_unprobed_inspection()
@@ -236,7 +236,7 @@ class LinuxProbeTests(unittest.TestCase):
         self.assertIsNone(probe.probe(unsafe).drive.hardware_id)
         self.assertEqual(runner.calls, [list(LSBLK_FACTS_COMMAND)])
 
-    def test_missing_drive_and_failed_lsblk_raise(self) -> None:
+    def test_missing_drive_failed_lsblk_raise(self) -> None:
         """A drive absent from lsblk or a failed lsblk call raises CommandExecutionError."""
         probe, _runner = build_linux_probe([])
         with self.assertRaises(CommandExecutionError):
@@ -318,7 +318,7 @@ class WindowsProbeTests(unittest.TestCase):
             runner.calls, [DISK_FACTS_COMMAND, PARTITION_FACTS_COMMAND, VOLUME_HEALTH_COMMAND]
         )
 
-    def test_commands_are_fixed_and_hold_no_drive_data(self) -> None:
+    def test_commands_fixed_without_drive_data(self) -> None:
         """Each PowerShell command uses the fixed prefix and holds no drive name."""
         prefix = (POWERSHELL_EXE, "-NoProfile", "-NonInteractive", "-Command")
         for command in (DISK_FACTS_COMMAND, PARTITION_FACTS_COMMAND, VOLUME_HEALTH_COMMAND):
@@ -342,7 +342,7 @@ class WindowsProbeTests(unittest.TestCase):
                 result, _runner = probe_windows(health=status)
                 self.assertIs(result.partitions[0].filesystem_health, expected)
 
-    def test_boot_and_system_flags_mark_the_drive(self) -> None:
+    def test_boot_system_flags_mark_drive(self) -> None:
         """A boot or system flag on the disk or the partition marks a system drive."""
         for disk_changes, partition_changes in (
             ({"IsBoot": True}, None),
@@ -354,18 +354,18 @@ class WindowsProbeTests(unittest.TestCase):
                 result, _runner = probe_windows(disk_changes, partition_changes)
                 self.assertIs(result.drive.is_system, True)
 
-    def test_absent_disk_flags_leave_system_state_unknown(self) -> None:
+    def test_absent_flags_leave_system_unknown(self) -> None:
         """A missing disk boot flag leaves the system state unknown."""
         result, _runner = probe_windows({"IsBoot": None})
         self.assertIsNone(result.drive.is_system)
 
-    def test_active_and_extended_partitions_are_read(self) -> None:
+    def test_active_extended_partitions_are_read(self) -> None:
         """The active flag and an extended MBR type both reach the partition facts."""
         result, _runner = probe_windows(partition_changes={"IsActive": True, "MbrType": 5})
         self.assertIs(result.partitions[0].is_active, True)
         self.assertIs(result.partitions[0].is_primary, False)
 
-    def test_missing_disk_and_foreign_name_raise(self) -> None:
+    def test_missing_disk_foreign_name_raise(self) -> None:
         """A missing disk or a non-Windows drive name raises CommandExecutionError."""
         runner = WindowsRunner([], [], [])
         with self.assertRaises(CommandExecutionError):
@@ -407,7 +407,7 @@ class MacOSProbeTests(unittest.TestCase):
         self.assertIsNone(partition.filesystem_health)
         self.assertEqual(result.inferred_facts, frozenset())
 
-    def test_unverified_facts_reach_the_preflight_result(self) -> None:
+    def test_unverified_facts_reach_preflight_result(self) -> None:
         """Preflight passes and lists the three facts the macOS probe cannot verify."""
         partition = build_partition(is_active=None, is_primary=None, filesystem_health=None)
         drive = build_drive(name="disk4", hardware_id=None, is_system=None)
@@ -420,19 +420,19 @@ class MacOSProbeTests(unittest.TestCase):
             (FACT_ACTIVE_PARTITION, FACT_FILESYSTEM_HEALTH, FACT_PRIMARY_PARTITION),
         )
 
-    def test_system_mounts_and_system_image_mark_the_drive(self) -> None:
+    def test_system_mounts_image_mark_drive(self) -> None:
         """A root or data volume mount or a system image marks a system drive."""
         self.assertIs(self.probe_with({}, "/").drive.is_system, True)
         self.assertIs(self.probe_with({}, "/System/Volumes/Data").drive.is_system, True)
         self.assertIs(self.probe_with({"SystemImage": True}).drive.is_system, True)
 
-    def test_hardware_id_falls_back_to_the_registry_name(self) -> None:
+    def test_hardware_id_registry_name_fallback(self) -> None:
         """Without a media name the registry name becomes the hardware id."""
         result = self.probe_with({"IORegistryEntryName": "Ultra Media"})
         self.assertEqual(result.drive.hardware_id, "Ultra Media")
         self.assertIsNone(self.probe_with({}).drive.hardware_id)
 
-    def test_foreign_drive_name_never_reaches_diskutil(self) -> None:
+    def test_foreign_name_never_reaches_diskutil(self) -> None:
         """A non-macOS drive name raises before diskutil runs."""
         calls: list[str] = []
 

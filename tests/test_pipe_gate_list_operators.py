@@ -98,7 +98,7 @@ class PipelineSplitTest(unittest.TestCase):
         "cat a.sh |(sh)",
     )
 
-    def test_group_nesting_past_the_bound_denies(self):
+    def test_deep_group_nesting_denies(self):
         for inner in ("node a.js && node b.js", "ls && echo hi"):
             with self.subTest(inner=inner):
                 command = "( " * EXCESS_GROUP_DEPTH + inner + " )" * EXCESS_GROUP_DEPTH
@@ -119,26 +119,26 @@ class PipelineSplitTest(unittest.TestCase):
         "Get-Content a.ps1 | iex",
     )
 
-    def test_bash_list_operators_do_not_read_as_pipes(self):
+    def test_bash_list_operators(self):
         for command in self.BASH_ALLOW:
             with self.subTest(command=command):
                 _, decision = run_bash(command)
                 self.assertEqual(decision, "")
 
-    def test_bash_real_pipes_into_interpreters_still_deny(self):
+    def test_bash_interpreter_pipes_deny(self):
         for command in self.BASH_DENY:
             with self.subTest(command=command):
                 code, decision = run_bash(command)
                 self.assertEqual(code, BLOCKING_EXIT_CODE)
                 self.assertEqual(decision, "deny")
 
-    def test_powershell_list_operators_do_not_read_as_pipes(self):
+    def test_powershell_list_operators(self):
         for command in self.POWERSHELL_ALLOW:
             with self.subTest(command=command):
                 _, decision = run_powershell(command)
                 self.assertEqual(decision, "")
 
-    def test_powershell_real_pipes_into_interpreters_still_deny(self):
+    def test_powershell_interpreter_pipes_deny(self):
         for command in self.POWERSHELL_DENY:
             with self.subTest(command=command):
                 code, decision = run_powershell(command)
@@ -162,7 +162,7 @@ class InterpreterChainDepthTest(unittest.TestCase):
             input=json.dumps(payload), capture_output=True, text=True,
             check=False)
 
-    def test_long_interpreter_chain_with_payload_denies(self):
+    def test_long_interpreter_chain_denies(self):
         command = "bash " * INTERPRETER_CHAIN_LENGTH + "-c 'echo hi'"
         result = self.run_real_hook(command)
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr[-STDERR_TAIL_CHARACTERS:])

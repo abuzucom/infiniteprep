@@ -15,18 +15,40 @@ def _workflow_paths(root: Path) -> list[Path]:
     return sorted((*workflow_root.glob("*.yml"), *workflow_root.glob("*.yaml")))
 
 
-def _references(value: object, path: str = "") -> list[tuple[str, str]]:
-    """Collect uses values from nested YAML data."""
-    found = []
+def _child_entries(value: object, path: str) -> list[tuple[object, str]]:
+    """Return the containers and `uses` strings directly below `value`."""
     if isinstance(value, dict):
+        entries = []
         for key, child in value.items():
             child_path = f"{path}.{key}" if path else str(key)
-            if key == "uses" and isinstance(child, str):
-                found.append((child_path, child))
-            found.extend(_references(child, child_path))
-    elif isinstance(value, list):
-        for index, child in enumerate(value):
-            found.extend(_references(child, f"{path}[{index}]"))
+            if isinstance(child, (dict, list)) or (
+                    key == "uses" and isinstance(child, str)):
+                entries.append((child, child_path))
+        return entries
+    if isinstance(value, list):
+        return [(child, f"{path}[{index}]") for index, child in enumerate(value)
+                if isinstance(child, (dict, list))]
+    return []
+
+
+def _references(value: object, path: str = "") -> list[tuple[str, str]]:
+    """Collect uses values from nested YAML data in document order.
+
+    An explicit stack with a visited set walks recursive YAML aliases once
+    instead of recursing without bound.
+    """
+    found = []
+    stack = [(value, path)]
+    visited: set[int] = set()
+    while stack:
+        current, current_path = stack.pop()
+        if isinstance(current, str):
+            found.append((current_path, current))
+            continue
+        if id(current) in visited:
+            continue
+        visited.add(id(current))
+        stack.extend(reversed(_child_entries(current, current_path)))
     return found
 
 

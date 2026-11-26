@@ -26,7 +26,7 @@ MAJOR_KEYS = ("B", "F#", "Db", "Ab", "Eb", "Bb", "F", "C", "G", "D", "A", "E")
 
 @pytest.mark.parametrize("wheel_position", range(1, 13))
 @pytest.mark.parametrize("mode", list(KeyMode))
-def test_read_supported_notations_for_every_key(wheel_position: int, mode: KeyMode) -> None:
+def test_read_supported_notations_every_key(wheel_position: int, mode: KeyMode) -> None:
     """Each wheel position and musical spelling resolves to the same canonical key."""
     is_minor = mode == KeyMode.MINOR
     tonic = (MINOR_KEYS if is_minor else MAJOR_KEYS)[wheel_position - 1]
@@ -49,12 +49,12 @@ def test_read_supported_notations_for_every_key(wheel_position: int, mode: KeyMo
 
 
 @pytest.mark.parametrize("raw", ["00A", "008A", "13m", "A miniature", "B majestic", "F# min junk"])
-def test_malformed_keys_have_no_canonical_value(raw: str) -> None:
+def test_malformed_keys_lack_canonical_value(raw: str) -> None:
     """A valid prefix does not make the rest of a malformed key meaningful."""
     assert parse_key_string(raw) is None
 
 
-def test_unreadable_key_survives_import_with_warning(tmp_path: Path) -> None:
+def test_unreadable_key_imports_with_warning(tmp_path: Path) -> None:
     """Keep the original tag in the library and surface the parse failure."""
     repo = Repository(DatabaseManager(":memory:"))
     path = create_flac_fixture(tmp_path / "track.flac", tags={"initialkey": "A miniature"})
@@ -68,7 +68,7 @@ def test_unreadable_key_survives_import_with_warning(tmp_path: Path) -> None:
     )
 
 
-def test_read_m4a_key_and_integer_tempo(tmp_path: Path) -> None:
+def test_read_m4a_key_integer_tempo(tmp_path: Path) -> None:
     """Map M4A key and tempo into standard fields while retaining the atom names."""
     path = tmp_path / "track.m4a"
     key_atom = "----:com.apple.iTunes:initialkey"
@@ -96,7 +96,7 @@ def test_read_ogg_key_and_tempo(tmp_path: Path) -> None:
     assert metadata.standard_tags == {FieldName.KEY: "F# min", FieldName.BPM: "128.5"}
 
 
-def test_transcode_formats_key_and_bpm_on_output_only(tmp_path: Path) -> None:
+def test_transcode_formats_output_key_bpm(tmp_path: Path) -> None:
     """Apply the tag preferences when copying metadata to a transcode."""
     repo = Repository(DatabaseManager(":memory:"))
     source = create_wav_fixture(tmp_path / "track.wav", tags={"key": "Bbm", "bpm": "128.5"})

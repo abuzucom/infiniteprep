@@ -43,7 +43,7 @@ def make_mapping(mapping_id: str = MAPPING_ID, library_id: str = LIBRARY_ID) -> 
     )
 
 
-def test_a_new_library_holds_the_two_import_tables(tmp_path: Path) -> None:
+def test_new_library_holds_import_tables(tmp_path: Path) -> None:
     """The migration creates the imported library and path mapping tables."""
     db_path = tmp_path / "library.sqlite3"
     repository = Repository(DatabaseManager(db_path))
@@ -67,7 +67,7 @@ def test_the_library_record_round_trips(repository: Repository) -> None:
     assert stored.detected_version == "3.5.1"
 
 
-def test_the_library_record_updates_on_a_second_write(repository: Repository) -> None:
+def test_library_record_updates_on_rewrite(repository: Repository) -> None:
     """Writing the same library again updates the stored record."""
     repository.upsert_imported_library(make_library())
     updated = ImportedLibrary(
@@ -85,7 +85,7 @@ def test_the_library_record_updates_on_a_second_write(repository: Repository) ->
     assert stored.detected_version == "3.6.0"
 
 
-def test_the_libraries_come_back_newest_first(repository: Repository) -> None:
+def test_libraries_come_back_newest_first(repository: Repository) -> None:
     """The list of libraries puts the newest import first."""
     repository.upsert_imported_library(
         ImportedLibrary(
@@ -115,7 +115,7 @@ def test_the_path_mapping_round_trips(repository: Repository) -> None:
     assert mappings[0].root_path == "/Users/user/Music"
 
 
-def test_the_path_mapping_updates_on_a_second_write(repository: Repository) -> None:
+def test_path_mapping_updates_on_rewrite(repository: Repository) -> None:
     """Writing the same mapping again updates the stored record."""
     repository.upsert_imported_library(make_library())
     repository.upsert_path_mapping(make_mapping())
@@ -135,7 +135,7 @@ def test_the_path_mapping_updates_on_a_second_write(repository: Repository) -> N
     assert mappings[0].target_prefix == "/Users/user/Other"
 
 
-def test_a_deleted_path_mapping_is_gone(repository: Repository) -> None:
+def test_deleted_path_mapping_is_gone(repository: Repository) -> None:
     """A deleted mapping no longer comes back."""
     repository.upsert_imported_library(make_library())
     repository.upsert_path_mapping(make_mapping())

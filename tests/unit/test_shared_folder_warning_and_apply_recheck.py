@@ -48,7 +48,7 @@ def test_shared_folder_warns_and_opens(tmp_path: Path, caplog: pytest.LogCapture
 
 
 @posix_only
-def test_private_library_folder_logs_no_warning(
+def test_private_library_folder_no_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """An owner-only library folder opens without the shared folder warning."""
@@ -72,7 +72,7 @@ def preview(tmp_path: Path, source: Path) -> tuple[WriteService, Repository, Fil
     return service, repo, service.build_batch_preview([asset.id])[0]
 
 
-def test_write_with_the_previewed_data_loss_completes(tmp_path: Path) -> None:
+def test_previewed_data_loss_write_completes(tmp_path: Path) -> None:
     """The same dropped tag data at write time lets the write finish."""
     source = create_mp3_fixture(tmp_path / "encrypted.mp3")
     data = source.read_bytes()

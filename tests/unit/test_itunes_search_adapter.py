@@ -79,7 +79,7 @@ def _adapter(
     )
 
 
-def test_search_match_has_genre_and_date() -> None:
+def test_search_match_has_genre_date() -> None:
     """A matching row supplies the coarse genre and the release year."""
     adapter = _adapter(build_memory_repository(), _recorded("match_with_genre_and_date"))
 
@@ -95,7 +95,7 @@ def test_search_match_has_genre_and_date() -> None:
     assert candidate.release_details.release_title == "The Dream"
 
 
-def test_search_without_a_match_returns_no_candidate() -> None:
+def test_unmatched_search_returns_no_candidate() -> None:
     """An empty response produces no candidate."""
     adapter = _adapter(build_memory_repository(), _recorded("no_match"))
 
@@ -113,7 +113,7 @@ def test_earliest_release_date_wins_ties() -> None:
     assert matches[0].release_details.year == "1994"
 
 
-def test_the_cached_response_keeps_no_artwork() -> None:
+def test_cached_response_keeps_no_artwork() -> None:
     """The shared cache holds the read fields only, so no artwork URL stays in it."""
     repository = build_memory_repository()
     adapter = _adapter(repository, _recorded("artwork_only"))
@@ -160,7 +160,7 @@ def test_response_cached_in_shared_sqlite() -> None:
     assert first[0].provider_entity_id == second[0].provider_entity_id
 
 
-def test_the_rate_limit_holds_the_next_request_back(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rate_limit_delays_next_request(monkeypatch: pytest.MonkeyPatch) -> None:
     """Two calls in a row wait the minimum interval between them."""
     clock_seconds = [START_SECONDS]
     sleeps: list[float] = []
@@ -189,7 +189,7 @@ def test_the_rate_limit_holds_the_next_request_back(monkeypatch: pytest.MonkeyPa
     assert sleeps == [pytest.approx(RATE_LIMIT_INTERVAL_SEC)]
 
 
-def test_an_unrelated_row_supplies_no_candidate() -> None:
+def test_unrelated_row_supplies_no_candidate() -> None:
     """A row that matches neither the artist nor the title supplies no value."""
     adapter = _adapter(build_memory_repository(), _recorded("unrelated_row"))
 
@@ -207,7 +207,7 @@ def test_malformed_duration_is_dropped() -> None:
     assert matches[0].release_details.genre == "Dance"
 
 
-def test_cache_key_names_provider_and_endpoint() -> None:
+def test_cache_key_names_provider_endpoint() -> None:
     """The cache key holds the provider and the endpoint, so no other source shares it."""
     adapter = _adapter(build_memory_repository(), _recorded("match_with_genre_and_date"))
 
@@ -267,7 +267,7 @@ def test_two_threads_share_one_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
     assert results == [1, 1]
 
 
-def test_request_has_user_agent_and_terms() -> None:
+def test_request_has_user_agent_terms() -> None:
     """The request names the search endpoint and sends the artist and the title."""
     calls: list[tuple[str, dict[str, str]]] = []
     adapter = _adapter(build_memory_repository(), _recorded("match_with_genre_and_date"), calls)
@@ -329,7 +329,7 @@ def test_supplied_field_gets_no_proposal() -> None:
 
 
 @pytest.mark.parametrize("fixture_name", ["no_match", "artwork_only"])
-def test_no_network_call_without_search_term(
+def test_no_network_without_search_term(
     fixture_name: str,
 ) -> None:
     """A query without an artist or a title never reaches the network."""

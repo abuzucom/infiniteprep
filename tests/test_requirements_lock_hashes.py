@@ -132,7 +132,7 @@ class ApplicationLockHashesTest(unittest.TestCase):
         for entry in entries:
             self.assertTrue(entry.digests, f"{entry.name} pins no artifact digest")
 
-    def test_every_raw_requirement_line_reaches_a_digest(self) -> None:
+    def test_raw_requirement_lines_reach_digests(self) -> None:
         """A raw scan finds as many requirements as the parser maps to digests.
 
         The scan does not use the parser, so a parser that drops an entry or
@@ -152,7 +152,7 @@ class ApplicationLockHashesTest(unittest.TestCase):
         self.assertEqual(upgraded.version, UPGRADED_VERSION)
         self.assertTrue(upgraded.digests)
 
-    def test_the_two_lockfiles_lock_separate_environments(self) -> None:
+    def test_lockfiles_lock_separate_environments(self) -> None:
         """A package that both lockfiles name carries the same version in both."""
         application = {entry.name: entry.version for entry in read_lock_entries(LOCKFILE)}
         sbom = {entry.name: entry.version for entry in read_lock_entries(SBOM_LOCKFILE)}

@@ -94,7 +94,7 @@ def window_parts(
     gate.set()
 
 
-def test_import_runs_off_the_ui_thread_and_commits(qtbot: Any, window_parts: Any) -> None:
+def test_import_off_ui_thread_commits(qtbot: Any, window_parts: Any) -> None:
     """The UI keeps processing events during an import, and the table fills after commit."""
     window, repository, gate, folder = window_parts
     ticks: list[int] = []
@@ -120,9 +120,7 @@ def test_import_runs_off_the_ui_thread_and_commits(qtbot: Any, window_parts: Any
     assert window.file_table.rowCount() == TRACK_COUNT
 
 
-def test_import_leaves_the_loaded_track_in_place(
-    qtbot: Any, window_parts: Any, tmp_path: Path
-) -> None:
+def test_import_keeps_loaded_track(qtbot: Any, window_parts: Any, tmp_path: Path) -> None:
     """An import neither unloads nor reloads the track in the preview player (D243)."""
     window, _repository, gate, folder = window_parts
     playing = create_wav_fixture(tmp_path / "playing.wav", duration_sec=1.0)
@@ -143,7 +141,7 @@ def test_import_leaves_the_loaded_track_in_place(
         (CLOSE_STAY, ImportOutcome.COMMITTED, TRACK_COUNT, True),
     ],
 )
-def test_closing_mid_import_cancels_or_stays(
+def test_closing_import_cancels_or_stays(
     qtbot: Any,
     window_parts: Any,
     monkeypatch: pytest.MonkeyPatch,
@@ -187,7 +185,7 @@ def test_worker_keeps_ui_connection_open(qtbot: Any, window_parts: Any, tmp_path
     assert len(repository.list_files()) == TRACK_COUNT + 1
 
 
-def test_a_failed_import_after_cancel_still_closes(
+def test_failed_import_after_cancel_closes(
     qtbot: Any, window_parts: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Choosing Cancel and Exit closes the window even when the batch fails outright."""
@@ -206,7 +204,7 @@ def test_a_failed_import_after_cancel_still_closes(
     assert "OperationalError: disk I/O error" in window.import_controller.last_error
 
 
-def test_failed_import_message_holds_no_error_text(
+def test_failed_import_message_omits_errors(
     qtbot: Any, window_parts: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The failure message is fixed text. The exception text never reaches the window."""
@@ -248,7 +246,7 @@ def test_second_close_asks_nothing(
     assert prompts == [1]
 
 
-def test_staying_open_keeps_the_import_running(
+def test_staying_open_keeps_import_running(
     qtbot: Any, window_parts: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Dismissing the close prompt keeps the window and lets the import commit."""
@@ -265,7 +263,7 @@ def test_staying_open_keeps_the_import_running(
     assert len(repository.list_files()) == TRACK_COUNT
 
 
-def test_progress_and_report_labels_show_plain_text(qtbot: Any, window_parts: Any) -> None:
+def test_progress_report_labels_are_plain(qtbot: Any, window_parts: Any) -> None:
     """Labels that can show file names never interpret them as rich text."""
     window, _repository, gate, folder = window_parts
     # The main window shows progress in its dock, so the dialog comes from its own controller.
@@ -308,7 +306,7 @@ def stuck_parts(
     gate.set()
 
 
-def test_a_stuck_file_offers_quit_now(qtbot: Any, stuck_parts: Any) -> None:
+def test_stuck_file_offers_quit_now(qtbot: Any, stuck_parts: Any) -> None:
     """A file past the time limit raises the stuck prompt, and Quit Now ends the process."""
     controller, gate, folder, exit_codes = stuck_parts
 
@@ -323,7 +321,7 @@ def test_a_stuck_file_offers_quit_now(qtbot: Any, stuck_parts: Any) -> None:
     assert controller.stuck_box is None
 
 
-def test_keep_waiting_restarts_the_time_limit(qtbot: Any, stuck_parts: Any) -> None:
+def test_keep_waiting_restarts_time_limit(qtbot: Any, stuck_parts: Any) -> None:
     """Keep Waiting closes the prompt, and the prompt returns after another full limit."""
     controller, gate, folder, exit_codes = stuck_parts
 
@@ -343,7 +341,7 @@ def test_keep_waiting_restarts_the_time_limit(qtbot: Any, stuck_parts: Any) -> N
     assert controller.stuck_box is None
 
 
-def test_report_text_lists_counts_and_failed_files() -> None:
+def test_report_lists_counts_failed_files() -> None:
     """The plain-text report names each category count and every failed file."""
     report = ImportBatchReport(batch_id="batch-1", scanned_count=4)
     report.unsupported_files.append("/music/cover.jpg")
@@ -357,7 +355,7 @@ def test_report_text_lists_counts_and_failed_files() -> None:
     assert "/music/gone.wav: FileNotFoundError: gone" in text
 
 
-def test_cancelled_report_says_nothing_was_imported() -> None:
+def test_cancelled_report_says_nothing_imported() -> None:
     """A rolled-back batch reports that no file was imported."""
     report = ImportBatchReport(batch_id="batch-2", scanned_count=3)
     report.outcome = ImportOutcome.CANCELLED
@@ -365,7 +363,7 @@ def test_cancelled_report_says_nothing_was_imported() -> None:
     assert "Cancelled. No file was imported." in format_import_report(report)
 
 
-def test_copy_button_puts_the_report_on_the_clipboard(qtbot: Any) -> None:
+def test_copy_button_copies_the_report(qtbot: Any) -> None:
     """Copy places the same plain text as format_import_report on the clipboard."""
     report = ImportBatchReport(batch_id="batch-3", scanned_count=1)
     dialog = ImportReportDialog(report)

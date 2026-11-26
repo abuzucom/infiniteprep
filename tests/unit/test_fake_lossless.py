@@ -88,7 +88,7 @@ class FakeLosslessDetectionTests(unittest.TestCase):
             self.assertGreaterEqual(result.cutoff_hz, 19500.0)
             self.assertIsNone(result.format_warning())
 
-    def test_ring_buffer_advances_past_max_stored_frames(self) -> None:
+    def test_ring_buffer_advances_past_capacity(self) -> None:
         """Full-band energy after 512 frames updates distinct ring slots."""
         with tempfile.TemporaryDirectory() as tmp:
             intro = _broadband_signal(SAMPLE_RATE_44K, seconds=25.0)
@@ -156,7 +156,7 @@ class FakeLosslessDetectionTests(unittest.TestCase):
             self.assertIn(TRACE_AAC_SBR_GAP, result.traces)
             self.assertGreaterEqual(result.confidence, 0.65)
 
-    def test_non_lossless_format_is_not_flagged(self) -> None:
+    def test_lossy_format_is_not_flagged(self) -> None:
         """Lossy OGG files are not flagged as fake lossless."""
         with tempfile.TemporaryDirectory() as tmp:
             samples = _broadband_signal(SAMPLE_RATE_44K)
@@ -199,7 +199,7 @@ class FakeLosslessDetectionTests(unittest.TestCase):
         ):
             detect_fake_lossless(Path(tmp) / "missing.flac", cancel_event=cancel_event)
 
-    def test_min_analysis_sample_rate_boundary_is_analyzed(self) -> None:
+    def test_minimum_sample_rate_is_analyzed(self) -> None:
         """A 22050 Hz lossless track at the minimum rate boundary is analyzed."""
         with tempfile.TemporaryDirectory() as tmp:
             samples = _broadband_signal(MIN_ANALYSIS_SAMPLE_RATE_HZ)
@@ -223,7 +223,7 @@ class FakeLosslessDetectionTests(unittest.TestCase):
             self.assertIn(TRACE_SPECTRAL_CUTOFF, result.traces)
             self.assertEqual(result.sample_rate, MIN_ANALYSIS_SAMPLE_RATE_HZ)
 
-    def test_oversized_channels_and_sample_rate_rejected(self) -> None:
+    def test_oversized_channels_and_rate_rejected(self) -> None:
         """Excessive channels or sample rates are rejected before full decoding."""
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

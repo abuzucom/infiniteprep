@@ -63,7 +63,7 @@ def test_settings_dialog_persists_written_formats(qtbot: Any, tmp_path: Path) ->
         ("standard", True, 2, "128.445", "Bbm", "128.45"),
     ),
 )
-def test_write_preview_and_tags_use_saved_formats(
+def test_preview_tags_use_saved_formats(
     tmp_path: Path,
     *,
     factory: Callable[..., Path],

@@ -32,7 +32,7 @@ class CloudflarePagesPathSecurityTest(unittest.TestCase):
             str(self.root),
         )
 
-    def test_rejects_workspace_root_and_hidden_directories(self) -> None:
+    def test_rejects_root_hidden_directories(self) -> None:
         for path in (".", ".git", ".agents"):
             with self.subTest(path=path):
                 self.assertEqual(self.verdict(path)[0], "deny")

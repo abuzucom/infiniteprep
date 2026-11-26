@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Enforce the dash and ASCII style rules on the given files.
 
-A portable, path-generic version of lint_style.py's checks (which are
+A portable version of lint_style.py's checks for any path (which are
 hardcoded to AGENTS.md in this repo): copy this single file into any repo
 and point it at that repo's own source globs and CI. Blocking, like
 lint_style.py: exits 1 on any violation, since it propagates an
-already-blocking rule ("No non-ASCII characters") rather than a new one.
+already-blocking rule ("No non-ASCII characters") instead of a new one.
 """
 import re
 import sys
@@ -16,19 +16,20 @@ EM_EN_DASH = re.compile(r"[–—]")
 MAX_ASCII_CODEPOINT = 127
 # A Markdown table delimiter row carries only pipes, colons, dashes and
 # spaces. It is table syntax, and rewriting it to satisfy the dash rule
-# changes a document to satisfy a linter rather than a reader.
+# changes a document to satisfy a linter instead of a reader.
 TABLE_SEPARATOR = re.compile(r"^\s*\|[\s:|-]*-[\s:|-]*\|\s*$")
 # A list marker opens its line. It is syntax, not a dash between clauses.
 LIST_MARKER = re.compile(r"^(\s*)([-*+]|\d+\.)\s")
 
 
+# prose_policy.mask_markdown_code also masks code. This file keeps its own
+# stripper so it stays one portable file with no repository imports.
 def strip_code(line: str, in_span: bool = False) -> tuple:
     """Return the line's prose and whether a code span is still open.
 
     A span can open on one line and close on the next. Pairing backticks
-    within a line pairs the wrong ones and leaks the text between them,
-    which is how a preset name carrying a spaced hyphen reached the dash
-    check.
+    within a line pairs the wrong ones and leaks the text between them.
+    A preset name carrying a spaced hyphen reached the dash check that way.
     """
     prose = []
     for character in line:
@@ -40,7 +41,7 @@ def strip_code(line: str, in_span: bool = False) -> tuple:
 
 
 def strip_marker(line: str) -> str:
-    """Remove a leading list marker, which is syntax rather than prose."""
+    """Remove a leading list marker. The marker is syntax and not prose."""
     return LIST_MARKER.sub("", line, count=1)
 
 

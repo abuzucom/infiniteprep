@@ -86,7 +86,7 @@ def visible_ids(window: MainWindow) -> list[str]:
     ]
 
 
-def test_table_starts_sorted_by_filename_ascending(qtbot: Any, tmp_path: Path) -> None:
+def test_table_starts_sorted_by_filename(qtbot: Any, tmp_path: Path) -> None:
     """The table opens with the file names in ascending order."""
     window, _repo, _ids = build_window(
         qtbot, tmp_path, [TrackSpec("b.wav"), TrackSpec("a.wav"), TrackSpec("c.wav")]
@@ -104,7 +104,7 @@ def test_filename_column_sorts_naturally(qtbot: Any, tmp_path: Path) -> None:
     assert visible_names(window) == ["Track 2.wav", "Track 10.wav"]
 
 
-def test_clicking_the_active_header_reverses_the_order(qtbot: Any, tmp_path: Path) -> None:
+def test_clicking_active_header_reverses_order(qtbot: Any, tmp_path: Path) -> None:
     """A second click on the sorted header reverses the direction."""
     window, _repo, _ids = build_window(qtbot, tmp_path, [TrackSpec("a.wav"), TrackSpec("b.wav")])
 
@@ -167,7 +167,7 @@ def test_duration_column_sorts_numerically(qtbot: Any, tmp_path: Path) -> None:
     assert visible_names(window) == ["short.wav", "long.wav"]
 
 
-def test_key_column_sorts_by_camelot_wheel_position(qtbot: Any, tmp_path: Path) -> None:
+def test_key_column_sorts_by_camelot(qtbot: Any, tmp_path: Path) -> None:
     """The key column sorts by wheel position in the Camelot notation."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -184,7 +184,7 @@ def test_key_column_sorts_by_camelot_wheel_position(qtbot: Any, tmp_path: Path) 
     assert visible_names(window) == ["a.wav", "b.wav", "c.wav"]
 
 
-def test_key_column_puts_minor_before_major(qtbot: Any, tmp_path: Path) -> None:
+def test_key_column_minor_before_major(qtbot: Any, tmp_path: Path) -> None:
     """Two keys at one wheel position keep the minor key first in both directions."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -204,7 +204,7 @@ def test_key_column_puts_minor_before_major(qtbot: Any, tmp_path: Path) -> None:
     assert visible_names(window) == ["minor.wav", "major.wav"]
 
 
-def test_key_column_sorts_by_open_key_number(qtbot: Any, tmp_path: Path) -> None:
+def test_key_column_sorts_open_key(qtbot: Any, tmp_path: Path) -> None:
     """The key column sorts by number in the Open Key notation, minor key first."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -223,7 +223,7 @@ def test_key_column_sorts_by_open_key_number(qtbot: Any, tmp_path: Path) -> None
     assert visible_names(window) == ["a.wav", "b.wav", "c.wav"]
 
 
-def test_key_column_sorts_by_pitch_class(qtbot: Any, tmp_path: Path) -> None:
+def test_key_column_sorts_pitch_class(qtbot: Any, tmp_path: Path) -> None:
     """The key column sorts upward from C in the standard notation."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -242,7 +242,7 @@ def test_key_column_sorts_by_pitch_class(qtbot: Any, tmp_path: Path) -> None:
     assert visible_names(window) == ["a.wav", "b.wav", "c.wav"]
 
 
-def test_review_status_column_sorts_by_workflow_order(qtbot: Any, tmp_path: Path) -> None:
+def test_review_status_sorts_by_workflow(qtbot: Any, tmp_path: Path) -> None:
     """The review status column sorts by the workflow order."""
     window, repo, _ids = build_window(
         qtbot,
@@ -262,7 +262,7 @@ def test_review_status_column_sorts_by_workflow_order(qtbot: Any, tmp_path: Path
     assert visible_names(window) == ["a.wav", "b.wav", "c.wav"]
 
 
-def test_unsorted_rows_sort_first_by_default(qtbot: Any, tmp_path: Path) -> None:
+def test_unsorted_rows_first_by_default(qtbot: Any, tmp_path: Path) -> None:
     """A file with no BPM sorts before the files that carry one."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -278,7 +278,7 @@ def test_unsorted_rows_sort_first_by_default(qtbot: Any, tmp_path: Path) -> None
     assert visible_names(window) == ["b.wav", "a.wav"]
 
 
-def test_unsorted_rows_move_with_the_direction(qtbot: Any, tmp_path: Path) -> None:
+def test_unsorted_rows_follow_sort_direction(qtbot: Any, tmp_path: Path) -> None:
     """The unsorted group holds the lowest value, so a reversed sort puts it last."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -295,7 +295,7 @@ def test_unsorted_rows_move_with_the_direction(qtbot: Any, tmp_path: Path) -> No
     assert visible_names(window) == ["a.wav", "b.wav"]
 
 
-def test_a_non_finite_bpm_sorts_with_the_unsorted_rows(qtbot: Any, tmp_path: Path) -> None:
+def test_non_finite_bpm_joins_unsorted(qtbot: Any, tmp_path: Path) -> None:
     """A BPM that is not a finite number counts as no value at all."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -332,12 +332,12 @@ def test_non_finite_bpm_follows_placement(qtbot: Any, tmp_path: Path, settings) 
     ("text", "expected"),
     [("128.5", 128.5), ("128", 128.0), ("", None), ("fast", None), ("NaN", None), ("inf", None)],
 )
-def test_parse_bpm_value_keeps_only_finite_numbers(text: str, expected: float | None) -> None:
+def test_parse_bpm_keeps_finite_numbers(text: str, expected: float | None) -> None:
     """Only a finite number becomes a BPM value."""
     assert parse_bpm_value(text) == expected
 
 
-def test_clicking_a_row_after_a_sort_loads_that_file(qtbot: Any, tmp_path: Path) -> None:
+def test_sorted_row_click_loads_file(qtbot: Any, tmp_path: Path) -> None:
     """A row click opens the file in that row, not the file at the same row index."""
     window, _repo, ids = build_window(
         qtbot,
@@ -354,7 +354,7 @@ def test_clicking_a_row_after_a_sort_loads_that_file(qtbot: Any, tmp_path: Path)
     assert window.detail_panel.current_file_id == ids["b.wav"]
 
 
-def test_refresh_keeps_the_sort_column_and_direction(qtbot: Any, tmp_path: Path) -> None:
+def test_refresh_keeps_sort_column_direction(qtbot: Any, tmp_path: Path) -> None:
     """A refresh keeps the sorted column and the sort direction."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -393,7 +393,7 @@ def test_refresh_keeps_the_selected_file(qtbot: Any, tmp_path: Path) -> None:
     assert window.detail_panel.current_file_id == ids["b.wav"]
 
 
-def test_search_keeps_the_sort_and_the_selection(qtbot: Any, tmp_path: Path) -> None:
+def test_search_keeps_sort_and_selection(qtbot: Any, tmp_path: Path) -> None:
     """A search refresh keeps the sorted column, the direction, and the selected file."""
     window, _repo, ids = build_window(
         qtbot,
@@ -414,7 +414,7 @@ def test_search_keeps_the_sort_and_the_selection(qtbot: Any, tmp_path: Path) -> 
     assert window.detail_panel.current_file_id == ids["beta.wav"]
 
 
-def test_visible_file_ids_follow_the_display_order(qtbot: Any, tmp_path: Path) -> None:
+def test_visible_ids_follow_display_order(qtbot: Any, tmp_path: Path) -> None:
     """The visible file ID list matches the order shown on screen."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -430,7 +430,7 @@ def test_visible_file_ids_follow_the_display_order(qtbot: Any, tmp_path: Path) -
     assert window.visible_file_ids == visible_ids(window)
 
 
-def test_ties_fall_back_to_the_title_then_the_path(qtbot: Any, tmp_path: Path) -> None:
+def test_ties_fall_back_title_path(qtbot: Any, tmp_path: Path) -> None:
     """Rows with the same value order by title, then by path."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -446,7 +446,7 @@ def test_ties_fall_back_to_the_title_then_the_path(qtbot: Any, tmp_path: Path) -
     assert visible_names(window) == ["zebra.wav", "apple.wav"]
 
 
-def test_unsorted_rows_use_the_placement_setting(qtbot: Any, tmp_path: Path, settings) -> None:
+def test_unsorted_rows_use_placement_setting(qtbot: Any, tmp_path: Path, settings) -> None:
     """The placement setting decides where the unsorted group sits."""
     settings.settings = replace(settings.settings, unsorted_rows_placement="last")
     window, _repo, _ids = build_window(
@@ -463,7 +463,7 @@ def test_unsorted_rows_use_the_placement_setting(qtbot: Any, tmp_path: Path, set
     assert visible_names(window) == ["a.wav", "b.wav"]
 
 
-def test_a_changed_placement_moves_the_unsorted_rows(qtbot: Any, tmp_path: Path, settings) -> None:
+def test_changed_placement_moves_unsorted_rows(qtbot: Any, tmp_path: Path, settings) -> None:
     """The window reads the placement again and repaints the table."""
     window, _repo, _ids = build_window(
         qtbot,
@@ -481,7 +481,7 @@ def test_a_changed_placement_moves_the_unsorted_rows(qtbot: Any, tmp_path: Path,
     assert visible_names(window) == ["a.wav", "b.wav"]
 
 
-def test_header_keeps_the_sort_indicator_shown(qtbot: Any, tmp_path: Path) -> None:
+def test_header_keeps_sort_indicator_shown(qtbot: Any, tmp_path: Path) -> None:
     """The header shows the sort indicator for the active column."""
     window, _repo, _ids = build_window(qtbot, tmp_path, [TrackSpec("a.wav")])
     header = window.file_table.horizontalHeader()

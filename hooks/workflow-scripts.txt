@@ -5,6 +5,8 @@
 # Verdicts:
 #   allow          runs without a prompt and only inspects the repository
 #   consent-read   routes to consent and only inspects the repository
+#   trusted-read   runs without a prompt for an origin owner in
+#                  trusted-owners.txt, otherwise acts as consent-read
 #   consent-write  routes to consent and writes files
 #
 # Arguments match literally except these placeholders:
@@ -21,15 +23,18 @@ allow scripts/read_git_state.py remote
 allow scripts/read_git_state.py revision
 allow scripts/read_git_state.py all
 
-consent-read scripts/run_tests.py
+trusted-read scripts/run_tests.py
 consent-read scripts/sync.py --check
 consent-read scripts/sync.py --check-shared
 consent-read scripts/sync.py --print-adoptable
 consent-write scripts/sync.py
 consent-write scripts/sync.py --write-shared
+consent-write scripts/sync.py --backfill-digests
+consent-write scripts/report_adoption_status.py --config <path> --index <path> --output <path>
 
 allow scripts/check_action_pins.py
 allow scripts/check_agent_prose_gate.py --base <revision> --head <revision>
+allow scripts/check_anti_delegation.py <paths>
 allow scripts/check_ascii.py <paths>
 allow scripts/check_banned_agents.py --base <revision> --head <revision>
 allow scripts/check_branch_name.py
@@ -38,6 +43,8 @@ allow scripts/check_changelog.py
 allow scripts/check_changelog.py --staged
 allow scripts/check_changelog.py --base <revision> --head <revision>
 allow scripts/check_commit_message.py --base <revision> --head <revision>
+allow scripts/check_test_names.py --base <revision> --head <revision>
+allow scripts/check_test_names.py --all
 allow scripts/check_conflict_markers.py
 allow scripts/check_conflict_markers.py --staged
 allow scripts/check_dockerfile_root.py <paths>
@@ -56,8 +63,13 @@ allow scripts/check_hook_launchers.py
 allow scripts/check_local_paths.py <paths>
 allow scripts/check_local_paths.py --unpushed
 allow scripts/check_local_paths.py --report
+allow scripts/check_merge_safety.py <revision>
+allow scripts/check_merge_safety.py <revision> --root <path>
+consent-read scripts/check_merge_safety.py <revision> --run-tests
 allow scripts/check_persist_credentials.py <paths>
 allow scripts/check_policy_size.py
+allow scripts/check_policy_size.py --json
+allow scripts/check_policy_size.py --render-markdown <path>
 allow scripts/check_pull_request_message.py
 allow scripts/check_secrets_heuristic.py <paths>
 allow scripts/check_test_first.py

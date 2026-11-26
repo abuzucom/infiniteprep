@@ -2,8 +2,8 @@
 """Parse CMD command boundaries without executing command text."""
 from dataclasses import dataclass
 
+from _gate_core import MAX_COMMAND_CHARACTERS
 
-MAX_COMMAND_CHARACTERS = 65536
 COMMAND_SEPARATORS = frozenset({"&", "|", "(", ")", "\n", "\r"})
 OUTPUT_REDIRECT = ">"
 

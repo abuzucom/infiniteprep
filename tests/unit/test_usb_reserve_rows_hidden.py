@@ -21,7 +21,7 @@ def test_reserve_rows_stay_hidden(qtbot) -> None:
     assert tab.form.isRowVisible(tab.usb_recovery_expiry_checkbox) is True
 
 
-def test_hidden_rows_keep_the_stored_reserve(qtbot) -> None:
+def test_hidden_rows_keep_stored_reserve(qtbot) -> None:
     """A save from the tab keeps the stored percentage and rounds the size up to a MiB."""
     stored = AppSettings(usb_reserve_percent=STORED_PERCENT, usb_reserve_bytes=STORED_RESERVE_BYTES)
     tab = StorageTab(stored)

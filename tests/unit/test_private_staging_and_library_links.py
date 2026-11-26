@@ -51,7 +51,7 @@ def make_table_library(db_path: Path) -> None:
 
 
 @posix_only
-def test_staging_dir_owner_only_and_removed(tmp_path: Path) -> None:
+def test_staging_dir_owner_only_removed(tmp_path: Path) -> None:
     """The staging folder allows only the owner and leaves nothing behind."""
     with private_staging_dir(tmp_path) as staging:
         assert staging.parent == tmp_path
@@ -62,7 +62,7 @@ def test_staging_dir_owner_only_and_removed(tmp_path: Path) -> None:
     assert staging_leftovers(tmp_path) == []
 
 
-def test_private_staging_dir_is_removed_after_an_error(tmp_path: Path) -> None:
+def test_staging_dir_removed_after_error(tmp_path: Path) -> None:
     """An error inside the block still removes the folder and its files."""
     with pytest.raises(RuntimeError, match="copy failed"), private_staging_dir(tmp_path) as staging:
         (staging / "copy.db").write_bytes(b"partial")
@@ -72,7 +72,7 @@ def test_private_staging_dir_is_removed_after_an_error(tmp_path: Path) -> None:
 
 
 @posix_only
-def test_library_path_that_is_a_link_is_refused(tmp_path: Path) -> None:
+def test_linked_library_path_is_refused(tmp_path: Path) -> None:
     """A link at the library name fails the open before SQLite touches the target."""
     outside = tmp_path / "outside.db"
     outside.write_bytes(OUTSIDE_TEXT)
@@ -89,9 +89,7 @@ def test_library_path_that_is_a_link_is_refused(tmp_path: Path) -> None:
 
 
 @posix_only
-def test_migration_backup_in_owner_only_dir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_migration_backup_owner_only_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The backup copy and its record write happen inside a private staging folder."""
     db_path = tmp_path / "library.db"
     make_table_library(db_path)
@@ -116,7 +114,7 @@ def test_migration_backup_in_owner_only_dir(
 
 
 @posix_only
-def test_restore_copy_in_owner_only_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_restore_copy_owner_only_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The staged restore copy lives in a private staging folder until the swap."""
     db_path = tmp_path / "library.db"
     make_table_library(db_path)
@@ -153,7 +151,7 @@ def startup_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, An
 
 
 @posix_only
-def test_startup_creates_the_data_folder_owner_only(startup_env: dict[str, Any]) -> None:
+def test_startup_creates_private_data_folder(startup_env: dict[str, Any]) -> None:
     """A first start creates the per-user data folder with mode 0700."""
     opened = open_storage(
         startup_env["app"] / EXE_NAME,

@@ -262,7 +262,7 @@ def test_unwritable_folder_quit_returns_none(
     assert read_fallback_list(user_dirs) == []
 
 
-def test_unwritable_folder_without_remember_asks_again(
+def test_unwritable_unremembered_folder_asks_again(
     user_dirs: Path, downloads: Path, appdir: Path
 ) -> None:
     """Without Remember the fallback holds for this run only."""
@@ -284,7 +284,7 @@ def test_unwritable_folder_without_remember_asks_again(
     assert read_fallback_list(user_dirs) == []
 
 
-def test_writable_again_forgets_the_remembered_choice(
+def test_writable_again_forgets_remembered_choice(
     user_dirs: Path, downloads: Path, appdir: Path
 ) -> None:
     """Once the folder can be written, the AppImage uses it again (D259)."""

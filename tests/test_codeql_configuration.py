@@ -66,13 +66,13 @@ class CodeQLConfigurationTest(unittest.TestCase):
         self.assertIsInstance(name, str)
         self.assertTrue(str(name).strip(), "the CodeQL configuration needs a name")
 
-    def test_configuration_adds_the_extended_query_suite(self) -> None:
+    def test_configuration_adds_extended_query_suite(self) -> None:
         queries = load_config().get("queries")
         self.assertIsInstance(queries, list)
         suites = [entry.get("uses") for entry in queries if isinstance(entry, dict)]
         self.assertIn(EXTENDED_SUITE, suites)
 
-    def test_every_queried_suite_is_a_known_codeql_suite(self) -> None:
+    def test_queried_suites_are_known_codeql(self) -> None:
         known = {"security", "security-extended", "security-and-quality"}
         queries = load_config().get("queries")
         self.assertIsInstance(queries, list)
@@ -92,7 +92,7 @@ class CodeQLConfigurationTest(unittest.TestCase):
     def test_workflow_directory_is_declared(self) -> None:
         self.assertIn(".github", declared_paths())
 
-    def test_no_python_source_sits_at_the_repository_root(self) -> None:
+    def test_no_python_source_at_root(self) -> None:
         root_level = [path for path in source_files(".py") if len(path.parts) == 1]
         self.assertEqual(
             [str(path) for path in root_level],
@@ -100,7 +100,7 @@ class CodeQLConfigurationTest(unittest.TestCase):
             "a root level Python file cannot be named by a CodeQL path entry",
         )
 
-    def test_declared_paths_are_plain_relative_directories(self) -> None:
+    def test_declared_paths_plain_relative_directories(self) -> None:
         for entry in declared_paths():
             self.assertFalse(entry.startswith("/"), entry)
             self.assertNotIn("..", Path(entry).parts, entry)
@@ -111,13 +111,13 @@ class CodeQLConfigurationTest(unittest.TestCase):
         paths = declared_paths()
         self.assertEqual(len(paths), len(set(paths)))
 
-    def test_default_setup_keeps_ownership_of_the_analysis(self) -> None:
+    def test_default_setup_owns_the_analysis(self) -> None:
         self.assertFalse(
             ADVANCED_WORKFLOW.exists(),
             "an advanced CodeQL workflow competes with the default setup",
         )
 
-    def test_document_records_the_remote_property_value(self) -> None:
+    def test_document_records_remote_property_value(self) -> None:
         self.assertIn(
             PROPERTY_VALUE,
             DOCUMENT.read_text(encoding="utf-8"),

@@ -56,7 +56,7 @@ def is_inside(widget: QWidget | None, ancestor: QWidget) -> bool:
     return widget is not None and (widget is ancestor or ancestor.isAncestorOf(widget))
 
 
-def test_enter_in_template_keeps_preview_open(qtbot: Any) -> None:
+def test_template_enter_keeps_preview_open(qtbot: Any) -> None:
     """Enter in the rename template field never applies the writes and closes the dialog."""
     dialog = WritePlanDialog(WriteService(Repository(DatabaseManager(":memory:"))), [])
     show_focused(qtbot, dialog)
@@ -89,7 +89,7 @@ def test_tab_leaves_library_table(
     assert not is_inside(QApplication.focusWidget(), window.file_table)
 
 
-def test_tab_from_field_edit_reaches_row_action_button(qtbot: Any, tmp_path: Path) -> None:
+def test_field_tab_reaches_row_action(qtbot: Any, tmp_path: Path) -> None:
     """Tab from a field's edit box lands on a button in the same row's action cell."""
     repository, file_ids = import_tracks(tmp_path)
     panel = DetailPanel(repository, ReviewService(repository))
