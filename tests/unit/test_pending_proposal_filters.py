@@ -111,7 +111,7 @@ class BulkApproveTests(ProposalFilterTestCase):
 class TopProposalValueTests(ProposalFilterTestCase):
     """The effective top proposal skips rejected and superseded rows."""
 
-    def test_rejected_and_superseded_values_are_skipped(self) -> None:
+    def test_rejected_superseded_values_are_skipped(self) -> None:
         """The top value comes from the pending proposal despite higher scored rejected rows."""
         file_id = self.import_track("a.wav")
         self.store_proposal(
@@ -134,7 +134,7 @@ class TopProposalValueTests(ProposalFilterTestCase):
 
         self.assertEqual(values, {FieldName.BPM.value: "128.0"})
 
-    def test_playlist_order_ignores_a_rejected_bpm(self) -> None:
+    def test_playlist_order_ignores_rejected_bpm(self) -> None:
         """Playlist ordering by BPM uses the pending BPM instead of a rejected one."""
         slow_id = self.import_track("slow.wav")
         fast_id = self.import_track("fast.wav")

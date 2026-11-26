@@ -18,7 +18,7 @@ def _fail_replace(_source: Any, _target: Any) -> None:
     raise OSError("simulated replace failure")
 
 
-def test_failed_save_keeps_previous_settings_file(tmp_path: Path, monkeypatch: Any) -> None:
+def test_failed_save_keeps_previous_settings(tmp_path: Path, monkeypatch: Any) -> None:
     """A write failure leaves the earlier settings readable and no partial file."""
     settings_path = tmp_path / "settings.json"
     manager = SettingsManager(settings_path)
@@ -32,7 +32,7 @@ def test_failed_save_keeps_previous_settings_file(tmp_path: Path, monkeypatch: A
     assert list(tmp_path.iterdir()) == [settings_path]
 
 
-def test_failed_update_keeps_previous_settings_file(tmp_path: Path, monkeypatch: Any) -> None:
+def test_failed_update_keeps_previous_settings(tmp_path: Path, monkeypatch: Any) -> None:
     """A failed partial update leaves the earlier settings readable."""
     settings_path = tmp_path / "settings.json"
     manager = SettingsManager(settings_path)
@@ -66,7 +66,7 @@ def test_write_failure_removes_temp_file(tmp_path: Path, monkeypatch: Any) -> No
     assert list(tmp_path.iterdir()) == [settings_path]
 
 
-def test_save_and_update_leave_only_the_settings_file(tmp_path: Path) -> None:
+def test_save_update_leave_only_settings(tmp_path: Path) -> None:
     """Successful writes remove their temporary file."""
     settings_path = tmp_path / "config" / "settings.json"
     manager = SettingsManager(settings_path)

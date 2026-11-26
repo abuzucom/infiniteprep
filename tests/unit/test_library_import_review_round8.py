@@ -69,7 +69,7 @@ def build_library(path: str, format_id: FormatId) -> LocatedLibrary:
     )
 
 
-def test_the_dialog_picks_the_library_of_the_visible_row(qtbot) -> None:
+def test_dialog_picks_visible_row_library(qtbot) -> None:
     """A hidden library that comes first never takes the pick of a visible row."""
     hidden = build_library("/music/hidden.nml", FormatId.SERATO)
     visible = build_library("/music/collection.nml", FormatId.TRAKTOR)
@@ -83,7 +83,7 @@ def test_the_dialog_picks_the_library_of_the_visible_row(qtbot) -> None:
     assert picked.file_path == Path("/music/collection.nml")
 
 
-def test_the_dialog_reports_no_library_when_no_format_is_readable(qtbot) -> None:
+def test_dialog_reports_no_readable_library(qtbot) -> None:
     """The placeholder row of an empty list names no library."""
     dialog = LibraryImportDialog(
         [build_library("/music/hidden.nml", FormatId.SERATO)], readable_formats=[]
@@ -95,7 +95,7 @@ def test_the_dialog_reports_no_library_when_no_format_is_readable(qtbot) -> None
     assert dialog.chosen_library() is None
 
 
-def test_a_relocated_track_keeps_its_library_row(repository: Repository, tmp_path: Path) -> None:
+def test_relocated_track_keeps_library_row(repository: Repository, tmp_path: Path) -> None:
     """A track that moved keeps its row, so the library holds no second copy."""
     music = tmp_path / "music"
     music.mkdir()
@@ -138,9 +138,7 @@ def test_a_relocated_track_keeps_its_library_row(repository: Repository, tmp_pat
     assert after[0].current_path == str(moved)
 
 
-def test_an_import_that_found_no_track_still_reports_a_change(
-    repository: Repository, tmp_path: Path
-) -> None:
+def test_trackless_import_still_reports_change(repository: Repository, tmp_path: Path) -> None:
     """The library record and the path mappings are changes worth committing."""
     music = tmp_path / "music"
     music.mkdir()
@@ -159,7 +157,7 @@ def test_an_import_that_found_no_track_still_reports_a_change(
     assert len(repository.list_imported_libraries()) == 1
 
 
-def test_the_relocation_hash_refuses_a_file_that_a_link_replaced(tmp_path: Path) -> None:
+def test_relocation_hash_refuses_link_replacement(tmp_path: Path) -> None:
     """A candidate that a link replaced never reads the file the link points at."""
     root = tmp_path / "root"
     root.mkdir()

@@ -35,7 +35,7 @@ class PagesDeploymentWorkflowTest(unittest.TestCase):
         """Return every step of the deploy job."""
         return self.workflow["jobs"]["deploy"]["steps"]
 
-    def test_runs_on_push_to_main_and_on_demand(self) -> None:
+    def test_runs_on_main_or_demand(self) -> None:
         """The workflow deploys after a push to the default branch and on demand."""
         triggers = self.workflow["on"]
         self.assertEqual(triggers["push"]["branches"], ["main"])
@@ -50,7 +50,7 @@ class PagesDeploymentWorkflowTest(unittest.TestCase):
             ["website/**", ".github/workflows/deploy-pages.yml"],
         )
 
-    def test_token_writes_the_site_and_nothing_else(self) -> None:
+    def test_token_writes_only_the_site(self) -> None:
         """The workflow token writes the Pages site and proves the deployment identity."""
         self.assertEqual(self.workflow["permissions"], EXPECTED_PERMISSIONS)
 
@@ -63,7 +63,7 @@ class PagesDeploymentWorkflowTest(unittest.TestCase):
         for step in checkouts:
             self.assertIs(step["with"]["persist-credentials"], False)
 
-    def test_every_action_is_pinned_to_a_full_sha(self) -> None:
+    def test_every_action_pinned_full_sha(self) -> None:
         """Every external action names a 40-character commit SHA."""
         references = [step["uses"] for step in self._steps() if "uses" in step]
         self.assertTrue(references)
@@ -80,12 +80,12 @@ class PagesDeploymentWorkflowTest(unittest.TestCase):
         self.assertEqual(len(uploads), 1)
         self.assertEqual(uploads[0]["with"]["path"], f"./{SITE_FOLDER}")
 
-    def test_the_site_folder_holds_the_five_site_files(self) -> None:
+    def test_site_folder_holds_five_files(self) -> None:
         """The site folder holds the page, its images, the crawler preferences, and the domain."""
         published = sorted(path.name for path in (REPOSITORY_ROOT / SITE_FOLDER).iterdir())
         self.assertEqual(published, list(SITE_FILES))
 
-    def test_the_page_shows_the_project_logo(self) -> None:
+    def test_page_shows_project_logo(self) -> None:
         """The page displays the published logo with descriptive alternative text."""
         logo_path = REPOSITORY_ROOT / SITE_FOLDER / "logo.png"
         source_logo = REPOSITORY_ROOT / "docs/infiniteprep-logo.png"
@@ -93,14 +93,14 @@ class PagesDeploymentWorkflowTest(unittest.TestCase):
         page = (REPOSITORY_ROOT / SITE_FOLDER / "index.html").read_text(encoding="utf-8")
         self.assertRegex(page, r'<img[^>]*src="logo\.png"[^>]*alt="InfinitePrep logo"')
 
-    def test_the_project_documents_stay_in_docs(self) -> None:
+    def test_project_documents_stay_in_docs(self) -> None:
         """The documents stay under docs/, and no site file remains there."""
         self.assertTrue((REPOSITORY_ROOT / "docs/agent-policy").is_dir())
         for name in SITE_FILES:
             with self.subTest(name=name):
                 self.assertFalse((REPOSITORY_ROOT / "docs" / name).exists())
 
-    def test_the_deployment_reports_the_site_url(self) -> None:
+    def test_deployment_reports_site_url(self) -> None:
         """The job binds the site URL to the deployment step output."""
         job = self.workflow["jobs"]["deploy"]
         self.assertEqual(job["environment"]["name"], "github-pages")
@@ -108,7 +108,7 @@ class PagesDeploymentWorkflowTest(unittest.TestCase):
         deployment = next(step for step in self._steps() if step.get("id") == "deployment")
         self.assertTrue(deployment["uses"].startswith("actions/deploy-pages@"))
 
-    def test_one_deployment_runs_at_a_time(self) -> None:
+    def test_deployments_never_run_concurrently(self) -> None:
         """The concurrency group keeps a running deployment and queues the rest."""
         self.assertEqual(
             self.workflow["concurrency"],

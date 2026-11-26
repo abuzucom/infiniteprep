@@ -79,10 +79,10 @@ class InfrastructureAccessTest(unittest.TestCase):
             with self.subTest(file_path=file_path):
                 self.assert_denied(payload("Read", file_path=file_path))
 
-    def test_writes_to_new_terraform_files_deny(self):
+    def test_new_terraform_writes_deny(self):
         self.assert_denied(payload("Write", file_path="network.tf", content=""))
 
-    def test_broad_search_over_protected_tree_denies(self):
+    def test_broad_search_denies(self):
         self.assert_denied(payload("Grep", path=str(self.root), pattern="resource"))
         self.assert_denied(payload("Glob", path=str(self.root), pattern="**/*"))
         self.assert_denied(payload(
@@ -105,7 +105,7 @@ class InfrastructureAccessTest(unittest.TestCase):
 class InfrastructureWiringTest(unittest.TestCase):
     """Claude settings register the infrastructure gate for file tools."""
 
-    def test_live_and_example_settings_register_gate(self):
+    def test_settings_register_gate(self):
         for settings_path in SETTINGS_PATHS:
             with self.subTest(settings=settings_path.name):
                 settings = json.loads(settings_path.read_text(encoding="utf-8"))

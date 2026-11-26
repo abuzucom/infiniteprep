@@ -11,7 +11,7 @@ from infiniteprep.config.settings import AppSettings, SettingsManager
 from infiniteprep.ui.settings_dialog import SettingsDialog
 
 
-def test_stop_setting_off_and_old_files_load(tmp_path: Path) -> None:
+def test_stop_setting_defaults_to_off(tmp_path: Path) -> None:
     """A batch continues by default, and a file without the key loads that default."""
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(json.dumps({"transcode_mode": "sibling_export"}), encoding="utf-8")
@@ -20,7 +20,7 @@ def test_stop_setting_off_and_old_files_load(tmp_path: Path) -> None:
     assert SettingsManager(settings_path).load().stop_batch_on_first_failure is False
 
 
-def test_settings_dialog_saves_the_stop_checkbox(qtbot: Any, tmp_path: Path) -> None:
+def test_settings_dialog_saves_stop_checkbox(qtbot: Any, tmp_path: Path) -> None:
     """Checking the box and saving stores the stop rule. Reopening shows it checked."""
     manager = SettingsManager(tmp_path / "settings.json")
     dialog = SettingsDialog(manager, CredentialStore(use_memory_backend=True))

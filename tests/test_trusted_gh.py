@@ -89,7 +89,7 @@ class TrustedRunnerSafetyTest(unittest.TestCase):
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("denied by policy", result.stderr)
 
-    def test_failure_message_does_not_expose_exception_text(self):
+    def test_failure_message_hides_exception(self):
         with patch.object(trusted_gh, "authenticated_account",
                           side_effect=OSError("token-secret-value")):
             with patch.object(trusted_gh.sys, "argv", ["trusted_gh.py", "run", "api", "user"]):
@@ -99,7 +99,7 @@ class TrustedRunnerSafetyTest(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertNotIn("token-secret-value", output.getvalue())
 
-    def test_literal_newline_escape_in_pr_body_is_rejected(self):
+    def test_pr_body_escape_rejected(self):
         result = subprocess.run(
             [sys.executable, str(REPOSITORY_ROOT / "scripts" / "trusted_gh.py"),
              "run", "pr", "edit", "45", "--body", "line1\\n\\nline2"],
@@ -236,7 +236,7 @@ class TrustedRunnerSafetyTest(unittest.TestCase):
 
         self.assertNotIn("GH_CONFIG_DIR", captured["env"])
 
-    def test_runner_decodes_malformed_output_with_utf8_replacement(self):
+    def test_malformed_output_decoded(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             with patch.object(trusted_gh, "resolve_gh", return_value=sys.executable):
@@ -298,7 +298,7 @@ class RepositoryContextTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 trusted_gh.repository_target(root)
 
-    def test_repo_argument_is_added_to_repository_command(self):
+    def test_repo_argument_added(self):
         captured = {}
 
         with tempfile.TemporaryDirectory() as temporary:
@@ -312,7 +312,7 @@ class RepositoryContextTest(unittest.TestCase):
                 with patch.object(trusted_gh, "run_gh", side_effect=run_gh):
                     trusted_gh._run_requested_command(root, ["pr", "create"])
         self.assertEqual(captured["arguments"], [
-            "pr", "create", "--head", "owner:feature/test", "--repo", "owner/repo"
+            "pr", "create", "--base", "main", "--head", "owner:feature/test", "--repo", "owner/repo"
         ])
 
     def test_explicit_repo_argument_is_preserved(self):
@@ -324,7 +324,7 @@ class RepositoryContextTest(unittest.TestCase):
                 ["pr", "view", "-R", "other/repo"],
             )
 
-    def test_global_options_before_command_receive_context(self):
+    def test_global_options_get_context(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self.write_config(root, "https://github.com/owner/repo.git")
@@ -342,7 +342,7 @@ class RepositoryContextTest(unittest.TestCase):
             )
             self.assertEqual(arguments.count("--head=owner:other"), 1)
 
-    def test_injected_flags_precede_end_of_options(self):
+    def test_injected_flags_precede_separator(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self.write_config(root, "https://github.com/owner/repo.git")
@@ -351,7 +351,7 @@ class RepositoryContextTest(unittest.TestCase):
             )
             self.assertEqual(arguments, ["pr", "view", "--repo", "owner/repo", "--", "12"])
 
-    def test_repo_commands_do_not_receive_unsupported_context_flag(self):
+    def test_repo_commands_skip_context_flag(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             self.write_config(root, "https://github.com/owner/repo.git")

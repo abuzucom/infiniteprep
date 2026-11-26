@@ -2,8 +2,8 @@
 """Regression tests for hook checks that never fired or contradicted each other.
 
 Each case runs the real hook entrypoint as a subprocess against a synthetic
-payload, except the guard-order case, which counts calls into the shared
-core from the command execution gate.
+payload, except the guard-order case. That case counts calls into the
+shared core from the command execution gate.
 """
 import importlib.util
 import json
@@ -63,12 +63,12 @@ def cmd(command: str) -> str:
 
 
 class NeverFiringCheckTest(unittest.TestCase):
-    """Checks whose markers never matched now ask."""
+    """Checks with markers that matched nothing now ask."""
 
     def test_auditctl_delete_all_rules_asks(self) -> None:
         self.assertEqual(bash("auditctl -D"), "ask")
 
-    def test_in_place_edit_over_a_glob_asks(self) -> None:
+    def test_in_place_glob_edit_asks(self) -> None:
         for command in ("sed -n -i 's/a/b/p' *.py", "sed -ni 's/a/b/p' *.py",
                         "sed -i.bak 's/a/b/' *.py", "sed --in-place 's/a/b/' *.py",
                         "sed --in-place=.bak 's/a/b/' *.py", "sed -Ei 's/a/b/' *.py",
@@ -77,13 +77,13 @@ class NeverFiringCheckTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(bash(command), "ask")
 
-    def test_xargs_max_args_is_not_a_dry_run(self) -> None:
+    def test_xargs_max_args_executes(self) -> None:
         self.assertEqual(bash("find . -name x | xargs -n 1 rm"), "ask")
 
-    def test_cmd_git_clean_dry_run_stays_allowed(self) -> None:
+    def test_cmd_git_clean_dry_run(self) -> None:
         self.assertEqual(cmd("git clean -n"), "allow")
 
-    def test_reads_and_dry_runs_stay_allowed(self) -> None:
+    def test_reads_and_dry_runs_allowed(self) -> None:
         for command in ("sed -n 's/a/b/p' *.py", "sed -e 's/i/j/' *.py",
                         "perl -Mstrict -e 'print' *.py", "git clean -n"):
             with self.subTest(command=command):
@@ -93,21 +93,21 @@ class NeverFiringCheckTest(unittest.TestCase):
 class VolumeVerdictTest(unittest.TestCase):
     """A recursive mode change under a mount point asks in every shell."""
 
-    def test_bash_recursive_mode_change_under_a_volume_asks(self) -> None:
+    def test_bash_volume_mode_change_asks(self) -> None:
         for command in ("chmod -R 777 /mnt/x", "chown -R nobody /media/disk",
                         "chgrp --recursive staff /var/tmp/x"):
             with self.subTest(command=command):
                 self.assertEqual(bash(command), "ask")
 
-    def test_powershell_recursive_mode_change_under_a_volume_asks(self) -> None:
+    def test_powershell_volume_mode_change_asks(self) -> None:
         self.assertEqual(powershell("chmod -R 777 /mnt/x"), "ask")
 
-    def test_cmd_recursive_mode_change_under_a_volume_asks(self) -> None:
+    def test_cmd_volume_mode_change_asks(self) -> None:
         for command in ("icacls /mnt/x /grant everyone:F /T", "takeown /F /mnt/x /R"):
             with self.subTest(command=command):
                 self.assertEqual(cmd(command), "ask")
 
-    def test_non_recursive_or_project_mode_change_stays_allowed(self) -> None:
+    def test_local_mode_change_allowed(self) -> None:
         for command in ("chmod 644 /mnt/x/file", "chmod -R 755 build",
                         "chmod -r /mnt/x/file"):
             with self.subTest(command=command):
@@ -134,7 +134,7 @@ class RebaseRecoveryMessageTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assert_rebase_only(json.loads(result.stdout)["reason"])
 
-    def test_context_events_name_only_rebase_recovery(self) -> None:
+    def test_context_events_rebase_recovery(self) -> None:
         branch_fixture = self.fixture()
         for event in ("SessionStart", "UserPromptSubmit"):
             with self.subTest(event=event):
@@ -147,7 +147,7 @@ class RebaseRecoveryMessageTest(unittest.TestCase):
 class UnreadableGitdirLifecycleTest(unittest.TestCase):
     """A broken gitdir pointer still reports the branch lookup failure."""
 
-    def test_stop_names_the_branch_lookup_failure(self) -> None:
+    def test_stop_names_lookup_failure(self) -> None:
         branch_fixture = BranchFixture(self, "main")
         branch_fixture.admin.rename(branch_fixture.root / "moved-admin")
         branch_fixture.admin.write_text("not a gitdir pointer\n", encoding="utf-8")
@@ -161,7 +161,7 @@ class UnreadableGitdirLifecycleTest(unittest.TestCase):
 class ProhibitedBranchSwitchTest(unittest.TestCase):
     """Switching to an existing claude/ branch is not a read-only act."""
 
-    def test_switch_to_existing_claude_branch_is_denied(self) -> None:
+    def test_claude_branch_switch_denied(self) -> None:
         for state in ("main", DETACHED_HEAD):
             with self.subTest(state=state):
                 branch_fixture = BranchFixture(self, state)
@@ -173,7 +173,7 @@ class ProhibitedBranchSwitchTest(unittest.TestCase):
 class OutsideRootReasonTest(unittest.TestCase):
     """A new non-test file outside the root asks without a test-file reason."""
 
-    def test_new_file_outside_root_asks_with_an_accurate_reason(self) -> None:
+    def test_outside_root_reason(self) -> None:
         with tempfile.TemporaryDirectory() as project, \
                 tempfile.TemporaryDirectory() as outside:
             target = os.path.join(outside, "notes.txt")
@@ -195,7 +195,7 @@ class OutsideRootReasonTest(unittest.TestCase):
 class GuardOrderTest(unittest.TestCase):
     """The trusted wrapper length guard runs before the forge verdict."""
 
-    def test_bare_run_skips_the_forge_verdict(self) -> None:
+    def test_bare_run_skips_forge(self) -> None:
         spec = importlib.util.spec_from_file_location(
             "command_execution_gate_order", HOOKS / "_command_execution_gate.py")
         gate = importlib.util.module_from_spec(spec)

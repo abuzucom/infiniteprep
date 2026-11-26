@@ -74,18 +74,18 @@ def inspect_one(bus_type: str, drive_type: str | None) -> Any:
 class WindowsRemovableFlagTests(unittest.TestCase):
     """The removable flag follows the volume DriveType, not the bus."""
 
-    def test_usb_disk_with_a_fixed_volume_is_not_removable(self) -> None:
+    def test_fixed_volume_disk_not_removable(self) -> None:
         """A USB disk with a Fixed volume keeps its USB bus but is not removable."""
         drive = inspect_one("USB", "Fixed")
 
         self.assertFalse(drive.is_removable)
         self.assertEqual(drive.bus_type, "USB")
 
-    def test_usb_disk_with_a_removable_volume_is_removable(self) -> None:
+    def test_removable_volume_disk_is_removable(self) -> None:
         """A USB disk with a Removable volume is removable."""
         self.assertTrue(inspect_one("USB", "Removable").is_removable)
 
-    def test_no_drive_type_is_not_removable(self) -> None:
+    def test_missing_drive_type_not_removable(self) -> None:
         """A USB disk with no volume DriveType is not removable."""
         self.assertFalse(inspect_one("USB", None).is_removable)
 

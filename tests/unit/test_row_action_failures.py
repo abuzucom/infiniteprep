@@ -86,7 +86,7 @@ def test_failed_save_keeps_typed_text(
     assert artist_edit(panel).text() == TYPED_ARTIST
 
 
-def test_a_refused_accept_keeps_the_typed_text(
+def test_refused_accept_keeps_typed_text(
     panel_and_file: tuple[DetailPanel, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """An accept that the review service refuses leaves the row's typed text in place."""

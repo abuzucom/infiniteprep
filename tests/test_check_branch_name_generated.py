@@ -27,12 +27,12 @@ def run_checker(branch: str) -> subprocess.CompletedProcess:
 class GeneratedBranchNameTest(unittest.TestCase):
     """Reject harness-generated names and keep descriptive names passing."""
 
-    def test_rejects_generated_name_with_letter_suffix(self):
+    def test_generated_letter_suffix_rejected(self):
         result = run_checker("chore/dreamy-goldberg-nwjlsu")
         self.assertEqual(result.returncode, 1)
         self.assertIn(GENERATED_MESSAGE, result.stderr)
 
-    def test_rejects_generated_name_with_mixed_suffix(self):
+    def test_generated_mixed_suffix_rejected(self):
         violations = check_branch_name.find_violations("chore/zealous-gauss-zz1yiy", strict=True)
         self.assertTrue(any(GENERATED_MESSAGE in item for item in violations))
         self.assertTrue(any("opaque mixed alphanumeric" in item for item in violations))

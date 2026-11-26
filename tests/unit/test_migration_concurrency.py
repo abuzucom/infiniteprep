@@ -71,7 +71,7 @@ def _migrate_in_thread(
         conn.close()
 
 
-def test_concurrent_instances_apply_a_step_once(tmp_path: Path) -> None:
+def test_concurrent_instances_apply_step_once(tmp_path: Path) -> None:
     """Both instances reach version 2. The step itself runs one time."""
     db_path = tmp_path / LIBRARY_NAME
     _prepare_library(db_path)

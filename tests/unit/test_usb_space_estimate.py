@@ -57,19 +57,19 @@ class EstimateExportBytesTests(unittest.TestCase):
         """A plan with no files, directories, or allowance needs zero bytes."""
         self.assertEqual(estimate_export_bytes(()), 0)
 
-    def test_one_byte_file_data_and_dir_clusters(self) -> None:
+    def test_tiny_file_data_dir_clusters(self) -> None:
         """A one-byte file costs one data cluster and one directory cluster."""
         self.assertEqual(estimate_export_bytes((1,)), SMALL_FILE_CLUSTERS * CLUSTER)
 
-    def test_exact_cluster_file_is_not_rounded_further(self) -> None:
+    def test_exact_cluster_file_not_rounded(self) -> None:
         """A file of exactly one cluster costs one data cluster and one directory cluster."""
         self.assertEqual(estimate_export_bytes((CLUSTER,)), SMALL_FILE_CLUSTERS * CLUSTER)
 
-    def test_one_byte_over_needs_two_data_clusters(self) -> None:
+    def test_byte_over_needs_two_clusters(self) -> None:
         """A file one byte over a cluster costs two data clusters and one directory cluster."""
         self.assertEqual(estimate_export_bytes((CLUSTER + 1,)), SPILLED_FILE_CLUSTERS * CLUSTER)
 
-    def test_empty_file_still_takes_a_directory_cluster(self) -> None:
+    def test_empty_file_takes_directory_cluster(self) -> None:
         """An empty file costs its directory cluster alone."""
         self.assertEqual(estimate_export_bytes((0,)), CLUSTER)
 
@@ -93,7 +93,7 @@ class EstimateExportBytesTests(unittest.TestCase):
         cluster_count = MIXED_DATA_CLUSTERS + MIXED_FILE_COUNT + MIXED_DIRECTORY_COUNT
         self.assertEqual(estimate, cluster_count * CLUSTER + MIXED_ALLOWANCE_BYTES)
 
-    def test_estimate_is_never_below_the_raw_sum(self) -> None:
+    def test_estimate_never_below_raw_sum(self) -> None:
         """Boundary file sizes never estimate below their raw byte total."""
         estimate = estimate_export_bytes(BOUNDARY_FILE_SIZES)
         self.assertGreaterEqual(estimate, sum(BOUNDARY_FILE_SIZES))
@@ -116,7 +116,7 @@ class ComputeReserveBytesTests(unittest.TestCase):
         self.assertEqual(ReservePolicy(), ReservePolicy(percent=0.0, fixed_bytes=0))
         self.assertEqual(compute_reserve_bytes(ESTIMATE_BYTES, ReservePolicy()), 0)
 
-    def test_percentage_reserve_applies_to_the_estimate(self) -> None:
+    def test_percentage_reserve_applies_to_estimate(self) -> None:
         """A percentage reserve takes that share of the estimate."""
         reserve = ReservePolicy(percent=TEN_PERCENT)
         self.assertEqual(compute_reserve_bytes(ESTIMATE_BYTES, reserve), TEN_PERCENT_OF_ESTIMATE)

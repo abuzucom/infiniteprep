@@ -33,7 +33,7 @@ def test_load_replaces_invalid_settings(tmp_path: Path) -> None:
     assert loaded.waveform_zoom_seconds == defaults.waveform_zoom_seconds
 
 
-def test_load_replaces_non_object_settings_document(tmp_path: Path) -> None:
+def test_load_replaces_non_object_settings(tmp_path: Path) -> None:
     """A JSON array cannot be interpreted as a settings mapping."""
     settings_path = tmp_path / "settings.json"
     settings_path.write_text("[]", encoding="utf-8")

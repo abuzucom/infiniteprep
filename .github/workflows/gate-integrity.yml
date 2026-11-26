@@ -2,8 +2,10 @@ name: Gate Integrity
 
 on:
   pull_request:
-    branches: [main]
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    # No branch filter. A filter cannot read hooks/primary-branch.txt. Gate
+    # integrity rejects a base outside the stable set.
+    # A base branch change fires edited. The base check then reruns.
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
 
 permissions:
   checks: read
@@ -33,7 +35,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
-          python-version: '3.x'
+          python-version: '3.14'
       # The approval binds to the head only through GitHub-recorded times:
       # label events, force pushes, and check-suite creation for the head SHA.
       - name: Read approval timeline
@@ -83,6 +85,19 @@ jobs:
               path.join(process.env.RUNNER_TEMP, "gate-timeline.json"),
               JSON.stringify(document),
             );
+      - name: Check pull request base
+        working-directory: trusted-base
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        # The base checkout defines the stable set. Without a base copy of the
+        # script, the first adoption passes only with the approval label.
+        run: |
+          if [ -f scripts/check_pr_base.py ]; then
+            python scripts/check_pr_base.py --base "$PR_BASE_REF"
+          else
+            python -c 'import json, os, sys; sys.exit(0 if "gate-change-approved" in json.loads(os.environ["PR_LABELS_JSON"]) else "first base check adoption requires the gate-change-approved label")'
+          fi
       - name: Verify protected gate changes
         working-directory: trusted-base
         env:
@@ -91,7 +106,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           GIT_ALTERNATE_OBJECT_DIRECTORIES: ${{ github.workspace }}/pr-head/.git/objects
-        # Pull-request code never runs here. Without a base checker, the first
+        # This job executes no pull request code. Without a base checker, the first
         # adoption passes only with the approval label.
         run: |
           if [ -f scripts/check_gate_pr_integrity.py ]; then

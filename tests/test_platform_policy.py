@@ -117,7 +117,7 @@ class TransferPolicyTest(unittest.TestCase):
         )
         self.assertEqual(verdict, "ask")
 
-    def test_windows_drive_is_not_remote_endpoint(self):
+    def test_windows_drive_not_remote(self):
         verdict, _reason = platform_policy.classify_platform_command(
             "win32",
             "scp",

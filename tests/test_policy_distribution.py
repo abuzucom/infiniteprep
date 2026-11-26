@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for repository-only and adoptable policy content."""
+"""Tests for local policy and adoptable policy content."""
 import sys
 import unittest
 from pathlib import Path
@@ -12,7 +12,7 @@ import sync
 
 
 class AdoptablePolicyTest(unittest.TestCase):
-    """Adoption excludes source-repository orientation."""
+    """Adoption excludes source repository orientation."""
 
     def test_filter_removes_repository_only_block(self):
         source = (
@@ -29,7 +29,7 @@ class AdoptablePolicyTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             sync.adoptable_content(source)
 
-    def test_live_policy_marks_one_repository_only_block(self):
+    def test_live_policy_marks_block(self):
         policy = POLICY_PATH.read_text(encoding="utf-8")
         self.assertEqual(policy.count(sync.REPOSITORY_ONLY_START), 1)
         self.assertEqual(policy.count(sync.REPOSITORY_ONLY_END), 1)
@@ -40,7 +40,7 @@ class AdoptablePolicyTest(unittest.TestCase):
         self.assertIn("<!-- Per-repo orientation.", adoptable)
         self.assertNotIn("## Repository-only orientation", adoptable)
 
-    def test_adoptable_policy_removes_source_only_supporting_content(self):
+    def test_adoptable_drops_source_only_content(self):
         source_only = (
             f"{sync.SOURCE_ONLY_START}\n"
             "source facts\n"

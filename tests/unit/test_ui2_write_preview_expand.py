@@ -44,7 +44,7 @@ def expanded_rows(dialog: WritePlanDialog) -> list[bool]:
     return [tree.topLevelItem(index).isExpanded() for index in range(tree.topLevelItemCount())]
 
 
-def test_rows_open_up_to_the_limit() -> None:
+def test_rows_open_up_to_limit() -> None:
     """A preview of up to ten files opens its rows. A longer one keeps them closed."""
     assert EXPAND_ROWS_MAX_FILES == 10
     assert should_expand_rows(1)

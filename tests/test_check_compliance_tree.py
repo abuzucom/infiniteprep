@@ -17,7 +17,7 @@ WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "immutable-conflict-check.
 class ComplianceTreeTest(unittest.TestCase):
     """Numeric YAML versions remain valid trusted workflow candidates."""
 
-    def test_unquoted_numeric_python_version_matches_candidate_job(self):
+    def test_numeric_python_version_matches(self):
         text = WORKFLOW_PATH.read_text(encoding="utf-8")
         text = text.replace("python-version: '3.x'", "python-version: 3.12")
         document = yaml.safe_load(text)

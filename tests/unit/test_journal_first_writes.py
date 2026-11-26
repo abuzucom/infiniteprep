@@ -39,7 +39,7 @@ def pending_write(tmp_path: Path) -> tuple[Repository, WriteService, FileWritePl
     return repo, write_svc, plan, source, original_hash
 
 
-def test_successful_write_leaves_one_completed_record(pending_write: Any) -> None:
+def test_successful_write_leaves_completed_record(pending_write: Any) -> None:
     """The journal entry made before the write ends COMPLETED with both hashes."""
     repo, write_svc, plan, source, original_hash = pending_write
 
@@ -52,7 +52,7 @@ def test_successful_write_leaves_one_completed_record(pending_write: Any) -> Non
     assert records[0].post_write_hash == compute_sha256(source)
 
 
-def test_failure_after_backup_rolls_the_file_back(
+def test_failure_after_backup_rolls_back(
     pending_write: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A write that corrupts the file and then fails restores the original bytes.
@@ -77,7 +77,7 @@ def test_failure_after_backup_rolls_the_file_back(
     assert "simulated power loss" in (record.error_message or "")
 
 
-def test_failure_before_backup_marks_the_record_failed(
+def test_failure_before_backup_marks_failed(
     pending_write: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A failed backup leaves the file untouched and records the failure."""
@@ -97,7 +97,7 @@ def test_failure_before_backup_marks_the_record_failed(
     assert "disk full" in (record.error_message or "")
 
 
-def test_unsafe_plan_creates_no_journal_record(pending_write: Any) -> None:
+def test_unsafe_plan_creates_no_record(pending_write: Any) -> None:
     """A plan that fails preflight raises before any journal entry exists."""
     repo, write_svc, plan, source, _ = pending_write
     source.write_bytes(source.read_bytes() + b"\x00\x00")

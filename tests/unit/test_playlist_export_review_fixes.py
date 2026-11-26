@@ -43,7 +43,7 @@ def store_path(repo: Repository, file_id: str, new_path: str) -> None:
 
 
 @pytest.mark.parametrize("control_char", ["\t", "\x00", "\x1b", "\x7f"])
-def test_paths_with_any_control_character_are_skipped(tmp_path: Path, control_char: str) -> None:
+def test_control_character_paths_are_skipped(tmp_path: Path, control_char: str) -> None:
     """Tab, NUL, ESC, and DEL paths are left out and reported like line breaks."""
     repo, _, file_ids = import_tracks(tmp_path, 2)
     store_path(repo, file_ids[1], str(tmp_path / "crate" / f"bad{control_char}name.wav"))
@@ -56,7 +56,7 @@ def test_paths_with_any_control_character_are_skipped(tmp_path: Path, control_ch
     assert control_char not in destination.read_text(encoding="utf-8")
 
 
-def test_resolved_path_line_is_checked_before_writing(
+def test_resolved_line_checked_before_writing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A clean stored path that resolves to a line break is still skipped."""
@@ -77,7 +77,7 @@ def test_resolved_path_line_is_checked_before_writing(
     assert "linked" not in destination.read_text(encoding="utf-8")
 
 
-def test_skip_text_names_ids_blanks_controls(tmp_path: Path) -> None:
+def test_skip_names_ids_blanks_controls(tmp_path: Path) -> None:
     """A stale ID gets an unknown-track label, and control characters become spaces."""
     repo, _, file_ids = import_tracks(tmp_path, 1)
     store_path(repo, file_ids[0], str(tmp_path / "crate" / "tab\there.wav"))
@@ -92,7 +92,7 @@ def test_skip_text_names_ids_blanks_controls(tmp_path: Path) -> None:
     ("chosen_name", "expected_name"),
     [("set.M3U8", "set.M3U8"), ("set.v2", "set.v2.m3u8"), ("notes.txt", "notes.txt.m3u8")],
 )
-def test_export_adds_suffix_only_if_missing(
+def test_export_adds_missing_suffix_only(
     qtbot,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

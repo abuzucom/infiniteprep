@@ -59,7 +59,7 @@ def write_parts(
     return repo, write_svc, plans
 
 
-def test_batch_continues_on_failure_by_default(write_parts: Any) -> None:
+def test_default_batch_continues_on_failure(write_parts: Any) -> None:
     """The failed file is recorded and left untouched. The later file is still written."""
     repo, write_svc, plans = write_parts
     broken_hash = compute_sha256(plans[1].source_path)
@@ -88,7 +88,7 @@ def test_batch_records_share_operation_id(write_parts: Any) -> None:
     assert None not in batch_ids
 
 
-def test_apply_batch_stops_at_first_failure(write_parts: Any) -> None:
+def test_apply_batch_stops_first_failure(write_parts: Any) -> None:
     """The earlier method keeps its contract: the error propagates and later files wait."""
     repo, write_svc, plans = write_parts
 
@@ -98,7 +98,7 @@ def test_apply_batch_stops_at_first_failure(write_parts: Any) -> None:
     assert repo.list_change_records(plans[2].file_id) == []
 
 
-def test_stop_on_failure_ends_batch_early(write_parts: Any) -> None:
+def test_stop_on_failure_ends_early(write_parts: Any) -> None:
     """With the stop rule on, files after the failed one stay unwritten."""
     repo, write_svc, plans = write_parts
 
@@ -110,7 +110,7 @@ def test_stop_on_failure_ends_batch_early(write_parts: Any) -> None:
     assert repo.list_change_records(plans[2].file_id) == []
 
 
-def test_cancel_stops_and_keeps_finished_writes(write_parts: Any) -> None:
+def test_cancel_keeps_finished_writes(write_parts: Any) -> None:
     """A cancel request after the first file keeps that write and skips the rest."""
     repo, write_svc, plans = write_parts
     started = CallRecorder(record=select_progress_file_name)

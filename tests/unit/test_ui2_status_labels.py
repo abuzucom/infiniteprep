@@ -22,7 +22,7 @@ EXPECTED_LABELS: dict[ReviewStatus, str] = {
 }
 
 
-def test_every_status_has_its_plain_label() -> None:
+def test_every_status_has_plain_label() -> None:
     """Each stored status shows its approved plain label."""
     assert {status: format_status_label(status) for status in ReviewStatus} == EXPECTED_LABELS
 
@@ -34,7 +34,7 @@ def test_labels_stay_unique() -> None:
     assert len(set(labels)) == len(labels)
 
 
-def test_cell_reads_stored_values_and_keeps_unknown_ones() -> None:
+def test_cell_reads_stored_keeps_unknown() -> None:
     """A stored value shows its label. An unknown value shows as stored."""
     assert format_status_cell("written") == "Saved"
     assert format_status_cell("not_a_status") == "not_a_status"

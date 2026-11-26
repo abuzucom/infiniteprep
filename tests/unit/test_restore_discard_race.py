@@ -115,7 +115,7 @@ def test_discard_keeps_a_different_file(tmp_path: Path) -> None:
     assert [path.name for path in tmp_path.iterdir()] == ["renamed.wav"]
 
 
-def test_discard_of_a_missing_file_does_nothing(tmp_path: Path) -> None:
+def test_discard_missing_file_does_nothing(tmp_path: Path) -> None:
     """A path that no longer exists returns False and creates nothing."""
     assert not discard_if_same_file(tmp_path / "gone.wav", (0, 0))
 

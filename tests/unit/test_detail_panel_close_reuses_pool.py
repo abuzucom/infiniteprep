@@ -23,7 +23,7 @@ WAVEFORM_DURATION_SECONDS = 1.0
 ANALYSIS_WAIT_TIMEOUT_MS = 3_000
 
 
-def test_reopened_panel_analyzes_the_selected_track(
+def test_reopened_panel_analyzes_selected_track(
     qtbot: Any, tmp_path: Path, monkeypatch: Any
 ) -> None:
     """Closing the panel cancels work without disabling later analysis."""

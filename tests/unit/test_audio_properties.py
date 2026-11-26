@@ -82,7 +82,7 @@ def test_cbr_mp3_duration_uses_bitrate() -> None:
     assert props.bits_per_sample is None
 
 
-def test_id3_tags_not_counted_as_audio() -> None:
+def test_id3_tags_excluded_from_audio() -> None:
     """The ID3v2 tag before the frames and the ID3v1 tag after them do not lengthen the track."""
     audio = mpeg_frames(MPEG1_STEREO_HEADER, MPEG1_FRAME_BYTES)
     tag = tag_bytes(3, v23_frame("TIT2", b"\x01" + utf16("Song")))
@@ -90,7 +90,7 @@ def test_id3_tags_not_counted_as_audio() -> None:
     assert props.duration == pytest.approx(read_mp3_properties(audio).duration)
 
 
-def test_mono_mpeg1_header_reports_one_channel() -> None:
+def test_mono_mpeg1_header_one_channel() -> None:
     """Channel mode 3 in the frame header means one channel."""
     props = read_mp3_properties(mpeg_frames(MPEG1_MONO_HEADER, MPEG1_FRAME_BYTES))
     assert props.channels == 1
@@ -105,7 +105,7 @@ def test_mpeg2_layer3_uses_own_tables() -> None:
 
 
 @pytest.mark.parametrize("marker", [b"Xing", b"Info"])
-def test_xing_or_info_count_sets_duration(marker: bytes) -> None:
+def test_xing_info_count_sets_duration(marker: bytes) -> None:
     """A Xing or Info header with frame and byte counts gives exact VBR timing."""
     header = marker + struct.pack(">III", 3, VBR_FRAMES, VBR_BYTES)
     audio = mpeg_frames(MPEG1_STEREO_HEADER, MPEG1_FRAME_BYTES)
@@ -123,14 +123,14 @@ def test_vbri_frame_count_sets_duration() -> None:
     assert props.duration == pytest.approx(VBR_FRAMES * MPEG1_SAMPLES_PER_FRAME / RATE_44K)
 
 
-def test_false_sync_before_the_audio_is_skipped() -> None:
+def test_false_sync_before_audio_skipped() -> None:
     """A stray 0xFF byte that does not start a frame chain is not taken as the first frame."""
     audio = mpeg_frames(MPEG1_STEREO_HEADER, MPEG1_FRAME_BYTES)
     props = read_mp3_properties(b"\x00\xff\xfb\x00\x00" + audio)
     assert props.bitrate == MPEG1_BITRATE
 
 
-def test_mp3_shorter_than_id3v1_keeps_length() -> None:
+def test_short_mp3_id3v1_keeps_length() -> None:
     """A file under 128 bytes holds no ID3v1 tag, even when "TAG" appears inside a frame."""
     frame = bytearray(MPEG25_MONO_HEADER + bytes(MPEG25_FRAME_BYTES - len(MPEG25_MONO_HEADER)))
     # A negative slice start of 72 - 128 reads from byte 16 of a 72-byte file.
@@ -147,7 +147,7 @@ def test_data_without_mpeg_frames_raises(data: bytes) -> None:
         read_mp3_properties(data)
 
 
-def test_wav_properties_come_from_fmt_and_data_chunks() -> None:
+def test_wav_properties_from_fmt_data() -> None:
     """Rate, channels, and bit depth come from fmt. Duration is data bytes over block align."""
     data = wav_file(riff_chunk(b"fmt ", WAV_FMT_BODY), riff_chunk(b"data", PCM_SAMPLES))
     stream = read_wav_stream(data)
@@ -170,7 +170,7 @@ def test_wav_id3_chunk_excludes_audio() -> None:
         assert read_wav_stream(data).tag_body == tag
 
 
-def test_wav_oversized_data_chunk_is_clamped() -> None:
+def test_wav_oversized_data_chunk_clamped() -> None:
     """A data chunk size past the end, as in a truncated recording, counts only real bytes."""
     payload = b"WAVE" + riff_chunk(b"fmt ", WAV_FMT_BODY)
     payload += b"data" + struct.pack("<I", 0xFFFFFFF0) + PCM_SAMPLES
@@ -186,14 +186,14 @@ def test_wav_oversized_data_chunk_is_clamped() -> None:
         wav_file(riff_chunk(b"fmt ", bytes(8))),
     ],
 )
-def test_wav_without_a_usable_fmt_chunk_raises(data: bytes) -> None:
+def test_wav_without_usable_fmt_raises(data: bytes) -> None:
     """A non-RIFF file, a missing fmt chunk, or a short fmt chunk raises."""
     with pytest.raises(AudioPropertiesError):
         read_wav_stream(data)
 
 
 @pytest.mark.parametrize("form_type", [b"AIFF", b"AIFC"])
-def test_aiff_properties_come_from_the_comm_chunk(form_type: bytes) -> None:
+def test_aiff_properties_from_comm_chunk(form_type: bytes) -> None:
     """COMM gives channels, frame count, bit depth, and the 80-bit extended sample rate."""
     tag = tag_bytes(3, v23_frame("TIT2", b"\x01" + utf16("Song")))
     stream = read_aiff_stream(basic_aiff(iff_chunk(b"ID3 ", tag), form_type=form_type))
@@ -206,7 +206,7 @@ def test_aiff_properties_come_from_the_comm_chunk(form_type: bytes) -> None:
 
 # Exponent fields 0x401F (2 ** 32, one past 32 bits), 0x4FFF, and 0x7FFE (the largest finite).
 @pytest.mark.parametrize("exponent_field", [0x401F, 0x4FFF, 0x7FFE])
-def test_aiff_rate_over_32_bits_raises(exponent_field: int) -> None:
+def test_aiff_rate_overflow_raises(exponent_field: int) -> None:
     """A COMM rate whose exponent puts it past 32 bits raises AudioPropertiesError.
 
     A float conversion of the largest exponents would raise OverflowError, which callers
@@ -255,12 +255,12 @@ def test_flac_comment_returned_id3_skipped() -> None:
         b"fLaC" + b"\x80\x00\x00\x22" + bytes(10),
     ],
 )
-def test_flac_without_a_valid_streaminfo_raises(data: bytes) -> None:
+def test_flac_without_valid_streaminfo_raises(data: bytes) -> None:
     """A missing magic, a first block other than STREAMINFO, or a truncated block raises."""
     with pytest.raises(AudioPropertiesError):
         read_flac_stream(data)
 
 
-def test_audio_properties_error_is_a_value_error() -> None:
+def test_properties_error_is_value_error() -> None:
     """Callers that catch ValueError also catch stream damage."""
     assert issubclass(AudioPropertiesError, ValueError)

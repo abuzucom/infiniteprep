@@ -973,7 +973,7 @@ class TestUsbMacosInspection(unittest.TestCase):
         self.assertEqual(partition.filesystem, "FAT32")
         self.assertTrue(partition.is_fat32)
 
-    def test_legacy_apfs_volumes_on_disk_entry(self) -> None:
+    def test_legacy_apfs_volumes_disk_entry(self) -> None:
         """APFS volumes listed directly on a disk entry attach to that disk."""
         runner = FakeRunner(
             list_plist=LEGACY_APFS_LIST_PLIST,
@@ -995,7 +995,7 @@ class TestUsbMacosInspection(unittest.TestCase):
             SpaceInfo(total_bytes=1000, used_bytes=600, available_bytes=400),
         )
 
-    def test_container_with_unknown_physical_store_raises(self) -> None:
+    def test_unknown_physical_store_container_raises(self) -> None:
         """A container naming an unknown physical store raises before any info call."""
         runner = FakeRunner(list_plist=CONTAINER_ORPHAN_LIST_PLIST, info_by_device={})
         with self.assertRaises(InspectionParseError):
@@ -1018,7 +1018,7 @@ class TestUsbMacosInspection(unittest.TestCase):
         self.assertEqual(volume.mount_points, ("/Volumes/Ghost",))
         self.assertEqual(volume.size_bytes, 900)
 
-    def test_multi_store_container_attaches_to_all_owners(self) -> None:
+    def test_multi_store_container_attaches_owners(self) -> None:
         """A multi-store container attaches its volumes to every store owner."""
         runner = FakeRunner(
             list_plist=MULTI_STORE_LIST_PLIST,
@@ -1185,7 +1185,7 @@ class TestUsbMacosInspection(unittest.TestCase):
         with self.assertRaisesRegex(InspectionParseError, "byte limit"):
             MacOSDriveInspector._parse_plist_dict(oversized, "diskutil list")
 
-    def test_parse_plist_dict_rejects_undecodable_output(self) -> None:
+    def test_parse_plist_rejects_undecodable_output(self) -> None:
         """Output with lone surrogates raises InspectionParseError, not UnicodeEncodeError."""
         with self.assertRaises(InspectionParseError):
             MacOSDriveInspector._parse_plist_dict("\ud800 not a plist", "diskutil list")
@@ -1197,7 +1197,7 @@ class TestUsbMacosInspection(unittest.TestCase):
             with self.assertRaises(CommandExecutionError):
                 inspector.inspect_device(unsafe)
 
-    def test_drive_identity_maps_vendor_and_serial(self) -> None:
+    def test_drive_identity_maps_vendor_serial(self) -> None:
         """Vendor, Manufacturer, and SerialNumber info keys map onto the identity."""
         runner = FakeRunner(
             list_plist=MSDOS_FAT32_LIST_PLIST,
@@ -1210,7 +1210,7 @@ class TestUsbMacosInspection(unittest.TestCase):
         self.assertEqual(inspection.drive.vendor, "SanDisk")
         self.assertEqual(inspection.drive.serial, "SN123456")
 
-    def test_inspect_device_info_calls_limited_to_target(self) -> None:
+    def test_info_calls_limited_to_target(self) -> None:
         """inspect_device runs info calls only for the matching drive."""
         runner = FakeRunner(
             list_plist=COMBINED_LIST_PLIST,
@@ -1233,13 +1233,13 @@ class TestUsbMacosInspection(unittest.TestCase):
         self.assertEqual(inspection.drive.name, "disk3")
         self.assertTrue(inspection.has_exfat_partition)
 
-    def test_malformed_list_plist_raises_parse_error(self) -> None:
+    def test_malformed_list_plist_parse_error(self) -> None:
         """A malformed list reply raises InspectionParseError."""
         runner = FakeRunner(list_plist=MALFORMED_LIST_PLIST, info_by_device={})
         with self.assertRaises(InspectionParseError):
             MacOSDriveInspector(command_runner=runner).inspect_all()
 
-    def test_non_mapping_plist_raises_parse_error(self) -> None:
+    def test_non_mapping_plist_parse_error(self) -> None:
         """A non-mapping list reply raises InspectionParseError."""
         runner = FakeRunner(list_plist=NON_MAPPING_LIST_PLIST, info_by_device={})
         with self.assertRaises(InspectionParseError):
@@ -1257,7 +1257,7 @@ class TestUsbMacosInspection(unittest.TestCase):
         with self.assertRaises(InspectionParseError):
             MacOSDriveInspector(command_runner=runner).inspect_all()
 
-    def test_disk_entry_not_mapping_raises_parse_error(self) -> None:
+    def test_non_mapping_disk_entry_raises(self) -> None:
         """A non-mapping disk entry raises InspectionParseError."""
         runner = FakeRunner(list_plist=DISK_ENTRY_NOT_MAPPING_LIST_PLIST, info_by_device={})
         with self.assertRaises(InspectionParseError):
@@ -1272,19 +1272,19 @@ class TestUsbMacosInspection(unittest.TestCase):
         with self.assertRaises(InspectionParseError):
             MacOSDriveInspector(command_runner=runner).inspect_all()
 
-    def test_partitions_not_list_raises_parse_error(self) -> None:
+    def test_partitions_not_list_parse_error(self) -> None:
         """A non-list Partitions value raises InspectionParseError."""
         runner = FakeRunner(list_plist=PARTITIONS_NOT_LIST_LIST_PLIST, info_by_device={})
         with self.assertRaises(InspectionParseError):
             MacOSDriveInspector(command_runner=runner).inspect_all()
 
-    def test_unsafe_disk_identifier_raises_parse_error(self) -> None:
+    def test_unsafe_disk_identifier_parse_error(self) -> None:
         """An unsafe device identifier in a recorded reply raises InspectionParseError."""
         runner = FakeRunner(list_plist=UNSAFE_IDENTIFIER_LIST_PLIST, info_by_device={})
         with self.assertRaises(InspectionParseError):
             MacOSDriveInspector(command_runner=runner).inspect_all()
 
-    def test_list_command_failure_raises_execution_error(self) -> None:
+    def test_list_failure_raises_execution_error(self) -> None:
         """A failing diskutil list command raises CommandExecutionError."""
         runner = FakeRunner(
             list_plist="",
@@ -1295,7 +1295,7 @@ class TestUsbMacosInspection(unittest.TestCase):
         with self.assertRaises(CommandExecutionError):
             MacOSDriveInspector(command_runner=runner).inspect_all()
 
-    def test_info_command_failure_raises_execution_error(self) -> None:
+    def test_info_failure_raises_execution_error(self) -> None:
         """A failing diskutil info command raises CommandExecutionError."""
 
         def failing_info_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
@@ -1326,7 +1326,7 @@ class TestUsbMacosInspection(unittest.TestCase):
         with self.assertRaises(CommandExecutionError):
             MacOSDriveInspector(command_runner=runner).inspect_all()
 
-    def test_inspect_device_by_name_and_path(self) -> None:
+    def test_inspect_device_by_name_path(self) -> None:
         """inspect_device resolves bare identifiers and /dev paths to one record."""
         inspector = MacOSDriveInspector(command_runner=fat32_stick_runner())
         by_name = inspector.inspect_device("disk2")
@@ -1410,7 +1410,7 @@ class TestUsbMacosInspection(unittest.TestCase):
             ],
         )
 
-    def test_clean_str_strips_ansi_and_control_characters(self) -> None:
+    def test_clean_str_strips_ansi_controls(self) -> None:
         """The shared sanitizer strips ANSI escapes and control characters."""
         self.assertEqual(clean_str("\x1b[31mJUNK\x00NAME\x07"), "JUNKNAME")
         self.assertIsNone(clean_str("   "))

@@ -14,7 +14,7 @@ from infiniteprep.ui.audio_player import (
 )
 
 
-def test_directory_source_never_reaches_the_decoder(tmp_path: Path, monkeypatch: Any) -> None:
+def test_directory_source_never_reaches_decoder(tmp_path: Path, monkeypatch: Any) -> None:
     """A non-regular source returns the empty overview without opening the path."""
 
     def fail_if_decoded(*_args: Any, **_kwargs: Any) -> None:

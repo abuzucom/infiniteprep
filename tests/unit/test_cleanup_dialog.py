@@ -40,7 +40,7 @@ def _dialog(qtbot: QtBot, confirm: RecordingConfirm) -> CleanupDialog:
     return dialog
 
 
-def test_boxes_start_unchecked_and_delete_is_disabled(qtbot: QtBot) -> None:
+def test_boxes_unchecked_delete_disabled(qtbot: QtBot) -> None:
     """Both boxes start unchecked, so Delete cannot run until one is chosen (D294)."""
     dialog = _dialog(qtbot, RecordingConfirm(reply=True))
 
@@ -60,7 +60,7 @@ def test_checking_a_box_enables_delete(qtbot: QtBot) -> None:
     assert not dialog.delete_btn.isEnabled()
 
 
-def test_folder_list_names_every_folder_as_plain_text(qtbot: QtBot) -> None:
+def test_folder_list_plain_text_names(qtbot: QtBot) -> None:
     """The dialog shows each folder the data box deletes, as plain text."""
     dialog = _dialog(qtbot, RecordingConfirm(reply=True))
 
@@ -82,7 +82,7 @@ def test_final_prompt_yes_accepts_choice(qtbot: QtBot) -> None:
     assert dialog.choice() == CleanupChoice(delete_data=True, delete_keys=False)
 
 
-def test_no_on_the_final_prompt_keeps_the_dialog_open(qtbot: QtBot) -> None:
+def test_final_prompt_no_keeps_open(qtbot: QtBot) -> None:
     """No on the final prompt deletes nothing and leaves the dialog unaccepted."""
     dialog = _dialog(qtbot, RecordingConfirm(reply=False))
     dialog.keys_box.setChecked(True)
@@ -93,7 +93,7 @@ def test_no_on_the_final_prompt_keeps_the_dialog_open(qtbot: QtBot) -> None:
 
 
 @pytest.mark.usefixtures("qapp")
-def test_final_prompt_defaults_no_lists_items() -> None:
+def test_prompt_lists_items_defaults_no() -> None:
     """The final prompt names every folder and the keys, with No as its default (D296)."""
     box = build_cleanup_confirm(CleanupChoice(delete_data=True, delete_keys=True), FOLDERS)
 
@@ -105,7 +105,7 @@ def test_final_prompt_defaults_no_lists_items() -> None:
 
 
 @pytest.mark.usefixtures("qapp")
-def test_final_prompt_for_keys_only_lists_no_folders() -> None:
+def test_keys_prompt_lists_no_folders() -> None:
     """With only the keys box checked, the prompt names no folder."""
     box = build_cleanup_confirm(CleanupChoice(delete_data=False, delete_keys=True), FOLDERS)
 
@@ -114,7 +114,7 @@ def test_final_prompt_for_keys_only_lists_no_folders() -> None:
 
 
 @pytest.mark.usefixtures("qapp")
-def test_result_box_lists_failures_as_plain_text() -> None:
+def test_result_box_lists_plain_failures() -> None:
     """The closing message lists what was removed and what remains (D295)."""
     report = CleanupReport(removed=[FOLDERS[0]], failed=[(FOLDERS[1], "Permission denied")])
 
@@ -127,7 +127,7 @@ def test_result_box_lists_failures_as_plain_text() -> None:
 
 
 @pytest.mark.usefixtures("qapp")
-def test_blocked_box_says_nothing_was_deleted() -> None:
+def test_blocked_box_reports_nothing_deleted() -> None:
     """When the window stays open, the message says nothing was deleted."""
     box = build_cleanup_blocked_box()
 

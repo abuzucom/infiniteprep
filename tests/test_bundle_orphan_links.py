@@ -53,7 +53,7 @@ class LoadedOrphanTest(unittest.TestCase):
 
         self.assertEqual(conflicts, [])
 
-    def test_linux_conflict_names_the_binary_and_the_link(self) -> None:
+    def test_linux_conflict_names_binary_link(self) -> None:
         """A new plugin that links QtPdf shows up with its destination and link name."""
         kept = [
             ("plugins/new/libnew.so", "/build/future-plugin", "BINARY"),
@@ -76,7 +76,7 @@ class LoadedOrphanTest(unittest.TestCase):
         self.assertEqual(len(conflicts), 1)
         self.assertIn("QtQuick.framework", conflicts[0])
 
-    def test_windows_link_matches_regardless_of_case(self) -> None:
+    def test_windows_link_matches_any_case(self) -> None:
         """Windows link names ignore case, so QT6QUICK.DLL matches a dropped Qt6Quick.dll."""
         kept = [("PySide6\\plugins\\ffmpegmediaplugin.dll", "/build/ffmpeg-windows", "BINARY")]
 
@@ -84,7 +84,7 @@ class LoadedOrphanTest(unittest.TestCase):
 
         self.assertEqual(len(conflicts), 1)
 
-    def test_symlink_entries_are_not_read_as_binaries(self) -> None:
+    def test_symlinks_not_read_as_binaries(self) -> None:
         """A symlink holds a link target, so its links are never read."""
         kept = [("libQt6Quick.so.6", "/build/ffmpeg-linux", FILTERS.SYMLINK_TYPECODE)]
 
@@ -96,7 +96,7 @@ class LoadedOrphanTest(unittest.TestCase):
 class SpecLoadedOrphanWiringTest(unittest.TestCase):
     """The spec checks the dropped binaries on every OS and stops the build on a conflict."""
 
-    def test_spec_checks_between_trim_and_prune(self) -> None:
+    def test_spec_checks_between_trim_prune(self) -> None:
         """The check sees the binaries left after the Linux plugin trim, then stops the build.
 
         Dropped EGLFS plugins link the dropped EGLFS libraries, so the check must follow

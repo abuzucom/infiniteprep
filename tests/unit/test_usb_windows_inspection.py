@@ -378,7 +378,7 @@ class TestUsbWindowsInspection(unittest.TestCase):
         self.assertEqual(report.partitions, ())
         self.assertEqual(report.space_by_mount, ())
 
-    def test_inspect_device_by_name_number_and_path(self) -> None:
+    def test_inspect_device_name_number_path(self) -> None:
         """inspect_device accepts disk names, numbers, and PHYSICALDRIVE paths."""
         _, inspector = _make_mock_runner(
             disks_stdout=FAT32_STICK_DISKS_JSON,
@@ -428,7 +428,7 @@ class TestUsbWindowsInspection(unittest.TestCase):
             [list(DISK_COMMAND), list(PARTITION_COMMAND), list(VOLUME_COMMAND)],
         )
 
-    def test_system_root_sets_the_interpreter_path(self) -> None:
+    def test_system_root_sets_interpreter_path(self) -> None:
         """SYSTEMROOT relocates the interpreter, and its absence falls back to C:\\Windows."""
         # The module reads SYSTEMROOT once at import, so each case reloads it.
         # The cleanup reload restores the constants under the real environment.
@@ -525,7 +525,7 @@ class TestUsbWindowsInspection(unittest.TestCase):
         _, inspector = _make_mock_runner(disks_stdout="")
         self.assertEqual(inspector.inspect_all(), ())
 
-    def test_missing_disk_number_raises_parse_error(self) -> None:
+    def test_missing_disk_number_parse_error(self) -> None:
         """A disk entry without a valid DiskNumber raises InspectionParseError."""
         bad_entries = ("{}", '{"DiskNumber": "abc"}', '{"DiskNumber": -1}', '{"DiskNumber": null}')
         for bad_entry in bad_entries:
@@ -533,7 +533,7 @@ class TestUsbWindowsInspection(unittest.TestCase):
             with self.subTest(entry=bad_entry), self.assertRaises(InspectionParseError):
                 inspector.inspect_all()
 
-    def test_invalid_partition_number_raises_parse_error(self) -> None:
+    def test_invalid_partition_number_parse_error(self) -> None:
         """Partition entries without a positive PartitionNumber raise InspectionParseError."""
         for bad_entry in ('{"DiskNumber": 1}', '{"DiskNumber": 1, "PartitionNumber": 0}'):
             _, inspector = _make_mock_runner(partitions_stdout="[" + bad_entry + "]")
@@ -553,7 +553,7 @@ class TestUsbWindowsInspection(unittest.TestCase):
             with self.subTest(command=key), self.assertRaises(CommandExecutionError):
                 inspector.inspect_all()
 
-    def test_command_timeout_wrapped_as_execution_error(self) -> None:
+    def test_timeout_wrapped_as_execution_error(self) -> None:
         """A runner timeout surfaces as CommandExecutionError."""
 
         def timeout_runner(cmd: list[str]) -> subprocess.CompletedProcess[str]:
@@ -682,7 +682,7 @@ class TestUsbWindowsInspection(unittest.TestCase):
             report.partitions[0].path, _BS + _BS + "." + _BS + "Volume{" + _FAT32_GUID + "}"
         )
 
-    def test_removable_inferred_from_volume_drive_type(self) -> None:
+    def test_removable_from_volume_drive_type(self) -> None:
         """A non-USB disk with a Removable volume is reported as removable."""
         disks = json.dumps(
             [

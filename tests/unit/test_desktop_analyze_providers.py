@@ -21,7 +21,7 @@ def import_one_track(repo: Repository, crate: Path) -> str:
     return report.imported_files[0].id
 
 
-def test_desktop_analyze_stores_no_mock_matches(tmp_path: Path) -> None:
+def test_desktop_analyze_stores_no_mocks(tmp_path: Path) -> None:
     """Desktop Analyze runs local analysis and stores no made-up candidate matches."""
     repo = Repository(DatabaseManager(":memory:"))
     file_id = import_one_track(repo, tmp_path / "crate")

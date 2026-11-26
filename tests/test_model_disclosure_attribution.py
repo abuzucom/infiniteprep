@@ -37,7 +37,7 @@ def commit(body: str) -> dict:
 class UnversionedModelTest(unittest.TestCase):
     """An Assisted-by value must name a versioned model."""
 
-    def test_vendor_or_tool_name_is_rejected(self):
+    def test_vendor_name_rejected(self):
         checker = load_checker()
         for value in ("Claude", "Claude Code", "Codex", "Gemini", "Antigravity"):
             with self.subTest(value=value):
@@ -72,7 +72,7 @@ class UnversionedModelTest(unittest.TestCase):
 class MissingDisclosureTest(unittest.TestCase):
     """A name-only agent label requires an Assisted-by disclosure."""
 
-    def test_agent_label_without_assisted_by_is_rejected(self):
+    def test_missing_assisted_by_rejected(self):
         checker = load_checker()
         body = "fix: change\n\nCo-authored-by: Claude Code\n"
         violations = checker.model_disclosure_violations([commit(body)])

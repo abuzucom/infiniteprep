@@ -136,7 +136,7 @@ def _responding(body: bytes) -> Any:
 # Candidate ids hold the file id.
 
 
-def test_musicbrainz_candidate_ids_differ_per_file() -> None:
+def test_musicbrainz_ids_differ_per_file() -> None:
     """The same MusicBrainz result gives each file its own candidate id."""
     adapter = MusicBrainzAdapter(
         build_memory_repository(), http_get_json=_returning(MB_SEARCH_PAYLOAD), min_interval_sec=0.0
@@ -148,7 +148,7 @@ def test_musicbrainz_candidate_ids_differ_per_file() -> None:
     assert SECOND_FILE_ID in second[0].id
 
 
-def test_discogs_candidate_ids_differ_per_file() -> None:
+def test_discogs_ids_differ_per_file() -> None:
     """The same Discogs result gives each file its own candidate id and keeps the year."""
     payload = {"results": [{"id": 249504, "title": "Deep Dish - Junk Science", "year": "1998"}]}
     adapter = DiscogsAdapter(
@@ -163,7 +163,7 @@ def test_discogs_candidate_ids_differ_per_file() -> None:
     assert first[0].release_details.year == "1998"
 
 
-def test_itunes_candidate_ids_differ_per_file() -> None:
+def test_itunes_ids_differ_per_file() -> None:
     """The same iTunes result gives each file its own candidate id."""
     adapter = ItunesSearchAdapter(
         build_memory_repository(),
@@ -179,7 +179,7 @@ def test_itunes_candidate_ids_differ_per_file() -> None:
 # Discogs release normalization.
 
 
-def test_discogs_release_ids_and_year_zero() -> None:
+def test_discogs_release_ids_year_zero() -> None:
     """Unpositioned entries get index ids and every track drops the zero year."""
     adapter = DiscogsAdapter(
         build_memory_repository(),
@@ -285,7 +285,7 @@ def test_musicbrainz_bad_type_no_request() -> None:
     assert requested == []
 
 
-def test_musicbrainz_no_track_number_is_none() -> None:
+def test_musicbrainz_missing_track_number_none() -> None:
     """A track entry without a number reads as no track number."""
     adapter = MusicBrainzAdapter(
         build_memory_repository(), http_get_json=_returning(MB_SEARCH_PAYLOAD), min_interval_sec=0.0
@@ -318,7 +318,7 @@ def test_musicbrainz_lookup_failure_is_empty(
 
 
 @pytest.mark.parametrize("error", NETWORK_ERRORS)
-def test_discogs_lookup_failure_returns_no_candidates(error: Exception) -> None:
+def test_discogs_lookup_failure_no_candidates(error: Exception) -> None:
     """A network failure gives no Discogs search or fetch candidates."""
     adapter = DiscogsAdapter(
         build_memory_repository(),
@@ -331,7 +331,7 @@ def test_discogs_lookup_failure_returns_no_candidates(error: Exception) -> None:
 
 
 @pytest.mark.parametrize("error", NETWORK_ERRORS)
-def test_itunes_lookup_failure_returns_no_candidates(error: Exception) -> None:
+def test_itunes_lookup_failure_no_candidates(error: Exception) -> None:
     """A network failure gives no iTunes candidates."""
     adapter = ItunesSearchAdapter(
         build_memory_repository(), http_get_json=_raising(error), limiter=RequestLimiter(0.0)
@@ -340,7 +340,7 @@ def test_itunes_lookup_failure_returns_no_candidates(error: Exception) -> None:
 
 
 @pytest.mark.parametrize("payload", [["unexpected"], "text", 7])
-def test_itunes_non_object_reply_not_cached(payload: Any) -> None:
+def test_itunes_non_object_reply_uncached(payload: Any) -> None:
     """A non-object response gives no candidates and stays out of the cache."""
     requested: list[str] = []
 
@@ -372,7 +372,7 @@ def test_failed_lookup_is_not_cached() -> None:
 
 
 @pytest.mark.parametrize("error", NETWORK_ERRORS)
-def test_acoustid_lookup_failure_returns_a_warning(error: Exception) -> None:
+def test_acoustid_lookup_failure_returns_warning(error: Exception) -> None:
     """A lookup failure keeps the fingerprint and gives one warning without the key."""
     adapter = ChromaprintAcoustIDAdapter(
         build_memory_repository(),
@@ -402,7 +402,7 @@ def test_fpcalc_failure_returns_a_warning() -> None:
     assert "fpcalc execution failed" in result.warnings[0]
 
 
-def test_fpcalc_programming_error_is_not_swallowed() -> None:
+def test_fpcalc_programming_error_not_swallowed() -> None:
     """A programming error in the fpcalc runner propagates."""
 
     def broken_fpcalc(_path: Path) -> tuple[float, str]:
@@ -418,7 +418,7 @@ def test_fpcalc_programming_error_is_not_swallowed() -> None:
 # Shared HTTP helper.
 
 
-def test_fetch_json_rejects_http_before_send() -> None:
+def test_fetch_json_rejects_http_upfront() -> None:
     """A plain HTTP URL raises before any connection opens."""
     opened: list[Any] = []
     with pytest.raises(ValueError, match="Example URL must use https:// scheme"):
@@ -428,7 +428,7 @@ def test_fetch_json_rejects_http_before_send() -> None:
     assert opened == []
 
 
-def test_fetch_json_reads_a_bounded_body() -> None:
+def test_fetch_json_reads_bounded_body() -> None:
     """An HTTPS request uses the default timeout and parses the JSON object."""
 
     def open_url(_request: Any, timeout: float) -> _Response:
@@ -442,7 +442,7 @@ def test_fetch_json_reads_a_bounded_body() -> None:
 
 
 @pytest.mark.parametrize("body", [b'[{"id": "x"}]', b'[{"a": 1, "b": 2}]', b"[1]", b'"text"'])
-def test_fetch_json_rejects_non_object_body(body: bytes) -> None:
+def test_fetch_json_requires_object_body(body: bytes) -> None:
     """An array or string body raises a not-an-object error."""
     with pytest.raises(ValueError, match="not a JSON object"):
         http_json.fetch_json(
@@ -480,7 +480,7 @@ def test_candidate_ids_unique_across_parts(first: tuple[str, str], second: tuple
     )
 
 
-def test_itunes_request_limiter_is_the_shared_limiter() -> None:
+def test_itunes_uses_shared_request_limiter() -> None:
     """The iTunes limiter is the shared limiter with a positive default interval."""
     limiter = RequestLimiter()
     assert isinstance(limiter, http_json.RequestLimiter)
@@ -541,7 +541,7 @@ def test_validator_accepts_selected_value() -> None:
         ("http://localhost:8080/v1/", "http://localhost:8080/api/tags"),
     ],
 )
-def test_ollama_tags_url_follows_the_base_url(base_url: str, expected: str) -> None:
+def test_ollama_tags_url_follows_base(base_url: str, expected: str) -> None:
     """The tags URL keeps the host and port and drops any v1 path."""
     assert build_tags_url(base_url) == expected
     assert OllamaBootstrapService(base_url=base_url).tags_url == expected
@@ -561,7 +561,7 @@ def test_ollama_lists_model_names(monkeypatch: pytest.MonkeyPatch) -> None:
     assert OllamaBootstrapService().list_installed_models() == ["qwen2.5:3b"]
 
 
-def test_ollama_refuses_a_remote_plain_http_server(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ollama_refuses_remote_plain_http(monkeypatch: pytest.MonkeyPatch) -> None:
     """A remote plain HTTP server lists no models and opens no connection."""
     opened = CallRecorder()
     monkeypatch.setattr(ollama_module.urllib.request, "urlopen", opened)
@@ -604,7 +604,7 @@ def test_forget_all_continues_after_failure(
     assert remaining == [first_key]
 
 
-def test_forget_all_returns_zero_on_success(
+def test_forget_all_success_returns_zero(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Every delete succeeding returns zero and leaves no stored key."""

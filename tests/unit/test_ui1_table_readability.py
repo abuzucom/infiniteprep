@@ -104,7 +104,7 @@ def test_format_warning_summary_counts_warnings() -> None:
     assert format_warning_summary(["a", "b", "c"]) == "3 issues"
 
 
-def test_library_table_does_not_stretch_the_last_section(
+def test_library_table_no_last_stretch(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """No column absorbs the spare width through the last-section stretch."""
@@ -131,7 +131,7 @@ def test_equal_stretch_shares(
 
 
 @pytest.mark.parametrize("width", WINDOW_WIDTHS)
-def test_columns_fill_the_viewport_without_overflow(
+def test_columns_fill_viewport_without_overflow(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager, width: int
 ) -> None:
     """The weighted shares replace the old widths, so the columns sum to the viewport width.
@@ -146,7 +146,7 @@ def test_columns_fill_the_viewport_without_overflow(
     assert viewport_width - weighted_count <= total <= viewport_width
 
 
-def test_wider_window_gives_the_extra_width_to_the_named_columns(
+def test_wider_window_widens_named_columns(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """A wider window widens the weighted columns and leaves the fitted columns as they were.
@@ -165,7 +165,7 @@ def test_wider_window_gives_the_extra_width_to_the_named_columns(
     assert wide[WARNINGS_COLUMN] == narrow[WARNINGS_COLUMN]
 
 
-def test_a_dragged_column_keeps_its_width_for_the_session(
+def test_dragged_column_keeps_session_width(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """A width the user sets survives a window resize."""
@@ -178,7 +178,7 @@ def test_a_dragged_column_keeps_its_width_for_the_session(
     assert window.file_table.horizontalHeader().sectionSize(ARTIST_COLUMN) == DRAGGED_WIDTH
 
 
-def test_a_restored_layout_never_stretches_the_last_section(
+def test_restored_layout_no_last_stretch(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """A layout saved by an older version, with the last-section stretch on, loads without it."""
@@ -196,7 +196,7 @@ def test_a_restored_layout_never_stretches_the_last_section(
     assert header.sectionResizeMode(WARNINGS_COLUMN) == QHeaderView.ResizeMode.Interactive
 
 
-def test_headers_carry_their_full_text_as_a_tooltip(
+def test_headers_carry_full_text_tooltip(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """An elided header still shows its full name on hover."""
@@ -209,7 +209,7 @@ def test_headers_carry_their_full_text_as_a_tooltip(
     assert tooltips == list(TABLE_COLUMNS)
 
 
-def test_warning_cell_shows_a_count_and_the_full_text_in_a_tooltip(
+def test_warning_cell_shows_count_tooltip(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """A file above the player sample-rate limit shows a count, with the warnings on hover."""
@@ -225,7 +225,7 @@ def test_warning_cell_shows_a_count_and_the_full_text_in_a_tooltip(
     assert item.toolTip() == "\n".join(warnings)
 
 
-def test_search_matches_only_the_visible_warning_cell(
+def test_search_matches_visible_warning_cell(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """Warning text sits in a tooltip, so typing it no longer matches the row."""
@@ -239,7 +239,7 @@ def test_search_matches_only_the_visible_warning_cell(
     assert window.file_table.rowCount() == 0
 
 
-def test_key_notation_box_shows_readable_names(
+def test_key_notation_shows_readable_names(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """The box lists readable names and keeps the stored notation values as item data."""
@@ -273,7 +273,7 @@ def shown_panel(qtbot: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     return panel
 
 
-def test_field_column_shows_readable_names_over_unchanged_keys(shown_panel: DetailPanel) -> None:
+def test_field_column_prefers_readable_names(shown_panel: DetailPanel) -> None:
     """Rows show names such as "Mix name" and their controls keep the stored field keys."""
     table = shown_panel.fields_table
     shown = [table.item(row, COLUMN_FIELD_NAME).text() for row in range(table.rowCount())]
@@ -289,7 +289,7 @@ def test_field_column_shows_readable_names_over_unchanged_keys(shown_panel: Deta
     assert FIELD_LABELS[FieldName.BPM.value] == "BPM"
 
 
-def test_detail_value_columns_share_the_spare_width(shown_panel: DetailPanel) -> None:
+def test_detail_columns_share_spare_width(shown_panel: DetailPanel) -> None:
     """Existing Tag, Top Proposal, and Approved / Edit share the spare width equally."""
     header = shown_panel.fields_table.horizontalHeader()
     shares = [
@@ -302,7 +302,7 @@ def test_detail_value_columns_share_the_spare_width(shown_panel: DetailPanel) ->
     assert shares[0] > header.sectionSize(COLUMN_FIELD_NAME)
 
 
-def test_actions_column_is_no_wider_than_its_buttons(shown_panel: DetailPanel) -> None:
+def test_actions_column_fits_its_buttons(shown_panel: DetailPanel) -> None:
     """The Actions column fits its buttons, and each button keeps its natural width."""
     table = shown_panel.fields_table
     fitted = table.sizeHintForColumn(COLUMN_ACTIONS)

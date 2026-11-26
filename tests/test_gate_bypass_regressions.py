@@ -148,7 +148,7 @@ class GitDeletionTest(ExpectationTable):
             ("git branch -df feat/x", "ask"),
         ))
 
-    def test_dry_runs_and_safe_deletes_pass(self):
+    def test_safe_deletions_pass(self):
         self.assert_verdicts((
             ("git clean -n", ""),
             ("git clean -fn", ""),

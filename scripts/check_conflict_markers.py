@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check tracked files for unresolved git merge conflict markers.
 
-A portable, path-generic checker: copy this file into any repo and run
+A portable checker for any path: copy this file into any repo and run
 it in CI, pre-commit hooks, or Makefile targets. Scans files for unresolved
 git merge conflict blocks and orphan markers across standard and configured
 marker sizes. Inspects Git index modes to ignore symlinks and submodules,
@@ -28,12 +28,25 @@ import sys
 import tempfile
 from pathlib import Path
 
+# A copy beside trusted_git uses its resolver. A copy shipped alone falls
+# back to the equivalent standalone lookup below.
+try:
+    from scripts.trusted_git import resolve_git as _trusted_resolve_git
+except ModuleNotFoundError:
+    try:
+        from trusted_git import resolve_git as _trusted_resolve_git
+    except ModuleNotFoundError:
+        _trusted_resolve_git = None
+
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 MAX_LINE_LENGTH = 65536  # 64 KB
 MAX_VIOLATIONS = 100
 # git check-attr reads paths from stdin; chunk them so one
-# invocation stays a reasonable size on a large repository.
+# command stays a reasonable size on a large repository.
 CHECK_ATTR_CHUNK = 500
+# check_compliance_tree keeps its own _sanitize copy capped at 500, so each
+# file stays standalone. tests/test_tree_checker_parity.py pins the shared
+# rendering below both caps.
 MAX_DIAGNOSTIC_LENGTH = 200
 MAX_LATIN1_CODE_POINT = 0xFF
 BINARY_SNIFF_BYTES = 4096
@@ -46,6 +59,10 @@ STAGE_FIELD_INDEX = 2
 SHORT_SHA_LENGTH = 12
 REGULAR_MODES = {"100644", "100755"}
 OBJECT_ID_PATTERN = re.compile(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})\Z")
+# Git tree entry (mode, object type) pairs. Regular and executable files get
+# scanned. Symlinks and submodules carry no file content to scan.
+TREE_REGULAR_BLOB_TYPES = frozenset({(b"100644", b"blob"), (b"100755", b"blob")})
+TREE_SKIPPED_ENTRY_TYPES = frozenset({(b"120000", b"blob"), (b"160000", b"commit")})
 
 
 def _sanitize(value: object) -> str:
@@ -101,6 +118,15 @@ def is_valid_setext_heading(
     return True
 
 
+def _try_decode(raw_bytes: bytes, encoding: str, errors: str,
+                failure: type[Exception]) -> str | None:
+    """Decode `raw_bytes`, or return None when the decoder raises `failure`."""
+    try:
+        return raw_bytes.decode(encoding, errors=errors)
+    except failure:
+        return None
+
+
 def decode_content(
     raw_bytes: bytes, encoding_hint: str | None = None
 ) -> tuple[str | None, str | None]:
@@ -127,23 +153,16 @@ def decode_content(
         return decoded.lstrip("\ufeff"), None
 
     if encoding_hint and encoding_hint != "unspecified":
-        try:
-            decoded = raw_bytes.decode(
-                encoding_hint, errors="replace"
-            )
+        # The working-tree-encoding attribute can name a codec this build
+        # of Python lacks. That case falls through to UTF-8.
+        decoded = _try_decode(raw_bytes, encoding_hint, "replace", LookupError)
+        if decoded is not None:
             return decoded.lstrip("\ufeff"), None
-        except (LookupError, UnicodeDecodeError):
-            # The declared working-tree-encoding did not apply. Fall
-            # through to UTF-8 rather than reporting, since the attribute
-            # can name an encoding this build of Python does not carry.
-            pass
 
-    try:
-        return raw_bytes.decode("utf-8").lstrip("\ufeff"), None
-    except UnicodeDecodeError:
-        # Not UTF-8 either, so treat the file as binary below. A file the
-        # decoder cannot read carries no conflict markers to find.
-        pass
+    # A file that is not UTF-8 falls through to the binary sniff below.
+    decoded = _try_decode(raw_bytes, "utf-8", "strict", UnicodeDecodeError)
+    if decoded is not None:
+        return decoded.lstrip("\ufeff"), None
 
     if b"\x00" in raw_bytes[:BINARY_SNIFF_BYTES]:
         return None, None
@@ -336,10 +355,66 @@ def check_content(
     return violations
 
 
+def _repository_anchor() -> Path:
+    """Return the nearest working-directory ancestor that holds .git."""
+    current = Path.cwd().resolve()
+    for candidate in (current, *current.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return current
+
+
+def _trusted_candidate(candidate: Path, repository: Path) -> str:
+    """Return the resolved candidate when it is an executable outside the repo, else ""."""
+    if Path(os.path.abspath(candidate)).is_relative_to(repository):
+        return ""
+    try:
+        if candidate.is_symlink() or not candidate.is_file():
+            return ""
+        executable = candidate.resolve(strict=True)
+    except OSError:
+        return ""
+    if executable.is_relative_to(repository):
+        return ""
+    if os.name == "nt" or os.access(executable, os.X_OK):
+        return str(executable)
+    return ""
+
+
+def _standalone_resolve_git(repository: Path) -> str:
+    """Return Git from an absolute PATH entry outside the repository."""
+    names = ("git.exe", "git.com") if os.name == "nt" else ("git",)
+    for raw_directory in os.environ.get("PATH", "").split(os.pathsep):
+        directory = Path(raw_directory.strip('"'))
+        if not raw_directory or not directory.is_absolute():
+            continue
+        for name in names:
+            executable = _trusted_candidate(directory / name, repository)
+            if executable:
+                return executable
+    raise FileNotFoundError("trusted Git executable was not found on PATH")
+
+
+def _git_executable(repo_root: str | None = None) -> str:
+    """Return an absolute Git outside the repository.
+
+    A bare `git` would let a repository-controlled PATH entry choose the
+    program that reads the tree.
+    """
+    repository = Path(repo_root).resolve() if repo_root else _repository_anchor()
+    resolver = _trusted_resolve_git or _standalone_resolve_git
+    try:
+        return resolver(repository)
+    except FileNotFoundError as err:
+        raise RuntimeError(
+            "trusted Git was not found on PATH outside the repository; "
+            "install Git or fix PATH") from err
+
+
 def _get_repo_root() -> str:
     """Resolve the git repository root directory."""
     result = subprocess.run(
-        ["git", "--no-pager", "rev-parse", "--show-toplevel"],
+        [_git_executable(), "--no-pager", "rev-parse", "--show-toplevel"],
         capture_output=True,
         check=False,
     )
@@ -353,12 +428,13 @@ def _get_repo_root() -> str:
     return result.stdout.decode("utf-8", errors="replace").strip()
 
 
-def _probe_is_symlink(path: str):
-    """Return True, False, or None when the check itself failed."""
-    try:
-        return os.path.islink(path)
-    except OSError:
-        return None
+def _probe_is_symlink(path: str) -> bool:
+    """Return whether the path is a link.
+
+    os.path.islink reports False for a path it cannot inspect. The open in
+    _safe_read then reports that path's error.
+    """
+    return os.path.islink(path)
 
 
 def _safe_read(
@@ -372,7 +448,7 @@ def _safe_read(
     that narrowed, not closed.
 
     Returns (data, error_message). data is None on skip or error.
-    error_message is None when the file is silently skipped.
+    error_message is None when the scan skips the file without a message.
     """
     flags = os.O_RDONLY
     nofollow = hasattr(os, "O_NOFOLLOW")
@@ -380,12 +456,8 @@ def _safe_read(
         flags |= os.O_NOFOLLOW
     else:
         # Without O_NOFOLLOW the check and the open are separate calls, so
-        # this narrows the window rather than closing it. A probe that
-        # fails tells us nothing about the path, so refuse it.
-        is_link = _probe_is_symlink(path)
-        if is_link is None:
-            return None, f"could not determine whether {_sanitize(path)} is a link"
-        if is_link:
+        # a race between them stays possible but shorter.
+        if _probe_is_symlink(path):
             return None, None
 
     try:
@@ -466,7 +538,7 @@ def _run_check_attr(rel_paths: list, repo_root: str | None,
                     cached: bool) -> bytes:
     """Return raw check-attr output for one chunk of repo-relative paths."""
     cmd = [
-        "git", "--no-pager",
+        _git_executable(repo_root), "--no-pager",
         "-c", "core.fsmonitor=",
         "check-attr",
         "conflict-marker-size",
@@ -536,7 +608,8 @@ def check_file(
 ) -> list[str]:
     """Check a single worktree file for conflict markers.
 
-    Uses _safe_read for race-free, bounded, no-follow-symlink I/O.
+    Uses _safe_read for bounded, no-follow-symlink I/O. Without O_NOFOLLOW
+    the probe-to-open window is narrowed, not closed.
     """
     raw_bytes, err = _safe_read(path, MAX_FILE_SIZE)
     if err:
@@ -546,7 +619,7 @@ def check_file(
 
     text, decode_err = decode_content(raw_bytes, encoding_hint)
     if decode_err:
-        return [f"error: {path}: {decode_err}"]
+        return [f"error: {_sanitize(path)}: {_sanitize(decode_err)}"]
     if text is None:
         return []
 
@@ -559,28 +632,18 @@ def get_tracked_regular_files(
     """Return all git-tracked regular files.
 
     Excludes symlinks (120000) and submodules (160000). Callers decide
-    whether a skip-worktree entry comes from disk or its index blob.
+    whether an entry kept out of the worktree comes from disk or its index blob.
     """
     if repo_root is None:
         repo_root = _get_repo_root()
-    regular: list[str] = []
-    for part in _run_ls_files(repo_root, ["-s"]).split(b"\x00"):
-        if not part:
-            continue
-        try:
-            file_path, _, _, mode = _parse_index_entry(
-                part.decode("utf-8", errors="replace"))
-        except (ValueError, IndexError):
-            continue
-        if mode in REGULAR_MODES:
-            regular.append(file_path)
-    return regular
+    return [file_path for file_path, _sha, _stage, mode in _get_index_entries(repo_root)
+            if mode in REGULAR_MODES]
 
 
 def _skip_worktree_paths(repo_root: str) -> set:
-    """Return index paths marked skip-worktree, which have no local file.
+    """Return index paths that Git keeps out of the worktree. Those paths have no local file.
 
-    A sparse checkout omits them deliberately, so reporting them as
+    A sparse checkout omits them by design, so reporting them as
     missing fails a valid working tree.
     """
     skipped = set()
@@ -588,9 +651,10 @@ def _skip_worktree_paths(repo_root: str) -> set:
         if not part:
             continue
         entry = part.decode("utf-8", errors="replace")
-        # git ls-files -v tags skip-worktree entries "S", then one space,
-        # then the path. A lowercase tag is assume-unchanged, which still
-        # has a working-tree file and stays in scope.
+        # git ls-files -v tags entries kept out of the worktree "S". One
+        # space and the path follow. A lowercase tag marks an entry Git
+        # assumes unchanged. Such a path still has a working-tree file and
+        # stays in scope.
         if len(entry) > len(SKIP_WORKTREE_PREFIX) and entry.startswith(SKIP_WORKTREE_PREFIX):
             skipped.add(entry[len(SKIP_WORKTREE_PREFIX):])
     return skipped
@@ -599,7 +663,7 @@ def _skip_worktree_paths(repo_root: str) -> set:
 def _run_ls_files(repo_root: str, extra: list) -> bytes:
     """Return raw ls-files output, raising with git's own message."""
     result = subprocess.run(
-        ["git", "--no-pager", "-c", "core.fsmonitor=", "ls-files",
+        [_git_executable(repo_root), "--no-pager", "-c", "core.fsmonitor=", "ls-files",
          *extra, "-z", "--full-name"],
         capture_output=True,
         check=False,
@@ -646,13 +710,13 @@ def _supports_no_lazy_fetch(repo_root: str) -> bool:
 
     The option arrived in Git 2.45. Ubuntu 24.04 LTS ships 2.43, where every
     object read failed with "unknown option" and the checker reported one
-    error per tracked file rather than one message about git.
+    error per tracked file instead of one message about git.
 
-    Probe rather than parse `git --version`: a distribution backport carries
+    Probe `git --version` instead of parsing it: a distribution backport carries
     the option without carrying the version number.
     """
     probe = subprocess.run(
-        ["git", "--no-lazy-fetch", "rev-parse", "--git-dir"],
+        [_git_executable(repo_root), "--no-lazy-fetch", "rev-parse", "--git-dir"],
         capture_output=True, check=False, cwd=repo_root)
     stderr = probe.stderr.decode("utf-8", errors="replace")
     if "unknown option" not in stderr:
@@ -673,7 +737,7 @@ def _object_command(repo_root: str, *args: str) -> list:
     git has it. --no-lazy-fetch is added only where it exists, because a git
     that rejects it fails the whole scan instead of reading one object.
     """
-    command = ["git", "--no-pager", "--no-replace-objects"]
+    command = [_git_executable(repo_root), "--no-pager", "--no-replace-objects"]
     if _supports_no_lazy_fetch(repo_root):
         command.append("--no-lazy-fetch")
     command += ["-c", "core.fsmonitor=", *args]
@@ -802,45 +866,51 @@ def _check_staged(repo_root: str) -> list[str]:
 
 
 def _check_all(repo_root: str) -> list[str]:
-    """Check present worktree files and absent skip-worktree index blobs."""
+    """Check present worktree files and index blobs kept out of the worktree."""
     violations, readable = _partition_index_entries(
         _get_index_entries(repo_root))
     skipped = _skip_worktree_paths(repo_root)
-
-    def _path_exists(candidate_path: str) -> bool:
-        return os.path.lexists(os.path.join(repo_root, candidate_path))
-
-    present = [path for path, _ in readable if _path_exists(path)]
-    absent_skipped = [
-        (path, sha) for path, sha in readable
-        if path in skipped and not _path_exists(path)
-    ]
+    present, absent_skipped = _split_by_presence(readable, skipped, repo_root)
     worktree_attributes = get_git_attributes(
-        present, repo_root=repo_root)
+        list(present), repo_root=repo_root)
     cached_attributes = get_git_attributes(
-        [path for path, _ in absent_skipped], repo_root=repo_root,
-        cached=True)
+        list(absent_skipped), repo_root=repo_root, cached=True)
 
     for file_path, sha in readable:
         if len(violations) >= MAX_VIOLATIONS:
             violations.append(
                 f"reached violation limit ({MAX_VIOLATIONS}), stopping")
             break
-        if file_path in skipped and not _path_exists(file_path):
+        if file_path in absent_skipped:
             attrs = cached_attributes.get(file_path, {})
             violations.extend(_check_staged_blob(
                 file_path, sha, repo_root,
                 _parse_marker_size(attrs.get("conflict-marker-size"))))
-            continue
-        if not _path_exists(file_path):
-            continue
-        attrs = worktree_attributes.get(file_path, {})
-        violations.extend(check_file(
-            file_path,
-            _parse_marker_size(attrs.get("conflict-marker-size")),
-            attrs.get("working-tree-encoding"),
-        ))
+        elif file_path in present:
+            attrs = worktree_attributes.get(file_path, {})
+            violations.extend(check_file(
+                file_path,
+                _parse_marker_size(attrs.get("conflict-marker-size")),
+                attrs.get("working-tree-encoding"),
+            ))
     return violations
+
+
+def _split_by_presence(readable: list, skipped: set,
+                       repo_root: str) -> tuple[dict, dict]:
+    """Return (present paths, absent skip-worktree paths) in index order.
+
+    Each path gets one existence probe. The dicts keep index order for the
+    attribute lookups and give constant-time membership tests.
+    """
+    present: dict = {}
+    absent_skipped: dict = {}
+    for path, _ in readable:
+        if os.path.lexists(os.path.join(repo_root, path)):
+            present[path] = None
+        elif path in skipped:
+            absent_skipped[path] = None
+    return present, absent_skipped
 
 
 def _run_immutable_git(
@@ -862,7 +932,7 @@ def _run_immutable_git(
 
 
 def _validate_object_id(object_id: str) -> str:
-    """Return a normalized validated hexadecimal object ID."""
+    """Return a normalized 40- or 64-character hexadecimal object ID."""
     if not OBJECT_ID_PATTERN.fullmatch(object_id):
         raise RuntimeError(
             "--tree requires a validated hexadecimal object id "
@@ -886,31 +956,38 @@ def _validate_tree_path(raw_path: bytes) -> str:
 
 
 def _parse_tree_entries(raw: bytes) -> list[tuple[str, str]]:
-    """Parse complete ls-tree output into regular blob paths and IDs."""
+    """Parse complete ls-tree output into regular blob paths and IDs.
+
+    check_compliance_tree keeps its own copy so each file stays standalone.
+    tests/test_tree_parser_parity.py pins both copies to one record grammar.
+    """
     if raw and not raw.endswith(b"\x00"):
         raise RuntimeError("truncated git ls-tree output")
     entries: list[tuple[str, str]] = []
     seen: set[str] = set()
     for record in raw[:-1].split(b"\x00") if raw else []:
-        try:
-            metadata, raw_path = record.split(b"\t", 1)
-            mode, object_type, raw_id = metadata.split(b" ")
-            object_id = raw_id.decode("ascii")
-        except (ValueError, UnicodeDecodeError) as err:
-            raise RuntimeError("malformed git ls-tree entry") from err
+        mode_and_type, raw_path, object_id = _split_tree_record(record)
         file_path = _validate_tree_path(raw_path)
         if file_path in seen or not OBJECT_ID_PATTERN.fullmatch(object_id):
             raise RuntimeError(
                 f"malformed git ls-tree entry: {_sanitize(file_path)}")
         seen.add(file_path)
-        if (mode, object_type) in ((b"100644", b"blob"),
-                                   (b"100755", b"blob")):
+        if mode_and_type in TREE_REGULAR_BLOB_TYPES:
             entries.append((file_path, object_id.lower()))
-        elif (mode, object_type) not in ((b"120000", b"blob"),
-                                        (b"160000", b"commit")):
+        elif mode_and_type not in TREE_SKIPPED_ENTRY_TYPES:
             raise RuntimeError(
                 f"unsupported git ls-tree entry: {_sanitize(file_path)}")
     return entries
+
+
+def _split_tree_record(record: bytes) -> tuple[tuple[bytes, bytes], bytes, str]:
+    """Return ((mode, object type), raw path, object ID) for one ls-tree record."""
+    try:
+        metadata, raw_path = record.split(b"\t", 1)
+        mode, object_type, raw_id = metadata.split(b" ")
+        return (mode, object_type), raw_path, raw_id.decode("ascii")
+    except (ValueError, UnicodeDecodeError) as err:
+        raise RuntimeError("malformed git ls-tree entry") from err
 
 
 def _parse_tree_attributes(
@@ -944,7 +1021,7 @@ def _parse_tree_attributes(
 
 
 def _isolated_git_env(repo_root: str, config_root: str) -> dict:
-    """Build an environment whose attributes come only from source objects."""
+    """Build an environment with attributes from source objects only."""
     raw_objects = _run_immutable_git(
         repo_root, ["rev-parse", "--git-path", "objects"])
     try:
@@ -981,7 +1058,7 @@ def _get_tree_attributes(
     with tempfile.TemporaryDirectory() as temp_dir:
         env = _isolated_git_env(repo_root, temp_dir)
         init = subprocess.run(
-            ["git", "--no-pager", "-c", "init.templateDir=", "init",
+            [_git_executable(repo_root), "--no-pager", "-c", "init.templateDir=", "init",
              "--bare", "--quiet", temp_dir],
             capture_output=True, check=False, env=env)
         if init.returncode != 0:
@@ -1027,23 +1104,10 @@ def _check_tree(repo_root: str, raw_object_id: str) -> list[str]:
     return violations
 
 
-def _collect_files(resolved: list, repo_root: str) -> list:
-    """Return the files to check, expanding --all against the index."""
-    if not resolved or resolved == ["--all"]:
-        return get_tracked_regular_files(repo_root)
-    files: list[str] = []
-    for arg in resolved:
-        if arg == "--all":
-            files.extend(get_tracked_regular_files(repo_root))
-        else:
-            files.append(arg)
-    return files
-
-
 def _report(violations: list) -> int:
-    """Print violations and return the exit code they imply."""
+    """Print sanitized violations and return the exit code they imply."""
     for violation in violations:
-        print(violation, file=sys.stderr)
+        print(_sanitize(violation), file=sys.stderr)
     return 1 if violations else 0
 
 
@@ -1064,6 +1128,17 @@ def _check_worktree(args: list, repo_root: str) -> list:
     return violations
 
 
+def _store_cli_value(argument: str, value: str, tree_id: str | None,
+                     repo_path: str | None) -> tuple[str | None, str | None]:
+    """Return (tree_id, repo_path) after recording one --tree or --repo value."""
+    current = tree_id if argument == "--tree" else repo_path
+    if current is not None:
+        raise RuntimeError(f"{argument} may be supplied only once")
+    if argument == "--tree":
+        return value, repo_path
+    return tree_id, value
+
+
 def _parse_cli(raw_args: list[str]) -> tuple[bool, list[str], str | None,
                                              str | None]:
     """Parse the staged, tree, and worktree CLI modes."""
@@ -1079,16 +1154,9 @@ def _parse_cli(raw_args: list[str]) -> tuple[bool, list[str], str | None,
         elif argument in ("--tree", "--repo"):
             if index + 1 >= len(raw_args):
                 raise RuntimeError(f"{argument} requires a value")
-            value = raw_args[index + 1]
             index += 1
-            if argument == "--tree":
-                if tree_id is not None:
-                    raise RuntimeError("--tree may be supplied only once")
-                tree_id = value
-            else:
-                if repo_path is not None:
-                    raise RuntimeError("--repo may be supplied only once")
-                repo_path = value
+            tree_id, repo_path = _store_cli_value(
+                argument, raw_args[index], tree_id, repo_path)
         else:
             files.append(argument)
         index += 1

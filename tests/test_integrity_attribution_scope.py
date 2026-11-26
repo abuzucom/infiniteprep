@@ -30,7 +30,7 @@ class AttributionCheckerScopeTest(unittest.TestCase):
         checker = load_checker()
         self.assertTrue(checker.requires_approval(["scripts/check_commit_attribution.py"]))
 
-    def test_identity_and_prose_gate_checkers_require_approval(self):
+    def test_identity_prose_checkers_need_approval(self):
         checker = load_checker()
         for path in ("scripts/check_git_identity.py", "scripts/check_agent_prose_gate.py"):
             with self.subTest(path=path):

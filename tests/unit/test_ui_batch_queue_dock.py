@@ -65,7 +65,7 @@ def enqueue_three(parts: DockParts) -> tuple[QueuedBatch, QueuedBatch, QueuedBat
     )
 
 
-def test_one_batch_runs_at_a_time_in_arrival_order(qtbot: Any, dock_parts: DockParts) -> None:
+def test_batches_run_singly_in_order(qtbot: Any, dock_parts: DockParts) -> None:
     """The first batch runs while the others wait. All three then run in FIFO order."""
     controller, dock, _make_job, log, gate = dock_parts
     first, second, third = enqueue_three(dock_parts)
@@ -106,7 +106,7 @@ def test_move_buttons_reorder_waiting_batches(qtbot: Any, dock_parts: DockParts)
     assert log == ["first", "third", "second"]
 
 
-def test_dragging_a_row_reorders_waiting_batches(qtbot: Any, dock_parts: DockParts) -> None:
+def test_dragging_row_reorders_waiting_batches(qtbot: Any, dock_parts: DockParts) -> None:
     """A row move in the list becomes the queue order. A move past the running batch reverts."""
     controller, dock, _make_job, log, gate = dock_parts
     first, second, third = enqueue_three(dock_parts)

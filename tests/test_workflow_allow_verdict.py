@@ -115,22 +115,23 @@ WRITING_COMMANDS = (
 
 
 class AllowVerdictModuleTest(unittest.TestCase):
-    """Classify single invocations through the gate module."""
+    """Classify single commands through the gate module."""
 
     @classmethod
     def setUpClass(cls) -> None:
         cls.gate = _load_gate_module()
 
     def decide(self, command: str, project_dir: str = PROJECT_DIR) -> tuple:
-        """Return the gate decision for one command."""
-        return self.gate.workflow_decision(command, project_dir)
+        """Return the untrusted gate decision for one command."""
+        with patch.object(self.gate, "_trusted_project", return_value=False):
+            return self.gate.workflow_decision(command, project_dir)
 
     def test_inspecting_forms_pass_without_consent(self) -> None:
         for command in ALLOWED_COMMANDS:
             with self.subTest(command=command):
                 self.assertEqual(self.decide(command), ("allow", ""))
 
-    def test_writing_and_unbounded_forms_route_to_consent(self) -> None:
+    def test_writing_forms_need_consent(self) -> None:
         for command in CONSENT_COMMANDS:
             with self.subTest(command=command):
                 decision, reason = self.decide(command)
@@ -169,19 +170,20 @@ class ChainVerdictTest(unittest.TestCase):
         cls.gate = _load_gate_module()
 
     def decision(self, command: str) -> str:
-        """Return only the decision word for one command."""
-        return self.gate.workflow_decision(command, PROJECT_DIR)[0]
+        """Return only the untrusted decision word for one command."""
+        with patch.object(self.gate, "_trusted_project", return_value=False):
+            return self.gate.workflow_decision(command, PROJECT_DIR)[0]
 
-    def test_chain_of_allowed_forms_is_allowed(self) -> None:
+    def test_allowed_chain_allowed(self) -> None:
         self.assertEqual(
             self.decision("ruff check src && ruff format --check src && python -m unittest discover -s tests"),
             "allow")
 
-    def test_chain_with_a_consent_form_asks(self) -> None:
+    def test_consent_chain_asks(self) -> None:
         self.assertEqual(self.decision("ruff check src && ruff format src"), "ask")
         self.assertEqual(self.decision("python scripts/run_tests.py && ruff check src"), "ask")
 
-    def test_chain_with_an_unaccepted_part_stays_unmatched(self) -> None:
+    def test_unaccepted_chain_unmatched(self) -> None:
         for command in ("ruff check src && node script.js",
                         "ruff check src && git status",
                         "ruff check src && ruff rule E501",
@@ -213,14 +215,14 @@ class RuffLookupTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
 
-    def test_root_module_file_shadows_the_module_spelling(self) -> None:
+    def test_root_module_file_shadows(self) -> None:
         (self.root / "ruff.py").write_text("", encoding="utf-8")
         decision, reason = self.gate.workflow_decision("python -m ruff check src", str(self.root))
         self.assertEqual(decision, "deny")
         self.assertIn("ruff.py", reason)
         self.assertEqual(self.gate.workflow_decision("ruff check src", str(self.root)), ("allow", ""))
 
-    def test_root_package_directory_shadows_the_module_spelling(self) -> None:
+    def test_root_package_shadows(self) -> None:
         (self.root / "ruff").mkdir()
         decision, reason = self.gate.workflow_decision("python -m ruff format --check", str(self.root))
         self.assertEqual(decision, "deny")
@@ -282,14 +284,14 @@ class WorkflowScriptListTest(unittest.TestCase):
         self.assertEqual(decision, "deny")
         self.assertIn(SCRIPT_LIST_NAME, reason)
 
-    def test_missing_list_leaves_the_literal_tables_empty(self) -> None:
+    def test_missing_list_empty_tables(self) -> None:
         gate = _load_gate_module()
         missing = str(REPO_ROOT / "hooks" / "absent-workflow-scripts.txt")
         with patch.object(gate, "WORKFLOW_SCRIPT_LIST_PATH", missing):
             gate._load_workflow_scripts.cache_clear()
             self.assertEqual(gate._literal_script_arguments(gate.SCRIPT_VERDICTS), {})
 
-    def test_unusable_list_content_names_the_cause(self) -> None:
+    def test_unusable_list_names_cause(self) -> None:
         oversized = b"# filler\n" * (MAX_SCRIPT_LIST_BYTES // len(b"# filler\n") + 1)
         cases = ((oversized, "exceeds 64 KiB"),
                  (b"allow scripts/caf\xc3\xa9.py\n", "non-ASCII"),
@@ -307,7 +309,7 @@ class WorkflowScriptListTest(unittest.TestCase):
                     self.assertIn(cause, str(raised.exception))
                     self.assertIn(SCRIPT_LIST_NAME, str(raised.exception))
 
-    def test_single_path_placeholder_accepts_one_repository_path(self) -> None:
+    def test_path_placeholder_single_path(self) -> None:
         pattern = ("--file", "<path>")
         self.assertTrue(self.gate._pattern_matches(pattern, ("--file", "docs/guide.md")))
         self.assertFalse(self.gate._pattern_matches(pattern, ("--file", "/etc/passwd")))
@@ -338,15 +340,19 @@ class AcceptedFormHintTest(unittest.TestCase):
         self.assertIn(OPAQUE_REASON, reason)
         self.assertIn("python -m unittest discover", reason)
 
-    def test_script_denial_names_the_script_list(self) -> None:
+    def test_script_denial_names_list(self) -> None:
         reason = self.gate.segment_program_reason(["python", "scripts/other.py"])
         self.assertIn(OPAQUE_REASON, reason)
         self.assertIn(f"hooks/{SCRIPT_LIST_NAME}", reason)
 
-    def test_other_programs_keep_the_plain_reason(self) -> None:
+    def test_other_programs_plain_reason(self) -> None:
         for segment in (["node", "script.js"], ["python", "-c", "pass"]):
             with self.subTest(segment=segment):
-                self.assertEqual(self.gate.segment_program_reason(segment), OPAQUE_REASON)
+                reason = self.gate.segment_program_reason(segment)
+                self.assertTrue(reason.startswith(OPAQUE_REASON))
+                self.assertIn(f"(rejected: {segment[0]})", reason)
+                self.assertNotIn("Accepted", reason)
+                self.assertNotIn("lists the accepted", reason)
 
 
 class AllowVerdictHookTest(unittest.TestCase):
@@ -388,7 +394,7 @@ class AllowVerdictHookTest(unittest.TestCase):
             timeout=TIMEOUT_SECONDS, check=False,
         )
 
-    def test_inspecting_forms_pass_for_every_client_and_mode(self) -> None:
+    def test_inspecting_forms_pass(self) -> None:
         commands = ("ruff check src tests", "ruff format --check src tests",
                     "python -m ruff check src tests", "python -m unittest discover -s tests",
                     "python scripts/check_changelog.py",
@@ -401,14 +407,14 @@ class AllowVerdictHookTest(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertEqual(result.stdout.strip(), "")
 
-    def test_writing_form_asks_an_interactive_claude_session(self) -> None:
+    def test_writing_form_asks_interactive(self) -> None:
         result = self.run_candidate("ruff format src", "claude")
         self.assertEqual(result.returncode, 0, result.stderr)
         output = json.loads(result.stdout)["hookSpecificOutput"]
         self.assertEqual(output["permissionDecision"], "ask")
         self.assertIn(f"blocked by {GATE_NAME}:", output["permissionDecisionReason"])
 
-    def test_writing_form_is_denied_without_a_consent_path(self) -> None:
+    def test_writing_form_denied_unattended(self) -> None:
         for client, mode in (("claude", ""), ("codex", "")):
             with self.subTest(client=client):
                 result = self.run_candidate("ruff format src", client, mode)
@@ -416,7 +422,7 @@ class AllowVerdictHookTest(unittest.TestCase):
                 self.assertIn(f"blocked by {GATE_NAME}:", result.stderr)
                 self.assertIn("execution consent", result.stderr)
 
-    def test_unaccepted_ruff_form_denial_lists_accepted_forms(self) -> None:
+    def test_unaccepted_ruff_lists_forms(self) -> None:
         for client in ("claude", "codex"):
             with self.subTest(client=client):
                 result = self.run_candidate("ruff check --config other.toml src", client)
@@ -429,7 +435,7 @@ class AllowVerdictHookTest(unittest.TestCase):
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
         self.assertIn(OPAQUE_REASON, result.stderr)
 
-    def test_primary_branch_allows_inspection_and_denies_writes(self) -> None:
+    def test_primary_branch_inspection_only(self) -> None:
         self.set_branch("main")
         for client in ("claude", "codex"):
             with self.subTest(client=client):

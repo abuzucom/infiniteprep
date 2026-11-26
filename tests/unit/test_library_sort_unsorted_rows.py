@@ -55,7 +55,7 @@ def sorted_ids(rows: list[LibraryRow], column: int) -> list[str]:
 class UnsortedRowSortTests(unittest.TestCase):
     """Rows without a value form the unsorted group and never break the sort."""
 
-    def test_key_sort_places_a_keyless_row_last(self) -> None:
+    def test_key_sort_places_keyless_last(self) -> None:
         """A row without a key sorts after every row with a key."""
         rows = [
             make_row("keyless"),
@@ -92,7 +92,7 @@ class NaturalKeyTests(unittest.TestCase):
         self.assertLess(natural_key("Track 09"), natural_key("Track 10"))
         self.assertEqual(natural_key("Track 007"), natural_key("track 7"))
 
-    def test_digit_run_past_the_int_limit_still_compares(self) -> None:
+    def test_huge_digit_run_still_compares(self) -> None:
         """A digit run longer than the int conversion limit still sorts after a short number."""
         long_run = "9" * (INT_DIGIT_LIMIT + 1)
 

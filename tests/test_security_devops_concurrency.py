@@ -31,14 +31,14 @@ class SecurityDevopsConcurrencyTest(unittest.TestCase):
         """A push to main always completes, so the Security tab gets every upload."""
         self.assertEqual(self.workflow["concurrency"]["cancel-in-progress"], PULL_REQUEST_ONLY)
 
-    def test_group_separates_pull_requests_and_commits(self) -> None:
+    def test_group_separates_prs_and_commits(self) -> None:
         """One group per pull request, and one group per pushed commit."""
         group = self.workflow["concurrency"]["group"]
         self.assertIn(PULL_REQUEST_NUMBER, group)
         self.assertIn(COMMIT_SHA, group)
         self.assertLess(group.index(PULL_REQUEST_NUMBER), group.index(COMMIT_SHA))
 
-    def test_comment_job_keeps_its_own_group(self) -> None:
+    def test_comment_job_keeps_own_group(self) -> None:
         """The comment job still serializes its own writes per pull request."""
         job_concurrency = self.workflow["jobs"][COMMENT_JOB]["concurrency"]
         self.assertTrue(job_concurrency["cancel-in-progress"])

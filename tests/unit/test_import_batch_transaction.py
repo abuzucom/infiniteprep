@@ -52,9 +52,7 @@ def repository(tmp_path: Path) -> Repository:
     return Repository(DatabaseManager(tmp_path / "library.sqlite3"))
 
 
-def test_batch_imports_every_file_and_reports_progress(
-    repository: Repository, tmp_path: Path
-) -> None:
+def test_batch_imports_files_reports_progress(repository: Repository, tmp_path: Path) -> None:
     """Each file gets one progress call before it imports, and the batch commits at the end."""
     tracks = make_tracks(tmp_path / "crate")
     calls = CallRecorder()
@@ -88,7 +86,7 @@ def test_batch_hidden_until_commit(repository: Repository, tmp_path: Path) -> No
     assert len(repository.list_files()) == TRACK_COUNT
 
 
-def test_cancel_rolls_back_the_whole_batch(repository: Repository, tmp_path: Path) -> None:
+def test_cancel_rolls_back_whole_batch(repository: Repository, tmp_path: Path) -> None:
     """Cancel after the first file stops before the next file and keeps nothing."""
     make_tracks(tmp_path / "crate")
     check_count = 0
@@ -129,7 +127,7 @@ def test_failed_file_skipped_rest_commit(repository: Repository, tmp_path: Path)
     )
 
 
-def test_any_error_in_one_file_skips_only_that_file(repository: Repository, tmp_path: Path) -> None:
+def test_per_file_error_skips_file(repository: Repository, tmp_path: Path) -> None:
     """An error type the reader does not expect still skips one file, not the whole batch."""
     tracks = make_tracks(tmp_path / "crate")
     service = ImportService(repository, FailingTagAdapter(tracks[1].name))
@@ -158,7 +156,7 @@ def test_interrupt_rolls_back_whole_batch(
     assert repository.list_source_groups() == []
 
 
-def test_each_thread_gets_its_own_connection(repository: Repository) -> None:
+def test_each_thread_gets_own_connection(repository: Repository) -> None:
     """A worker thread's connection is a different object from the calling thread's."""
     main_connection = repository.db.connect()
     worker_connections: list[object] = []
@@ -171,7 +169,7 @@ def test_each_thread_gets_its_own_connection(repository: Repository) -> None:
     assert repository.db.connect() is main_connection
 
 
-def test_a_batch_refuses_an_open_transaction(repository: Repository) -> None:
+def test_batch_refuses_open_transaction(repository: Repository) -> None:
     """A batch never absorbs or discards uncommitted work already on the connection."""
     connection = repository.db.connect()
     connection.execute("BEGIN")
@@ -182,9 +180,7 @@ def test_a_batch_refuses_an_open_transaction(repository: Repository) -> None:
         connection.rollback()
 
 
-def test_an_unexpected_error_rolls_back_and_propagates(
-    repository: Repository, tmp_path: Path
-) -> None:
+def test_unexpected_error_rolls_back_propagates(repository: Repository, tmp_path: Path) -> None:
     """An error outside the per-file scope rolls the batch back and reaches the caller."""
     make_tracks(tmp_path / "crate")
     check_count = 0
@@ -205,7 +201,7 @@ def test_an_unexpected_error_rolls_back_and_propagates(
     assert repository.list_files() == []
 
 
-def test_a_second_batch_on_the_same_thread_is_refused(repository: Repository) -> None:
+def test_second_batch_same_thread_refused(repository: Repository) -> None:
     """Nested batches on one thread raise instead of silently joining the outer batch."""
     with (
         repository.batch(),
@@ -238,7 +234,7 @@ def test_savepoint_rollback_error_aborts_batch(repository: Repository) -> None:
     assert repository.list_source_groups() == []
 
 
-def test_each_savepoint_scope_gets_its_own_name(repository: Repository) -> None:
+def test_each_savepoint_gets_own_name(repository: Repository) -> None:
     """Savepoint names never repeat within a batch, so no scope can collide with another."""
     names: list[str] = []
     with repository.batch() as batch:
@@ -249,9 +245,7 @@ def test_each_savepoint_scope_gets_its_own_name(repository: Repository) -> None:
     assert len(set(names)) == TRACK_COUNT
 
 
-def test_writes_outside_a_batch_still_commit_at_once(
-    repository: Repository, tmp_path: Path
-) -> None:
+def test_writes_outside_batch_commit_immediately(repository: Repository, tmp_path: Path) -> None:
     """The plain import path with no callbacks keeps its earlier visible result."""
     make_tracks(tmp_path / "crate", count=1)
 

@@ -41,7 +41,7 @@ class InPlaceTranscodeAssetRefreshTests(unittest.TestCase):
         report = ImportService(self.repo, self.adapter).import_paths([path])
         return report.imported_files[0].id
 
-    def test_same_path_transcode_updates_hash_and_size(self) -> None:
+    def test_same_path_transcode_refreshes_asset(self) -> None:
         """An in-place transcode to the same path stores the new hash and size."""
         source = create_wav_fixture(
             self.root / "crate" / "96k.wav",
@@ -82,7 +82,7 @@ class InPlaceTranscodeAssetRefreshTests(unittest.TestCase):
         self.assertEqual(asset.format, AudioFormat.WAV)
         self.assertEqual(asset.content_hash, compute_sha256(result.output_path))
 
-    def test_blank_manual_value_keeps_original_tag(self) -> None:
+    def test_blank_manual_value_keeps_tag(self) -> None:
         """A blank manual artist leaves the original artist tag on the transcoded file."""
         source = create_wav_fixture(
             self.root / "crate" / "tagged.wav",

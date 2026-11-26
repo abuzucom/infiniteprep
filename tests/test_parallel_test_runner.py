@@ -26,7 +26,7 @@ class ParallelTestRunnerTest(unittest.TestCase):
         """Write one synthetic test module."""
         (self.root / "tests" / name).write_text(body, encoding="utf-8")
 
-    def test_discovery_parity_covers_every_test_id(self):
+    def test_discovery_parity(self):
         self.write_test(
             "test_alpha.py",
             "import unittest\n\n"

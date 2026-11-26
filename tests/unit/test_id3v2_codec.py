@@ -19,12 +19,12 @@ from infiniteprep.adapters.metadata_io.id3v2 import (
 from tests.fixtures.id3v2_bytes import synchsafe, tag_bytes, utf16, v22_frame, v23_frame, v24_frame
 
 
-def test_parse_returns_none_without_id3_magic() -> None:
+def test_parse_without_magic_returns_none() -> None:
     """Data that does not start with an ID3 header has no tag."""
     assert parse_id3v2(b"\xff\xfb\x90\x00" + b"\x00" * 32) is None
 
 
-def test_v23_text_and_txxx_frames_decode() -> None:
+def test_v23_text_txxx_frames_decode() -> None:
     """UTF-16 text and TXXX frames decode to their values."""
     frames = v23_frame("TIT2", b"\x01" + utf16("Strobe")) + v23_frame(
         "TXXX", b"\x01" + utf16("CATALOGNUMBER") + b"\x00\x00" + utf16("MAU5-001")
@@ -38,14 +38,14 @@ def test_v23_text_and_txxx_frames_decode() -> None:
     assert frame_key(txxx) == "TXXX:CATALOGNUMBER"
 
 
-def test_v24_utf8_multi_value_text_decodes() -> None:
+def test_v24_utf8_multiple_values_decode() -> None:
     """ID3v2.4 null-separated UTF-8 values decode as separate strings."""
     tag = parse_id3v2(tag_bytes(4, v24_frame("TCON", b"\x03House\x00Techno\x00")))
     assert tag is not None
     assert decode_text_values(tag.frames[0]) == ["House", "Techno"]
 
 
-def test_v22_frames_upgrade_to_four_character_ids() -> None:
+def test_v22_ids_become_four_characters() -> None:
     """ID3v2.2 frames convert to their ID3v2.3 identifiers."""
     tag = parse_id3v2(tag_bytes(2, v22_frame("TT2", b"\x00Title") + v22_frame("TBP", b"\x00128")))
     assert tag is not None
@@ -70,7 +70,7 @@ def test_truncated_tag_raises_format_error() -> None:
         parse_id3v2(raw[:-8])
 
 
-def test_unsupported_major_version_raises_format_error() -> None:
+def test_unsupported_major_version_raises() -> None:
     """Major versions outside 2 to 4 raise Id3FormatError."""
     with pytest.raises(Id3FormatError):
         parse_id3v2(b"ID3\x05\x00\x00" + synchsafe(0))
@@ -90,7 +90,7 @@ def test_round_trip_keeps_unknown_frames() -> None:
     assert decode_text_values(reparsed.frames[1]) == ["124.00"]
 
 
-def test_render_converts_v24_text_and_dates() -> None:
+def test_render_converts_v24_text_dates() -> None:
     """v2.4 UTF-8 text is re-encoded as UTF-16 and TDRC becomes TYER in v2.3 output."""
     frames = v24_frame("TPE1", b"\x03Ch\xc3\xa9 Artist\x00") + v24_frame(
         "TDRC", b"\x032021-05-14\x00"
@@ -107,7 +107,7 @@ def test_render_converts_v24_text_and_dates() -> None:
     assert decode_text_values(by_id["TDAT"]) == ["1405"]
 
 
-def test_render_joins_multiple_values_with_slash() -> None:
+def test_render_joins_values_with_slash() -> None:
     """ID3v2.3 has one string per text frame, so values join with a slash."""
     source = parse_id3v2(tag_bytes(4, v24_frame("TCON", b"\x03House\x00Techno")))
     assert source is not None
@@ -116,7 +116,7 @@ def test_render_joins_multiple_values_with_slash() -> None:
     assert decode_text_values(reparsed.frames[0]) == ["House/Techno"]
 
 
-def test_replace_drops_frames_with_same_key() -> None:
+def test_replace_drops_same_key_frames() -> None:
     """Replacing a frame removes every frame with that key and keeps other TXXX frames."""
     tag = Id3Tag(source_version=3)
     tag = replace_text_frame(tag, "TKEY", "8A")
@@ -155,7 +155,7 @@ def test_txxx_utf16be_decodes_all_values() -> None:
     assert values == ["CAT001", "CAT002"]
 
 
-def test_render_joins_utf16be_multi_values_with_slash() -> None:
+def test_render_slash_joins_utf16be_values() -> None:
     """Rendering v2.4 UTF-16BE multi-value text to v2.3 joins with a slash without mojibake."""
     utf16be_bom = b"\xfe\xff"
     val1 = "House".encode("utf-16-be")

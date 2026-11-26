@@ -55,14 +55,14 @@ def visible_names(window: MainWindow) -> list[str]:
     return [window.file_table.item(row, 0).text() for row in range(window.file_table.rowCount())]
 
 
-def test_status_filter_offers_every_review_status() -> None:
+def test_status_filter_offers_review_statuses() -> None:
     """Each review status has one filter entry, with readable labels."""
     assert set(STATUS_FILTER_VALUES.values()) == {status.value for status in ReviewStatus}
     assert format_status_label(ReviewStatus.READY_FOR_REVIEW) == "Needs review"
     assert format_status_label(ReviewStatus.READY_TO_WRITE) == "Ready to save"
 
 
-def test_status_filter_shows_a_pipeline_status(
+def test_status_filter_shows_pipeline_status(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """A file the pipeline marks no_match appears under the Needs review filter."""
@@ -85,7 +85,7 @@ def test_search_ignores_internal_key_names(
     assert visible_names(window) == []
 
 
-def test_search_matches_an_approved_value_the_table_shows(
+def test_search_matches_shown_approved_value(
     qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
 ) -> None:
     """An approved artist shown in the table is searchable, though no file tag holds it."""

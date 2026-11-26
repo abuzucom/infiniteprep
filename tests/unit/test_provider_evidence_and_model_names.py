@@ -22,7 +22,7 @@ EVIDENCE_KEYS = {"id", "title", "duration", "artists", "releasegroup_ids"}
 LONG_TITLE = "t" * (MAX_PROVIDER_TEXT_CHARS * 3)
 
 
-def test_acoustid_evidence_keeps_only_checked_fields(tmp_path: Path) -> None:
+def test_acoustid_evidence_keeps_checked_fields(tmp_path: Path) -> None:
     """Unknown keys and nested objects stay out of the stored evidence."""
     recording: dict[str, Any] = {
         "id": "rec-1",
@@ -49,7 +49,7 @@ def test_acoustid_evidence_keeps_only_checked_fields(tmp_path: Path) -> None:
     assert len(stored["title"]) == MAX_PROVIDER_TEXT_CHARS
 
 
-def test_ollama_list_keeps_safe_unique_refs(
+def test_ollama_keeps_safe_unique_refs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Names outside the model reference grammar drop out, and repeats appear once."""

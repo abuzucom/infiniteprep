@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
-          python-version: '3.x'
+          python-version: '3.14'
       - name: Check commit prose (warning only)
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         env:
@@ -33,7 +33,9 @@ jobs:
         run: python scripts/check_pull_request_message.py
 
   pr-checks:
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    # This job runs on drafts. Rule 5 makes every agent pull request a draft.
+    # A draft-only skip would hide the agent prose gate until review.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -44,7 +46,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
-          python-version: '3.x'
+          python-version: '3.14'
       - name: Check banned-agent authorship
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -59,6 +61,14 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           python scripts/check_git_identity.py \
+            --base "$PR_BASE_SHA" \
+            --head "$PR_HEAD_SHA"
+      - name: Check new test names
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python scripts/check_test_names.py \
             --base "$PR_BASE_SHA" \
             --head "$PR_HEAD_SHA"
       - name: Check strict commit attribution
@@ -82,6 +92,11 @@ jobs:
             --head "$PR_HEAD_SHA"
       - name: Check external repository references
         run: python scripts/check_external_pr_refs.py
+      - name: Check session zone paths
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python scripts/check_forbidden_paths.py --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA"
 
   static-checks:
     runs-on: ubuntu-latest
@@ -94,14 +109,16 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
-          python-version: '3.x'
+          python-version: '3.14'
       - name: Install checker dependencies
-        run: python -m pip install --requirement requirements-checkers.txt
+        run: 'python -m pip install --requirement requirements-checkers.txt --only-binary :all:'
       - name: Check branch name
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
         run: python scripts/check_branch_name.py
       - name: Check gate adoption
         run: python scripts/check_gate_adoption.py
+      - name: Check shared file neutrality
+        run: python scripts/check_shared_neutrality.py
       - name: Probe configured hook launchers
         run: python scripts/check_hook_launchers.py
       - name: Check versioned changelog
@@ -119,7 +136,7 @@ jobs:
       - name: Check for unjustified MD5/SHA-1
         run: |
           shopt -s nullglob
-          files=(scripts/*.py)
+          files=(scripts/*.py hooks/*.py)
           if [ ${#files[@]} -gt 0 ]; then
             python scripts/check_weak_hashing.py "${files[@]}"
           fi
@@ -133,7 +150,7 @@ jobs:
       - name: Check for likely secrets
         run: |
           shopt -s nullglob
-          files=(scripts/*.py .github/workflows/*.yml .pre-commit-config.yaml Makefile)
+          files=(scripts/*.py hooks/*.py .github/workflows/*.yml .pre-commit-config.yaml Makefile)
           if [ ${#files[@]} -gt 0 ]; then
             python scripts/check_secrets_heuristic.py "${files[@]}"
           fi

@@ -42,7 +42,7 @@ def read_allowlist(operating_system: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if line.strip()]
 
 
-def test_the_spec_collects_the_theme_package() -> None:
+def test_spec_collects_theme_package() -> None:
     """The spec names the theme package and points PyInstaller at the hook folder."""
     spec_text = SPEC_PATH.read_text(encoding="utf-8")
 
@@ -119,9 +119,7 @@ def test_hook_collects_roboto_fonts_license() -> None:
         ),
     ],
 )
-def test_each_bundle_allowlist_names_the_theme_payload(
-    operating_system: str, expected: list[str]
-) -> None:
+def test_bundle_allowlists_name_theme_payload(operating_system: str, expected: list[str]) -> None:
     """Every bundle allowlist names the theme files and the libraries they need."""
     entries = read_allowlist(operating_system)
 
@@ -147,7 +145,7 @@ def test_theme_packages_stay_pinned() -> None:
         assert f"{package}=={version}" in lock_text
 
 
-def test_the_unused_opengl_bindings_leave_every_bundle() -> None:
+def test_bundles_exclude_unused_opengl_bindings() -> None:
     """The OpenGL bindings stay out of every bundle, and their libraries stay in."""
     prefixes = load_bundle_filters().ORPHAN_QT_FILE_PREFIXES
 

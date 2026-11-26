@@ -48,7 +48,7 @@ class BranchWriteDestinationTest(unittest.TestCase):
                 self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertIn("metadata", result.stderr)
 
-    def test_powershell_checks_each_path_array_element(self) -> None:
+    def test_powershell_path_array_elements(self) -> None:
         for arguments in ("-Path .git/HEAD,notes.txt", "-Path notes.txt, .git/HEAD",
                           "notes.txt,.git/HEAD", "-LiteralPath notes.txt,'.git/HEAD'",
                           "-Path:notes.txt,.git/HEAD", r"-Path notes.txt,.git\HEAD"):
@@ -58,7 +58,7 @@ class BranchWriteDestinationTest(unittest.TestCase):
                 self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
                 self.assertIn("metadata", result.stderr)
 
-    def test_powershell_arrays_do_not_confuse_values_and_destinations(self) -> None:
+    def test_powershell_values_vs_destinations(self) -> None:
         for command in (
             "Write-Output 'notes.txt,other.txt'",
             "Set-Content -Path notes.txt,other.txt -Value 'ref: refs/heads/claude/x'",
@@ -74,20 +74,20 @@ class BranchWriteDestinationTest(unittest.TestCase):
         result = self.run_candidate("printf text | tee -a -- notes.txt other.txt")
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_incomplete_powershell_destination_arrays_fail_closed(self) -> None:
+    def test_incomplete_powershell_arrays(self) -> None:
         for command in ("Set-Content -Path , notes.txt", "Set-Content -Path notes.txt,",
                         "Set-Content -Path notes.txt, ,other.txt"):
             with self.subTest(command=command):
                 result = self.run_candidate(command, "PowerShell")
                 self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
 
-    def test_git_reads_discover_repository_from_subdirectories(self) -> None:
+    def test_subdirectory_git_read_discovery(self) -> None:
         for command in ("git -C src status", "git -C src/nested status", "git -C src -C nested status"):
             with self.subTest(command=command):
                 result = self.run_candidate(command)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_subdirectory_discovery_preserves_invalid_branch_denial(self) -> None:
+    def test_subdirectory_invalid_branch_denial(self) -> None:
         nested_admin = self.root / "src" / ".git"
         (nested_admin / "objects").mkdir(parents=True)
         (nested_admin / "refs").mkdir()

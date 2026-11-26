@@ -23,12 +23,12 @@ class IdentityRecoveryWordingTest(unittest.TestCase):
     def setUp(self):
         self.warning = load_hook().build_warning("identity unset", "")
 
-    def test_warning_directs_derivation_from_authenticated_source(self):
+    def test_warning_names_authenticated_source(self):
         self.assertIn("Derive the name and email from an authenticated account source",
                       self.warning)
         self.assertIn("Confirm the derived values with the user", self.warning)
 
-    def test_warning_prohibits_asking_the_user_for_values(self):
+    def test_warning_forbids_asking_user(self):
         self.assertIn("Never ask the user", self.warning)
         self.assertNotIn("Confirm the exact name and email with the user", self.warning)
 

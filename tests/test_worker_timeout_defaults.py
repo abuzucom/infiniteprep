@@ -18,12 +18,15 @@ def main():
 class WorkerTimeoutDefaultTest(unittest.TestCase):
     """The default deadline covers observed CI process startup time."""
 
-    def test_main_worker_uses_ci_safe_bounded_default(self):
+    def test_main_worker_default_timeout(self):
         with tempfile.TemporaryDirectory() as temporary:
             module_path = Path(temporary) / "sample_cli.py"
             module_path.write_text(MODULE_SOURCE, encoding="utf-8")
             worker = MainWorker(module_path)
-            self.addCleanup(worker.close)
+            # The child process can write bytecode into the directory. Join it
+            # before directory cleanup. macOS otherwise reports a nonempty
+            # directory during removal.
+            worker.close()
 
         self.assertEqual(
             worker.transport.request_timeout,

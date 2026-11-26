@@ -61,7 +61,7 @@ class PlainTextTestCase(unittest.TestCase):
 class DetailPanelLabelTests(PlainTextTestCase):
     """The header and warnings labels show imported text literally."""
 
-    def test_labels_use_the_plain_text_format(self) -> None:
+    def test_labels_use_plain_text_format(self) -> None:
         """Both detail panel labels use the plain text format from the start."""
         panel = self.build_panel()
 
@@ -69,7 +69,7 @@ class DetailPanelLabelTests(PlainTextTestCase):
         self.assertEqual(panel.warnings_label.textFormat(), Qt.TextFormat.PlainText)
 
     @unittest.skipIf(os.name == "nt", "Windows file names cannot hold angle brackets.")
-    def test_header_keeps_markup_in_the_file_name_literal(self) -> None:
+    def test_header_keeps_filename_markup_literal(self) -> None:
         """A file name with markup shows in the header as typed."""
         _, file_id = self.import_track(MARKUP_FILE_NAME)
         panel = self.build_panel()
@@ -102,7 +102,7 @@ class TranscodeDialogTests(PlainTextTestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_confirm_and_failure_text_is_plain(self) -> None:
+    def test_confirm_failure_text_is_plain(self) -> None:
         """The confirmation and the failure summary both use plain text and name the file."""
         removed, file_id = self.import_track("gone.wav")
         removed.unlink()

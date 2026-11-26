@@ -164,7 +164,7 @@ def check_file(path: Path) -> int:
 
 def find_range_violations(base: str, head: str, changed: list[str],
                           today: date | None = None) -> list[str]:
-    """Return findings for a pull-request changelog range."""
+    """Return findings for a pull request changelog range."""
     findings, head_top_heading = _scan(head)
     _base_findings, base_top_heading = _scan(base)
     if "CHANGELOG.md" not in changed:

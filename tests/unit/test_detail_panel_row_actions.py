@@ -68,7 +68,7 @@ def spoken_name(widget: QWidget) -> str:
     return interface.text(QAccessible.Text.Name) if interface is not None else ""
 
 
-def test_every_row_control_has_a_distinct_name(panel: DetailPanel) -> None:
+def test_row_controls_have_distinct_names(panel: DetailPanel) -> None:
     """Each row's edit box and buttons name their field, so no two controls sound alike."""
     names: list[str] = []
     for row in range(panel.fields_table.rowCount()):
@@ -92,7 +92,7 @@ def test_space_on_save_keeps_focus(qtbot: Any, panel: DetailPanel) -> None:
     assert focused is row_button(panel, ARTIST_ROW, "Save")
 
 
-def test_save_in_one_row_keeps_unsaved_text_in_another(panel: DetailPanel) -> None:
+def test_save_keeps_other_row_text(panel: DetailPanel) -> None:
     """Save on the artist row leaves text typed in the title row in place."""
     edit_box(panel, ARTIST_ROW).setText("Saved Artist")
     edit_box(panel, TITLE_ROW).setText(TYPED_TITLE)
@@ -103,7 +103,7 @@ def test_save_in_one_row_keeps_unsaved_text_in_another(panel: DetailPanel) -> No
     assert edit_box(panel, TITLE_ROW).text() == TYPED_TITLE
 
 
-def test_save_shows_the_saved_value_in_its_own_row(panel: DetailPanel) -> None:
+def test_save_shows_value_in_row(panel: DetailPanel) -> None:
     """Save shows the trimmed saved value in its row, not the text as typed."""
     edit_box(panel, ARTIST_ROW).setText("  New Artist  ")
 

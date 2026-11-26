@@ -32,7 +32,7 @@ def import_two_tracks(tmp_path: Path) -> tuple[Repository, list[str]]:
     return repo, file_ids
 
 
-def test_line_break_path_skipped_and_reported(tmp_path: Path) -> None:
+def test_line_break_path_skipped_reported(tmp_path: Path) -> None:
     """The unsafe track is skipped, the safe track is written, and no line is injected."""
     repo, file_ids = import_two_tracks(tmp_path)
     destination = tmp_path / "out" / "crate.m3u8"

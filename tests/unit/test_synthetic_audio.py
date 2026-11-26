@@ -125,7 +125,7 @@ def test_click_track_accents_downbeats() -> None:
     assert np.abs(gap).max() == 0.0
 
 
-def test_tone_and_chord_peak_at_requested_frequencies() -> None:
+def test_tone_chord_peak_requested_frequencies() -> None:
     """A tone peaks at its frequency and a chord peaks at each note."""
     tone = sa.synthesize_tone(440.0, duration_sec=1.0, sample_rate=RATE)
     assert _spectrum_peaks(tone, RATE, 1) == pytest.approx([440.0], abs=1.0)
@@ -145,7 +145,7 @@ def test_noise_is_seeded() -> None:
     assert _band_energy_fraction(first, RATE, 10000.0, RATE / 2) > 0.4
 
 
-def test_band_limited_noise_stays_in_band() -> None:
+def test_bandlimited_noise_stays_in_band() -> None:
     """Band-limited noise keeps nearly all energy between its edges."""
     noise = sa.synthesize_band_limited_noise(
         low_hz=200.0, high_hz=2000.0, duration_sec=1.0, sample_rate=RATE, seed=3
@@ -153,7 +153,7 @@ def test_band_limited_noise_stays_in_band() -> None:
     assert _band_energy_fraction(noise, RATE, 200.0, 2000.0) > 0.999
 
 
-def test_lowpass_shelf_removes_content_above_cutoff() -> None:
+def test_lowpass_shelf_removes_above_cutoff() -> None:
     """The MP3-like shelf drops energy above the cutoff by the requested depth."""
     noise = sa.synthesize_noise(duration_sec=1.0, sample_rate=RATE, seed=5)
     shelved = sa.apply_lowpass_shelf(noise, sample_rate=RATE, cutoff_hz=16000.0)
@@ -164,7 +164,7 @@ def test_lowpass_shelf_removes_content_above_cutoff() -> None:
     assert _band_energy_fraction(shelved, RATE, 0.0, 16000.0) > 0.99
 
 
-def test_wav_fixture_reads_back_and_repeats(tmp_path: Path) -> None:
+def test_wav_fixture_reads_back_repeats(tmp_path: Path) -> None:
     """A written WAV passes the app reader and repeats byte for byte for one seed."""
     signal = sa.synthesize_noise(duration_sec=1.0, sample_rate=RATE, seed=11)
     first = sa.write_wav_fixture(tmp_path / "a.wav", signal, sample_rate=RATE)
@@ -221,7 +221,7 @@ def test_m4a_fixtures_pass_mp4_reader(tmp_path: Path, builder, codec: str, bit_d
     assert data != builder(**options, seed=9)
 
 
-def test_stem_fixture_holds_mixdown_stems_and_manifest(tmp_path: Path) -> None:
+def test_stem_fixture_mixdown_stems_manifest(tmp_path: Path) -> None:
     """A STEM.MP4 fixture holds five sound tracks and a stem manifest the readers accept."""
     data = sa.build_stem_mp4_bytes(duration_sec=1.0, sample_rate=RATE, seed=2)
     info = read_mp4(data)
@@ -239,7 +239,7 @@ def test_stem_fixture_holds_mixdown_stems_and_manifest(tmp_path: Path) -> None:
     assert data == sa.build_stem_mp4_bytes(duration_sec=1.0, sample_rate=RATE, seed=2)
 
 
-def test_ogg_vorbis_fixture_passes_ogg_reader(tmp_path: Path) -> None:
+def test_ogg_vorbis_fixture_passes_reader(tmp_path: Path) -> None:
     """An Ogg Vorbis fixture has valid page CRCs and passes the Ogg reader and the adapter."""
     data = sa.build_ogg_vorbis_bytes(
         duration_sec=3.0, sample_rate=RATE, channels=2, seed=6, fields=(("TITLE", "Click"),)
@@ -260,7 +260,7 @@ def test_ogg_vorbis_fixture_passes_ogg_reader(tmp_path: Path) -> None:
     )
 
 
-def test_ogg_opus_fixture_passes_ogg_reader() -> None:
+def test_ogg_opus_fixture_passes_reader() -> None:
     """An Ogg Opus fixture spans several pages, keeps valid CRCs, and passes the Ogg reader."""
     data = sa.build_ogg_opus_bytes(duration_sec=6.0, channels=1, seed=8)
     pages = _ogg_pages(data)

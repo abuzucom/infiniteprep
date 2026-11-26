@@ -59,7 +59,7 @@ def _write_float_wav(path: Path, signal: np.ndarray, rate: int) -> Path:
 
 
 @pytest.mark.parametrize(("source_rate", "target_rate"), RATE_PAIRS)
-def test_block_resample_matches_a_whole_file_resample(
+def test_block_resample_matches_whole_file(
     tmp_path: Path, source_rate: int, target_rate: int
 ) -> None:
     """Joined blocks equal one whole-file resample_poly call, sample for sample."""
@@ -78,7 +78,7 @@ def test_block_resample_matches_a_whole_file_resample(
     assert max(block.shape[0] for block in blocks) < signal.shape[0]
 
 
-def test_matching_rates_pass_the_frames_through(tmp_path: Path) -> None:
+def test_matching_rates_pass_frames_through(tmp_path: Path) -> None:
     """A source at the target rate yields its own frames in bounded blocks."""
     signal = _random_signal(48_000)
     path = _write_float_wav(tmp_path / "source.wav", signal, 48_000)
@@ -90,7 +90,7 @@ def test_matching_rates_pass_the_frames_through(tmp_path: Path) -> None:
     assert max(block.shape[0] for block in blocks) == SMALL_BLOCK_FRAMES
 
 
-def test_frame_count_of_a_stream_rewinds_the_source(tmp_path: Path) -> None:
+def test_stream_frame_count_rewinds_source(tmp_path: Path) -> None:
     """The count pass returns the frame total and leaves the stream at its start."""
     signal = _random_signal(44_100)
     path = _write_float_wav(tmp_path / "source.wav", signal, 44_100)
@@ -122,14 +122,14 @@ def test_transcode_matches_whole_file_result(tmp_path: Path) -> None:
     assert np.allclose(written, expected, rtol=0.0, atol=PCM_24_STEP)
 
 
-def test_short_raw_tag_value_stays_whole() -> None:
+def test_short_raw_tag_stays_whole() -> None:
     """A raw tag value at the cap keeps every character."""
     value = "x" * MAX_RAW_TAG_TEXT_CHARS
 
     assert bound_raw_tag_value(value) == value
 
 
-def test_long_raw_tag_value_becomes_a_summary() -> None:
+def test_long_raw_tag_becomes_summary() -> None:
     """A raw tag value past the cap keeps its head, its length, and its digest."""
     value = "y" * LONG_TAG_CHARS
     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
@@ -143,7 +143,7 @@ def test_long_raw_tag_value_becomes_a_summary() -> None:
     assert len(summary) < MAX_RAW_TAG_TEXT_CHARS
 
 
-def test_raw_tag_list_values_are_bounded_in_order() -> None:
+def test_raw_tag_lists_bounded_ordered() -> None:
     """Each string in a list value is bounded and the list keeps its order."""
     bounded = bound_raw_tag_value(["short", "z" * LONG_TAG_CHARS, 7])
 
@@ -153,7 +153,7 @@ def test_raw_tag_list_values_are_bounded_in_order() -> None:
     assert bounded[2] == 7
 
 
-def test_import_read_summarizes_a_long_vorbis_comment(tmp_path: Path) -> None:
+def test_import_shortens_long_vorbis_comment(tmp_path: Path) -> None:
     """A long custom Vorbis comment reaches the raw tags as a summary, not whole."""
     long_value = "p" * LONG_TAG_CHARS
     path = tmp_path / "long.ogg"
@@ -166,7 +166,7 @@ def test_import_read_summarizes_a_long_vorbis_comment(tmp_path: Path) -> None:
     assert len(stored) < MAX_RAW_TAG_TEXT_CHARS
 
 
-def test_ogg_reader_parses_a_mapped_file(tmp_path: Path) -> None:
+def test_ogg_reader_parses_mapped_file(tmp_path: Path) -> None:
     """A path input parses through the file map with the same result as bytes."""
     data = make_synthetic_vorbis_ogg(fields=[("ARTIST", "Mapped")])
     path = tmp_path / "mapped.ogg"
@@ -182,7 +182,7 @@ def test_ogg_reader_parses_a_mapped_file(tmp_path: Path) -> None:
     assert ("ARTIST", "Mapped") in list(from_path.comment.fields)
 
 
-def test_ogg_reader_rejects_an_empty_file(tmp_path: Path) -> None:
+def test_ogg_reader_rejects_empty_file(tmp_path: Path) -> None:
     """An empty file raises the format error instead of a map error."""
     path = tmp_path / "empty.ogg"
     path.write_bytes(b"")
@@ -200,7 +200,7 @@ def test_similarity_uses_leading_chars_only() -> None:
     assert string_similarity("Deep Dish", "Sasha") < 1.0
 
 
-def test_analyzer_rejects_a_sample_rate_above_the_cap(
+def test_analyzer_rejects_oversized_sample_rate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The analyzer refuses a file whose sample rate exceeds the cap before any decode."""

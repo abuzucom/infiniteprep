@@ -1,11 +1,14 @@
 name: AGENTS.md Compliance
 
 # The checks run before merge. A push to main does not run them.
-# The ready_for_review type starts the pr-checks job, which skips drafts.
 on:
   pull_request:
-    branches: [ main ]
-    types: [opened, synchronize, reopened, ready_for_review]
+    # No branch filter. A filter cannot read hooks/primary-branch.txt. Gate
+    # integrity rejects a base outside the stable set.
+    # The reusable pr-checks job runs on drafts. ready_for_review reruns it
+    # when a draft pull request becomes ready. A base change or a body edit
+    # fires edited.
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

@@ -35,13 +35,13 @@ HALF_HOUR_ZONE = timezone(timedelta(hours=5, minutes=30))
 TIMESTAMP_COLUMN = 0
 # The first representable instant. A zone west of UTC has no local form for it.
 EARLIEST_SUPPORTED_INSTANT = "0001-01-01T00:00:00+00:00"
-# Fullwidth digits one, nine, nine, nine. They are decimal digits outside ASCII.
+# Fullwidth digits one, nine, nine, nine. Each is a decimal digit outside ASCII.
 FULLWIDTH_ONE = chr(0xFF11)
 FULLWIDTH_NINE = chr(0xFF19)
 FULLWIDTH_DIGIT_DATE = f"{FULLWIDTH_ONE}{FULLWIDTH_NINE}{FULLWIDTH_NINE}{FULLWIDTH_NINE}-01"
 
 
-def test_stored_utc_time_displays_in_the_given_zone() -> None:
+def test_utc_time_displays_in_zone() -> None:
     """A stored UTC instant reads as local date and time with no offset or fraction."""
     assert format_local_timestamp(STORED_TIME, FIVE_HOURS_BEHIND_UTC) == "2026-11-16 07:00:00"
     assert format_local_timestamp(STORED_TIME, HALF_HOUR_ZONE) == "2026-11-16 17:30:00"
@@ -57,7 +57,7 @@ def test_local_display_crosses_date_line() -> None:
 @pytest.mark.parametrize(
     "unreadable", ["", "not a time", "2026-11-16T12:00:00", EARLIEST_SUPPORTED_INSTANT]
 )
-def test_text_that_names_no_instant_displays_unchanged(unreadable: str) -> None:
+def test_non_instant_text_displays_unchanged(unreadable: str) -> None:
     """Damaged or offset-less text stays visible as stored."""
     assert format_local_timestamp(unreadable, FIVE_HOURS_BEHIND_UTC) == unreadable
 

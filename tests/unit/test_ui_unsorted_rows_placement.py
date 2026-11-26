@@ -60,7 +60,7 @@ def test_bad_stored_placement_uses_default(tmp_path: Path) -> None:
     assert settings.unsorted_rows_placement == UNSORTED_PLACEMENT_FIRST
 
 
-def test_general_tab_shows_the_stored_placement(qtbot: Any) -> None:
+def test_general_tab_shows_stored_placement(qtbot: Any) -> None:
     """The General tab shows the stored placement when it opens."""
     tab = GeneralTab("dark_teal.xml", unsorted_placement=UNSORTED_PLACEMENT_LAST)
     qtbot.addWidget(tab)
@@ -68,7 +68,7 @@ def test_general_tab_shows_the_stored_placement(qtbot: Any) -> None:
     assert tab.unsorted_rows_placement_combo.currentData() == UNSORTED_PLACEMENT_LAST
 
 
-def test_general_tab_writes_the_chosen_placement(qtbot: Any) -> None:
+def test_general_tab_writes_chosen_placement(qtbot: Any) -> None:
     """The General tab copies the chosen placement into the settings."""
     tab = GeneralTab("dark_teal.xml")
     qtbot.addWidget(tab)
@@ -81,7 +81,7 @@ def test_general_tab_writes_the_chosen_placement(qtbot: Any) -> None:
     assert settings.unsorted_rows_placement == UNSORTED_PLACEMENT_LAST
 
 
-def test_the_placement_combo_sits_on_the_general_tab(qtbot: Any, tmp_path: Path) -> None:
+def test_placement_combo_on_general_tab(qtbot: Any, tmp_path: Path) -> None:
     """The settings dialog shows the placement combo on the General tab page."""
     manager = SettingsManager(tmp_path / "settings.json")
     dialog = SettingsDialog(manager, CredentialStore(use_memory_backend=True))
@@ -93,7 +93,7 @@ def test_the_placement_combo_sits_on_the_general_tab(qtbot: Any, tmp_path: Path)
     assert general_page.isAncestorOf(dialog.unsorted_rows_placement_combo)
 
 
-def test_saving_the_dialog_stores_the_placement(qtbot: Any, tmp_path: Path) -> None:
+def test_saving_dialog_stores_placement(qtbot: Any, tmp_path: Path) -> None:
     """A save from the settings dialog persists the chosen placement."""
     manager = SettingsManager(tmp_path / "settings.json")
     dialog = SettingsDialog(manager, CredentialStore(use_memory_backend=True))

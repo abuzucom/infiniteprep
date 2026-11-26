@@ -28,9 +28,7 @@ def adapter() -> MetadataTagAdapter:
     return MetadataTagAdapter()
 
 
-def test_a_wav_reads_its_tags_from_an_open_handle(
-    adapter: MetadataTagAdapter, tmp_path: Path
-) -> None:
+def test_wav_reads_tags_from_handle(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
     """A WAV reads the same fields from a handle as from a path."""
     path = create_wav_fixture(tmp_path / "track.wav", tags=TAGS)
     with path.open("rb") as handle:
@@ -40,9 +38,7 @@ def test_a_wav_reads_its_tags_from_an_open_handle(
     assert meta.standard_tags == TAGS
 
 
-def test_an_mp3_reads_its_tags_from_an_open_handle(
-    adapter: MetadataTagAdapter, tmp_path: Path
-) -> None:
+def test_mp3_reads_tags_from_handle(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
     """An MP3 reads the same fields from a handle as from a path."""
     path = create_mp3_fixture(tmp_path / "track.mp3", tags=TAGS)
     with path.open("rb") as handle:
@@ -52,9 +48,7 @@ def test_an_mp3_reads_its_tags_from_an_open_handle(
     assert meta.standard_tags == TAGS
 
 
-def test_a_flac_reads_its_tags_from_an_open_handle(
-    adapter: MetadataTagAdapter, tmp_path: Path
-) -> None:
+def test_flac_reads_tags_from_handle(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
     """A FLAC reads the same fields from a handle as from a path."""
     path = create_flac_fixture(tmp_path / "track.flac", tags=TAGS)
     with path.open("rb") as handle:
@@ -64,9 +58,7 @@ def test_a_flac_reads_its_tags_from_an_open_handle(
     assert meta.standard_tags == TAGS
 
 
-def test_an_ogg_reads_its_properties_from_an_open_handle(
-    adapter: MetadataTagAdapter, tmp_path: Path
-) -> None:
+def test_ogg_reads_properties_from_handle(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
     """An Ogg reads the same properties from a handle as from a path."""
     path = create_ogg_fixture(tmp_path / "track.ogg")
     with path.open("rb") as handle:
@@ -79,7 +71,7 @@ def test_an_ogg_reads_its_properties_from_an_open_handle(
     assert meta.channels == from_path.channels
 
 
-def test_an_unsupported_extension_reports_the_same_warning_from_a_handle(
+def test_unsupported_extension_handle_same_warning(
     adapter: MetadataTagAdapter, tmp_path: Path
 ) -> None:
     """A file the app cannot read reports the unsupported extension."""
@@ -92,9 +84,7 @@ def test_an_unsupported_extension_reports_the_same_warning_from_a_handle(
     assert any("Unsupported file extension" in warning for warning in meta.warnings)
 
 
-def test_a_damaged_file_reports_the_same_warning_from_a_handle(
-    adapter: MetadataTagAdapter, tmp_path: Path
-) -> None:
+def test_damaged_file_handle_same_warning(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
     """A file the parser cannot read reports a damaged container."""
     path = tmp_path / "track.wav"
     path.write_bytes(b"not a wav file at all")

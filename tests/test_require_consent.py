@@ -2,7 +2,7 @@
 """Tests for hooks/require_consent.py and its wiring.
 
 Runs the hook as a subprocess against synthetic Claude Code payloads, the
-same path the harness uses, rather than asserting on mocks. Test files are
+same path the harness uses. No assertion targets a mock. Test files are
 created on disk, because the hook distinguishes a new test file from an edit
 to an existing one by looking at the filesystem.
 
@@ -145,8 +145,8 @@ class AllowTest(TestFileFixture):
     def test_appending_a_test_asks(self):
         """Appending to a file that exists is still an edit to it.
 
-        The carve-out this replaces cleared an append textually, which
-        cannot tell a new test from a statement that neutralizes every
+        The exemption this replaces cleared an append from raw text. A check
+        on raw text cannot tell a new test from a statement that neutralizes every
         test above it. Creating a new file stays unprompted, so the
         test-first workflow keeps its exemption where it is verifiable.
         """
@@ -172,13 +172,13 @@ class GateTest(TestFileFixture):
         code, parsed = run_hook(edit_payload(str(self.test_file), old, ""))
         self.assertEqual(decision_of(parsed), "ask")
 
-    def test_introduced_skip_marker_asks_even_when_additive(self):
+    def test_skip_marker_asks(self):
         old = "});\n"
         new = "});\n\ntest.skip('a case for later', function () {});\n"
         _, parsed = run_hook(edit_payload(str(self.test_file), old, new))
         self.assertEqual(decision_of(parsed), "ask")
 
-    def test_overwriting_an_existing_test_file_asks(self):
+    def test_overwrite_asks(self):
         payload = {
             "hook_event_name": "PreToolUse",
             "tool_name": "Write",
@@ -201,7 +201,7 @@ class GateTest(TestFileFixture):
         _, parsed = run_hook(payload)
         self.assertEqual(decision_of(parsed), "ask")
 
-    def test_multiedit_asks_when_any_edit_is_not_additive(self):
+    def test_multiedit_non_additive_asks(self):
         payload = {
             "hook_event_name": "PreToolUse",
             "tool_name": "MultiEdit",
@@ -217,7 +217,7 @@ class GateTest(TestFileFixture):
         _, parsed = run_hook(payload)
         self.assertEqual(decision_of(parsed), "ask")
 
-    def test_notebook_edit_uses_its_own_path_key(self):
+    def test_notebook_path_key(self):
         notebook = Path(self.tmp.name) / "tests" / "test_analysis.ipynb"
         notebook.write_text("{}", encoding="utf-8")
         payload = {
@@ -229,21 +229,21 @@ class GateTest(TestFileFixture):
         _, parsed = run_hook(payload)
         self.assertEqual(decision_of(parsed), "ask")
 
-    def test_reason_names_the_file_and_the_rule(self):
+    def test_reason_names_file_rule(self):
         old = "  assert.equal(viz.diagnostics().trackState, 'none');\n"
         _, parsed = run_hook(edit_payload(str(self.test_file), old, ""))
         reason = parsed["hookSpecificOutput"]["permissionDecisionReason"]
         self.assertIn("test_bcviz_api.js", reason)
         self.assertIn("Rule 3", reason)
 
-    def test_reason_states_that_plan_approval_is_not_consent(self):
+    def test_reason_plan_not_consent(self):
         """Violation 3 of the incident: approval of a document read as per-act consent."""
         old = "  assert.equal(viz.diagnostics().trackState, 'none');\n"
         _, parsed = run_hook(edit_payload(str(self.test_file), old, ""))
         reason = parsed["hookSpecificOutput"]["permissionDecisionReason"]
         self.assertIn("Approving a plan is not authorization for this edit", reason)
 
-    def test_banned_models_edit_asks_and_cites_rule_22(self):
+    def test_banned_models_edit_asks(self):
         models_file = Path(self.tmp.name) / "scripts" / "banned_models.txt"
         models_file.parent.mkdir(parents=True, exist_ok=True)
         models_file.write_text("grok*\n", encoding="utf-8")
@@ -262,7 +262,7 @@ class GateTest(TestFileFixture):
         reason = parsed["hookSpecificOutput"]["permissionDecisionReason"]
         self.assertIn("Rule 22", reason)
 
-    def test_banned_models_edit_denies_in_unattended_mode(self):
+    def test_banned_models_unattended_denies(self):
         models_file = Path(self.tmp.name) / "scripts" / "banned_models.txt"
         models_file.parent.mkdir(parents=True, exist_ok=True)
         models_file.write_text("grok*\n", encoding="utf-8")
@@ -296,10 +296,10 @@ class GateTest(TestFileFixture):
 class PreservedTextEvasionTest(TestFileFixture):
     """Keeping the old text somewhere in the new text is not keeping the test.
 
-    Every case here passed the original substring check, which asked only
-    whether the old text still appeared anywhere in the new text. An
+    Every case here passed the original substring check. That check tested
+    only whether the old text still appeared anywhere in the new text. An
     assertion that is commented out, wrapped in a string, or moved into a
-    branch that never runs is still present as text and no longer runs.
+    branch that is unreachable is still present as text and no longer runs.
     """
 
     ASSERTION = "  assert.equal(viz.diagnostics().trackState, 'none');"
@@ -317,23 +317,23 @@ class PreservedTextEvasionTest(TestFileFixture):
             with self.subTest(new=new):
                 self.assertEqual(self._decision_for(old, new), "ask")
 
-    def test_moving_an_assertion_into_dead_code_asks(self):
+    def test_dead_code_assertion_asks(self):
         new = "  if (false) {\n" + self.ASSERTION + "\n  }"
         self.assertEqual(self._decision_for(self.ASSERTION, new), "ask")
 
-    def test_guarding_an_assertion_behind_a_condition_asks(self):
+    def test_guarded_assertion_asks(self):
         new = "  if (process.env.CI) { assert.ok(x) }"
         self.assertEqual(self._decision_for("assert.ok(x)", new), "ask")
 
-    def test_wrapping_an_assertion_in_a_string_asks(self):
+    def test_string_wrapped_assertion_asks(self):
         new = "  const dead = `" + self.ASSERTION + "`;"
         self.assertEqual(self._decision_for(self.ASSERTION, new), "ask")
 
-    def test_appending_to_the_same_line_asks(self):
+    def test_same_line_append_asks(self):
         """An addition that continues the last line can change its meaning."""
         self.assertEqual(self._decision_for("assert.ok(x)", "assert.ok(x) || true"), "ask")
 
-    def test_insertion_into_the_middle_of_the_file_asks(self):
+    def test_mid_file_insertion_asks(self):
         """Only an end-of-file append can be verified as leaving the rest intact."""
         old = "  assert.equal(deviceBCalls, 1, 'no retry attempted');"
         new = old + "\n  assert.equal(2, 2);"
@@ -345,7 +345,7 @@ class PreservedTextEvasionTest(TestFileFixture):
         new = "});\n\ntest('a new case', function () {\n  assert.equal(1, 1);\n});\n"
         self.assertEqual(self._decision_for(old, new), "ask")
 
-    def test_whole_file_append_via_write_asks(self):
+    def test_write_append_asks(self):
         payload = {
             "hook_event_name": "PreToolUse",
             "tool_name": "Write",
@@ -373,8 +373,8 @@ class FailClosedTest(TestFileFixture):
 class PathAliasTest(unittest.TestCase):
     """A path is only as trustworthy as what it resolves to.
 
-    Classifying the string the caller supplied, rather than the file it
-    reaches, lets a symlink with an innocuous name carry an edit straight
+    Classifying the string the caller supplied in place of the file it
+    reaches lets a symlink with a harmless name carry an edit straight
     into a test file.
     """
 
@@ -392,7 +392,7 @@ class PathAliasTest(unittest.TestCase):
         _, parsed = run_hook(payload, env)
         return decision_of(parsed)
 
-    def test_symlink_with_an_innocuous_name_is_still_a_test(self):
+    def test_harmless_symlink_name_detected(self):
         if not _symlinks_available(self.tmp.name):
             self.skipTest("this platform needs elevation to create symlinks; "
                           "HardLinkTest covers alias resolution without it")
@@ -400,7 +400,7 @@ class PathAliasTest(unittest.TestCase):
         alias.symlink_to(self.test_file)
         self.assertEqual(self._edit(str(alias)), "ask")
 
-    def test_test_named_symlink_pointing_outside_the_root_is_gated(self):
+    def test_symlink_outside_root_gated(self):
         if not _symlinks_available(self.tmp.name):
             self.skipTest("this platform needs elevation to create symlinks; "
                           "HardLinkTest covers alias resolution without it")
@@ -412,8 +412,8 @@ class PathAliasTest(unittest.TestCase):
         alias.symlink_to(target)
         self.assertEqual(self._edit(str(alias)), "ask")
 
-    def test_test_file_outside_the_root_is_gated_without_any_link(self):
-        """The gate speaks for one tree and is asked about anything outside it."""
+    def test_outside_root_file_gated(self):
+        """The gate covers one tree and prompts for anything outside it."""
         outside = tempfile.TemporaryDirectory()
         self.addCleanup(outside.cleanup)
         target = Path(os.path.realpath(outside.name)) / "tests"
@@ -422,7 +422,7 @@ class PathAliasTest(unittest.TestCase):
         external.write_text(EXISTING_TEST, encoding="utf-8")
         self.assertEqual(self._edit(str(external)), "ask")
 
-    def test_ordinary_non_test_file_still_passes(self):
+    def test_non_test_file_passes(self):
         source = Path(self.root) / "src.js"
         source.write_text("export function create() {}\n", encoding="utf-8")
         payload = edit_payload(str(source), "create() {}", "create() { return 1; }")
@@ -447,8 +447,8 @@ class OccurrenceCountTest(unittest.TestCase):
     The hook ignored `replace_all`, so it validated one replacement at the
     end of the file while the tool rewrote every occurrence. The same hole
     exists without the flag: when the old text appears twice, a plain Edit
-    replaces the first, which is mid-file, while `content.endswith(old)`
-    still reported an append.
+    replaces the first occurrence in the middle of the file. Yet
+    `content.endswith(old)` still reported an append.
     """
 
     def setUp(self):
@@ -469,25 +469,25 @@ class OccurrenceCountTest(unittest.TestCase):
 
     APPEND = "});\n\ntest('c', function () {\n  assert.ok(3);\n});\n"
 
-    def test_repeated_old_text_gates_with_replace_all(self):
+    def test_repeated_text_global_replace(self):
         self.assertEqual(self._edit("});\n", self.APPEND, replace_all=True), "ask")
 
-    def test_repeated_old_text_gates_without_replace_all(self):
-        """A plain Edit replaces the first occurrence, which is not the end."""
+    def test_repeated_text_single_replace(self):
+        """A plain Edit replaces the first occurrence. That occurrence is not the end."""
         self.assertEqual(self._edit("});\n", self.APPEND), "ask")
 
-    def test_single_occurrence_at_the_end_now_gates(self):
-        """The append carve-out is gone: an existing test file always asks."""
+    def test_end_occurrence_gates(self):
+        """The append exemption is gone: an existing test file always asks."""
         tail = "  assert.ok(2);\n});\n"
         self.assertEqual(
             self._edit(tail, tail + "\ntest('c', function () {});\n"), "ask")
 
-    def test_single_occurrence_gates_under_replace_all(self):
+    def test_single_occurrence_global_replace(self):
         tail = "  assert.ok(2);\n});\n"
         new = tail + "\ntest('c', function () {});\n"
         self.assertEqual(self._edit(tail, new, replace_all=True), "ask")
 
-    def test_multiedit_on_an_existing_test_gates(self):
+    def test_multiedit_existing_test_gates(self):
         """Every edit to an existing test file asks, MultiEdit included."""
         payload = {
             "hook_event_name": "PreToolUse",
@@ -523,12 +523,12 @@ class HardLinkTest(unittest.TestCase):
         _, parsed = run_hook(payload)
         return decision_of(parsed)
 
-    def test_hard_link_under_an_innocuous_name_is_gated(self):
+    def test_hard_link_alias_gated(self):
         alias = Path(self.root) / "notes.txt"
         os.link(self.test_file, alias)
         self.assertEqual(self._edit(alias), "ask")
 
-    def test_unrelated_multiply_linked_file_is_not_gated(self):
+    def test_unrelated_hard_link_passes(self):
         source = Path(self.root) / "src.js"
         source.write_text("export function create() {}\n", encoding="utf-8")
         os.link(source, Path(self.root) / "src-alias.js")
@@ -537,7 +537,7 @@ class HardLinkTest(unittest.TestCase):
         _, parsed = run_hook(payload)
         self.assertEqual(decision_of(parsed), "")
 
-    def test_inode_walk_budget_exhaustion_gates_the_alias(self):
+    def test_inode_budget_gates_alias(self):
         alias = Path(self.root) / "notes.txt"
         os.link(self.test_file, alias)
         spec = importlib.util.spec_from_file_location("require_consent_budget", HOOK_PATH)
@@ -547,7 +547,7 @@ class HardLinkTest(unittest.TestCase):
         target = module.resolve_target(str(alias), self.root)
         self.assertTrue(module.names_a_test(str(alias), target, self.root))
 
-    def test_inode_walk_traversal_error_gates_the_alias(self):
+    def test_inode_walk_error_gates(self):
         alias = Path(self.root) / "notes.txt"
         os.link(self.test_file, alias)
         module = self._load_module("require_consent_walk_error")
@@ -560,7 +560,7 @@ class HardLinkTest(unittest.TestCase):
         with unittest.mock.patch.object(module.os, "walk", side_effect=failed_walk):
             self.assertIsNone(module.reaches_a_test_inode(target, self.root))
 
-    def test_candidate_stat_error_gates_the_alias(self):
+    def test_candidate_stat_error_gates(self):
         alias = Path(self.root) / "notes.txt"
         os.link(self.test_file, alias)
         module = self._load_module("require_consent_stat_error")
@@ -584,7 +584,7 @@ class HardLinkTest(unittest.TestCase):
 
 
 class PathFieldTypeTest(unittest.TestCase):
-    """A path that is not a string must deny rather than crash."""
+    """A path that is not a string must deny instead of crashing."""
 
     def test_non_string_path_denies(self):
         for value in (NON_STRING_PATH, ["tests/test_x.js"], {"path": "x"}):
@@ -609,7 +609,7 @@ class PathReasonTest(unittest.TestCase):
         self.root.mkdir()
         self.module = load_hook_module("require_consent_path_reasons")
 
-    def test_redirected_out_of_root_path_names_the_link_boundary(self):
+    def test_redirect_reason_link_boundary(self):
         raw = self.root / "linked" / "test_external.py"
         target = Path(self.tmp.name) / "outside" / "test_external.py"
         reason = self.module.escape_reason(
@@ -620,7 +620,7 @@ class PathReasonTest(unittest.TestCase):
             "which the gate cannot vouch for",
         )
 
-    def test_open_os_error_reports_that_the_target_cannot_be_confirmed(self):
+    def test_open_error_reason(self):
         target = self.root / "tests" / "test_unreadable.py"
         error = PermissionError(PERMISSION_DENIED_ERRNO, "permission denied")
         with unittest.mock.patch.object(self.module.os, "open", side_effect=error):
@@ -631,7 +631,7 @@ class PathReasonTest(unittest.TestCase):
             "what this edit changes",
         )
 
-    def test_installed_policy_root_is_protected_from_another_working_directory(self):
+    def test_installed_root_protected(self):
         target = str(Path(self.module.__file__).resolve().parent / "_gate_core.py")
         payload = edit_payload(target, "old", "new")
         reason = self.module._write_reason(
@@ -659,8 +659,8 @@ class FailClosedInputTest(unittest.TestCase):
         parsed = json.loads(result.stdout)
         self.assertEqual(decision_of(parsed), "deny")
 
-    def test_empty_stdin_is_still_a_session_start(self):
-        """No payload at all is the SessionStart invocation, not a failure."""
+    def test_empty_stdin_session_start(self):
+        """No payload at all is the SessionStart event, not a failure."""
         result = subprocess.run(
             [sys.executable, str(HOOK_PATH)],
             input="",
@@ -702,7 +702,7 @@ class UnreadableFileTest(unittest.TestCase):
         _, parsed = run_hook(payload)
         return decision_of(parsed)
 
-    def test_non_utf8_test_file_is_gated(self):
+    def test_non_utf8_file_gated(self):
         target = os.path.join(self.root, "tests", "test_binary.js")
         with open(target, "wb") as handle:
             handle.write(b"test('x', function () {\n  assert.ok(\xff\xfe);\n});\n")
@@ -715,7 +715,7 @@ class UnreadableFileTest(unittest.TestCase):
         self.addCleanup(os.chmod, target, RESTORED_FILE_MODE)
         self.assertEqual(self._write_over(target), "ask")
 
-    def test_non_utf8_file_cannot_be_edited_through_an_empty_old_string(self):
+    def test_non_utf8_empty_old_string(self):
         target = os.path.join(self.root, "tests", "test_binary2.js")
         with open(target, "wb") as handle:
             handle.write(b"assert.ok(\xff\xfe);\n")
@@ -728,21 +728,21 @@ class UnreadableFileTest(unittest.TestCase):
 class QuestionChecklistTest(unittest.TestCase):
     """The checklist arrives at SessionStart, before any question is written.
 
-    It used to be injected on PreToolUse for AskUserQuestion, which is too
-    late to help: by the time a tool call reaches a hook, the model has
+    It used to be injected on PreToolUse for AskUserQuestion. That event
+    fires after the options exist: by the time a tool call reaches a hook, the model has
     already written the question and its option labels, and additionalContext
     cannot rewrite them. Guidance that arrives after the decision it is meant
     to shape is decoration.
     """
 
-    def test_checklist_is_in_the_session_notice(self):
+    def test_checklist_in_notice(self):
         code, parsed = run_hook({"hook_event_name": "SessionStart"})
         self.assertEqual(code, 0)
         context = parsed["hookSpecificOutput"]["additionalContext"]
         self.assertIn("existing test", context)
         self.assertIn("Recommended", context)
 
-    def test_ask_user_question_gets_no_decision(self):
+    def test_ask_question_no_decision(self):
         """The hook has nothing useful to say at this point and says nothing."""
         code, parsed = run_hook({
             "hook_event_name": "PreToolUse",
@@ -801,7 +801,7 @@ class SettingsWiringTest(unittest.TestCase):
         self._assert_registered(EXAMPLE_SETTINGS)
 
     def test_entries_use_the_exec_form(self):
-        """Shell form splits a project path containing spaces and the hook never runs."""
+        """Shell form splits a project path containing spaces and the hook fails to launch."""
         for path in (LIVE_SETTINGS, EXAMPLE_SETTINGS):
             settings = json.loads(path.read_text(encoding="utf-8"))
             for event in ("SessionStart", "PreToolUse"):
@@ -847,7 +847,7 @@ class CorpusTest(unittest.TestCase):
             _, parsed = run_hook(payload)
             return decision_of(parsed) or gate_corpus.ALLOW
 
-    def test_every_corpus_row_reaches_its_verdict(self):
+    def test_corpus_verdicts(self):
         for relative, exists, expected, why in gate_corpus.CONSENT_CASES:
             with self.subTest(path=relative, why=why):
                 self.assertEqual(self.decision_for(relative, exists), expected)

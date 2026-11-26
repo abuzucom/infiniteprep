@@ -127,7 +127,7 @@ class CloudflarePagesPolicyTest(unittest.TestCase):
             ("", ""),
         )
 
-    def test_prohibited_classifier_does_not_classify_pages(self) -> None:
+    def test_prohibited_classifier_skips_pages(self) -> None:
         """Leave Wrangler policy decisions to the CWD-aware shell gates."""
         self.assertEqual(
             _gate_core.prohibited_command_verdict(

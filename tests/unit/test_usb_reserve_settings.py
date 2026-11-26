@@ -40,7 +40,7 @@ def open_dialog(qtbot, manager: SettingsManager) -> SettingsDialog:
     return dialog
 
 
-def test_both_reserve_kinds_start_at_zero(tmp_path: Path) -> None:
+def test_both_reserves_start_at_zero(tmp_path: Path) -> None:
     """New settings and older settings files hold a zero reserve of both kinds."""
     manager = write_settings(tmp_path / "settings.json", {"transcode_mode": "sibling_export"})
 
@@ -63,7 +63,7 @@ def test_valid_stored_reserve_values_load(tmp_path: Path) -> None:
     "stored_percent",
     [-1, MAX_USB_RESERVE_PERCENT + 1, "ten", True, None, float("nan"), float("inf"), [5]],
 )
-def test_invalid_stored_percent_loads_as_zero(tmp_path: Path, stored_percent: object) -> None:
+def test_invalid_percent_loads_as_zero(tmp_path: Path, stored_percent: object) -> None:
     """A percentage outside 0 to 100 or of another type loads as zero."""
     manager = write_settings(tmp_path / "settings.json", {"usb_reserve_percent": stored_percent})
 
@@ -74,14 +74,14 @@ def test_invalid_stored_percent_loads_as_zero(tmp_path: Path, stored_percent: ob
     "stored_bytes",
     [-1, 1.5, "many", True, None, MAX_USB_RESERVE_MIB * BYTES_PER_MIB + 1, [5]],
 )
-def test_invalid_stored_bytes_load_as_zero(tmp_path: Path, stored_bytes: object) -> None:
+def test_invalid_bytes_load_as_zero(tmp_path: Path, stored_bytes: object) -> None:
     """A byte count below zero, above the limit, or of another type loads as zero."""
     manager = write_settings(tmp_path / "settings.json", {"usb_reserve_bytes": stored_bytes})
 
     assert manager.load().usb_reserve_bytes == 0
 
 
-def test_stored_reserve_feeds_the_reserve_policy(tmp_path: Path) -> None:
+def test_stored_reserve_feeds_policy(tmp_path: Path) -> None:
     """The loaded values build a reserve policy. The larger kind decides."""
     values = {"usb_reserve_percent": STORED_PERCENT, "usb_reserve_bytes": STORED_RESERVE_BYTES}
     settings = write_settings(tmp_path / "settings.json", values).load()
@@ -92,7 +92,7 @@ def test_stored_reserve_feeds_the_reserve_policy(tmp_path: Path) -> None:
     assert compute_reserve_bytes(ESTIMATE_BYTES, reserve) == PERCENT_RESERVE_OF_ESTIMATE
 
 
-def test_settings_dialog_shows_the_stored_reserve(qtbot, tmp_path: Path) -> None:
+def test_settings_dialog_shows_stored_reserve(qtbot, tmp_path: Path) -> None:
     """The inputs open with the stored percentage and the stored size in MiB."""
     values = {"usb_reserve_percent": STORED_PERCENT, "usb_reserve_bytes": STORED_RESERVE_BYTES}
     dialog = open_dialog(qtbot, write_settings(tmp_path / "settings.json", values))
@@ -101,7 +101,7 @@ def test_settings_dialog_shows_the_stored_reserve(qtbot, tmp_path: Path) -> None
     assert dialog.usb_reserve_mib_spin.value() == STORED_RESERVE_MIB
 
 
-def test_settings_dialog_rounds_a_partial_mib_up(qtbot, tmp_path: Path) -> None:
+def test_settings_dialog_rounds_mib_up(qtbot, tmp_path: Path) -> None:
     """A stored size between two MiB values shows the higher one. A save never shrinks it."""
     values = {"usb_reserve_bytes": STORED_RESERVE_BYTES + 1}
     dialog = open_dialog(qtbot, write_settings(tmp_path / "settings.json", values))
@@ -120,7 +120,7 @@ def test_settings_dialog_input_ranges(qtbot, tmp_path: Path) -> None:
     assert dialog.usb_reserve_mib_spin.maximum() == MAX_USB_RESERVE_MIB
 
 
-def test_settings_dialog_saves_both_reserve_kinds(qtbot, tmp_path: Path) -> None:
+def test_settings_dialog_saves_both_reserves(qtbot, tmp_path: Path) -> None:
     """Saving stores the percentage and the size in bytes."""
     manager = SettingsManager(tmp_path / "settings.json")
     dialog = open_dialog(qtbot, manager)

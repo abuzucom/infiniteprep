@@ -66,7 +66,7 @@ def test_each_candidate_gets_a_row(qtbot) -> None:
     assert MOUNT_PATH in dialog.drive_list.item(0).text()
 
 
-def test_refused_drive_shows_its_first_reason(qtbot) -> None:
+def test_refused_drive_shows_first_reason(qtbot) -> None:
     """A refused removable drive stays in the list with its refusal message."""
     dialog = open_picker(qtbot, build_candidates())
 
@@ -142,7 +142,7 @@ def test_failed_load_shows_fixed_text(qtbot) -> None:
     assert dialog.status_label.textFormat() == Qt.TextFormat.PlainText
 
 
-def test_rescan_loads_again_and_clears_the_selection(qtbot) -> None:
+def test_rescan_reloads_and_clears_selection(qtbot) -> None:
     """Rescan calls the loader again and drops the chosen row."""
     loader = CountingLoader(build_candidates())
     dialog = UsbDrivePickerDialog(loader)

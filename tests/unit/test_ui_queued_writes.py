@@ -63,7 +63,7 @@ def write_parts(
     qtbot.waitUntil(lambda: not window.batch_queue.is_busy(), timeout=SIGNAL_TIMEOUT_MS)
 
 
-def test_dialog_submits_plans_but_writes_none(qtbot: Any, write_parts: WriteParts) -> None:
+def test_dialog_submits_plans_writes_none(qtbot: Any, write_parts: WriteParts) -> None:
     """With submit_plans, Apply hands over the previewed safe plans and closes."""
     _window, repository, write_svc, file_ids = write_parts
     submitted: list[list[FileWritePlan]] = []
@@ -123,7 +123,7 @@ def test_queued_writes_change_the_files(qtbot: Any, write_parts: WriteParts) -> 
     assert statuses == {OperationStatus.COMPLETED}
 
 
-def test_stop_setting_reaches_a_queued_write_batch(
+def test_stop_setting_reaches_queued_batch(
     qtbot: Any, write_parts: WriteParts, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """With the stop setting saved, a queued batch ends at its first failed write."""

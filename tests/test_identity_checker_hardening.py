@@ -63,7 +63,7 @@ def capture_config_parameters(repo: Path, environment: dict, settings: list) -> 
 class PolicyRootCheckerTest(unittest.TestCase):
     """A missing policy-root checker skips even when the project opts in."""
 
-    def test_missing_policy_root_checker_returns_none(self):
+    def test_missing_root_checker_none(self):
         spec = importlib.util.spec_from_file_location("identity_policy_root", IDENTITY_HOOK)
         hook = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(hook)

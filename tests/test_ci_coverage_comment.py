@@ -169,7 +169,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
             tmp_path=self.tmp, summary=summary, comments=comments, script=self.script, **options
         )
 
-    def test_a_valid_summary_creates_the_comment(self) -> None:
+    def test_valid_summary_creates_comment(self) -> None:
         """A valid summary becomes a comment with the total and the file rows."""
         calls = self.run_comment_script(
             {"total": 87.9, "files": [{"path": "src/infiniteprep/ui/theme.py", "percent": 42.4}]},
@@ -182,7 +182,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
         self.assertIn("42.4%  src/infiniteprep/ui/theme.py", calls[0]["body"])
         self.assertTrue(calls[0]["body"].startswith(MARKER))
 
-    def test_a_foreign_comment_never_becomes_the_target(self) -> None:
+    def test_foreign_comment_never_becomes_target(self) -> None:
         """A comment from another author that carries the marker is left alone."""
         calls = self.run_comment_script(
             {"total": 87.9, "files": []},
@@ -198,7 +198,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
         actions = [call["action"] for call in calls]
         self.assertEqual(actions, ["create"])
 
-    def test_marker_inside_body_is_left_alone(self) -> None:
+    def test_marker_inside_body_left_alone(self) -> None:
         """A bot comment that only mentions the marker is not the target."""
         calls = self.run_comment_script(
             {"total": 87.9, "files": []},
@@ -214,7 +214,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
         actions = [call["action"] for call in calls]
         self.assertEqual(actions, ["create"])
 
-    def test_a_second_bot_comment_is_removed(self) -> None:
+    def test_second_bot_comment_is_removed(self) -> None:
         """A second coverage comment from the bot does not survive."""
         calls = self.run_comment_script(
             {"total": 87.9, "files": []},
@@ -225,7 +225,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
         self.assertEqual(actions, ["update", "delete"])
         self.assertEqual(calls[1]["comment_id"], 12)
 
-    def test_an_older_run_never_replaces_a_newer_result(self) -> None:
+    def test_older_run_never_replaces_newer(self) -> None:
         """A run older than the posted run writes nothing."""
         calls = self.run_comment_script(
             {"total": 87.9, "files": []},
@@ -236,7 +236,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
         actions = [call["action"] for call in calls]
         self.assertEqual(actions, ["info"])
 
-    def test_a_newer_run_updates_the_comment(self) -> None:
+    def test_newer_run_updates_comment(self) -> None:
         """A run newer than the posted run updates the comment."""
         calls = self.run_comment_script(
             {"total": 87.9, "files": []},
@@ -248,7 +248,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
         self.assertEqual(actions, ["update"])
         self.assertEqual(calls[0]["comment_id"], 14)
 
-    def test_a_path_with_a_fence_character_is_rejected(self) -> None:
+    def test_path_with_fence_is_rejected(self) -> None:
         """A crafted file path never reaches the comment."""
         calls = self.run_comment_script(
             {"total": 87.9, "files": [{"path": "src/a.py`\n@someone", "percent": 1.0}]},
@@ -268,7 +268,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
         self.assertEqual([call["action"] for call in calls], ["error"])
         self.assertIn("unexpected fields", calls[0]["message"])
 
-    def test_a_total_out_of_range_is_rejected(self) -> None:
+    def test_out_of_range_total_rejected(self) -> None:
         """A total outside the range never reaches the comment."""
         calls = self.run_comment_script({"total": 1000, "files": []}, [])
 
@@ -283,7 +283,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
         self.assertEqual([call["action"] for call in calls], ["error"])
         self.assertIn("out of range", calls[0]["message"])
 
-    def test_a_file_record_with_an_extra_field_is_rejected(self) -> None:
+    def test_file_record_extra_field_rejected(self) -> None:
         """A file record with an extra field never reaches the comment."""
         calls = self.run_comment_script(
             {"total": 87.9, "files": [{"path": "src/a.py", "percent": 1.0, "note": "x"}]},
@@ -293,7 +293,7 @@ class CoverageCommentScriptTest(unittest.TestCase):
         self.assertEqual([call["action"] for call in calls], ["error"])
         self.assertIn("unexpected fields", calls[0]["message"])
 
-    def test_a_summary_that_is_not_json_is_rejected(self) -> None:
+    def test_non_json_summary_is_rejected(self) -> None:
         """A summary that is not valid JSON never reaches the comment."""
         calls = self.run_comment_script(None, [], raw_summary="not json")
 

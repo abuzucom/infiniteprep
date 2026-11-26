@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -11,22 +12,41 @@ import urllib.parse
 from pathlib import Path
 
 # The proxy constants stay importable from this module for existing callers.
+# Executable resolution, the repository-containment test, and PATH filtering
+# come from trusted_git so both wrappers apply one set of rules.
 try:
     from scripts.trusted_git import (
         MANAGED_PROXY_HOST, MANAGED_PROXY_PORT, PROXY_VARIABLES,
         is_managed_proxy_placeholder, sanitize_managed_proxy,
+        is_inside_directory as _is_inside, resolve_executable,
+        safe_search_path as _safe_search_path, select_safe_directory,
     )
 except ModuleNotFoundError:
     from trusted_git import (
         MANAGED_PROXY_HOST, MANAGED_PROXY_PORT, PROXY_VARIABLES,
         is_managed_proxy_placeholder, sanitize_managed_proxy,
+        is_inside_directory as _is_inside, resolve_executable,
+        safe_search_path as _safe_search_path, select_safe_directory,
     )
 
 
 ACCOUNT_OUTPUT_LIMIT = 256
 COMMAND_OUTPUT_LIMIT = 1024 * 1024
 METADATA_OUTPUT_LIMIT = 65536
+# gh prints the GraphQL block and connectivity errors first, so their
+# classifiers scan only this prefix of stderr.
 ERROR_SCAN_LIMIT = 4096
+# Relayed gh output is untrusted text. These characters can move the cursor,
+# rewrite the terminal, or reorder displayed text. Tab, newline, and carriage
+# return stay so multi-line output keeps its shape.
+# Code points: C0 except tab (0x09), newline (0x0A), and carriage return
+# (0x0D), then DEL and C1 (0x7F-0x9F), then the Arabic letter mark and the
+# bidi marks, embeddings, overrides, and isolates.
+TERMINAL_CONTROL_CODEPOINTS = (
+    *range(0x00, 0x09), 0x0B, 0x0C, *range(0x0E, 0x20), *range(0x7F, 0xA0),
+    0x061C, 0x200E, 0x200F, *range(0x202A, 0x202F), *range(0x2066, 0x206A),
+)
+TERMINAL_CONTROL_TABLE = dict.fromkeys(TERMINAL_CONTROL_CODEPOINTS, "?")
 MAX_GIT_DISCOVERY_DEPTH = 100
 GH_TIMEOUT_SECONDS = 5
 # GitHub CLI exits with 4 when a command requires authentication.
@@ -81,6 +101,59 @@ REMOTE_PATH_PART_COUNT = 2
 ACCOUNT_FIELD_COUNT = 2
 # A repository command path holds a command and one subcommand.
 COMMAND_PATH_LENGTH = 2
+# Comment threads. Pull request conversation comments live on the issues
+# endpoint, so both kinds map to one REST path.
+COMMENT_KINDS = frozenset(("issue", "pr"))
+COMMENT_DRAFT_DIRECTORY = ".comment-drafts"
+COMMENT_BODY_OPTION = "--body-file"
+# GitHub caps a comment body at 65536 characters.
+MAX_COMMENT_BYTES = 65536
+# Draft reads open one descriptor that does not follow a link and never blocks
+# on a FIFO, so a path swapped after the check cannot redirect the read.
+DRAFT_NO_FOLLOW = getattr(os, "O_NOFOLLOW", 0)
+DRAFT_READ_FLAGS = (os.O_RDONLY | DRAFT_NO_FOLLOW | getattr(os, "O_NONBLOCK", 0)
+                    | getattr(os, "O_BINARY", 0))
+DRAFT_DIRECTORY_FLAGS = os.O_RDONLY | DRAFT_NO_FOLLOW | getattr(os, "O_DIRECTORY", 0)
+THREAD_NUMBER = re.compile(r"\A[1-9][0-9]{0,9}\Z")
+COMMENTS_ARGUMENT_COUNT = 2
+COMMENT_ARGUMENT_COUNT = 4
+# A comment read fetches one page so a long thread cannot exhaust memory.
+# GitHub caps per_page at 100.
+COMMENT_PAGE_OPTION = "--page"
+COMMENT_PAGE_SIZE = 100
+COMMENT_PAGE_NUMBER = re.compile(r"\A[1-9][0-9]{0,3}\Z")
+MAX_COMMENT_PAGE = 1000
+COMMENT_PAGE_ARGUMENT_COUNT = 2
+# `gh issue edit` and `gh issue create` call GraphQL. Some sessions block
+# GraphQL. Two exact body-file shapes run over REST instead. Any other option
+# leaves the command for gh unchanged.
+ISSUE_TITLE_OPTION = "--title"
+ISSUE_REST_OPTIONS = frozenset((COMMENT_BODY_OPTION, ISSUE_TITLE_OPTION))
+ISSUE_STDIN_BODY = "-"
+ISSUE_EDIT_PREFIX_LENGTH = 3
+ISSUE_CREATE_PREFIX_LENGTH = 2
+# `gh pr create`, `gh pr edit`, `gh issue close`, and `gh issue reopen` also
+# call GraphQL. Their exact shapes below run over REST. Rule 5 allows only
+# draft pull requests, so the create shape requires `--draft`.
+PR_DRAFT_FLAG = "--draft"
+PR_BASE_OPTION = "--base"
+PR_BASE_SHORT_OPTION = "-B"
+PR_CREATE_OPTIONS = frozenset((COMMENT_BODY_OPTION, ISSUE_TITLE_OPTION, PR_BASE_OPTION))
+ISSUE_CLOSE_REASON_OPTION = "--reason"
+ISSUE_CLOSE_REASONS = frozenset(("completed", "not_planned"))
+ISSUE_STATE_PREFIX_LENGTH = 3
+# The branch gate reads the same override file with the same rules.
+PRIMARY_BRANCH_FILE = Path("hooks") / "primary-branch.txt"
+DEFAULT_PRIMARY_BRANCH = "main"
+REJECTED_PRIMARY_BRANCHES = frozenset(("master", "HEAD"))
+MAX_PRIMARY_BRANCH_BYTES = 256
+GRAPHQL_UNAVAILABLE = "GraphQL is not available"
+GRAPHQL_ERROR_MESSAGE = (
+    "error: this session blocks GitHub GraphQL; read comments with "
+    "`python scripts/trusted_gh.py comments <issue|pr> <number>`, post with "
+    "`python scripts/trusted_gh.py comment <issue|pr> <number> --body-file "
+    ".comment-drafts/<file>`, or read other data through a REST `run api` call"
+)
 
 
 def is_connectivity_failure(stderr: str) -> bool:
@@ -219,11 +292,58 @@ def repository_branch(repo_root: Path) -> str:
     if not content.startswith(marker):
         raise ValueError("repository has no named branch; check out a branch first")
     branch = content.removeprefix(marker)
-    components = branch.split("/")
-    if (not BRANCH_NAME.fullmatch(branch) or any(component in ("", ".", "..")
-                                                for component in components)):
+    if not is_valid_branch_name(branch):
         raise ValueError("repository has an invalid current branch")
     return branch
+
+
+def is_valid_branch_name(name: str) -> bool:
+    """Return whether a branch name has safe characters and no empty or dot component."""
+    return bool(BRANCH_NAME.fullmatch(name)) and not any(
+        component in ("", ".", "..") for component in name.split("/"))
+
+
+def primary_branch_name(root: Path) -> str:
+    """Return the branch in hooks/primary-branch.txt below root, or main.
+
+    The file must be a regular non-link file holding one ASCII line that
+    names a valid branch other than master or HEAD.
+    """
+    content = _read_primary_branch_bytes(Path(root) / PRIMARY_BRANCH_FILE)
+    if content is None:
+        return DEFAULT_PRIMARY_BRANCH
+    lines = content.splitlines()
+    name = lines[0].decode("ascii", errors="replace") if len(lines) == 1 else ""
+    if not content.isascii() or not is_allowed_base_branch(name):
+        raise ValueError(f"{PRIMARY_BRANCH_FILE.as_posix()} must name one valid branch "
+                         "other than master or HEAD")
+    return name
+
+
+def is_allowed_base_branch(name: str) -> bool:
+    """Return whether a name can serve as a primary or pull request base branch."""
+    return name not in REJECTED_PRIMARY_BRANCHES and is_valid_branch_name(name)
+
+
+def _read_primary_branch_bytes(path: Path) -> bytes | None:
+    """Return the override bytes read through one descriptor, or None when absent.
+
+    The open does not follow a link and never blocks on a FIFO. The descriptor
+    is checked and read directly, so a path swapped after the open cannot
+    change the bytes.
+    """
+    try:
+        descriptor = os.open(path, DRAFT_READ_FLAGS)
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise ValueError(f"{PRIMARY_BRANCH_FILE.as_posix()} cannot be opened as a regular "
+                         f"file ({type(error).__name__})") from error
+    with os.fdopen(descriptor, "rb") as handle:
+        details = os.fstat(handle.fileno())
+        if not stat.S_ISREG(details.st_mode) or details.st_size > MAX_PRIMARY_BRANCH_BYTES:
+            raise ValueError(f"{PRIMARY_BRANCH_FILE.as_posix()} must be a small regular file")
+        return handle.read(MAX_PRIMARY_BRANCH_BYTES + 1)
 
 
 def _has_repository_option(arguments: list[str]) -> bool:
@@ -247,8 +367,36 @@ def _command_position(arguments: list[str]) -> int | None:
     return None
 
 
+def _has_base_option(option_tokens: list[str]) -> bool:
+    """Return whether option tokens name a pull request base in any gh spelling."""
+    return any(token == PR_BASE_OPTION or token.startswith(PR_BASE_OPTION + "=")
+               or token.startswith(PR_BASE_SHORT_OPTION) for token in option_tokens)
+
+
+def _with_default_pull_base(repository: Path, arguments: list[str]) -> list[str]:
+    """Add the primary branch as base to a pull request create that names none.
+
+    gh otherwise targets the GitHub default branch. CI runs only for pull
+    requests into a stable branch, and the default branch can differ. An
+    explicit base may name any stable branch: primary, test, or develop.
+    """
+    position = _command_position(arguments)
+    delimiter = arguments.index("--") if "--" in arguments else len(arguments)
+    option_tokens = arguments[:delimiter]
+    if position is None or option_tokens[position:position + COMMAND_PATH_LENGTH] != ["pr", "create"]:
+        return list(arguments)
+    if _has_base_option(option_tokens):
+        return list(arguments)
+    try:
+        primary = primary_branch_name(_find_git_entry(Path(repository)).parent)
+    except (OSError, ValueError) as error:
+        raise RestWriteError(f"pull request base cannot default to the primary branch: {error}") from error
+    return [*option_tokens, PR_BASE_OPTION, primary, *arguments[delimiter:]]
+
+
 def with_repository_context(repository: Path, arguments: list[str]) -> list[str]:
     """Add validated repository context to a repository-bound command."""
+    arguments = _with_default_pull_base(repository, arguments)
     position = _command_position(arguments)
     if position is None or _has_repository_option(arguments):
         return list(arguments)
@@ -266,16 +414,6 @@ def with_repository_context(repository: Path, arguments: list[str]) -> list[str]
     return context
 
 
-def _is_inside(path: Path, directory: Path) -> bool:
-    """Return whether one path resides under a directory."""
-    try:
-        path.relative_to(directory)
-        return True
-    except ValueError:
-        # Paths on different roots or outside directory are not inside it.
-        return False
-
-
 def _candidate_names() -> tuple[str, ...]:
     """Return accepted GitHub CLI executable names."""
     if os.name == "nt":
@@ -286,59 +424,16 @@ def _candidate_names() -> tuple[str, ...]:
 
 def resolve_gh(repo_root) -> str:
     """Return an absolute GitHub CLI executable outside the repository."""
-    repository = Path(repo_root).resolve()
-    names = _candidate_names()
-    for raw_directory in os.environ.get("PATH", "").split(os.pathsep):
-        if not raw_directory:
-            continue
-        directory = Path(raw_directory.strip('"'))
-        if not directory.is_absolute():
-            continue
-        for name in names:
-            candidate = directory / name
-            if _is_inside(Path(os.path.abspath(candidate)), repository):
-                continue
-            try:
-                if candidate.is_symlink() or not candidate.is_file():
-                    continue
-                resolved = candidate.resolve(strict=True)
-            except OSError:
-                continue
-            if _is_inside(resolved, repository):
-                continue
-            if os.name != "nt" and not os.access(resolved, os.X_OK):
-                continue
-            return str(resolved)
-    raise FileNotFoundError("trusted GitHub CLI executable was not found on PATH")
+    return resolve_executable(repo_root, _candidate_names(), "GitHub CLI")
 
 
 def _safe_directory(repository: Path, executable: Path) -> Path:
-    """Return an existing execution directory outside the repository."""
-    for candidate in (Path(tempfile.gettempdir()), Path.cwd(), executable.parent):
-        try:
-            resolved = candidate.resolve(strict=True)
-        except OSError:
-            continue
-        if resolved.is_dir() and not _is_inside(resolved, repository):
-            return resolved
-    raise OSError("no safe external directory is available for GitHub CLI execution")
+    """Return an existing execution directory outside the repository.
 
-
-def _safe_search_path(repository: Path) -> str:
-    """Return PATH without relative or repository-controlled entries."""
-    entries = []
-    for raw_directory in os.environ.get("PATH", "").split(os.pathsep):
-        directory = Path(raw_directory.strip('"')) if raw_directory else Path()
-        if not raw_directory or not directory.is_absolute():
-            continue
-        try:
-            resolved = directory.resolve(strict=False)
-        except OSError:
-            # Drop unresolvable PATH entries rather than aborting sanitization.
-            continue
-        if not _is_inside(resolved, repository):
-            entries.append(str(resolved))
-    return os.pathsep.join(entries)
+    GitHub CLI also accepts the working directory, after the temp directory.
+    """
+    candidates = (Path(tempfile.gettempdir()), Path.cwd(), executable.parent)
+    return select_safe_directory(repository, candidates, "GitHub CLI")
 
 
 def _is_managed_proxy_placeholder(value: str) -> bool:
@@ -427,8 +522,8 @@ def _sanitize_config_directory(environment: dict, repository: Path) -> None:
     environment["GH_CONFIG_DIR"] = str(resolved)
 
 
-def run_gh(repo_root, arguments: list[str], *, runner=None, timeout=None):
-    """Run trusted GitHub CLI from outside the repository."""
+def run_gh(repo_root, arguments: list[str], *, runner=None, timeout=None, input_text=None):
+    """Run trusted GitHub CLI from outside the repository, with optional stdin."""
     repository = Path(repo_root).resolve()
     executable = Path(resolve_gh(repository))
     environment = dict(os.environ)
@@ -449,6 +544,7 @@ def run_gh(repo_root, arguments: list[str], *, runner=None, timeout=None):
             [str(executable), *arguments],
             cwd=private,
             env=environment,
+            input=input_text,
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -533,6 +629,341 @@ def verify_account(repo_root) -> None:
         raise
 
 
+def _safe_write(stream, text: str) -> None:
+    """Write text to a stream, replacing unencodable characters if needed."""
+    try:
+        stream.write(text)
+    except UnicodeEncodeError:
+        encoding = getattr(stream, "encoding", None) or "utf-8"
+        buffer = getattr(stream, "buffer", None)
+        if buffer is not None:
+            buffer.write(text.encode(encoding, errors="replace"))
+        else:
+            sanitized = text.encode(encoding, errors="replace").decode(encoding, errors="replace")
+            stream.write(sanitized)
+
+
+def comment_thread(kind: str, number: str) -> int:
+    """Return the thread number for an issue or pr comment target."""
+    if kind not in COMMENT_KINDS:
+        raise ValueError("comment target kind must be issue or pr")
+    if not THREAD_NUMBER.fullmatch(number):
+        raise ValueError("comment target number must be a positive integer")
+    return int(number)
+
+
+def comment_body_path(repo_root: Path, raw: str) -> Path:
+    """Return the absolute path of a validated draft under .comment-drafts/."""
+    return read_comment_draft(repo_root, raw)[0]
+
+
+def read_comment_draft(repo_root: Path, raw: str) -> tuple[Path, str]:
+    """Return the path and validated text of one draft under .comment-drafts/.
+
+    The draft must be a regular non-link ASCII file. The wrapper reads it once
+    and posts these exact bytes, so a later change to the file cannot alter
+    the posted comment.
+    """
+    name = _draft_name(raw)
+    if not _safe_draft_open_supported():
+        raise ValueError("comment posting needs os.open dir_fd and O_NOFOLLOW support, which "
+                         "this platform lacks; post the comment through another approved path")
+    drafts = _find_git_entry(Path(repo_root)).parent / COMMENT_DRAFT_DIRECTORY
+    try:
+        body = _read_draft_bytes(drafts, name)
+    except (OSError, ValueError) as error:
+        raise ValueError(f"comment body file must be a readable regular file directly in "
+                         f"{COMMENT_DRAFT_DIRECTORY}/; write the draft there first") from error
+    if not body or len(body) > MAX_COMMENT_BYTES:
+        raise ValueError(f"comment body must hold 1 to {MAX_COMMENT_BYTES} bytes")
+    if not body.isascii():
+        raise ValueError("comment body must be ASCII")
+    text = body.decode("ascii")
+    if find_literal_escape_sequences(["--body", text]):
+        raise ValueError("comment body contains literal escape text; use real newlines")
+    return drafts / name, text
+
+
+def _draft_name(raw: str) -> str:
+    """Return the single file name of a `.comment-drafts/<name>` argument."""
+    prefix = COMMENT_DRAFT_DIRECTORY + "/"
+    name = raw[len(prefix):] if raw.startswith(prefix) else ""
+    if not name or name in (".", "..") or "/" in name or "\\" in name:
+        raise ValueError(f"comment body file must be {prefix}<name> with no subdirectory")
+    return name
+
+
+def _safe_draft_open_supported() -> bool:
+    """Return whether this platform can open a draft relative to a no-follow directory.
+
+    Windows lacks dir_fd and O_NOFOLLOW. A path-based check there cannot stop
+    a junction or link swapped in for the drafts directory, so posting fails
+    closed instead.
+    """
+    return os.open in os.supports_dir_fd and bool(DRAFT_NO_FOLLOW)
+
+
+def _read_draft_bytes(drafts: Path, name: str) -> bytes:
+    """Read one draft through a descriptor that no later path swap can redirect.
+
+    The drafts directory and the draft both open with O_NOFOLLOW, the draft
+    relative to the directory descriptor.
+    """
+    directory = os.open(drafts, DRAFT_DIRECTORY_FLAGS)
+    try:
+        descriptor = os.open(name, DRAFT_READ_FLAGS, dir_fd=directory)
+    finally:
+        os.close(directory)
+    with os.fdopen(descriptor, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise ValueError("comment draft is not a regular file")
+        return handle.read(MAX_COMMENT_BYTES + 1)
+
+
+def comment_page(extra: list[str]) -> int:
+    """Return the page a comment read names, or 1 when it names none."""
+    if not extra:
+        return 1
+    if (len(extra) != COMMENT_PAGE_ARGUMENT_COUNT or extra[0] != COMMENT_PAGE_OPTION
+            or not COMMENT_PAGE_NUMBER.match(extra[1]) or int(extra[1]) > MAX_COMMENT_PAGE):
+        raise ValueError(f"comments takes <issue|pr> <number> [{COMMENT_PAGE_OPTION} "
+                         f"<1-{MAX_COMMENT_PAGE}>]")
+    return int(extra[1])
+
+
+def comment_arguments(repo_root, operation: str,
+                      arguments: list[str]) -> tuple[list[str], str | None]:
+    """Return the fixed REST GitHub CLI arguments and stdin for one comment operation."""
+    if operation == "comments":
+        if len(arguments) < COMMENTS_ARGUMENT_COUNT:
+            raise ValueError(f"comments takes <issue|pr> <number> [{COMMENT_PAGE_OPTION} <n>]")
+        page = comment_page(arguments[COMMENTS_ARGUMENT_COUNT:])
+    elif len(arguments) != COMMENT_ARGUMENT_COUNT:
+        raise ValueError(f"comment takes <issue|pr> <number> {COMMENT_BODY_OPTION} <path>")
+    number = comment_thread(arguments[0], arguments[1])
+    endpoint = f"repos/{repository_target(Path(repo_root))}/issues/{number}/comments"
+    if operation == "comments":
+        return ["api", f"{endpoint}?per_page={COMMENT_PAGE_SIZE}&page={page}"], None
+    if arguments[2] != COMMENT_BODY_OPTION:
+        raise ValueError(f"comment takes {COMMENT_BODY_OPTION} <path>")
+    _path, body = read_comment_draft(Path(repo_root), arguments[3])
+    return ["api", "-X", "POST", endpoint, "--input", "-"], json.dumps({"body": body})
+
+
+def next_page_note(page: int, output: str) -> str:
+    """Return a hint naming the next page when a comment read filled its page."""
+    if page >= MAX_COMMENT_PAGE:
+        return ""
+    try:
+        comments = json.loads(output)
+    except ValueError:
+        return ""
+    if not isinstance(comments, list) or len(comments) < COMMENT_PAGE_SIZE:
+        return ""
+    return (f"note: page {page} holds {COMMENT_PAGE_SIZE} comments; read more with "
+            f"{COMMENT_PAGE_OPTION} {page + 1}")
+
+
+class RestWriteError(ValueError):
+    """A mapped REST write named a value that the wrapper refuses."""
+
+
+class IssueBodyError(RestWriteError):
+    """A mapped issue command named a body file that the draft rules refuse."""
+
+
+def _issue_rest_options(options: list[str]) -> dict | None:
+    """Return option values when every token is one approved option pair, else None."""
+    values = {}
+    for index in range(0, len(options), 2):
+        name = options[index]
+        if name not in ISSUE_REST_OPTIONS or name in values or index + 1 >= len(options):
+            return None
+        values[name] = options[index + 1]
+    if values.get(COMMENT_BODY_OPTION, ISSUE_STDIN_BODY) == ISSUE_STDIN_BODY:
+        return None
+    return values
+
+
+def _issue_rest_shape(arguments: list[str]) -> tuple[str, str, dict] | None:
+    """Return the method, issue path suffix, and options of an approved issue shape."""
+    if arguments[:2] == ["issue", "edit"] and len(arguments) > ISSUE_EDIT_PREFIX_LENGTH:
+        number = arguments[2]
+        options = _issue_rest_options(arguments[ISSUE_EDIT_PREFIX_LENGTH:])
+        if options is None or not THREAD_NUMBER.fullmatch(number):
+            return None
+        return "PATCH", f"/{int(number)}", options
+    if arguments[:2] == ["issue", "create"]:
+        options = _issue_rest_options(arguments[ISSUE_CREATE_PREFIX_LENGTH:])
+        if options is None or ISSUE_TITLE_OPTION not in options:
+            return None
+        return "POST", "", options
+    return None
+
+
+def issue_rest_request(repo_root, arguments: list[str]) -> tuple[list[str], str] | None:
+    """Return REST CLI arguments and a JSON body for an approved issue shape, else None.
+
+    Callers run this only after the gate checks pass on the original
+    arguments. A refused body file raises IssueBodyError so the call fails
+    closed instead of falling back to the blocked GraphQL path.
+    """
+    shape = _issue_rest_shape(list(arguments))
+    if shape is None:
+        return None
+    method, suffix, options = shape
+    payload = {"body": _read_rest_body(repo_root, options[COMMENT_BODY_OPTION])}
+    if ISSUE_TITLE_OPTION in options:
+        payload["title"] = options[ISSUE_TITLE_OPTION]
+    return _rest_call(repo_root, method, f"issues{suffix}", payload)
+
+
+def _read_rest_body(repo_root, raw: str) -> str:
+    """Return a validated draft body, or raise IssueBodyError so the call fails closed."""
+    try:
+        _path, body = read_comment_draft(Path(repo_root), raw)
+    except ValueError as error:
+        raise IssueBodyError(str(error)) from error
+    return body
+
+
+def _rest_call(repo_root, method: str, path: str, payload: dict) -> tuple[list[str], str]:
+    """Return REST CLI arguments for one origin repository path and its JSON body."""
+    endpoint = f"repos/{repository_target(Path(repo_root))}/{path}"
+    return ["api", "-X", method, endpoint, "--input", "-"], json.dumps(payload)
+
+
+def _pull_create_options(options: list[str]) -> dict | None:
+    """Return values for `--draft --title T --body-file F [--base B]` in any order, else None."""
+    values = {}
+    index = 0
+    while index < len(options):
+        name = options[index]
+        if name in values:
+            return None
+        if name == PR_DRAFT_FLAG:
+            values[name] = True
+            index += 1
+            continue
+        if name not in PR_CREATE_OPTIONS or index + 1 >= len(options):
+            return None
+        values[name] = options[index + 1]
+        index += 2
+    if PR_DRAFT_FLAG not in values or ISSUE_TITLE_OPTION not in values:
+        return None
+    if values.get(COMMENT_BODY_OPTION, ISSUE_STDIN_BODY) == ISSUE_STDIN_BODY:
+        return None
+    return values
+
+
+def _pull_base(repo_root, options: dict) -> str:
+    """Return the validated base branch, defaulting to the primary branch.
+
+    Only an absent `--base` takes the default. An explicit value, empty
+    included, passes the same rules as the primary branch.
+    """
+    if PR_BASE_OPTION in options:
+        base = options[PR_BASE_OPTION]
+    else:
+        try:
+            base = primary_branch_name(_find_git_entry(Path(repo_root)).parent)
+        except (OSError, ValueError) as error:
+            raise RestWriteError(str(error)) from error
+    if not is_allowed_base_branch(base):
+        raise RestWriteError("pull request base must name one valid branch "
+                             "other than master or HEAD")
+    return base
+
+
+def pull_rest_request(repo_root, arguments: list[str]) -> tuple[list[str], str] | None:
+    """Return REST CLI arguments and a JSON body for a draft create or a body edit, else None."""
+    if arguments[:2] == ["pr", "create"]:
+        options = _pull_create_options(arguments[ISSUE_CREATE_PREFIX_LENGTH:])
+        if options is None:
+            return None
+        payload = {"title": options[ISSUE_TITLE_OPTION],
+                   "body": _read_rest_body(repo_root, options[COMMENT_BODY_OPTION]),
+                   "head": repository_branch(Path(repo_root)),
+                   "base": _pull_base(repo_root, options), "draft": True}
+        return _rest_call(repo_root, "POST", "pulls", payload)
+    if arguments[:2] != ["pr", "edit"] or len(arguments) <= ISSUE_EDIT_PREFIX_LENGTH:
+        return None
+    options = _issue_rest_options(arguments[ISSUE_EDIT_PREFIX_LENGTH:])
+    if options is None or not THREAD_NUMBER.fullmatch(arguments[2]):
+        return None
+    payload = {"body": _read_rest_body(repo_root, options[COMMENT_BODY_OPTION])}
+    if ISSUE_TITLE_OPTION in options:
+        payload["title"] = options[ISSUE_TITLE_OPTION]
+    return _rest_call(repo_root, "PATCH", f"pulls/{int(arguments[2])}", payload)
+
+
+def issue_state_request(repo_root, arguments: list[str]) -> tuple[list[str], str] | None:
+    """Return REST CLI arguments and a JSON body for `issue close` or `issue reopen`, else None."""
+    if arguments[:2] not in (["issue", "close"], ["issue", "reopen"]):
+        return None
+    if len(arguments) < ISSUE_STATE_PREFIX_LENGTH or not THREAD_NUMBER.fullmatch(arguments[2]):
+        return None
+    extra = arguments[ISSUE_STATE_PREFIX_LENGTH:]
+    if arguments[1] == "reopen":
+        payload = {"state": "open"} if not extra else None
+    elif not extra:
+        payload = {"state": "closed"}
+    elif (len(extra) == 2 and extra[0] == ISSUE_CLOSE_REASON_OPTION
+          and extra[1] in ISSUE_CLOSE_REASONS):
+        payload = {"state": "closed", "state_reason": extra[1]}
+    else:
+        payload = None
+    if payload is None:
+        return None
+    return _rest_call(repo_root, "PATCH", f"issues/{int(arguments[2])}", payload)
+
+
+def rest_write_request(repo_root, arguments: list[str]) -> tuple[list[str], str] | None:
+    """Return the REST request for any approved write shape, else None.
+
+    Callers run this only after the gate checks pass on the original
+    arguments. A refused input raises RestWriteError so the call fails closed.
+    """
+    for build_request in (issue_rest_request, pull_rest_request, issue_state_request):
+        request = build_request(repo_root, list(arguments))
+        if request is not None:
+            return request
+    return None
+
+
+def issue_url(output: str) -> str | None:
+    """Return the html_url of a REST issue response, or None when absent."""
+    try:
+        issue = json.loads(output)
+    except ValueError:
+        return None
+    url = issue.get("html_url") if isinstance(issue, dict) else None
+    return url if isinstance(url, str) else None
+
+
+def _relay_issue_result(result) -> int:
+    """Print the issue URL of a successful REST write, else relay the raw result."""
+    url = issue_url(result.stdout) if result.returncode == 0 else None
+    if url is None:
+        return _relay_result(result)
+    _safe_write(sys.stdout, strip_terminal_controls(url[:MAX_REPORTED_PATH]) + "\n")
+    return 0
+
+
+def _run_comment_command(repo_root, operation: str, arguments: list[str]) -> int:
+    """Run one fixed comment read or post through the authenticated CLI."""
+    try:
+        gh_arguments, request_body = comment_arguments(repo_root, operation, arguments)
+    except (OSError, ValueError) as error:
+        print(f"error: {_bounded_path(error)}", file=sys.stderr)
+        return USAGE_ERROR_EXIT_CODE
+    if operation != "comments":
+        return _execute(repo_root, gh_arguments, input_text=request_body)
+    page = comment_page(arguments[COMMENTS_ARGUMENT_COUNT:])
+    return _execute(repo_root, gh_arguments,
+                    output_note=lambda output: next_page_note(page, output))
+
+
 def _run_requested_command(repo_root, arguments: list[str]) -> int:
     """Run one authenticated GitHub CLI command with bounded output."""
     if not arguments:
@@ -550,21 +981,47 @@ def _run_requested_command(repo_root, arguments: list[str]) -> int:
     except ImportError:
         print("error: GitHub safety policy is unavailable; repair adoption", file=sys.stderr)
         return POLICY_DENIAL_EXIT_CODE
-    decision, _reason = gate_core.forge_verdict("gh", arguments)
+    decision, reason = gate_core.forge_verdict("gh", arguments)
     if decision == "deny":
-        print("error: GitHub command denied by policy; review the command", file=sys.stderr)
+        print(f"error: GitHub command denied by policy: {gate_core.sanitize(reason)}",
+              file=sys.stderr)
         return POLICY_DENIAL_EXIT_CODE
+    return _execute(repo_root, arguments, gate_core)
+
+
+def _execute(repo_root, arguments: list[str], gate_core=None, input_text=None,
+             output_note=None) -> int:
+    """Verify the account, run gh, and relay bounded output and failures.
+
+    With `gate_core`, add repository context first and check the final
+    arguments again. Comment operations build fixed arguments and pass none.
+    `input_text` reaches gh on stdin. `output_note` maps successful stdout
+    to an optional stderr note.
+    """
+    rest_request = None
     try:
-        effective_arguments = with_repository_context(Path(repo_root), arguments)
-        decision, _reason = gate_core.forge_verdict("gh", effective_arguments)
-        if decision == "deny":
-            print("error: GitHub command denied by policy; review the command", file=sys.stderr)
-            return POLICY_DENIAL_EXIT_CODE
+        effective_arguments = arguments
+        if gate_core is not None:
+            effective_arguments = with_repository_context(Path(repo_root), arguments)
+            decision, reason = gate_core.forge_verdict("gh", effective_arguments)
+            if decision == "deny":
+                print(f"error: GitHub command denied by policy: {gate_core.sanitize(reason)}",
+                      file=sys.stderr)
+                return POLICY_DENIAL_EXIT_CODE
+            rest_request = rest_write_request(repo_root, arguments)
+        if rest_request is not None:
+            effective_arguments, input_text = rest_request
         verify_account(repo_root)
-        result = run_gh(repo_root, effective_arguments)
+        if input_text is None:
+            result = run_gh(repo_root, effective_arguments)
+        else:
+            result = run_gh(repo_root, effective_arguments, input_text=input_text)
     except subprocess.TimeoutExpired:
         print(TIMEOUT_ERROR_MESSAGE, file=sys.stderr)
         return 1
+    except RestWriteError as error:
+        print(f"error: {_bounded_path(error)}", file=sys.stderr)
+        return USAGE_ERROR_EXIT_CODE
     except ValueError:
         print("error: GitHub CLI input or repository metadata is invalid; inspect and retry",
               file=sys.stderr)
@@ -589,22 +1046,26 @@ def _run_requested_command(repo_root, arguments: list[str]) -> int:
     if result.returncode != 0 and is_connectivity_failure(result.stderr):
         print(CONNECTIVITY_ERROR_MESSAGE, file=sys.stderr)
         return 1
-    try:
-        sys.stdout.write(result.stdout[:COMMAND_OUTPUT_LIMIT])
-    except UnicodeEncodeError:
-        sys.stdout.buffer.write(
-            result.stdout[:COMMAND_OUTPUT_LIMIT].encode(
-                sys.stdout.encoding or "utf-8", errors="replace"
-            )
-        )
-    try:
-        sys.stderr.write(result.stderr[:COMMAND_OUTPUT_LIMIT])
-    except UnicodeEncodeError:
-        sys.stderr.buffer.write(
-            result.stderr[:COMMAND_OUTPUT_LIMIT].encode(
-                sys.stderr.encoding or "utf-8", errors="replace"
-            )
-        )
+    if result.returncode != 0 and GRAPHQL_UNAVAILABLE in result.stderr[:ERROR_SCAN_LIMIT]:
+        print(GRAPHQL_ERROR_MESSAGE, file=sys.stderr)
+        return 1
+    if rest_request is not None:
+        return _relay_issue_result(result)
+    return _relay_result(result, output_note)
+
+
+def strip_terminal_controls(text: str) -> str:
+    """Replace terminal control and bidi override characters with '?'."""
+    return text.translate(TERMINAL_CONTROL_TABLE)
+
+
+def _relay_result(result, output_note=None) -> int:
+    """Write bounded, control-free gh output, add an optional note, and return the exit code."""
+    _safe_write(sys.stdout, strip_terminal_controls(result.stdout[:COMMAND_OUTPUT_LIMIT]))
+    _safe_write(sys.stderr, strip_terminal_controls(result.stderr[:COMMAND_OUTPUT_LIMIT]))
+    note = output_note(result.stdout) if output_note and result.returncode == 0 else ""
+    if note:
+        print(note, file=sys.stderr)
     return result.returncode
 
 
@@ -612,8 +1073,11 @@ def main() -> int:
     """Print bounded authenticated account metadata as JSON."""
     if len(sys.argv) > 1:
         _program, operation, *gh_arguments = sys.argv
+        if operation in ("comments", "comment"):
+            return _run_comment_command(os.getcwd(), operation, gh_arguments)
         if operation != "run":
-            print("error: expected 'run' or no arguments", file=sys.stderr)
+            print("error: expected 'run', 'comments', 'comment', or no arguments",
+                  file=sys.stderr)
             return USAGE_ERROR_EXIT_CODE
         return _run_requested_command(os.getcwd(), gh_arguments)
     try:

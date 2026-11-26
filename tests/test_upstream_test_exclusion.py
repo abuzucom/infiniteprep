@@ -84,13 +84,13 @@ class UpstreamLoaderTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertNotIn(name, self.upstream_names)
 
-    def test_only_root_test_modules_are_returned(self) -> None:
+    def test_only_root_test_modules_returned(self) -> None:
         """Helper modules and directories in the Ruff list never reach the result."""
         for name in self.upstream_names:
             with self.subTest(name=name):
                 self.assertTrue(name.startswith("test_") and name.endswith(".py"))
 
-    def test_paths_sit_directly_in_the_tests_folder(self) -> None:
+    def test_paths_sit_directly_in_tests(self) -> None:
         """Every returned path is a direct child of tests/."""
         tests_dir = REPOSITORY_ROOT / "tests"
         for path in self.loader.load_upstream_test_paths(REPOSITORY_ROOT):
@@ -151,7 +151,7 @@ class MatrixWiringTest(unittest.TestCase):
         """Parse the ci workflow once."""
         cls.jobs = yaml.safe_load(CI_WORKFLOW.read_text(encoding="utf-8"))["jobs"]
 
-    def test_every_matrix_pytest_step_excludes_upstream(self) -> None:
+    def test_matrix_pytest_steps_exclude_upstream(self) -> None:
         """Both the plain and the coverage pytest steps pass the flag."""
         pytest_steps = [
             command for command in find_run_commands(self.jobs[MATRIX_JOB]) if "pytest" in command
@@ -161,7 +161,7 @@ class MatrixWiringTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIn(EXCLUDE_FLAG, command)
 
-    def test_checks_job_uses_the_parallel_runner(self) -> None:
+    def test_checks_job_uses_parallel_runner(self) -> None:
         """The checks job shards the suite instead of running it serially."""
         commands = "\n".join(find_run_commands(self.jobs[CHECKS_JOB]))
         self.assertIn(PARALLEL_RUNNER, commands)

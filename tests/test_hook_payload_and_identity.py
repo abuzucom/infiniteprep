@@ -24,7 +24,7 @@ INTEGRATION_STDERR = ("gh: Resource not accessible by integration (HTTP 403)\n"
 class IdentityBlockWordingTest(unittest.TestCase):
     """The commit block derives identity and never asks for values."""
 
-    def test_block_message_forbids_asking_for_values(self):
+    def test_block_message_wording(self):
         spec = importlib.util.spec_from_file_location("identity_block_wording", IDENTITY_HOOK)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)

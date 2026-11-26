@@ -42,7 +42,7 @@ def test_sizes_read_in_decimal_units(byte_count: int, expected: str) -> None:
     assert format_size(byte_count) == expected
 
 
-def test_space_summary_names_need_and_free() -> None:
+def test_space_summary_names_need_free() -> None:
     """The summary states the space the export needs against the free space."""
     result = evaluate_preflight(build_inspection(), build_request())
     needed = result.estimate_bytes + result.reserve_bytes
@@ -59,7 +59,7 @@ def test_space_summary_without_free_space() -> None:
     assert space_summary(result) == UNKNOWN_FREE_TEXT
 
 
-def test_space_bar_fills_by_share_and_caps() -> None:
+def test_space_bar_share_and_cap() -> None:
     """The bar fills by the needed share of free space and stops at full."""
     assert space_bar_value(250, 1_000) == SPACE_BAR_STEPS // 4
     assert space_bar_value(5_000, 1_000) == SPACE_BAR_STEPS
@@ -67,7 +67,7 @@ def test_space_bar_fills_by_share_and_caps() -> None:
     assert space_bar_value(10, None) is None
 
 
-def test_drive_title_prefers_the_volume_name() -> None:
+def test_drive_title_prefers_volume_name() -> None:
     """The drive shows its volume name, then its model, then its device name."""
     assert drive_title(build_inspection()) == "STICK"
     unnamed = build_inspection(partitions=(build_partition(label=None),))
@@ -78,7 +78,7 @@ def test_drive_title_prefers_the_volume_name() -> None:
     assert drive_title(bare) == "sdb"
 
 
-def test_detail_rows_hold_identifiers_and_unchecked_facts() -> None:
+def test_detail_rows_identifiers_unchecked_facts() -> None:
     """The details list the identifiers and each fact the check could not confirm."""
     inspection = build_inspection(partitions=(build_partition(is_active=None),))
     result = evaluate_preflight(inspection, build_request())
@@ -93,7 +93,7 @@ def test_detail_rows_hold_identifiers_and_unchecked_facts() -> None:
     assert rows["Couldn't check"] == "Active partition"
 
 
-def test_drive_change_lines_or_the_empty_sentence() -> None:
+def test_change_lines_or_empty_sentence() -> None:
     """The planned changes show as given. No changes show one plain sentence."""
     assert drive_change_lines(build_request()) == ["Add 2 tracks", "Update 1 playlist"]
     assert drive_change_lines(build_request(planned_changes=())) == [NO_DRIVE_CHANGES_TEXT]

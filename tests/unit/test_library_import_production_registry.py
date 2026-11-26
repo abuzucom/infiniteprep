@@ -29,7 +29,7 @@ def build_library(path: str, format_id: FormatId) -> LocatedLibrary:
     )
 
 
-def test_the_dialog_offers_nothing_while_the_app_holds_no_reader(qtbot) -> None:
+def test_dialog_offers_nothing_without_readers(qtbot) -> None:
     """A format with no reader stays out of the list of the production dialog."""
     dialog = LibraryImportDialog([build_library("/music/collection.nml", FormatId.TRAKTOR)])
     qtbot.addWidget(dialog)
@@ -40,7 +40,7 @@ def test_the_dialog_offers_nothing_while_the_app_holds_no_reader(qtbot) -> None:
     assert dialog.chosen_library() is None
 
 
-def test_the_open_refuses_a_file_that_a_link_replaced(tmp_path: Path) -> None:
+def test_open_refuses_link_replaced_file(tmp_path: Path) -> None:
     """A path that names a link never opens the file the link points at."""
     root = tmp_path / "root"
     root.mkdir()
@@ -55,7 +55,7 @@ def test_the_open_refuses_a_file_that_a_link_replaced(tmp_path: Path) -> None:
     assert open_inside_root(link, root) is None
 
 
-def test_the_open_reads_a_real_file_inside_the_root(tmp_path: Path) -> None:
+def test_open_reads_file_inside_root(tmp_path: Path) -> None:
     """A real file inside the root opens and keeps its handle."""
     root = tmp_path / "root"
     root.mkdir()

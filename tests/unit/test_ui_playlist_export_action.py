@@ -36,7 +36,7 @@ def crate(tmp_path: Path) -> tuple[Repository, ImportService, list[str]]:
     return repo, importer, [asset.id for asset in report.imported_files]
 
 
-def test_export_uses_m3u8_and_visible_files(
+def test_export_uses_m3u8_visible_files(
     qtbot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, crate: Any
 ) -> None:
     """A destination without the suffix gains .m3u8, and the visible IDs reach the callback."""
@@ -78,7 +78,7 @@ def test_cancelled_save_dialog_exports_nothing(
     assert export_calls == []
 
 
-def test_export_writes_crate_and_reports_path(
+def test_export_writes_crate_reports_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, crate: Any
 ) -> None:
     """The export writes an extended M3U8 with tagged and filename-derived entries."""

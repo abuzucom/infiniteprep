@@ -65,7 +65,7 @@ class LinuxPackagingWorkflowTest(unittest.TestCase):
             self.assertEqual(self._step(name)["if"], LINUX_CONDITION, name)
             self.assertGreater(names.index(name), notices_index, name)
 
-    def test_tools_are_pinned_and_checked_before_use(self) -> None:
+    def test_tools_pinned_checked_before_use(self) -> None:
         """Every tool matches its pinned SHA-256 before anything runs it (D286)."""
         step = self._step("Fetch pinned AppImage tools")
         for prefix, (url_tail, digest) in PINNED_TOOLS.items():
@@ -78,7 +78,7 @@ class LinuxPackagingWorkflowTest(unittest.TestCase):
         self.assertLess(run.index("sha256sum --check"), run.index("chmod +x"))
         self.assertNotIn("plugin-qt", run)
 
-    def test_appimage_pinned_runtime_no_qt_plugin(self) -> None:
+    def test_appimage_pinned_runtime_without_qt(self) -> None:
         """The build points at the pinned runtime and fails on a download (D284, D285)."""
         run = self._step("Build Linux AppImage")["run"]
         self.assertIn('LDAI_RUNTIME_FILE="$tools/runtime-x86_64"', run)
@@ -98,7 +98,7 @@ class LinuxPackagingWorkflowTest(unittest.TestCase):
         self.assertIn('LDAI_OUTPUT="$GITHUB_WORKSPACE/dist/', build)
         self.assertIn('"$GITHUB_WORKSPACE/packaging/linux/infiniteprep.desktop"', build)
 
-    def test_tarballs_differ_only_by_the_marker(self) -> None:
+    def test_tarballs_differ_only_by_marker(self) -> None:
         """The plain tarball is built before the marker is added for the portable one (D288)."""
         run = self._step("Build Linux tarballs")["run"]
         plain = run.index(TARBALL)
@@ -138,7 +138,7 @@ class LinuxPackagingFilesTest(unittest.TestCase):
         self.assertEqual(entry["Icon"], "infiniteprep")
         self.assertEqual(entry["Terminal"], "false")
 
-    def test_notice_lists_the_static_runtime_libraries(self) -> None:
+    def test_notice_lists_static_runtime_libraries(self) -> None:
         """NOTICE names the runtime, its static libraries, and where to get their source."""
         notice = NOTICE_PATH.read_text(encoding="utf-8")
         for fragment in (

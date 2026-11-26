@@ -26,7 +26,7 @@ def verdict(args: list, owner: str = OWNER) -> str:
 class LabelOptionDenialTest(unittest.TestCase):
     """Rule 23: agents never add, remove, or change labels through gh."""
 
-    def test_label_options_on_create_and_edit_deny(self):
+    def test_write_label_options_deny(self):
         for args in (
                 ["pr", "create", "--label", "gate-change-approved"],
                 ["pr", "create", "--label=gate-change-approved"],
@@ -46,7 +46,7 @@ class LabelOptionDenialTest(unittest.TestCase):
                 self.assertEqual(decision, "deny")
                 self.assertIn("Rule 23", reason)
 
-    def test_label_filters_on_read_commands_stay_available(self):
+    def test_read_label_filters_allowed(self):
         for args in (
                 ["pr", "list", "-l", "bug"],
                 ["pr", "list", "--label", "bug"],
@@ -55,7 +55,7 @@ class LabelOptionDenialTest(unittest.TestCase):
             with self.subTest(args=args):
                 self.assertEqual(verdict(args), "")
 
-    def test_edits_without_label_options_keep_prior_verdict(self):
+    def test_unlabeled_edits_keep_verdict(self):
         self.assertEqual(verdict(["pr", "edit", "79", "--title", "x"]), "")
         self.assertEqual(verdict(["pr", "create", "--draft", "--title", "x"]), "")
 
@@ -76,24 +76,24 @@ class ApiMethodDenialTest(unittest.TestCase):
     def test_repeated_get_passes(self):
         self.assertEqual(verdict(["api", "-X", "GET", "-X", "GET", "repos/o/r"]), "")
 
-    def test_fields_without_method_deny_and_fields_with_get_pass(self):
+    def test_field_method_combinations(self):
         self.assertEqual(verdict(["api", "repos/o/r/issues", "-f", "title=x"]), "deny")
         self.assertEqual(verdict(["api", "-X", "GET", "search/issues", "-f", "q=x"]), "")
 
 
 class UnreadableOriginTest(unittest.TestCase):
-    """An outward-facing command asks when the origin owner cannot be read."""
+    """An outward-facing command asks when the `origin` repository owner cannot be read."""
 
-    def test_implicit_target_asks_without_origin_owner(self):
+    def test_implicit_target_without_owner_asks(self):
         for args in (["pr", "create", "--draft"], ["pr", "comment", "5", "--body", "x"],
                      ["issue", "create", "--title", "x"]):
             with self.subTest(args=args):
                 self.assertEqual(verdict(args, ""), "ask")
 
-    def test_implicit_target_passes_with_origin_owner(self):
+    def test_implicit_target_with_owner_passes(self):
         self.assertEqual(verdict(["pr", "create", "--draft"]), "")
 
-    def test_read_only_command_passes_without_origin_owner(self):
+    def test_read_only_without_owner_passes(self):
         self.assertEqual(verdict(["pr", "view", "5"], ""), "")
 
 
@@ -115,7 +115,7 @@ class WrapperRecognitionTest(unittest.TestCase):
                     self.assertEqual(
                         _gate_core.trusted_gh_arguments(program, args, cwd), ["pr", "view"])
 
-    def test_non_wrapper_forms_are_not_recognized(self):
+    def test_non_wrapper_forms_unrecognized(self):
         with RetryingTemporaryDirectory() as tmp_dir:
             root = os.path.realpath(tmp_dir)
             for program, args in (
@@ -136,7 +136,7 @@ class WrapperRecognitionTest(unittest.TestCase):
 class PullRefDetectionTest(unittest.TestCase):
     """Pull request refs still count as GitHub targets."""
 
-    def test_pull_request_refs_are_github_targets(self):
+    def test_pull_refs_github_targets(self):
         for tokens in (["refs/pull/12/head"], ["origin", "pull/12/head"]):
             with self.subTest(tokens=tokens):
                 self.assertTrue(_gate_core._is_github_target(tokens))

@@ -77,7 +77,7 @@ def _build_match(*, requires_confirmation: bool, html_text: bool = False) -> Usb
 class UsbRecoveryDialogTests(unittest.TestCase):
     """Verify reconnect choices, confirmation gating, and plain-text rendering."""
 
-    def test_drive_fields_render_as_plain_text(self) -> None:
+    def test_drive_fields_render_as_plain(self) -> None:
         """Every dialog label uses plain text and shows markup in drive fields as typed."""
         dialog = UsbRecoveryDialog(_build_match(requires_confirmation=False, html_text=True))
         self.addCleanup(dialog.close)
@@ -141,7 +141,7 @@ class UsbRecoveryDialogTests(unittest.TestCase):
         self.assertIn("expired", overdue.casefold())
         self.assertIn(entry.export_id, overdue)
 
-    def test_launch_runs_usb_expiry_with_notices(self) -> None:
+    def test_launch_runs_expiry_with_notices(self) -> None:
         """Launch deletes the overdue entry, warns about the aging one, and keeps the fresh one."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
@@ -244,7 +244,7 @@ class StorageTabUsbRecoverySettingsTests(unittest.TestCase):
             self.assertFalse(saved.usb_recovery_expiry_enabled)
             self.assertEqual(saved.usb_recovery_expiry_days, 15)
 
-    def test_corrupt_journal_is_kept_and_reported(self) -> None:
+    def test_corrupt_journal_kept_and_reported(self) -> None:
         """Launch and manual cleanup each report one error and leave a corrupt journal intact."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)

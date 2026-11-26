@@ -51,7 +51,7 @@ def _build_fpcalc_zip(payload: bytes) -> bytes:
 # HIGH finding. fpcalc archive digest verification.
 
 
-def test_pinned_fpcalc_digests_cover_every_release_url() -> None:
+def test_fpcalc_digests_cover_release_urls() -> None:
     """Every pinned release URL has a well-formed SHA-256 digest."""
     assert set(fpcalc_module.OFFICIAL_FPCALC_SHA256) == set(fpcalc_module.OFFICIAL_FPCALC_URLS)
     for digest in fpcalc_module.OFFICIAL_FPCALC_SHA256.values():
@@ -117,7 +117,7 @@ def test_fpcalc_refuses_unpinned_platform(
     assert not (tmp_path / "bin").exists()
 
 
-def test_pinned_fpcalc_platforms_are_windows_and_macos() -> None:
+def test_fpcalc_platforms_are_windows_macos() -> None:
     """Pinned fpcalc archives exist for Windows and macOS only."""
     assert set(fpcalc_module.OFFICIAL_FPCALC_SHA256) == {"windows", "darwin"}
 
@@ -134,9 +134,7 @@ def test_archive_accepts_matching_digest(tmp_path: Path) -> None:
     assert installed.read_bytes() == FAKE_BINARY
 
 
-def test_zip_entry_read_stays_within_binary_cap(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_zip_read_stays_within_cap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A ZIP entry larger than the binary cap raises a size error."""
     payload = b"x" * 64
     archive_bytes = _build_fpcalc_zip(payload)
@@ -234,7 +232,7 @@ def test_discogs_rejects_bad_release_id(entity_id: str) -> None:
     assert requested == []
 
 
-def test_discogs_fetch_accepts_numeric_release_id() -> None:
+def test_discogs_fetch_accepts_numeric_id() -> None:
     """A plain numeric release id reaches the Discogs releases endpoint."""
     requested: list[str] = []
 
@@ -258,7 +256,7 @@ def test_discogs_fetch_accepts_numeric_release_id() -> None:
 @pytest.mark.parametrize(
     "model_name", ["-rf", "--insecure", "qwen2.5:", ":3b", "qwen 2.5:3b", "qwen2.5:3b;ls", ""]
 )
-def test_pull_model_rejects_unsafe_model_name(model_name: str) -> None:
+def test_pull_model_rejects_unsafe_name(model_name: str) -> None:
     """Option-like, empty, spaced, or shell-shaped names raise before any command runs."""
     commands: list[list[str]] = []
     service = OllamaBootstrapService(runner=_command_recorder(commands))
@@ -290,7 +288,7 @@ def test_pull_model_runs_recommended_model() -> None:
         "a:b:c",
     ],
 )
-def test_pull_model_rejects_unsafe_name_segments(model_name: str) -> None:
+def test_pull_model_rejects_unsafe_segments(model_name: str) -> None:
     """Empty, hidden, dotted, option-like, or extra segments raise before any command runs."""
     commands: list[list[str]] = []
     service = OllamaBootstrapService(runner=_command_recorder(commands))
@@ -344,7 +342,7 @@ def test_render_filename_logs_template_fallback(caplog: pytest.LogCaptureFixture
     assert any("template" in record.getMessage() for record in caplog.records)
 
 
-def test_render_filename_valid_template_logs_nothing(caplog: pytest.LogCaptureFixture) -> None:
+def test_valid_filename_template_logs_nothing(caplog: pytest.LogCaptureFixture) -> None:
     """A valid template renders without any log record."""
     with caplog.at_level(logging.WARNING, logger=metadata_tag_adapter_module.__name__):
         MetadataTagAdapter().render_filename(
@@ -433,7 +431,7 @@ def test_acoustid_http_read_is_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
 # LOW finding. TXXX frames on repeated ID3 writes.
 
 
-def test_repeated_mp3_writes_keep_one_txxx_frame(tmp_path: Path) -> None:
+def test_repeated_mp3_writes_one_txxx(tmp_path: Path) -> None:
     """A second catalog number write replaces the TXXX frame instead of adding one."""
     mp3_path = create_mp3_fixture(tmp_path / "track.mp3")
     adapter = MetadataTagAdapter()
@@ -462,7 +460,7 @@ def test_render_filename_keeps_escaped_braces(caplog: pytest.LogCaptureFixture) 
 
 
 @pytest.mark.parametrize("template", ["{artist} {", "{artist} }", "{{artist}", "{}"])
-def test_render_filename_unbalanced_braces_use_default(template: str) -> None:
+def test_unbalanced_filename_braces_use_default(template: str) -> None:
     """Unbalanced or empty braces fall back to the default layout."""
     rendered = MetadataTagAdapter().render_filename(
         Path("track.mp3"),
@@ -507,9 +505,7 @@ def _build_fpcalc_tar(payload: bytes) -> bytes:
     return buffer.getvalue()
 
 
-def test_tar_entry_read_stays_within_binary_cap(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_tar_read_stays_within_cap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A TAR entry larger than the binary cap raises and leaves no fpcalc file."""
     payload = b"x" * 64
     archive_bytes = _build_fpcalc_tar(payload)
@@ -524,9 +520,7 @@ def test_tar_entry_read_stays_within_binary_cap(
     assert not any((tmp_path / "bin").glob("fpcalc*"))
 
 
-def test_tar_entry_at_cap_installs_whole_binary(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_tar_entry_at_cap_installs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A TAR entry exactly at the binary cap installs whole."""
     payload = b"y" * 64
     archive_bytes = _build_fpcalc_tar(payload)

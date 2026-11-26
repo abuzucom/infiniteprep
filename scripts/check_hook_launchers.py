@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify configured hook launchers and one fail-closed gate invocation."""
+"""Verify configured hook launchers and one fail-closed gate run."""
 import json
 import shlex
 import shutil

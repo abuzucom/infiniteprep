@@ -62,7 +62,7 @@ def test_mock_providers_are_deterministic(tmp_path: Path) -> None:
     assert rec["selected_candidate_id"] == "cand-1"
 
 
-def test_review_accept_edit_reject_lock_bulk(tmp_path: Path) -> None:
+def test_review_actions_locks_and_bulk(tmp_path: Path) -> None:
     """Verify ReviewService enforces locks, manual edits, and non-conflicting bulk approval."""
     db = DatabaseManager(":memory:")
     repo = Repository(db)
@@ -199,7 +199,7 @@ def _verify_group_release_propagation(
     assert f2_cat.approved_value == "TW12-55412"
 
 
-def test_main_window_and_needle_drop_preview(qtbot, tmp_path: Path) -> None:
+def test_main_window_needle_drop_preview(qtbot, tmp_path: Path) -> None:
     """Verify MainWindow table filtering, notation switching, and audio cue jump positions."""
     cues = compute_cue_jump_positions(300.0)
     assert cues["Intro"] == 15.0

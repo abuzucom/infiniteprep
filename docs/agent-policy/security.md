@@ -17,19 +17,19 @@ analysis or prove that a repository contains no secret.
 Example cache use: `hashlib.md5(payload).hexdigest()` with a comment stating
 that the digest is non-cryptographic.
 
-A comment cannot convert a security-sensitive use into a non-security use.
+A comment cannot convert a security-sensitive use into a use outside security.
 
-For runtime-root containers, prefer ports of 1024 or higher behind a reverse
+For containers that run as root at runtime, prefer ports of 1024 or higher behind a reverse
 proxy or port mapping. Prefer `COPY --chown` or build-time `chown`. Set
 `user:` in Compose. Set `securityContext.runAsNonRoot: true` and `runAsUser`
 in Kubernetes. After approval, add:
 
 `# runtime-root: this container <reason> (Rule 12 exception).`
 
-Flag unrelated runtime-root findings instead of fixing them under Rule 4.
+Flag unrelated findings of runtime root instead of fixing them under Rule 4.
 `scripts/check_dockerfile_root.py` checks the rule.
 
-Preserve license-required attribution and source metadata in every controlled
+Preserve license attribution and source metadata in every controlled
 adoption and redistribution. Third-party mirrors remain responsible for their
 own legal compliance. This repository cannot enforce or verify their local
 practices.
@@ -37,12 +37,8 @@ practices.
 Report vulnerabilities through the process in `SECURITY.md`. Do not
 use public issues or pull requests for private vulnerability details.
 
-Avoid nested quantifiers such as `(x+)+` and overlapping patterns.
-
-Shell gates deny protected commands and paths. The
-Claude file-tool gate denies protected file operations and broad searches.
-Other clients may lack equivalent file-tool coverage. External controls remain
-necessary for tamper resistance.
+The Claude file tool gate also denies protected file operations and broad
+searches.
 
 Injection examples:
 
@@ -52,8 +48,8 @@ Injection examples:
 - Good: `subprocess.run(["convert", filename, "out.png"])`
 
 ## Local identifier limits
-Only the trusted CI scan blocks. CI sees only profile paths. Placeholder-named
-accounts, double encoding, and homoglyphs pass.
+Only the trusted CI scan blocks. CI sees only profile paths. Accounts with
+placeholder names, double encoding, and homoglyphs pass.
 
 ## Denied command families
 The denial covers AWS CLI, SAM, CDK, Azure CLI and PowerShell, Google Cloud
@@ -62,17 +58,10 @@ Kubernetes, Helm, Kustomize, OpenShift, Minikube, Kind, SSH clients, PuTTY,
 FTP, TFTP, Telnet, iptables, nftables, UFW, firewalld, and Windows firewall
 commands.
 
-Cloudflare Pages deployment is a limited exception to the cloud-tool denial.
-Permit a local build and `wrangler pages deploy <workspace-path>
---project-name <name>` with an optional literal `--branch <branch>`. Require
-the deployment path to resolve inside the workspace and require an explicit
-project name. Deny every other Wrangler operation, including Workers,
-account, zone, DNS, WAF, Turnstile, KV, D1, R2, Queues, Durable Objects,
-secret, configuration, inspection, and API operations. Keep dashboard
-automation and infrastructure-as-code denied.
-Require the path to target a dedicated non-hidden output directory named
-`build` or `dist`. Reject the workspace root, hidden directories, protected
-credential names, and outputs containing `.env` or protected credential files.
+The Rule 15 Cloudflare Pages exception denies every other Wrangler operation,
+including Workers, account, zone, DNS, WAF, Turnstile, KV, D1, R2, Queues,
+Durable Objects, secret, configuration, inspection, and API operations.
+Dashboard automation and infrastructure-as-code stay denied.
 
 Protected content includes AWS, Azure, Google Cloud, SSH, Kubernetes,
 Terraform, FTP, and Netrc credentials, Terraform source, variables, state,

@@ -43,6 +43,13 @@ DENIED_BASH = (
 ALLOWED_TOOLS = ("Read", "Grep", "Glob", "AskUserQuestion", "ExitPlanMode", "EnterPlanMode",
                  "TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet")
 DENIED_TOOLS = ("WebFetch", "NotebookEdit", "mcp__github__create_pull_request", "Agent")
+CMD_TOOL_NAMES = ("CMD", "Cmd", "CommandPrompt")
+CMD_ALLOWED = ("type README.md", "dir", "echo ready", "more README.md", "cd", "git status")
+CMD_DENIED = ("cd ..", "copy README.md copy.md", "echo x > notes.txt",
+              "del README.md", "type %USERPROFILE%\\x", "cat README.md")
+# Each command list is split in two. Each half runs in its own class and shard.
+ALLOWED_SPLIT = len(ALLOWED_BASH) // 2
+DENIED_SPLIT = len(DENIED_BASH) // 2
 
 
 class ReadOnlyCase(unittest.TestCase):
@@ -51,32 +58,41 @@ class ReadOnlyCase(unittest.TestCase):
     def fixture(self, branch: str) -> BranchFixture:
         return BranchFixture(self, branch)
 
-    def assert_shell_allowed(self, branch: str) -> None:
+    def assert_shell_allowed(self, branch: str, commands: tuple) -> None:
+        """Assert that each inspection command passes the hook on one read-only state."""
+        # A split list half can shrink to nothing. An empty loop passes unseen.
+        self.assertTrue(commands, "command list half is empty")
         fixture = self.fixture(branch)
-        for command in ALLOWED_BASH:
+        for command in commands:
             with self.subTest(branch=branch, command=command):
                 result = fixture.shell(command)
                 self.assertEqual(decision(result), "allow", result.stderr)
 
-    def assert_writes_denied(self, branch: str) -> None:
+    def assert_writes_denied(self, branch: str, commands: tuple) -> None:
+        """Assert that each write command fails the hook with the read-only message."""
+        self.assertTrue(commands, "command list half is empty")
         fixture = self.fixture(branch)
-        for command in DENIED_BASH:
+        for command in commands:
             with self.subTest(branch=branch, command=command):
                 result = fixture.shell(command)
                 self.assertEqual(decision(result), "deny", result.stdout)
                 self.assertIn("permits read-only inspection", result.stderr)
 
 
-class ReadOnlyToolTest(ReadOnlyCase):
-    """Read and planning tools pass. Other tools and malformed calls fail."""
+class ReadOnlyAllowedToolTest(ReadOnlyCase):
+    """Read and planning tools pass."""
 
-    def test_read_and_planning_tools_are_allowed(self):
+    def test_read_planning_tools_allowed(self):
         for branch in READ_ONLY_STATES:
             fixture = self.fixture(branch)
             for tool in ALLOWED_TOOLS:
                 with self.subTest(branch=branch, tool=tool):
                     result = fixture.run(tool, {"file_path": str(fixture.root / "README.md")})
                     self.assertEqual(decision(result), "allow", result.stderr)
+
+
+class ReadOnlyToolTest(ReadOnlyCase):
+    """Tools outside the read and planning set fail."""
 
     def test_other_tools_are_denied(self):
         for branch in READ_ONLY_STATES:
@@ -86,6 +102,10 @@ class ReadOnlyToolTest(ReadOnlyCase):
                     result = fixture.run(tool, {"url": "https://example.com"})
                     self.assertEqual(decision(result), "deny")
                     self.assertIn("permits read-only inspection", result.stderr)
+
+
+class ReadOnlyMalformedCallTest(ReadOnlyCase):
+    """Tool calls without a name or with a malformed input fail."""
 
     def test_malformed_tool_calls_are_denied(self):
         fixture = self.fixture("main")
@@ -98,23 +118,37 @@ class ReadOnlyToolTest(ReadOnlyCase):
 
 
 class ReadOnlyShellMainTest(ReadOnlyCase):
-    """Inspection commands pass on main."""
+    """The first half of the inspection commands pass on main."""
 
-    def test_read_only_shell_commands_are_allowed(self):
-        self.assert_shell_allowed("main")
+    def test_read_only_shell_allowed(self):
+        self.assert_shell_allowed("main", ALLOWED_BASH[:ALLOWED_SPLIT])
+
+
+class ReadOnlyShellMainRestTest(ReadOnlyCase):
+    """The second half of the inspection commands pass on main."""
+
+    def test_read_only_shell_allowed(self):
+        self.assert_shell_allowed("main", ALLOWED_BASH[ALLOWED_SPLIT:])
 
 
 class ReadOnlyShellDetachedTest(ReadOnlyCase):
-    """Inspection commands pass on a detached HEAD."""
+    """The first half of the inspection commands pass on a detached HEAD."""
 
-    def test_read_only_shell_commands_are_allowed(self):
-        self.assert_shell_allowed(DETACHED_HEAD)
+    def test_read_only_shell_allowed(self):
+        self.assert_shell_allowed(DETACHED_HEAD, ALLOWED_BASH[:ALLOWED_SPLIT])
+
+
+class ReadOnlyShellDetachedRestTest(ReadOnlyCase):
+    """The second half of the inspection commands pass on a detached HEAD."""
+
+    def test_read_only_shell_allowed(self):
+        self.assert_shell_allowed(DETACHED_HEAD, ALLOWED_BASH[ALLOWED_SPLIT:])
 
 
 class ReadOnlyConsentTest(ReadOnlyCase):
-    """Workflows and branch creation ask. Existing branch switches pass."""
+    """Workflows and branch creation ask, and fail without an interactive session."""
 
-    def test_workflows_and_branch_creation_request_consent(self):
+    def test_workflows_request_consent(self):
         for branch in READ_ONLY_STATES:
             fixture = self.fixture(branch)
             for command in CONSENT_BASH:
@@ -122,10 +156,14 @@ class ReadOnlyConsentTest(ReadOnlyCase):
                     result = fixture.shell(command)
                     self.assertEqual(decision(result), "ask", result.stderr)
 
-    def test_consent_is_denied_without_an_interactive_session(self):
+    def test_unattended_consent_denied(self):
         fixture = self.fixture("main")
         result = fixture.run("Bash", {"command": "git switch -c feat/new-work"}, mode="dontAsk")
         self.assertEqual(decision(result), "deny")
+
+
+class ReadOnlyBranchSwitchTest(ReadOnlyCase):
+    """Switches to existing loose or packed branches pass. Other switches fail."""
 
     def test_existing_branch_switch_is_allowed(self):
         fixture = self.fixture("main")
@@ -141,17 +179,31 @@ class ReadOnlyConsentTest(ReadOnlyCase):
 
 
 class ReadOnlyDenyMainTest(ReadOnlyCase):
-    """Write commands fail on main."""
+    """The first half of the write commands fail on main."""
 
     def test_write_operations_are_denied(self):
-        self.assert_writes_denied("main")
+        self.assert_writes_denied("main", DENIED_BASH[:DENIED_SPLIT])
+
+
+class ReadOnlyDenyMainRestTest(ReadOnlyCase):
+    """The second half of the write commands fail on main."""
+
+    def test_write_operations_are_denied(self):
+        self.assert_writes_denied("main", DENIED_BASH[DENIED_SPLIT:])
 
 
 class ReadOnlyDenyDetachedTest(ReadOnlyCase):
-    """Write commands fail on a detached HEAD."""
+    """The first half of the write commands fail on a detached HEAD."""
 
     def test_write_operations_are_denied(self):
-        self.assert_writes_denied(DETACHED_HEAD)
+        self.assert_writes_denied(DETACHED_HEAD, DENIED_BASH[:DENIED_SPLIT])
+
+
+class ReadOnlyDenyDetachedRestTest(ReadOnlyCase):
+    """The second half of the write commands fail on a detached HEAD."""
+
+    def test_write_operations_are_denied(self):
+        self.assert_writes_denied(DETACHED_HEAD, DENIED_BASH[DENIED_SPLIT:])
 
 
 class ReadOnlyRepositoryWriteTest(ReadOnlyCase):
@@ -190,24 +242,30 @@ class ReadOnlyPowerShellTest(ReadOnlyCase):
 
 
 class ReadOnlyCmdTest(ReadOnlyCase):
-    """CMD inspection forms pass and write forms fail."""
+    """CMD inspection forms pass."""
 
     def test_cmd_forms(self):
         fixture = self.fixture("main")
-        for tool in ("CMD", "Cmd", "CommandPrompt"):
-            for command in ("type README.md", "dir", "echo ready", "more README.md", "cd",
-                            "git status"):
+        for tool in CMD_TOOL_NAMES:
+            for command in CMD_ALLOWED:
                 with self.subTest(tool=tool, command=command):
                     result = fixture.shell(command, tool_name=tool)
                     self.assertEqual(decision(result), "allow", result.stderr)
-            for command in ("cd ..", "copy README.md copy.md", "echo x > notes.txt",
-                            "del README.md", "type %USERPROFILE%\\x", "cat README.md"):
+
+
+class ReadOnlyCmdDenyTest(ReadOnlyCase):
+    """CMD write forms fail."""
+
+    def test_cmd_forms(self):
+        fixture = self.fixture("main")
+        for tool in CMD_TOOL_NAMES:
+            for command in CMD_DENIED:
                 with self.subTest(tool=tool, command=command):
                     self.assertEqual(decision(fixture.shell(command, tool_name=tool)), "deny")
 
 
 class ReadOnlyClientTest(ReadOnlyCase):
-    """Other clients, active rebases, and lifecycle events."""
+    """Gemini and Antigravity read tools pass and their write commands fail."""
 
     def test_gemini_and_antigravity_read_tools(self):
         fixture = self.fixture("main")
@@ -225,6 +283,10 @@ class ReadOnlyClientTest(ReadOnlyCase):
         result = fixture.shell("touch x", tool_name="run_command", client="antigravity")
         self.assertEqual(decision(result, "antigravity"), "deny")
 
+
+class ReadOnlyRebaseTest(ReadOnlyCase):
+    """An active rebase keeps strict recovery on a detached HEAD."""
+
     def test_active_rebase_keeps_strict_recovery(self):
         fixture = self.fixture(DETACHED_HEAD)
         (fixture.admin / "rebase-merge").mkdir()
@@ -235,7 +297,11 @@ class ReadOnlyClientTest(ReadOnlyCase):
                 self.assertEqual(decision(result), "deny")
                 self.assertIn("rebase", result.stderr)
 
-    def test_lifecycle_events_show_only_a_note(self):
+
+class ReadOnlyLifecycleTest(ReadOnlyCase):
+    """Lifecycle events show only the read-only note."""
+
+    def test_lifecycle_note_only(self):
         for branch, label in (("main", "`main`"), (DETACHED_HEAD, "detached HEAD")):
             fixture = self.fixture(branch)
             start = fixture.lifecycle("SessionStart")

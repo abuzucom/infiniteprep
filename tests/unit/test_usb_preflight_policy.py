@@ -59,7 +59,7 @@ class PassingTargetTests(unittest.TestCase):
         self.assertTrue(result.passed)
         self.assertEqual(result.unverified_facts, ())
 
-    def test_result_reports_space_figures_and_mount_path(self) -> None:
+    def test_result_reports_space_and_mount(self) -> None:
         """The result carries the estimate, the reserve, the free space, and the mount path."""
         request = build_request()
         inspection = build_inspection(available_bytes=KNOWN_FREE_BYTES)
@@ -72,7 +72,7 @@ class PassingTargetTests(unittest.TestCase):
         self.assertEqual(result.available_bytes, KNOWN_FREE_BYTES)
         self.assertEqual(result.mount_path, MOUNT_PATH)
 
-    def test_platform_scheme_and_fs_names_pass(self) -> None:
+    def test_platform_scheme_fs_names_pass(self) -> None:
         """Each platform spelling of MBR and FAT32 passes."""
         for scheme, filesystem in (("dos", "vfat"), ("MBR", "FAT32"), ("mbr", "fat32")):
             with self.subTest(scheme=scheme, filesystem=filesystem):
@@ -91,7 +91,7 @@ class PassingTargetTests(unittest.TestCase):
 class SafetyRefusalTests(unittest.TestCase):
     """Safety refusals: removable class, system and boot volumes, active partitions."""
 
-    def test_safety_class_holds_exactly_four_codes(self) -> None:
+    def test_safety_class_holds_four_codes(self) -> None:
         """The safety class holds the bus, system, unknown system, and active codes."""
         self.assertEqual(
             SAFETY_REFUSAL_CODES,
@@ -105,7 +105,7 @@ class SafetyRefusalTests(unittest.TestCase):
             ),
         )
 
-    def test_removable_flag_on_other_bus_is_refused(self) -> None:
+    def test_removable_flag_other_bus_refused(self) -> None:
         """Preflight refuses a removable drive on a SATA, NVMe, or unknown bus."""
         for bus_type in ("sata", "nvme", None):
             with self.subTest(bus_type=bus_type):
@@ -113,7 +113,7 @@ class SafetyRefusalTests(unittest.TestCase):
                 codes = refusal_codes(evaluate_default(inspection))
                 self.assertEqual(codes, (RefusalCode.UNSUPPORTED_BUS,))
 
-    def test_system_or_boot_volume_is_refused(self) -> None:
+    def test_system_or_boot_volume_refused(self) -> None:
         """Preflight refuses a system or boot drive."""
         inspection = build_inspection(drive=build_drive(is_system=True))
         self.assertEqual(refusal_codes(evaluate_default(inspection)), (RefusalCode.SYSTEM_VOLUME,))
@@ -130,7 +130,7 @@ class SafetyRefusalTests(unittest.TestCase):
         codes = refusal_codes(evaluate_default(inspection))
         self.assertEqual(codes, (RefusalCode.ACTIVE_PARTITION,))
 
-    def test_safety_refusal_hides_every_other_refusal(self) -> None:
+    def test_safety_refusal_hides_other_refusals(self) -> None:
         """A safety refusal stands alone in the result despite other faults."""
         partition = build_partition(filesystem="exfat", is_read_only=True)
         inspection = build_inspection(
@@ -177,7 +177,7 @@ class MediaAndLayoutRefusalTests(unittest.TestCase):
         """Preflight refuses a drive with no partition on the partition count."""
         self.assert_single_refusal(build_inspection(partitions=()), RefusalCode.PARTITION_COUNT)
 
-    def test_drive_with_two_partitions_is_refused(self) -> None:
+    def test_two_partition_drive_is_refused(self) -> None:
         """Preflight refuses a drive with two partitions on the partition count."""
         second = build_partition(
             name="sdb2",
@@ -214,7 +214,7 @@ class MediaAndLayoutRefusalTests(unittest.TestCase):
             build_inspection(available_bytes=None), RefusalCode.SPACE_UNKNOWN
         )
 
-    def test_every_non_safety_refusal_is_listed(self) -> None:
+    def test_every_non_safety_refusal_listed(self) -> None:
         """The result lists every non-safety refusal in a fixed order."""
         partition = build_partition(
             filesystem="exfat", is_read_only=True, filesystem_health=FilesystemHealth.ERRORS
@@ -234,7 +234,7 @@ class MediaAndLayoutRefusalTests(unittest.TestCase):
 class UnverifiedFactTests(unittest.TestCase):
     """Facts without a source pass and appear as not verified."""
 
-    def test_unknown_facts_pass_and_are_listed(self) -> None:
+    def test_unknown_facts_pass_and_listed(self) -> None:
         """Unknown active, health, and primary facts pass and appear as unverified."""
         partition = build_partition(is_active=None, is_primary=None, filesystem_health=None)
         result = evaluate_default(build_inspection(partitions=(partition,)))
@@ -265,7 +265,7 @@ class RequestRefusalTests(unittest.TestCase):
                 self.assertEqual(refusal_codes(result), (RefusalCode.UNKNOWN_DATABASE_FORMAT,))
                 self.assertIn("Unknown player", result.refusals[0].message)
 
-    def test_blocked_file_size_is_exactly_4_gib(self) -> None:
+    def test_blocked_size_is_4_gib(self) -> None:
         """The FAT32 blocked file size equals 4 GiB."""
         self.assertEqual(FAT32_BLOCKED_FILE_BYTES, EXPECTED_BLOCKED_FILE_BYTES)
 
@@ -275,7 +275,7 @@ class RequestRefusalTests(unittest.TestCase):
         result = evaluate_preflight(build_inspection(), request)
         self.assertTrue(result.passed)
 
-    def test_one_4_gib_file_blocks_the_whole_export(self) -> None:
+    def test_4_gib_file_blocks_export(self) -> None:
         """One 4 GiB file in the plan blocks the whole export."""
         request = build_request(file_sizes=OVERSIZED_PLAN_FILE_SIZES)
         result = evaluate_preflight(build_inspection(), request)
@@ -304,11 +304,11 @@ class SpaceRefusalTests(unittest.TestCase):
         inspection = build_inspection(available_bytes=available_bytes)
         return evaluate_preflight(inspection, self.request, reserve)
 
-    def test_exactly_enough_space_passes_without_reserve(self) -> None:
+    def test_exact_space_passes_without_reserve(self) -> None:
         """Free space equal to the estimate passes with no reserve."""
         self.assertTrue(self.evaluate_with(self.estimate, ReservePolicy()).passed)
 
-    def test_one_byte_short_is_refused_without_reserve(self) -> None:
+    def test_byte_short_refused_without_reserve(self) -> None:
         """Preflight refuses free space one byte under the estimate."""
         result = self.evaluate_with(self.estimate - 1, ReservePolicy())
         self.assertEqual(refusal_codes(result), (RefusalCode.INSUFFICIENT_SPACE,))

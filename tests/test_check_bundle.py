@@ -48,13 +48,13 @@ def _make_bundle(root: Path, files: tuple[str, ...]) -> Path:
 class PatternTest(unittest.TestCase):
     """Allowlist patterns follow the documented wildcard rules."""
 
-    def test_single_star_stays_within_one_path_part(self) -> None:
+    def test_single_star_stays_within_part(self) -> None:
         """'*' matches a file name but never a folder separator."""
         pattern = CHECKER.compile_pattern("_internal/*.pyd")
         self.assertTrue(pattern.fullmatch("_internal/_ssl.pyd"))
         self.assertFalse(pattern.fullmatch("_internal/PySide6/QtCharts.pyd"))
 
-    def test_double_star_spans_any_number_of_folders(self) -> None:
+    def test_double_star_spans_any_folders(self) -> None:
         """'**/' matches no folder, one folder, or several."""
         pattern = CHECKER.compile_pattern("_internal/scipy/**/*.pyd")
         self.assertTrue(pattern.fullmatch("_internal/scipy/_cyutility.pyd"))
@@ -62,7 +62,7 @@ class PatternTest(unittest.TestCase):
         self.assertTrue(pattern.fullmatch("_internal/scipy/sparse/linalg/_dsolve/_superlu.pyd"))
         self.assertFalse(pattern.fullmatch("_internal/scipy/linalg/_fblas.dll"))
 
-    def test_trailing_double_star_matches_everything_below(self) -> None:
+    def test_trailing_double_star_matches_below(self) -> None:
         """A folder pattern ending in '**' matches every file below that folder."""
         pattern = CHECKER.compile_pattern("_internal/keyring-*.dist-info/**")
         self.assertTrue(pattern.fullmatch("_internal/keyring-25.7.0.dist-info/licenses/LICENSE"))
@@ -75,7 +75,7 @@ class PatternTest(unittest.TestCase):
         self.assertFalse(pattern.fullmatch("_internal/libbz2.so.10"))
         self.assertFalse(pattern.fullmatch("_internal/libbz2xso.1"))
 
-    def test_allowlist_reader_skips_blanks_and_comments(self) -> None:
+    def test_allowlist_reader_skips_blanks_comments(self) -> None:
         """Comment lines and blank lines add no pattern."""
         patterns = CHECKER.read_allowlist(["# comment", "", "  LICENSE  ", "NOTICE"])
         self.assertEqual(len(patterns), 2)
@@ -85,7 +85,7 @@ class PatternTest(unittest.TestCase):
 class DenylistTest(unittest.TestCase):
     """Qt tools, GPL-3-only Qt modules, and GNU Readline are always denied."""
 
-    def test_qt_tools_are_denied_on_every_os(self) -> None:
+    def test_qt_tools_denied_every_os(self) -> None:
         """Tool executables and macOS tool app bundles fail the check."""
         for name in (
             "_internal/PySide6/designer.exe",
@@ -97,7 +97,7 @@ class DenylistTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertTrue(CHECKER.is_denied(name))
 
-    def test_gpl3_module_families_are_denied_on_every_os(self) -> None:
+    def test_gpl3_modules_denied_every_os(self) -> None:
         """Each GPL-3-only Qt module family fails under Linux, macOS, and Windows names."""
         for name in (
             "_internal/libQt6Charts.so.6",
@@ -120,7 +120,7 @@ class DenylistTest(unittest.TestCase):
             CHECKER.is_denied("_internal/python3.12/lib-dynload/readline.cpython-312-darwin.so")
         )
 
-    def test_files_the_app_uses_are_not_denied(self) -> None:
+    def test_app_used_files_not_denied(self) -> None:
         """Quick, QML, Svg, the touch plugin, and the SVG icon engine stay allowed."""
         for name in (
             "_internal/libQt6Quick.so.6",
@@ -165,7 +165,7 @@ class CheckFilesTest(unittest.TestCase):
         self.assertEqual(report.denied, ["_internal/PySide6/Qt6Charts.dll"])
         self.assertFalse(report.passed)
 
-    def test_missing_notices_fail_in_a_fixed_order(self) -> None:
+    def test_missing_notices_fail_fixed_order(self) -> None:
         """Each notice missing from the root is named, and a nested copy does not count."""
         patterns = CHECKER.read_allowlist(["**"])
 
@@ -197,7 +197,7 @@ class BundleFolderTest(unittest.TestCase):
         self.assertEqual(report.denied, [])
         self.assertEqual(report.missing_notices, [])
 
-    def test_main_returns_one_and_names_each_problem(self) -> None:
+    def test_main_returns_one_names_problems(self) -> None:
         """main prints each problem and returns 1 for a failing Windows bundle."""
         files = ("LICENSE", "InfinitePrep.exe", "_internal/PySide6/designer.exe")
         output = io.StringIO()
@@ -212,7 +212,7 @@ class BundleFolderTest(unittest.TestCase):
         self.assertIn("not in the allowlist: _internal/PySide6/designer.exe", text)
         self.assertIn("missing notice at the bundle root: ICU-LICENSE.txt", text)
 
-    def test_main_returns_zero_for_a_passing_macos_bundle(self) -> None:
+    def test_main_passes_valid_macos_bundle(self) -> None:
         """A macOS bundle of listed files and all notices passes."""
         files = (*NOTICES, "InfinitePrep", "_internal/QtCore", "_internal/Python")
         output = io.StringIO()
@@ -255,7 +255,7 @@ class WorkflowWiringTest(unittest.TestCase):
         [step] = [step for step in self.steps if step.get("name") == name]
         return step
 
-    def test_icu_license_is_pinned_and_checked(self) -> None:
+    def test_icu_license_pinned_and_checked(self) -> None:
         """The ICU license comes from the release-73-2 tag and must match its SHA-256."""
         step = self._step("Fetch pinned ICU license")
         self.assertEqual(step["env"]["ICU_LICENSE_URL"], ICU_LICENSE_URL)
@@ -284,7 +284,7 @@ class WorkflowWiringTest(unittest.TestCase):
         for name in PACKAGING_STEPS:
             self.assertLess(check, self.names.index(name), name)
 
-    def test_every_package_carries_the_icu_license(self) -> None:
+    def test_every_package_carries_icu_license(self) -> None:
         """The macOS app, the DMG, the Linux tarballs, and the installed app hold the file."""
         for name in ("Sign macOS app", "Build macOS DMG"):
             self.assertIn('"$RUNNER_TEMP/icu/ICU-LICENSE.txt"', self._step(name)["run"], name)

@@ -6,9 +6,304 @@ testament
 serves as
 stands as
 functions as
+has the ability to
 utilize
+never held
+never holds
+never ran
+never delete
+never deletes
+never follows
+never saw
+never reach
+never reaches
+never runs
+never read
+never reads
+the owner
+that owner
+the origin owner
+does not run
+pull-request
+banned-phrase
+arguably
+innocuous
+rather than
+not parse
+must reach
+, never
+never write
+summarizes
+file-transfer
+never excuse
+blocks every
+target-directory
+editor-tool
+hard-link
+hard-linked
+protected-path
+input-error
+repository-discovery
+empty-segment
+permission-mode
+process-entrypoint
+source-repository
+default-branch
+detatched-head
+detached-head
+waiving
+whose
+live here
+cannot parse
+denies before
+asked about
+tokenize
+waved through
+speaks for
+restated here
+narrows the window
+of raising
+than raising
+then raising
+, instead
+feeding it
+instead of here
+raises no exception
+re-entry
+assume-unchanged
+tool-agnostic
+names the cause
+skip-worktree
+path-generic
+textual
+textually
+mid-file
+meanwhile
+comes too late
+is synced
+carve-out
+verbatim
+marker-led
+invokes
+happily
+genuine
+genuinely
+honestly
+essentially
+effectively
+simply
+fundamentally
+note that
+in order to
+in practice
+leverage
+leverages
+leveraged
+leveraging
+seamless
+seamlessly
+delve
+delves
+delved
+delving
+load-bearing
+best-effort
+silently
+deliberate
+deliberately
+comprehensive
+dual-valid
+avant-garde
+captivating
+crucial
+bustling
+distinguished
+esteemed
+exquisite
+formidable
+game-changing
+groundbreaking
+holistic
+iconic
+indomitable
+irrefutable
+meticulous
+multifaceted
+omniscient
+paradigm-shifting
+paramount
+pioneering
+pivotal
+predominant
+profound
+prominent
+quintessential
+revolutionary
+tangible
+trailblazing
+ubiquitous
+unassailable
+unblemished
+unequaled
+unparalleled
+unprecedented
+unrivaled
+unsurpassed
+unwavering
+unyielding
+visionary
+apogee
+epitome
+facet
+gusto
+journey
+landscape
+nestled
+nexus
+odyssey
+panorama
+paradigm
+pinnacle
+spectrum
+symphony
+tapestry
+trajectory
+dive
+elevate
+embark
+embrace
+emerge
+ensure
+envision
+foster
+galvanize
+orchestrate
+redefine
+reinforce
+streamline
+transcend
+unleash
+usher
+agent-attributed
+agent-authored
+agent-generated
+agent-initiated
+human-authored
+human-approved
+user-approved
+harness-assigned
+hook-delivered
+signer-supplied
+consent-required
+consent-gated
+consent-routed
+label-gated
+non-denied
+non-banned
+branch-exempt
+handoff-exempt
+name-only
+regex-only
+repository-only
+source-only
+adopter-only
+docs-only
+example-only
+warning-only
+push-only
+repository-bound
+repository-controlled
+repository-configured
+repository-contained
+repository-defined
+repository-resolved
+schema-safe
+injection-safe
+value-free
+name-free
+shell-free
+length-bounded
+size-bound
+target-scoped
+outward-facing
+state-changing
+privilege-changing
+email-bearing
+NUL-bearing
+test-shaped
+test-controlled
+base-defined
+root-targeted
+root-targeting
+commit-writing
+draft-skipping
+line-marking
+class-sharded
+tracer-unreached
+host-qualified
+license-required
+placeholder-named
+stop-and-ask
+line-ending-normalized
+non-pre-release
+non-dry-run
+writeability
+raises before
+raises after
+as no
+suffixed
+unpositioned
+active-human
+active-user
+act-specific
+rule-specific
+covered-act
+generated-name
+list-introduction
+shared-subject
+temporary-work
+conversational-provenance
+escape-sequence
+public-contract
+code-quality
+prose-style
+context-evident
+mass-refactor
+automatic-identity
+workspace-path
+argument-array
+hook-based
+task-specific
+client-specific
+adopter-specific
+shared-file
+commit-message
+event-stream
+login-correlation
+client-hook
+repository-local
+non-registration
+base-branch
+credential-manager
+opaque-command
+designed-denial
+parity-test
+self-scan
+hosted-resource
+proxy-placeholder
+one-use
+file-tool
+re-read
+re-verify
+re-test
+re-adopt
+pre-compaction
+post-disclosure
+non-hidden
+non-force
+non-security
 
-[handoff-exempt]
+[handoff exemption]
 this session
 a round
 could not carry

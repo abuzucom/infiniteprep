@@ -10,6 +10,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HOOK_PATH = REPO_ROOT / "hooks" / "reinject_agents_policy.py"
 DISCLOSURE_MARKER = "COMPACTION TEXT DISCLOSURE"
+# A hung hook fails this test instead of hanging the suite.
+HOOK_TIMEOUT_SECONDS = 30
 REQUIRED_PHRASES = (
     "Reproduce it verbatim inside a fenced block",
     "The client interface hides the compaction message",
@@ -33,6 +35,7 @@ def run_compact_session(client: str) -> str:
         text=True,
         env=environment,
         check=False,
+        timeout=HOOK_TIMEOUT_SECONDS,
     )
     if result.returncode != 0:
         raise AssertionError(f"{client} hook failed: {result.stderr}")
@@ -40,7 +43,7 @@ def run_compact_session(client: str) -> str:
 
 
 class CompactionDisclosureFormTest(unittest.TestCase):
-    """Compaction context defines a verbatim, marker-led disclosure."""
+    """Compaction context defines a word-for-word disclosure led by a marker."""
 
     def assert_disclosure_form(self, context: str) -> None:
         """Check the marker and disclosure wording in one context."""

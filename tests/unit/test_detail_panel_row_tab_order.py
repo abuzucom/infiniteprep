@@ -20,7 +20,7 @@ from tests.fixtures.audio_factory import create_wav_fixture
 EXPECTED_BUTTON_ORDER: list[str] = ["Save", "Lock"]
 
 
-def test_tab_visits_every_row_button_in_order(qtbot: Any, tmp_path: Path) -> None:
+def test_tab_visits_row_buttons_sequentially(qtbot: Any, tmp_path: Path) -> None:
     """Tab from a field edit box visits Save, then Lock, inside the same row."""
     repository = Repository(DatabaseManager(":memory:"))
     track = create_wav_fixture(tmp_path / "crate" / "a.wav")

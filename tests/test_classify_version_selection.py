@@ -50,7 +50,7 @@ class ReadVersionFileTextsTest(unittest.TestCase):
         self.base = commit_files_in(self.root, BASE_FILES)
         self.head = commit_files_in(self.root, {PYPROJECT_FILE: BUMPED_PYPROJECT_TEXT})
 
-    def test_reads_only_the_changed_version_files(self) -> None:
+    def test_reads_only_changed_version_files(self) -> None:
         """Paths outside the version files never reach Git."""
         texts = classifier.read_version_file_texts(
             str(self.root), self.base, self.head, [PYPROJECT_FILE, "docs/guide.md"]

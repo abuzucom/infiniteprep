@@ -13,7 +13,7 @@ import trusted_git
 
 
 def _recording_runner(calls: list):
-    """Return a runner that records each Git invocation and succeeds."""
+    """Return a runner that records each Git command and succeeds."""
     def runner(command, **kwargs):
         calls.append(command)
         return subprocess.CompletedProcess(command, 0, "", "")

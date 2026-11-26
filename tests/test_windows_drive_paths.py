@@ -52,7 +52,7 @@ class ProcessEnvironmentTest(unittest.TestCase):
     def test_proc_environ_is_protected(self):
         self.assertTrue(self.core.is_protected_infrastructure_path("/proc/1/environ"))
 
-    def test_project_environ_directory_is_not_protected(self):
+    def test_project_environ_unprotected(self):
         self.assertFalse(
             self.core.is_protected_infrastructure_path("src/environ/app.py", cwd=str(CORE_PATH.parent))
         )

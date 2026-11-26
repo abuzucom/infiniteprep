@@ -50,12 +50,12 @@ class AttributionTest(unittest.TestCase):
         body = "change\n\nAssisted-by: Claude Sonnet 5\n"
         self.assertTrue(checker.is_agent_attributed([commit(body)], ""))
 
-    def test_pr_body_disclosure_alone_is_attributed(self):
+    def test_pr_body_disclosure_attributed(self):
         checker = load_checker()
         pr_body = "Summary\n\nAssisted-by: Claude Sonnet 5\n"
         self.assertTrue(checker.is_agent_attributed([commit("plain change")], pr_body))
 
-    def test_empty_commit_range_and_no_pr_disclosure_is_not_attributed(self):
+    def test_empty_range_not_attributed(self):
         checker = load_checker()
         self.assertFalse(checker.is_agent_attributed([], ""))
 
@@ -85,7 +85,7 @@ class DocFindingsTest(unittest.TestCase):
 class PrFindingsTest(unittest.TestCase):
     """PR title/body findings reuse check_pull_request_message's own analyzers."""
 
-    def test_clean_title_and_body_have_no_findings(self):
+    def test_clean_pr_no_findings(self):
         checker = load_checker()
         findings = checker.find_pr_findings(
             "chore: add a feature", "Adds a feature.", "octocat", checker.load_denylist(),
@@ -110,7 +110,7 @@ class PrFindingsTest(unittest.TestCase):
 class CheckOrchestrationTest(unittest.TestCase):
     """check() gates on attribution first and only blocks disclosed agent work."""
 
-    def test_human_commit_with_violation_stays_advisory(self):
+    def test_human_violation_advisory(self):
         checker = load_checker()
         with tempfile.TemporaryDirectory() as tmp:
             event_path = Path(tmp) / "event.json"
@@ -127,7 +127,7 @@ class CheckOrchestrationTest(unittest.TestCase):
                 result = checker.check("base", "head", tmp, str(event_path))
         self.assertEqual(result, 0)
 
-    def test_agent_labeled_commit_with_violation_fails_the_gate(self):
+    def test_agent_violation_fails(self):
         checker = load_checker()
         with tempfile.TemporaryDirectory() as tmp:
             event_path = Path(tmp) / "event.json"
@@ -162,7 +162,7 @@ class CheckOrchestrationTest(unittest.TestCase):
                 result = checker.check("base", "head", tmp, str(event_path))
         self.assertEqual(result, 0)
 
-    def test_pr_body_only_disclosure_triggers_the_gate(self):
+    def test_pr_body_disclosure_triggers(self):
         checker = load_checker()
         with tempfile.TemporaryDirectory() as tmp:
             event_path = Path(tmp) / "event.json"
@@ -178,7 +178,7 @@ class CheckOrchestrationTest(unittest.TestCase):
                 result = checker.check("base", "head", tmp, str(event_path))
         self.assertEqual(result, 1)
 
-    def test_empty_range_with_no_disclosure_exits_clean_without_reading_files(self):
+    def test_empty_range_skips_files(self):
         checker = load_checker()
         with tempfile.TemporaryDirectory() as tmp:
             event_path = Path(tmp) / "event.json"
@@ -197,7 +197,7 @@ class CheckOrchestrationTest(unittest.TestCase):
 class SyncCheckFileListTest(unittest.TestCase):
     """The gate's target-file list must track sync-check.yml's, not drift from it."""
 
-    def test_target_files_match_sync_check_workflow(self):
+    def test_target_files_match_workflow(self):
         checker = load_checker()
         text = SYNC_CHECK_PATH.read_text(encoding="utf-8")
         match = re.search(r"run: python scripts/check_us_spelling\.py (.+)", text)

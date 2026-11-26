@@ -84,7 +84,7 @@ def _run_git(repository: Path, *arguments: str) -> str:
 
 
 def _init_repository(repository: Path) -> str:
-    """Create a repository whose first commit holds the base changelog."""
+    """Create a repository with the base changelog in its first commit."""
     _run_git(repository, "init", "-q", "-b", "main")
     _run_git(repository, "config", "user.name", "Test User")
     _run_git(repository, "config", "user.email", "test@example.com")
@@ -148,7 +148,7 @@ class WholeFileDateTest(unittest.TestCase):
             _changelog(("1.0.1", "2026-09-14"), ("1.0.0", "2026-09-14")))
         self.assertTrue(any("repeats line" in finding for finding in findings), findings)
 
-    def test_later_date_below_earlier_date_fails(self):
+    def test_ascending_dates_fail(self):
         findings = checker.find_violations(
             _changelog(("1.0.1", "2026-09-13"), ("1.0.0", "2026-09-14")))
         self.assertTrue(any("go back in time" in finding for finding in findings), findings)
@@ -179,12 +179,12 @@ class RangeDateTest(unittest.TestCase):
         head = _changelog(("2.0.1", "2026-09-13"))
         self.assertEqual(checker.find_range_violations(self.BASE, head, self.CHANGED), [])
 
-    def test_keeping_both_same_day_headings_fails(self):
+    def test_duplicate_day_headings_fail(self):
         head = _changelog(("2.0.1", "2026-09-13"), ("2.0.0", "2026-09-13"))
         findings = checker.find_range_violations(self.BASE, head, self.CHANGED)
         self.assertTrue(any("repeats line" in finding for finding in findings), findings)
 
-    def test_head_date_before_base_date_fails(self):
+    def test_head_before_base_fails(self):
         head = _changelog(("2.0.1", "2026-09-12"))
         findings = checker.find_range_violations(self.BASE, head, self.CHANGED)
         self.assertTrue(any("back in time" in finding for finding in findings), findings)
@@ -227,7 +227,7 @@ class StagedDateTest(unittest.TestCase):
             ["README.md"], self.STAGED, self.HEAD, NEXT_RELEASE_DAY)
         self.assertTrue(any("CHANGELOG.md" in finding for finding in findings), findings)
 
-    def test_unversioned_staged_changelog_returns_failure_without_raising(self):
+    def test_unversioned_staged_fails(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = Path(directory)
             _init_repository(repository)
@@ -251,7 +251,7 @@ class StagedDateTest(unittest.TestCase):
 class UtcDateConversionTest(unittest.TestCase):
     """Convert instants around DST transitions to their UTC date."""
 
-    def test_offsets_around_utc_midnight_on_transition_days(self):
+    def test_offsets_around_midnight(self):
         for transition_day, offsets in DST_TRANSITION_OFFSETS:
             for offset in offsets:
                 with self.subTest(day=transition_day, offset=offset):

@@ -221,7 +221,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
         self.assertIn(path, output)
         self.assertIn(term, output.lower())
 
-    def test_docs_secret_survives_a_pr_checker_that_exits_zero(self):
+    def test_docs_secret_survives_pr_checker(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -237,7 +237,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
 
             self._assert_detected(repo, violating_tree, "docs/security.md", "secret")
 
-    def test_workflow_secret_is_read_from_the_requested_tree(self):
+    def test_workflow_secret_from_tree(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -249,7 +249,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
 
             self._assert_detected(repo, violating_tree, path, "secret")
 
-    def test_production_env_file_is_read_from_the_requested_tree(self):
+    def test_env_file_from_tree(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -260,7 +260,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
 
             self._assert_detected(repo, violating_tree, ".env.production", "env")
 
-    def test_symlink_blob_is_read_from_the_requested_tree(self):
+    def test_symlink_blob_from_tree(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -277,7 +277,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
 
             self._assert_detected(repo, violating_tree, "docs-link", "secret")
 
-    def test_javascript_weak_hash_is_read_from_the_requested_tree(self):
+    def test_js_weak_hash_from_tree(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -300,7 +300,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
 
             self._assert_detected(repo, violating_tree, "encoded.txt", "secret")
 
-    def test_symlink_named_dockerfile_is_not_parsed_as_dockerfile(self):
+    def test_dockerfile_symlink_not_parsed(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -317,7 +317,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
             result = _scan_tree_process(repo, tree)
             self.assertEqual(result.returncode, 0, _scan_output(result))
 
-    def test_unsafe_pull_request_target_command_is_rejected(self):
+    def test_unsafe_target_command_rejected(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -333,7 +333,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
 
             self._assert_detected(repo, tree, path, "pull_request_target")
 
-    def test_unpinned_action_in_yaml_workflow_is_rejected(self):
+    def test_unpinned_action_rejected(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -349,7 +349,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
 
             self._assert_detected(repo, tree, path, "commit sha")
 
-    def test_branch_and_pr_author_are_checked_without_base(self):
+    def test_branch_author_checked_without_base(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -366,7 +366,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
             self.assertEqual(author_result.returncode, 1)
             self.assertIn("banned-agent", _scan_output(author_result))
 
-    def test_commit_metadata_is_checked_from_the_requested_range(self):
+    def test_commit_metadata_from_range(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -403,7 +403,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
             result = _scan_tree(repo, tree)
             self.assertEqual(result.returncode, 0, _scan_output(result))
 
-    def test_privileged_checkout_cannot_redirect_trusted_base(self):
+    def test_checkout_cannot_redirect_base(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -418,7 +418,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
 
             self._assert_detected(repo, tree, path, "job schema")
 
-    def test_privileged_scan_cannot_continue_on_error(self):
+    def test_scan_no_continue_on_error(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -433,7 +433,7 @@ class ImmutableComplianceScannerTest(unittest.TestCase):
 
             self._assert_detected(repo, tree, path, "job schema")
 
-    def test_critical_checker_path_cannot_be_a_symlink(self):
+    def test_checker_path_not_symlink(self):
         with RetryingTemporaryDirectory() as temporary:
             repo = Path(temporary)
             _initialize_repo(repo)
@@ -473,7 +473,7 @@ class ImmutableWorkflowTest(unittest.TestCase):
     def setUpClass(cls):
         cls.content = WORKFLOW_PATH.read_text(encoding="utf-8")
 
-    def test_uses_only_pull_request_target_with_read_only_permissions(self):
+    def test_target_trigger_read_only(self):
         self.assertEqual(_workflow_events(self.content), {"pull_request_target"})
         permission_blocks = _indented_blocks(self.content, "permissions")
         self.assertTrue(permission_blocks)
@@ -485,10 +485,10 @@ class ImmutableWorkflowTest(unittest.TestCase):
                 parsed = {key: _parse_scalar(value) for key, value in entries}
                 self.assertEqual(parsed, {"contents": "read"})
 
-    def test_has_no_pull_request_working_directory(self):
+    def test_no_pr_working_directory(self):
         self.assertNotRegex(self.content, r"(?m)^\s*working-directory:")
 
-    def test_security_commands_use_trusted_immutable_scanning(self):
+    def test_security_commands_trusted(self):
         self.assertIn(
             "TRUSTED_CHECKER: trusted-base/scripts/check_compliance_tree.py",
             self.content,
@@ -508,7 +508,7 @@ class ImmutableWorkflowTest(unittest.TestCase):
                 self.assertRegex(command, r"--repo\s+[\"']?\$PR_REPO[\"']?")
                 self.assertRegex(command, r"--tree\s+[\"']?\$PR_HEAD_SHA[\"']?")
 
-    def test_no_pr_authored_script_is_executed(self):
+    def test_no_pr_script_executed(self):
         self.assertNotIn("pr-head/scripts/", self.content)
         self.assertNotRegex(self.content, r"(?m)python\s+(?:\.\./)?scripts/")
         for command in _run_blocks(self.content):
@@ -520,12 +520,12 @@ class ImmutableWorkflowTest(unittest.TestCase):
                     or '"$TRUSTED_CHECKER"' in command
                     or command == (
                         "python -m pip install --requirement "
-                        "trusted-base/requirements-checkers.txt"
+                        "trusted-base/requirements-checkers.txt --only-binary :all:"
                     ),
                     command,
                 )
 
-    def test_external_actions_are_pinned_to_full_commit_shas(self):
+    def test_actions_pinned(self):
         paths = [
             *WORKFLOW_ROOT.glob("*.yml"),
             *WORKFLOW_ROOT.glob("*.yaml"),
@@ -543,7 +543,7 @@ class ImmutableWorkflowTest(unittest.TestCase):
                     revision = reference.rsplit("@", 1)[1]
                     self.assertRegex(revision, rf"^{FULL_SHA.pattern}$")
 
-    def test_every_checkout_parses_persist_credentials_as_false(self):
+    def test_checkout_credentials_not_persisted(self):
         checkout_steps = [
             block for block in _step_blocks(self.content) if "uses: actions/checkout@" in block
         ]

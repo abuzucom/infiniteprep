@@ -73,7 +73,7 @@ def redirect_server() -> Iterator[tuple[str, list[str]]]:
         thread.join(JOIN_TIMEOUT_SEC)
 
 
-def test_no_redirect_opener_raises_on_a_redirect(redirect_server: tuple[str, list[str]]) -> None:
+def test_no_redirect_opener_rejects_redirects(redirect_server: tuple[str, list[str]]) -> None:
     """A redirect response raises, and the redirect target never receives the request."""
     base_url, hits = redirect_server
     request = urllib.request.Request(
@@ -87,7 +87,7 @@ def test_no_redirect_opener_raises_on_a_redirect(redirect_server: tuple[str, lis
     assert hits == []
 
 
-def test_no_redirect_opener_returns_a_direct_response(
+def test_no_redirect_opener_returns_direct(
     redirect_server: tuple[str, list[str]],
 ) -> None:
     """A request that needs no redirect returns its body as before."""

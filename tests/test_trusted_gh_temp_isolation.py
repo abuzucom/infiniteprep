@@ -64,22 +64,22 @@ class PrivateTempDirectoryTest(unittest.TestCase):
                                       runner=runner)
         return runner
 
-    def test_child_temp_variables_name_the_private_directory(self):
+    def test_child_temp_variables(self):
         call = self.run_calls(1).calls[0]
         for name in TEMP_VARIABLES:
             with self.subTest(variable=name):
                 self.assertEqual(Path(call["env"][name]), call["cwd"])
 
-    def test_private_directory_sits_under_the_safe_parent(self):
+    def test_private_directory_under_parent(self):
         call = self.run_calls(1).calls[0]
         self.assertNotEqual(call["cwd"], self.parent_path)
         self.assertEqual(call["cwd"].parent, self.parent_path)
 
-    def test_each_call_gets_a_distinct_directory(self):
+    def test_distinct_directory_per_call(self):
         first, second = self.run_calls(DISTINCT_CALL_COUNT).calls
         self.assertNotEqual(first["cwd"], second["cwd"])
 
-    def test_directory_exists_during_call_and_leaves_after(self):
+    def test_directory_lifetime(self):
         call = self.run_calls(1).calls[0]
         self.assertTrue(call["existed"])
         self.assertFalse(call["cwd"].exists())
@@ -93,7 +93,7 @@ class PrivateTempDirectoryTest(unittest.TestCase):
 class TempRootSelectionTest(unittest.TestCase):
     """The private directory follows the caller's configured temp root."""
 
-    def test_private_directory_lands_under_configured_temp_root(self):
+    def test_configured_temp_root(self):
         with tempfile.TemporaryDirectory() as configured, \
                 tempfile.TemporaryDirectory() as repository:
             configured_root = Path(configured).resolve()
@@ -111,7 +111,7 @@ class PermissionMessageTest(unittest.TestCase):
 
     DENIED = PermissionError(13, "Permission denied", "/tmp/gh-cli-cache")
 
-    def test_requested_command_reports_the_denied_path(self):
+    def test_requested_command_denied_path(self):
         output = io.StringIO()
         with patch.object(trusted_gh, "with_repository_context",
                           side_effect=lambda _root, arguments: list(arguments)), \
@@ -126,7 +126,7 @@ class PermissionMessageTest(unittest.TestCase):
         self.assertIn("gh-cli-cache", output.getvalue())
         self.assertIn("TMPDIR", output.getvalue())
 
-    def test_account_check_reports_the_denied_path(self):
+    def test_account_check_denied_path(self):
         output = io.StringIO()
         with patch.object(trusted_gh, "authenticated_account",
                           side_effect=self.DENIED), \

@@ -17,20 +17,20 @@ DETACHED_HEAD_OBJECT_ID = "0" * 40
 class BranchExecutionTest(unittest.TestCase):
     """Reject execution paths that hide branch writes behind a Git read."""
 
-    def test_git_read_redirection_cannot_write_a_prohibited_ref(self):
-        reason = hook.command_execution_reason(
-            "git status > .git/refs/heads/claude/x", str(REPO_ROOT), "Bash")
+    def test_read_redirection_blocks_ref_write(self):
+        reason = hook.command_execution_violation(
+            "git status > .git/refs/heads/claude/x", str(REPO_ROOT), "Bash")[1]
         self.assertIn("prohibited", reason)
 
-    def test_repository_program_names_do_not_grant_execution(self):
+    def test_repository_program_names_untrusted(self):
         for command in ("./git status", "./echo hello", "echo.ps1 hello", "git.cmd status"):
             with self.subTest(command=command):
-                self.assertTrue(hook.command_execution_reason(command, str(REPO_ROOT), "Bash"))
+                self.assertTrue(hook.command_execution_violation(command, str(REPO_ROOT), "Bash")[1])
 
-    def test_input_and_privilege_wrappers_remain_opaque(self):
+    def test_input_privilege_wrappers_opaque(self):
         for command in ("xargs git branch", "sudo git status", "nohup git push origin HEAD"):
             with self.subTest(command=command):
-                self.assertTrue(hook.command_execution_reason(command, str(REPO_ROOT), "Bash"))
+                self.assertTrue(hook.command_execution_violation(command, str(REPO_ROOT), "Bash")[1])
 
     def test_implicit_push_targets_remain_unresolved(self):
         for arguments in ([], ["origin"], ["--repo=origin"], ["--repo", "origin"]):
@@ -102,21 +102,21 @@ class BranchExecutionTest(unittest.TestCase):
                 with self.assertRaises(OSError):
                     core._trusted_config_executable(directory)
 
-    def test_real_config_reader_returns_bounded_bytes(self):
+    def test_config_reader_bounded_bytes(self):
         command = [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'config')"]
         self.assertEqual(core._run_config_reader(command, dict(os.environ)), b"config")
 
-    def test_real_config_reader_rejects_nonzero_exit(self):
+    def test_config_reader_nonzero_exit(self):
         command = [sys.executable, "-c", "raise SystemExit(1)"]
         with self.assertRaises(OSError):
             core._run_config_reader(command, dict(os.environ))
 
-    def test_real_config_reader_rejects_excess_output(self):
+    def test_config_reader_excess_output(self):
         command = [sys.executable, "-c", "import sys; sys.stdout.buffer.write(b'x' * 262145)"]
         with self.assertRaises(OSError):
             core._run_config_reader(command, dict(os.environ))
 
-    def test_real_config_reader_reaps_timed_out_process(self):
+    def test_config_reader_timeout_reaped(self):
         command = [sys.executable, "-c", "import time; time.sleep(10)"]
         with patch.object(core, "CONFIG_READ_TIMEOUT_SECONDS", SHORTENED_CONFIG_READ_TIMEOUT_SECONDS):
             with self.assertRaises(subprocess.TimeoutExpired):
@@ -135,7 +135,7 @@ class BranchExecutionTest(unittest.TestCase):
             pointer.write_text("\n", encoding="utf-8")
             self.assertEqual(hook._metadata_roots(directory), (str(administration),))
 
-    def test_ci_reader_accepts_matching_branch_and_detached_head(self):
+    def test_ci_reader_matching_heads(self):
         with tempfile.TemporaryDirectory() as directory:
             administration = Path(directory) / ".git"
             administration.mkdir()

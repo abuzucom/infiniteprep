@@ -94,7 +94,7 @@ def test_empty_and_failed_drive_lists(qtbot: Any) -> None:
     assert not failed.next_btn.isEnabled()
 
 
-def test_next_shows_the_drive_and_back_returns(qtbot: Any) -> None:
+def test_next_shows_drive_back_returns(qtbot: Any) -> None:
     """Next shows the chosen drive. Back returns with the same drive picked."""
     dialog = open_dialog(qtbot, (candidate_for(build_inspection()),))
 
@@ -131,7 +131,7 @@ def test_space_bar_and_summary(qtbot: Any) -> None:
     assert not dialog.space_bar.isHidden()
 
 
-def test_drive_changes_or_the_empty_sentence(qtbot: Any) -> None:
+def test_drive_changes_or_empty_sentence(qtbot: Any) -> None:
     """Confirm lists what happens on the drive, or says nothing changes."""
     candidates = (candidate_for(build_inspection()),)
     listed = open_dialog(qtbot, candidates)
@@ -157,7 +157,7 @@ def test_export_accepts_a_passing_drive(qtbot: Any) -> None:
     assert dialog.selected_inspection() == inspection
 
 
-def test_refusal_turns_export_off_with_reason(qtbot: Any) -> None:
+def test_refusal_disables_export_with_reason(qtbot: Any) -> None:
     """A refused drive shows the reason and its guidance. Export stays off."""
     partition = build_partition(filesystem_health=FilesystemHealth.ERRORS)
     inspection = build_inspection(partitions=(partition,))
@@ -172,7 +172,7 @@ def test_refusal_turns_export_off_with_reason(qtbot: Any) -> None:
     assert not dialog.drive_group.isHidden()
 
 
-def test_safety_refusal_hides_drive_and_space(qtbot: Any) -> None:
+def test_safety_refusal_hides_drive_space(qtbot: Any) -> None:
     """A drive that must never take an export shows no identity and no space."""
     inspection = build_inspection(drive=build_drive(is_system=True))
     dialog = UsbExportDialog(lambda: (candidate_for(inspection),), build_request())

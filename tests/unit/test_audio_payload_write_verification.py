@@ -84,7 +84,7 @@ def import_track(repo: Repository, adapter: MetadataTagAdapter, path: Path) -> F
 
 
 @pytest.mark.parametrize(("suffix", "factory"), FORMATS)
-def test_library_tag_write_preserves_audio_payload(
+def test_tag_write_preserves_audio_payload(
     tmp_path: Path, suffix: str, factory: Callable[..., Path]
 ) -> None:
     """Write and read back a tag while retaining the original audio bytes."""
@@ -180,7 +180,7 @@ def test_transcode_mismatch_blocks_publish(tmp_path: Path, monkeypatch: pytest.M
     assert record.operation_status == OperationStatus.FAILED
 
 
-def test_write_rejects_a_wav_without_locatable_audio(tmp_path: Path) -> None:
+def test_write_rejects_unlocatable_wav_audio(tmp_path: Path) -> None:
     """A valid format header alone does not let the writer verify unknown audio."""
     adapter = MetadataTagAdapter()
     source = create_wav_fixture(tmp_path / "track.wav")

@@ -64,7 +64,7 @@ def make_library(music: Path) -> Path:
     return path
 
 
-def test_a_relative_root_stops_the_import(repository: Repository, tmp_path: Path) -> None:
+def test_relative_root_stops_import(repository: Repository, tmp_path: Path) -> None:
     """A root that names no absolute folder stops the run before the plan starts."""
     music = tmp_path / "music"
     music.mkdir()
@@ -79,9 +79,7 @@ def test_a_relative_root_stops_the_import(repository: Repository, tmp_path: Path
     assert result.has_changes is False
 
 
-def test_a_root_that_does_not_exist_stops_the_import(
-    repository: Repository, tmp_path: Path
-) -> None:
+def test_missing_root_stops_import(repository: Repository, tmp_path: Path) -> None:
     """A root that names no existing folder stops the run."""
     music = tmp_path / "music"
     music.mkdir()
@@ -96,7 +94,7 @@ def test_a_root_that_does_not_exist_stops_the_import(
     assert result.has_changes is False
 
 
-def test_a_root_that_names_a_file_stops_the_import(repository: Repository, tmp_path: Path) -> None:
+def test_file_root_stops_import(repository: Repository, tmp_path: Path) -> None:
     """A root that names a file stops the run."""
     music = tmp_path / "music"
     music.mkdir()
@@ -111,7 +109,7 @@ def test_a_root_that_names_a_file_stops_the_import(repository: Repository, tmp_p
     assert result.has_changes is False
 
 
-def test_a_root_that_is_a_link_stops_the_import(repository: Repository, tmp_path: Path) -> None:
+def test_linked_root_stops_import(repository: Repository, tmp_path: Path) -> None:
     """A root that names a link stops the run."""
     music = tmp_path / "music"
     music.mkdir()
@@ -131,7 +129,7 @@ def test_a_root_that_is_a_link_stops_the_import(repository: Repository, tmp_path
     assert result.has_changes is False
 
 
-def test_a_valid_root_starts_the_import(repository: Repository, tmp_path: Path) -> None:
+def test_valid_root_starts_import(repository: Repository, tmp_path: Path) -> None:
     """A root that names an existing folder starts the run."""
     music = tmp_path / "music"
     music.mkdir()
@@ -145,7 +143,7 @@ def test_a_valid_root_starts_the_import(repository: Repository, tmp_path: Path) 
     assert result.error == ""
 
 
-def test_the_plan_keeps_the_pending_values_of_the_merge() -> None:
+def test_plan_keeps_merge_pending_values() -> None:
     """A value with no storage keeps its payload in the plan until the commit."""
     library = SourceLibrary(
         source_format="fake",
@@ -172,7 +170,7 @@ def test_the_plan_keeps_the_pending_values_of_the_merge() -> None:
     assert payload["source_path"] == "/music/track.wav"
 
 
-def test_the_locator_skips_a_candidate_that_a_link_replaced(tmp_path: Path) -> None:
+def test_locator_skips_link_replaced_candidate(tmp_path: Path) -> None:
     """A folder that a link replaced holds no candidate inside the profile."""
     profile = tmp_path / "profile"
     profile.mkdir()

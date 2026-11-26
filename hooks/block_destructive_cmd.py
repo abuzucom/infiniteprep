@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Gate CMD commands through behavior-based operation policies."""
-import json
 import ntpath
 import os
 import sys
@@ -13,8 +12,10 @@ POLICY_DENIAL_EXIT_CODE = 2
 try:
     import _cmd_parser as cmd_parser
     import _gate_core as core
-except ImportError as error:  # pragma: no cover
-    failure_reason = f"shared CMD parser or core import failed ({error})"
+except ImportError as error:
+    failure_reason = (f"shared CMD parser or core import failed ({error}). "
+                      "Stop. Report this denial to the active human. Do not "
+                      "retry a variant or propose a gate change.")
     print(failure_reason, file=sys.stderr)
     sys.exit(POLICY_DENIAL_EXIT_CODE)
 
@@ -34,20 +35,13 @@ SENSITIVE_DISCOVERY_PROGRAMS = frozenset({
 })
 REMOTE_EXECUTION_PROGRAMS = frozenset({"psexec", "winrs"})
 SCRIPT_SUFFIXES = (".bat", ".cmd", ".ps1")
-INTERPRETER_PROGRAMS = frozenset({
-    "bash",
-    "cmd",
-    "csh",
-    "dash",
-    "fish",
-    "ksh",
-    "powershell",
-    "pwsh",
-    "sh",
-    "tcsh",
-    "zsh",
-})
+# The core list, normalized the way CMD names programs, so a shell the core
+# treats as an interpreter hop (busybox included) is one here too.
+INTERPRETER_PROGRAMS = frozenset(
+    core.normalize_windows_command_name(name) for name in core.SHELL_INTERPRETERS)
 _CWD = [""]
+# The payload permission mode for the current call. Plan mode denies git writes.
+_MODE = [""]
 
 
 def normalize_cmd_program(program_token: str) -> str:
@@ -140,11 +134,15 @@ def classify_cmd_segment(command_tokens: tuple[str, ...]) -> tuple[str, str]:
     if program_name == "git":
         verdict = core.strongest(
             verdict,
-            core.git_verdict(list(arguments), _CWD[0]),
+            core.plan_mode_git_verdict(
+                _MODE[0], list(arguments), _CWD[0], None,
+                core.git_verdict(list(arguments), _CWD[0])),
         )
     policies = (
         core.cloudflare_pages_verdict(
             program_name, list(arguments), _CWD[0]),
+        core.plan_mode_harden(
+            _MODE[0], core.cmd_set_assignment_verdict(program_name, list(arguments))),
         core.destruction_verdict(program_name, list(arguments)),
         core.alias_verdict(program_name, list(arguments)),
         core.mode_change_verdict(program_name, list(arguments)),
@@ -184,6 +182,7 @@ def classify_cmd_command(command_text: str) -> tuple[str, str]:
 
 def main() -> int:
     """Read one hook payload and emit its CMD policy decision."""
+    core.reset_invocation_caches()
     payload = core.read_payload()
     if payload is None:
         return core.emit(
@@ -200,6 +199,7 @@ def main() -> int:
     if command_text is None:
         return core.emit(GATE, "deny", "the CMD command field is not a string")
     _CWD[0] = core.project_dir(payload)
+    _MODE[0] = core.require_str(payload.get("permission_mode", "")) or ""
     decision, decision_reason = classify_cmd_command(command_text)
     if not decision:
         return 0

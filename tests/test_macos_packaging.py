@@ -35,7 +35,7 @@ class MacosPackagingWorkflowTest(unittest.TestCase):
         [step] = [step for step in self.steps if step.get("name") == name]
         return step
 
-    def test_macos_steps_run_only_on_macos_in_order(self) -> None:
+    def test_macos_only_steps_run_ordered(self) -> None:
         """Each macOS step is gated to macOS and runs after the bundle build."""
         names = [step.get("name") for step in self.steps]
         positions = [names.index(name) for name in MACOS_STEPS]
@@ -44,7 +44,7 @@ class MacosPackagingWorkflowTest(unittest.TestCase):
         for name in MACOS_STEPS:
             self.assertEqual(self._step(name)["if"], MACOS_CONDITION, name)
 
-    def test_app_is_signed_after_the_notices_are_added(self) -> None:
+    def test_app_signed_after_notices_added(self) -> None:
         """The ad-hoc signature covers LICENSE and NOTICE inside the bundle."""
         run = self._step("Sign macOS app")["run"]
         self.assertIn("Contents/Resources", run)
@@ -52,7 +52,7 @@ class MacosPackagingWorkflowTest(unittest.TestCase):
         self.assertIn("--sign -", run)
         self.assertIn("codesign --verify --deep --strict", run)
 
-    def test_dmg_holds_the_app_shortcut_and_notices(self) -> None:
+    def test_dmg_holds_app_shortcut_notices(self) -> None:
         """The DMG has the app, an Applications shortcut, and both notices (D298)."""
         run = self._step("Build macOS DMG")["run"]
         for fragment in ("InfinitePrep.app", "ln -s /Applications", "cp LICENSE NOTICE"):
@@ -61,7 +61,7 @@ class MacosPackagingWorkflowTest(unittest.TestCase):
         self.assertIn(DMG_NAME, run)
         self.assertNotIn("portable.mode", run)
 
-    def test_dmg_test_checks_contents_and_launch(self) -> None:
+    def test_dmg_test_checks_contents_launch(self) -> None:
         """The test mounts the DMG read-only and checks what users get."""
         run = self._step("Test macOS DMG")["run"]
         for fragment in (
@@ -93,7 +93,7 @@ class MacosBundleSpecTest(unittest.TestCase):
         """Read the spec once."""
         cls.spec = SPEC_PATH.read_text(encoding="utf-8")
 
-    def test_bundle_step_runs_only_on_macos(self) -> None:
+    def test_bundle_step_runs_macos_only(self) -> None:
         """BUNDLE sits under a darwin check, so Windows and Linux builds stay the same."""
         darwin = self.spec.index('if sys.platform == "darwin":')
         self.assertLess(darwin, self.spec.index("BUNDLE("))

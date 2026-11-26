@@ -43,7 +43,7 @@ def frame_at_limit() -> bytes:
     return compressed_priv_frame(MAX_INFLATED_FRAME_BYTES)
 
 
-def test_frame_over_inflate_limit_is_dropped() -> None:
+def test_frame_over_inflate_limit_dropped() -> None:
     """A compressed frame that inflates past MAX_INFLATED_FRAME_BYTES is dropped and named."""
     tag = parse_id3v2(v23_tag(compressed_priv_frame(MAX_INFLATED_FRAME_BYTES + 1)))
     assert tag is not None
@@ -51,7 +51,7 @@ def test_frame_over_inflate_limit_is_dropped() -> None:
     assert tag.dropped_frames == ("PRIV",)
 
 
-def test_frame_at_inflate_limit_is_kept(frame_at_limit: bytes) -> None:
+def test_frame_at_inflate_limit_kept(frame_at_limit: bytes) -> None:
     """A compressed frame at MAX_INFLATED_FRAME_BYTES still inflates in full."""
     tag = parse_id3v2(v23_tag(frame_at_limit))
     assert tag is not None
@@ -59,7 +59,7 @@ def test_frame_at_inflate_limit_is_kept(frame_at_limit: bytes) -> None:
     assert len(tag.frames[0].body) == MAX_INFLATED_FRAME_BYTES
 
 
-def test_frames_over_tag_budget_are_dropped(frame_at_limit: bytes) -> None:
+def test_frames_over_tag_budget_dropped(frame_at_limit: bytes) -> None:
     """Once a tag inflates MAX_INFLATED_TAG_BYTES in total, later compressed frames are dropped."""
     frames_in_budget = MAX_INFLATED_TAG_BYTES // MAX_INFLATED_FRAME_BYTES
     tag = parse_id3v2(v23_tag(frame_at_limit * (frames_in_budget + 1)))
@@ -69,13 +69,13 @@ def test_frames_over_tag_budget_are_dropped(frame_at_limit: bytes) -> None:
 
 
 @pytest.mark.parametrize("padding", [-1, MAX_PADDING_BYTES + 1])
-def test_render_rejects_padding_outside_the_limit(padding: int) -> None:
+def test_render_rejects_padding_beyond_limit(padding: int) -> None:
     """Negative padding and padding above MAX_PADDING_BYTES raise ValueError."""
     with pytest.raises(ValueError, match="padding"):
         render_id3v23(Id3Tag(frames=(Id3Frame("TIT2", b"\x00Title"),)), padding=padding)
 
 
-def test_render_accepts_padding_at_the_limit() -> None:
+def test_render_accepts_padding_at_limit() -> None:
     """MAX_PADDING_BYTES of padding renders and parses back."""
     rendered = render_id3v23(Id3Tag(frames=(Id3Frame("TIT2", b"\x00Title"),)), MAX_PADDING_BYTES)
     assert rendered.endswith(b"\x00" * MAX_PADDING_BYTES)

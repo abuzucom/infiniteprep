@@ -34,7 +34,7 @@ EMOJI_PRESENTATION = chr(0xFE0F)
     ],
     ids=["combining-accent", "skin-tone", "variation-selector", "zwj-sequence"],
 )
-def test_cut_moves_before_a_grapheme_that_spans_it(grapheme: str, kept_prefix_length: int) -> None:
+def test_cut_moves_before_spanning_grapheme(grapheme: str, kept_prefix_length: int) -> None:
     """A grapheme that crosses the cut point drops whole, with the mark after the text."""
     # The grapheme's last code point sits at CUT_INDEX, so the plain cut splits it.
     prefix = "a" * (CUT_INDEX + 1 - len(grapheme))
@@ -46,7 +46,7 @@ def test_cut_moves_before_a_grapheme_that_spans_it(grapheme: str, kept_prefix_le
     assert len(shown) <= OTHER_TAG_DISPLAY_LIMIT
 
 
-def test_plain_text_cuts_at_the_limit() -> None:
+def test_plain_text_cuts_at_limit() -> None:
     """Text with no joining characters fills the cell to the limit."""
     shown = truncate_for_cell("x" * (OTHER_TAG_DISPLAY_LIMIT * 2))
 
@@ -54,7 +54,7 @@ def test_plain_text_cuts_at_the_limit() -> None:
     assert len(shown) == OTHER_TAG_DISPLAY_LIMIT
 
 
-def test_run_of_marks_steps_back_to_its_base() -> None:
+def test_mark_run_steps_to_base() -> None:
     """A long run of marks on one base keeps only the text before that base."""
     text = "b" + COMBINING_ACUTE * (OTHER_TAG_DISPLAY_LIMIT * 2)
 

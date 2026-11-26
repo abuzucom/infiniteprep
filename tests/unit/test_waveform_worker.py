@@ -48,7 +48,7 @@ def test_cancelled_task_skips_analysis(monkeypatch: Any) -> None:
     assert failed == []
 
 
-def test_worker_logs_failure_and_emits_message(qtbot: Any, monkeypatch: Any, caplog: Any) -> None:
+def test_worker_logs_failure_emits_message(qtbot: Any, monkeypatch: Any, caplog: Any) -> None:
     """Unexpected details reach logs without exposing exception text to the UI."""
     private_detail = "private path /library/secret.wav"
 

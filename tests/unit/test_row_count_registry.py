@@ -26,7 +26,7 @@ def test_registry_covers_every_table(tmp_path: Path) -> None:
     assert tables == set(ROW_COUNT_QUERIES)
 
 
-def test_counts_skip_tables_the_library_lacks(tmp_path: Path) -> None:
+def test_counts_skip_missing_library_tables(tmp_path: Path) -> None:
     """A library from before a table existed reports counts only for the tables it holds."""
     with sqlite3.connect(tmp_path / "old.sqlite3") as conn:
         conn.execute("CREATE TABLE source_groups (id TEXT PRIMARY KEY)")

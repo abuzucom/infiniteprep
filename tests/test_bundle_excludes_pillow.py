@@ -112,7 +112,7 @@ class ListExpressionReaderTest(unittest.TestCase):
         expression = ast.parse(source, mode="eval").body
         return evaluate_list_expression(expression, {"KNOWN": ["setuptools"]})
 
-    def test_sum_of_literal_and_constant_reads_as_one_list(self) -> None:
+    def test_literal_constant_sum_one_list(self) -> None:
         """A literal list plus a list constant yields both names in order."""
         self.assertEqual(self._evaluate('["readline"] + KNOWN'), ["readline", "setuptools"])
 
@@ -126,7 +126,7 @@ class ListExpressionReaderTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not a list"):
             self._evaluate('("PIL",)')
 
-    def test_operator_other_than_add_raises_value_error(self) -> None:
+    def test_other_operator_raises_value_error(self) -> None:
         """Subtraction and repetition name no supported list form."""
         for source in ('["PIL"] - KNOWN', '["PIL"] * 2'):
             with self.subTest(source=source), self.assertRaisesRegex(ValueError, "operator"):

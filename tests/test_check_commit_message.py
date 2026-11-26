@@ -2,8 +2,8 @@
 """Tests for scripts/check_commit_message.py.
 
 Builds a throwaway git repository and runs the checker over real commit
-ranges, rather than feeding it synthetic subject strings, so the git
-invocation is covered along with the pattern.
+ranges. Synthetic subject strings would skip the git command. This
+covers the command along with the pattern.
 """
 import importlib.util
 import subprocess
@@ -69,14 +69,14 @@ class MergeCommitTest(unittest.TestCase):
         self.addCleanup(os.chdir, cwd)
         return checker.find_violations(checker.load_commits(base, "HEAD"))
 
-    def test_default_merge_subject_is_not_reported(self):
-        """`git merge` writes 'Merge branch ...', which no author chose."""
+    def test_default_merge_subject_ignored(self):
+        """`git merge` writes 'Merge branch ...'. No author chose that subject."""
         self._git("merge", "--no-ff", "side")
         subject = self._git("log", "-1", "--format=%s")
         self.assertTrue(subject.startswith("Merge branch"), subject)
         self.assertEqual(self._violations(self.base), [])
 
-    def test_a_real_violation_is_still_reported(self):
+    def test_real_violation_reported(self):
         self._commit("Added a thing without a type prefix", "four.txt")
         violations = self._violations(self.base)
         self.assertEqual(len(violations), 1)

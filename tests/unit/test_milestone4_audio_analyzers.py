@@ -11,7 +11,7 @@ from infiniteprep.domain.enums import KeyMode, PitchClass
 from tests.fixtures.audio_factory import synthesize_rhythmic_chord_pcm
 
 
-def test_dsp_analyzer_estimates_bpm_and_key(tmp_path: Path) -> None:
+def test_dsp_analyzer_estimates_bpm_key(tmp_path: Path) -> None:
     """Verify LocalDspAnalyzer computes accurate BPM and canonical key on synthetic audio."""
     # Synthesize 8 seconds of 125.0 BPM A minor (A3=220, C4=261.63, E4=329.63)
     pcm = synthesize_rhythmic_chord_pcm(
@@ -37,7 +37,7 @@ def test_dsp_analyzer_estimates_bpm_and_key(tmp_path: Path) -> None:
     assert len(result.configuration["waveform_envelope"]) == 64
 
 
-def test_dsp_detects_clipping_dc_and_silence(tmp_path: Path) -> None:
+def test_dsp_detects_clipping_dc_silence(tmp_path: Path) -> None:
     """Verify LocalDspAnalyzer emits warnings for clipping, DC offset, and leading silence."""
     pcm = synthesize_rhythmic_chord_pcm(
         duration_sec=6.0,

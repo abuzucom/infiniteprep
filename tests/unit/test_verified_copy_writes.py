@@ -42,7 +42,7 @@ def library(tmp_path: Path) -> tuple[Repository, WriteService, str, Path, str]:
     return repo, write_svc, asset.id, source, original_hash
 
 
-def test_each_write_keeps_its_own_backup(library: Any) -> None:
+def test_each_write_keeps_own_backup(library: Any) -> None:
     """Two writes to one track leave two backups, and the first still holds the original."""
     repo, write_svc, file_id, source, original_hash = library
     first = write_svc.apply_single_plan(write_svc.build_batch_preview([file_id])[0])
@@ -56,9 +56,7 @@ def test_each_write_keeps_its_own_backup(library: Any) -> None:
     assert sorted(p.name for p in source.parent.iterdir()) == ["track.wav"]
 
 
-def test_a_failed_tag_write_never_touches_the_original(
-    library: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_failed_write_never_touches_original(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """A write that corrupts its copy and fails leaves the original bytes and no copy."""
     _, write_svc, file_id, source, original_hash = library
 
@@ -76,7 +74,7 @@ def test_a_failed_tag_write_never_touches_the_original(
     assert sorted(p.name for p in source.parent.iterdir()) == ["track.wav"]
 
 
-def test_unverified_copy_is_not_swapped_in(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unverified_copy_never_swapped_in(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """A copy whose tags do not read back raises, and the original stays in place."""
     _, write_svc, file_id, source, original_hash = library
     monkeypatch.setattr(write_svc.tag_adapter, "_write_tags_by_format", lambda _p, _t: None)
@@ -88,7 +86,7 @@ def test_unverified_copy_is_not_swapped_in(library: Any, monkeypatch: pytest.Mon
     assert sorted(p.name for p in source.parent.iterdir()) == ["track.wav"]
 
 
-def test_a_flac_write_reads_back_through_the_copy(tmp_path: Path) -> None:
+def test_flac_write_reads_back_copy(tmp_path: Path) -> None:
     """A FLAC write passes Vorbis read-back verification and lands on the original path."""
     repo = Repository(DatabaseManager(":memory:"))
     tag_adapter = MetadataTagAdapter()
@@ -103,7 +101,7 @@ def test_a_flac_write_reads_back_through_the_copy(tmp_path: Path) -> None:
     assert sorted(p.name for p in source.parent.iterdir()) == ["track.flac"]
 
 
-def test_a_hard_linked_file_is_refused(library: Any) -> None:
+def test_hard_linked_file_is_refused(library: Any) -> None:
     """Preflight refuses a file with a second hard link, because a swap would split them."""
     _, write_svc, file_id, source, _ = library
     os.link(source, source.with_name("linked.wav"))
@@ -115,9 +113,7 @@ def test_a_hard_linked_file_is_refused(library: Any) -> None:
 
 
 @pytest.mark.skipif(not hasattr(os, "getuid"), reason="POSIX file ownership only")
-def test_a_file_owned_by_another_user_is_refused(
-    library: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_foreign_owned_file_is_refused(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """Preflight refuses a file whose owner differs from the current user."""
     _, write_svc, file_id, source, _ = library
     other_uid = source.stat().st_uid + 1
@@ -129,7 +125,7 @@ def test_a_file_owned_by_another_user_is_refused(
     assert any("another user" in error for error in plan.validation_errors)
 
 
-def test_in_place_transcode_backup_names_its_operation(tmp_path: Path) -> None:
+def test_transcode_backup_names_its_operation(tmp_path: Path) -> None:
     """The in-place transcode backup carries the operation id, so no later backup replaces it."""
     repo = Repository(DatabaseManager(":memory:"))
     source = create_wav_fixture(

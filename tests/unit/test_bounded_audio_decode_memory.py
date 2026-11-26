@@ -63,7 +63,7 @@ def test_analyzer_decode_averages_channels(tmp_path: Path) -> None:
     assert np.array_equal(mono, np.mean(whole, axis=1))
 
 
-def test_analyzer_decode_stops_at_the_duration_limit(tmp_path: Path) -> None:
+def test_analyzer_decode_stops_duration_limit(tmp_path: Path) -> None:
     """A duration limit shorter than the file caps the decoded frame count."""
     path = _write_wav(tmp_path / "long.wav", channels=2, frames=ONE_SECOND * 3)
 
@@ -105,7 +105,7 @@ def test_analyzer_reports_out_of_memory(tmp_path: Path, monkeypatch: pytest.Monk
     assert "Audio decode failed" in result.warnings[0]
 
 
-def test_long_track_tempo_within_time_limit() -> None:
+def test_long_track_tempo_within_limit() -> None:
     """Ten minutes of clicks at 120 BPM resolve to 120.0 well inside the time limit."""
     mono = np.zeros(CLICK_TRACK_RATE * CLICK_TRACK_SECONDS, dtype=np.float64)
     mono[::CLICK_PERIOD_SAMPLES] = 1.0
@@ -162,7 +162,7 @@ class _MemoryStarvedTranscoder:
         return TranscodeResult(file_id, self._output_path, self._output_path, SAMPLE_RATE, "PCM_16")
 
 
-def test_batch_continues_after_out_of_memory(tmp_path: Path) -> None:
+def test_batch_continues_after_memory_error(tmp_path: Path) -> None:
     """The batch lists the out-of-memory file as a failure and still converts the next file."""
     transcoder = _MemoryStarvedTranscoder(tmp_path / "out.wav")
 

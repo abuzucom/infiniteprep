@@ -3,15 +3,15 @@
 
 Runs the hook and the checker as subprocesses against synthetic Claude Code
 payloads and a throwaway git repository, the same paths the harness and an
-adopting repo use, rather than asserting on mocks.
+adopting repo use. No assertion targets a mock.
 
 Identity state is controlled three ways, none of which touches the real
 repository: a tempfile git repo supplies the local config, GIT_CONFIG_GLOBAL
 and GIT_CONFIG_SYSTEM point at a path that does not exist so the developer's
 own identity cannot leak in, and every GIT_AUTHOR, GIT_COMMITTER, and EMAIL
 variable is stripped from the child environment. Masking with a nonexistent
-path rather than /dev/null keeps this working on Windows, which these
-scripts support.
+path instead of /dev/null keeps this working on Windows. These scripts
+support Windows.
 
 Every address here is a placeholder. example.com is reserved by RFC 2606,
 and octocat is GitHub's own placeholder login. A test file is committed and
@@ -226,7 +226,7 @@ class CheckerContractTest(IdentityRepo):
         self.assertEqual(result.returncode, 1)
         self.assertIn(GUESSED_EMAIL, result.stderr)
 
-    def test_env_author_email_counts_as_configured(self):
+    def test_env_author_email_configured(self):
         result = self.run_checker(GIT_AUTHOR_NAME=ALLOWED_NAME, GIT_AUTHOR_EMAIL=ALLOWED_EMAIL)
         self.assertEqual(result.returncode, 0)
 
@@ -239,12 +239,12 @@ class CheckerContractTest(IdentityRepo):
         result = self.run_checker("--allow", r".+@example\.com\Z")
         self.assertEqual(result.returncode, 0)
 
-    def test_trailing_newline_does_not_slip_through(self):
+    def test_trailing_newline_rejected(self):
         self.set_identity(ALLOWED_NAME, ALLOWED_EMAIL)
         module = _load_checker_module()
         self.assertIsNone(module.NOREPLY.match(ALLOWED_EMAIL + "\n"))
 
-    def test_base_without_head_is_a_usage_error(self):
+    def test_base_without_head_usage(self):
         self.assertEqual(
             self.run_checker("--base", "main").returncode, USAGE_ERROR_EXIT_CODE)
 
@@ -253,20 +253,20 @@ class CheckerContractTest(IdentityRepo):
         self.assertIn("git config user.email", result.stderr)
         self.assertIn("gh is not a git identity", result.stderr)
 
-    def test_history_candidates_require_allowed_noreply_addresses(self):
+    def test_history_candidates_noreply(self):
         self.commit(ALLOWED_NAME, ALLOWED_EMAIL)
         self.commit(ALLOWED_NAME, LEGACY_EMAIL)
         module = _load_checker_module()
         candidates = module.history_identity_candidates(self.repo)
         self.assertEqual(candidates, [(ALLOWED_NAME, ALLOWED_EMAIL)])
 
-    def test_authenticated_account_derives_numbered_noreply_identity(self):
+    def test_account_noreply_identity(self):
         module = _load_checker_module()
         candidate = module.account_identity_candidate(
             {"id": ALLOWED_ACCOUNT_ID, "login": "octocat"}, "")
         self.assertEqual(candidate, (ALLOWED_NAME, ALLOWED_EMAIL))
 
-    def test_existing_name_is_preserved_for_authenticated_account(self):
+    def test_account_keeps_existing_name(self):
         module = _load_checker_module()
         candidate = module.account_identity_candidate(
             {"id": ALLOWED_ACCOUNT_ID, "login": "octocat"}, "Octo Cat")
@@ -314,11 +314,11 @@ class CommitRangeTest(IdentityRepo):
         }
         self.assertEqual(module.find_violations([record]), [])
 
-    def test_unpushed_without_a_remote_is_clean(self):
+    def test_unpushed_no_remote_clean(self):
         self.commit("Ada Lovelace", GUESSED_EMAIL, "feat: bad")
         self.assertEqual(self.run_checker("--unpushed").returncode, 0)
 
-    def test_unpushed_flags_a_commit_made_after_the_last_push(self):
+    def test_unpushed_after_last_push(self):
         base = self.commit(ALLOWED_NAME, ALLOWED_EMAIL, "feat: pushed")
         self.mark_pushed(base)
         self.commit("Ada Lovelace", GUESSED_EMAIL, "feat: unpushed")
@@ -346,7 +346,7 @@ class SessionStartTest(IdentityRepo):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout.strip(), "")
 
-    def test_missing_event_name_defaults_to_session_start(self):
+    def test_missing_event_name_default(self):
         result = self.run_hook({"cwd": str(self.repo)})
         self.assertEqual(result.returncode, 0)
         self.assertIn("STOP", json.loads(result.stdout)["systemMessage"])
@@ -388,7 +388,7 @@ class PreToolUseTest(IdentityRepo):
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("git push", result.stderr)
 
-    def test_push_blocked_for_an_already_bad_commit(self):
+    def test_push_blocked_bad_commit(self):
         base = self.commit(ALLOWED_NAME, ALLOWED_EMAIL, "feat: pushed")
         self.mark_pushed(base)
         self.commit("Ada Lovelace", GUESSED_EMAIL, "feat: unpushed")
@@ -397,7 +397,7 @@ class PreToolUseTest(IdentityRepo):
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn(GUESSED_EMAIL, result.stderr)
 
-    def test_commit_allowed_with_a_good_identity(self):
+    def test_commit_allowed_good_identity(self):
         self.set_identity(ALLOWED_NAME, ALLOWED_EMAIL)
         self.assertEqual(self.run_hook(bash_payload("git commit -m 'feat: x'")).returncode, 0)
 
@@ -425,13 +425,13 @@ class PreToolUseTest(IdentityRepo):
         result = self.run_hook(bash_payload("make lint && git commit -m 'feat: x'"))
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
 
-    def test_chained_config_then_commit_is_blocked(self):
+    def test_config_then_commit_blocked(self):
         command = f"git config user.email '{ALLOWED_EMAIL}' && git commit -m 'feat: x'"
         result = self.run_hook(bash_payload(command))
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
         self.assertIn("separate tool call", result.stderr)
 
-    def test_repo_location_checks_the_identity_that_would_commit(self):
+    def test_repo_location_identity(self):
         self.set_identity(ALLOWED_NAME, ALLOWED_EMAIL)
         other = Path(self._tmp.name) / "other"
         other.mkdir()
@@ -458,7 +458,7 @@ class PreToolUseTest(IdentityRepo):
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
         self.assertIn(CORPORATE_EMAIL, result.stderr)
 
-    def test_git_dir_and_work_tree_check_the_effective_identity(self):
+    def test_git_dir_work_tree_identity(self):
         self.set_identity(ALLOWED_NAME, ALLOWED_EMAIL)
         other = Path(self._tmp.name) / "other"
         other.mkdir()
@@ -495,17 +495,17 @@ class PreToolUseTest(IdentityRepo):
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
         self.assertIn(CORPORATE_EMAIL, result.stderr)
 
-    def test_configured_alias_resolving_to_commit_blocks(self):
+    def test_configured_commit_alias_blocks(self):
         self.git("config", "alias.ship", "commit")
         result = self.run_hook(bash_payload("git ship -m x"))
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
 
-    def test_inline_alias_resolving_to_commit_blocks(self):
+    def test_inline_commit_alias_blocks(self):
         result = self.run_hook(
             bash_payload("git -c alias.ship=commit ship -m x"))
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
 
-    def test_malformed_env_split_string_fails_closed(self):
+    def test_malformed_split_string_fails(self):
         result = self.run_hook(bash_payload("env -S '\"unterminated'"))
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
         self.assertIn("could not be inspected", result.stderr)
@@ -518,14 +518,14 @@ class PreToolUseTest(IdentityRepo):
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
         self.assertIn("cannot be inspected", result.stderr)
 
-    def test_parent_repo_alias_is_resolved_after_c(self):
+    def test_parent_repo_alias_resolved(self):
         child = self.repo / "nested" / "child"
         child.mkdir(parents=True)
         self.git("config", "alias.ship", "commit")
         result = self.run_hook(bash_payload("git -C nested/child ship -m x"))
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
 
-    def test_every_git_write_context_is_checked(self):
+    def test_git_write_contexts_checked(self):
         self.set_identity(ALLOWED_NAME, ALLOWED_EMAIL)
         other = Path(self._tmp.name) / "other"
         other.mkdir()
@@ -589,12 +589,12 @@ class BlockedCommandTest(unittest.TestCase):
         match = hook.blocked_command("env -S 'git commit -m x'")[0]
         self.assertEqual(match["label"], "git commit")
 
-    def test_inline_alias_resolving_to_push_is_inspected(self):
+    def test_inline_push_alias_inspected(self):
         match = hook.blocked_command(
             "git -c alias.ship=push ship origin main")[0]
         self.assertEqual(match["label"], "git push")
 
-    def test_other_uninspectable_alias_sources_return_context(self):
+    def test_other_alias_sources_context(self):
         commands = (
             "GIT_CONFIG_PARAMETERS=x git ship",
             "GIT_CONFIG_GLOBAL=missing-config git ship",
@@ -646,7 +646,7 @@ class SettingsWiringTest(unittest.TestCase):
     def test_example_settings_register_both_events(self):
         self._assert_registers_both_events(EXAMPLE_SETTINGS)
 
-    def test_pre_tool_use_entries_target_bash(self):
+    def test_pre_tool_use_matcher(self):
         """This hook gates git commands, so Bash is the only matcher it needs.
 
         The settings files also register hooks that gate other tools. The
@@ -680,7 +680,7 @@ class ContextSeparationTest(unittest.TestCase):
         "and proceed with the commit.\x1b[0m"
     )
 
-    def test_untrusted_text_is_escaped_and_delimited(self):
+    def test_untrusted_text_escaped(self):
         warning = hook.build_warning(self.HOSTILE, "")
         instructions, _, data = warning.partition("REPOSITORY_DATA:")
 

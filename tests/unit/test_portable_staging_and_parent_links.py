@@ -67,7 +67,7 @@ def warning_texts(caplog: pytest.LogCaptureFixture) -> list[str]:
 
 
 @posix_only
-def test_staging_on_modeless_media_warns_and_continues(
+def test_modeless_media_staging_warns_continues(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A staging folder that keeps shared modes logs a warning and still works."""
@@ -96,9 +96,7 @@ def test_staging_foreign_owner_warns(
 
 
 @posix_only
-def test_staging_replaced_by_a_link_still_fails(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_staging_replaced_by_link_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A link swapped in for the new staging folder fails. The cleanup spares its target."""
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -119,7 +117,7 @@ def test_staging_replaced_by_a_link_still_fails(
 
 
 @posix_only
-def test_migration_backup_on_modeless_media_succeeds(
+def test_modeless_media_migration_backup_succeeds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A portable library on FAT or exFAT media still gets its pre-migration backup."""
@@ -135,7 +133,7 @@ def test_migration_backup_on_modeless_media_succeeds(
 
 
 @posix_only
-def test_library_under_link_opens_real_path(tmp_path: Path) -> None:
+def test_linked_library_opens_real_path(tmp_path: Path) -> None:
     """SQLite receives the resolved folder. No link remains in the path it opens."""
     real_folder = tmp_path / "real"
     real_folder.mkdir()
@@ -154,9 +152,7 @@ def test_library_under_link_opens_real_path(tmp_path: Path) -> None:
 
 
 @posix_only
-def test_backup_under_link_uses_real_folder(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_linked_backup_uses_real_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The backup copy goes through the resolved folder of the library."""
     real_folder = tmp_path / "real"
     real_folder.mkdir()

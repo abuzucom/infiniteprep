@@ -53,7 +53,7 @@ class HookLauncherTest(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertIn("missing-python", stderr.getvalue())
 
-    def test_probe_checks_every_launcher_and_gate(self):
+    def test_probe_covers_launchers_gates(self):
         gates = [
             (Path("bash.py"), "Bash", BLOCKING_EXIT_CODE, ()),
             (Path("codex.py"), "Bash", 0, ("--client", "claude")),

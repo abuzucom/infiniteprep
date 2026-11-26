@@ -59,7 +59,7 @@ def test_oversize_text_becomes_size_summary(
     assert values["\xa9ART"] == ("Artist",)
 
 
-def test_text_payload_at_the_cap_still_decodes(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_text_payload_at_cap_decodes(monkeypatch: pytest.MonkeyPatch) -> None:
     """A text payload exactly at the cap decodes to its text."""
     monkeypatch.setattr(mp4_reader, "MAX_DATA_PAYLOAD_BYTES", SMALL_PAYLOAD_CAP)
     text = b"m" * SMALL_PAYLOAD_CAP
@@ -69,7 +69,7 @@ def test_text_payload_at_the_cap_still_decodes(monkeypatch: pytest.MonkeyPatch) 
     assert values["\xa9cmt"] == (text.decode(),)
 
 
-def test_cover_above_the_cap_keeps_its_cover_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cover_above_cap_keeps_summary(monkeypatch: pytest.MonkeyPatch) -> None:
     """A picture past the payload cap still reads as a cover with its byte count."""
     monkeypatch.setattr(mp4_reader, "MAX_DATA_PAYLOAD_BYTES", SMALL_PAYLOAD_CAP)
 
@@ -78,7 +78,7 @@ def test_cover_above_the_cap_keeps_its_cover_summary(monkeypatch: pytest.MonkeyP
     assert values["covr"] == (f"<cover image/jpeg {COVER_BYTES} bytes>",)
 
 
-def test_long_integer_payload_reads_as_binary() -> None:
+def test_long_integer_payload_reads_binary() -> None:
     """An integer data atom longer than any iTunes integer reads as a binary summary."""
     short = item(b"tmpo", data_atom(SIGNED_INT, struct.pack(">H", 124)))
     long = item(b"plID", data_atom(SIGNED_INT, LONG_INTEGER))

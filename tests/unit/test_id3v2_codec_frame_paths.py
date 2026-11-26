@@ -26,13 +26,13 @@ V23_ENCRYPTED = b"\x00\x40"
 PLAIN_SIZE_WITH_TOP_BIT = 200
 
 
-def test_comm_frame_key_names_description_and_language() -> None:
+def test_comm_key_names_description_language() -> None:
     """A COMM key holds the description and the 3-byte language code."""
     frame = Id3Frame("COMM", b"\x01eng" + utf16("Energy") + b"\x00\x00" + utf16("7"))
     assert frame_key(frame) == "COMM:Energy:eng"
 
 
-def test_render_reencodes_v24_utf8_comment_as_utf16() -> None:
+def test_render_reencodes_utf8_comment_utf16() -> None:
     """A v2.4 UTF-8 COMM frame becomes UTF-16 with its language and description kept."""
     source = parse_id3v2(tag_bytes(4, v24_frame("COMM", b"\x03engMood\x00Warm d\xc3\xa9but\x00")))
     assert source is not None
@@ -53,7 +53,7 @@ def test_v23_compressed_grouped_frame_inflates() -> None:
     assert tag.frames == (Id3Frame("TIT2", plain),)
 
 
-def test_v23_encrypted_frame_is_dropped_and_named() -> None:
+def test_v23_encrypted_frame_dropped_named() -> None:
     """An encrypted v2.3 frame is not kept and appears in dropped_frames."""
     frames = v23_frame("PRIV", b"owner\x00\x80secret", V23_ENCRYPTED) + v23_frame(
         "TIT2", b"\x00Kept"
@@ -64,7 +64,7 @@ def test_v23_encrypted_frame_is_dropped_and_named() -> None:
     assert tag.dropped_frames == ("PRIV",)
 
 
-def test_v24_plain_size_with_top_bit_decodes() -> None:
+def test_v24_top_bit_size_decodes() -> None:
     """A v2.4 frame size stored as a plain integer with a top bit set still reads in full."""
     body = b"owner\x00" + bytes(PLAIN_SIZE_WITH_TOP_BIT - len(b"owner\x00"))
     raw = b"PRIV" + struct.pack(">I", PLAIN_SIZE_WITH_TOP_BIT) + b"\x00\x00" + body
@@ -74,7 +74,7 @@ def test_v24_plain_size_with_top_bit_decodes() -> None:
     assert decode_text_values(tag.frames[1]) == ["After"]
 
 
-def test_v22_unknown_frame_is_dropped_and_named() -> None:
+def test_v22_unknown_frame_dropped_named() -> None:
     """A v2.2 frame without a v2.3 equivalent is not kept and appears in dropped_frames."""
     tag = parse_id3v2(tag_bytes(2, v22_frame("XYZ", b"data") + v22_frame("TT2", b"\x00Title")))
     assert tag is not None
@@ -82,14 +82,14 @@ def test_v22_unknown_frame_is_dropped_and_named() -> None:
     assert tag.dropped_frames == ("XYZ",)
 
 
-def test_v22_picture_upgrades_to_apic_with_mime_type() -> None:
+def test_v22_picture_upgrades_to_apic() -> None:
     """A v2.2 PIC frame becomes APIC with the image format turned into a MIME type."""
     tag = parse_id3v2(tag_bytes(2, v22_frame("PIC", b"\x00JPG\x03Cover\x00jpegdata")))
     assert tag is not None
     assert tag.frames == (Id3Frame("APIC", b"\x00image/jpeg\x00\x03Cover\x00jpegdata"),)
 
 
-def test_remove_frames_drops_only_the_named_identifier() -> None:
+def test_remove_frames_drops_only_named() -> None:
     """remove_frames removes every frame of one identifier and keeps the others in order."""
     tag = Id3Tag(
         frames=(
@@ -107,7 +107,7 @@ def test_unknown_encoding_byte_raises() -> None:
         decode_text_values(Id3Frame("TIT2", b"\x07Title"))
 
 
-def test_v23_compressed_over_max_is_dropped() -> None:
+def test_v23_compressed_over_max_dropped() -> None:
     """A compressed frame whose decompressed size exceeds the maximum is dropped and named."""
     large_data = b"\x00" * (17 * 1024 * 1024)
     compressed = zlib.compress(large_data)
@@ -118,7 +118,7 @@ def test_v23_compressed_over_max_is_dropped() -> None:
     assert tag.dropped_frames == ("TIT2",)
 
 
-def test_truncated_language_frame_raises_format_error() -> None:
+def test_truncated_language_frame_raises() -> None:
     """A COMM frame body shorter than 4 bytes raises Id3FormatError on re-encoding."""
     tag = parse_id3v2(tag_bytes(4, v24_frame("COMM", b"\x03en")))
     assert tag is not None

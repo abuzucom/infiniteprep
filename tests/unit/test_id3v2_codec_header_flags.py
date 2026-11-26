@@ -13,7 +13,7 @@ V24_FLAG_FOOTER = 0x10
 TITLE_BODY = b"\x00Title \xff\xe0"
 
 
-def test_v22_compression_bit_drops_the_whole_tag() -> None:
+def test_v22_compression_bit_drops_tag() -> None:
     """Bit 6 of a v2.2 header marks compression, so the codec keeps no frames and says why."""
     tag = parse_id3v2(tag_bytes(2, v22_frame("TT2", TITLE_BODY), flags=V22_FLAG_COMPRESSION))
     assert tag is not None
@@ -21,7 +21,7 @@ def test_v22_compression_bit_drops_the_whole_tag() -> None:
     assert tag.dropped_frames == ("compressed ID3v2.2 tag",)
 
 
-def test_v22_unsync_bit_alone_keeps_frames() -> None:
+def test_v22_unsync_bit_keeps_frames() -> None:
     """Bit 7 of a v2.2 header is unsynchronisation, which the codec reverses and keeps."""
     frames = unsynchronise(v22_frame("TT2", TITLE_BODY))
     tag = parse_id3v2(tag_bytes(2, frames, flags=V22_FLAG_UNSYNC))
@@ -30,7 +30,7 @@ def test_v22_unsync_bit_alone_keeps_frames() -> None:
     assert tag.frames == (Id3Frame("TIT2", TITLE_BODY),)
 
 
-def test_v24_footer_stays_outside_the_frame_area() -> None:
+def test_v24_footer_outside_frame_area() -> None:
     """The v2.4 header size excludes the footer, so every frame parses and nothing drops."""
     frames = v24_frame("TIT2", b"\x03Title\x00") + v24_frame("TPE1", b"\x03Artist\x00")
     footer = b"3DI\x04\x00" + bytes((V24_FLAG_FOOTER,)) + synchsafe(len(frames))

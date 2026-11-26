@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
 """Shared decision logic for the shell gates.
 
-Not part of AGENTS.md, which stays tool-agnostic and is synced to non-Claude
-tools verbatim. This module holds everything the Bash, PowerShell, and CMD gates
+Not part of AGENTS.md. AGENTS.md stays independent of any one tool.
+Synchronization copies it unchanged to non-Claude tools. This module holds everything the Bash, PowerShell, and CMD gates
 decide identically, so the gates cannot drift: payload reading and field-type
 validation, the deny and ask emission, the ask-to-deny downgrade for an
 unattended session, root-target detection, and the whole git classification.
 
-Each gate keeps only what its shell spells differently: how a command
-tokenizes, where one statement ends, which wrappers and redirections lead a
-    command, and how a delete's flags are written. All gates call this module
-    for shared decisions.
+Each gate keeps only what its shell spells differently:
+- how a command splits into tokens
+- where one statement ends
+- the wrappers and redirections that lead a command
+- how a delete's flags are written
+
+All gates call this module for shared decisions.
 
 A hook run as `python3 .../hooks/<gate>.py` gets `hooks/` as `sys.path[0]`,
 so `import _gate_core` resolves with no packaging. A gate that cannot import
-this module must fail closed rather than crash, because Claude Code treats a
-non-zero exit other than 2 as a non-blocking error, which waves the command
-through.
+this module must fail closed instead of crashing. Claude Code treats a
+non-zero exit other than 2 as a non-blocking error. That error lets the
+command proceed.
 """
 import base64
 import binascii
@@ -27,6 +30,7 @@ import ntpath
 import os
 import posixpath
 import shlex
+import stat
 import subprocess
 import sys
 import threading
@@ -43,6 +47,11 @@ UNC_SHARE_ROOT_PARTS = 2
 DRIVE_ROOT_LENGTH = 2
 MAX_GIT_CONFIG_COUNT = 1000
 MAX_GIT_ALIAS_DEPTH = 10
+# The longest command text the shell parsers read. Both parsers import it.
+MAX_COMMAND_CHARACTERS = 65536
+# A worktree .git file holds "gitdir: <path>". PATH_MAX on Linux is 4096,
+# so a longer pointer cannot name a real directory.
+MAX_GITDIR_POINTER_CHARACTERS = 4096
 GITHUB_DOMAINS = frozenset({"github.com", "githubusercontent.com"})
 CONFIG_READ_TIMEOUT_SECONDS = 5
 CONFIG_READ_ENVIRONMENT = frozenset({
@@ -52,7 +61,7 @@ CONFIG_READ_ENVIRONMENT = frozenset({
     "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM",
 })
 GIT_SHORT_OPTION_VALUE_INDEX = 2
-# section.subsection.key, the only shape a driver name takes.
+# section.subsection.key is the shortest shape a driver name takes.
 GIT_CONFIG_SUBSECTION_PARTS = 3
 # Latin-1 renders as \\xNN; everything above it needs \\uNNNN.
 MAX_LATIN1_CODEPOINT = 0xFF
@@ -84,8 +93,8 @@ REPOSITORY_SEGMENT_COUNT = 2
 HOSTED_REPOSITORY_SEGMENT_COUNT = 3
 # The gh arguments follow the wrapper script path and the "run" word.
 TRUSTED_GH_ARGUMENT_OFFSET = 2
-# Directories whose removal takes the machine with them. These deny rather
-# than ask: putting "delete /etc?" in front of a person is not consent, it
+# Directories that take the machine with them on removal. These deny instead
+# of asking: putting "delete /etc?" in front of a person is not consent, it
 # is an invitation to a mistake nobody can undo.
 SYSTEM_ROOTS = frozenset({
     "/", "/bin", "/boot", "/dev", "/etc", "/home", "/lib", "/lib32",
@@ -231,7 +240,7 @@ def _push_operand_reason(token: str) -> str:
     """Return why a git push refspec needs consent, or an empty string.
 
     A refspec deletes or rewrites without carrying any flag: `+HEAD:main`
-    forces, and `:main` pushes an empty source, which deletes the remote ref.
+    forces. `:main` pushes an empty source that deletes the remote ref.
     """
     if token.startswith("+"):
         return "git push with a forced refspec: this rewrites pushed history"
@@ -247,15 +256,166 @@ def push_ask_reason(token: str, name: str) -> str:
     return _push_operand_reason(token)
 
 
-def push_verdict(args: list) -> tuple:
-    """Return (decision, reason) for a git push argument list."""
-    ask = ""
+TAG_PUSH_REASON = ("git push sending a tag: agents never create, push, move, "
+                   "or delete Git tags. The repository owner pushes release tags")
+TAG_REF_PREFIX = "refs/tags/"
+ASCII_DIGITS = "0123456789"
+
+
+def _names_version_tag(side: str) -> bool:
+    """Return True for one refspec side shaped like a vX release tag.
+
+    Release tags take the vX.Y.Z form. Ref names compare without case
+    because macOS and Windows ref storage ignores case. The tag namespace
+    check runs first and covers refs/tags/ and tags/ sides.
+    """
+    folded = side.casefold()
+    return folded[:1] == "v" and folded[1:2] != "" and folded[1:2] in ASCII_DIGITS
+
+
+TAG_SHORTHAND_PREFIX = "tags/"
+BRANCH_REF_PREFIX = "refs/heads/"
+PACKED_REFS_NAME = "packed-refs"
+REFTABLE_DIRECTORY = "reftable"
+MAX_PACKED_REFS_BYTES = 4 * 1024 * 1024
+UNRESOLVED_REF_REASON = ("git push names a ref the gate cannot resolve "
+                         "safely, so it cannot rule out a tag push")
+# git push options with a value that can arrive as the next token.
+PUSH_VALUE_OPTIONS = ("--push-option", "--receive-pack", "--exec", "--repo")
+
+
+def _push_flag_sends_tag(name: str) -> bool:
+    """Return True for a git push flag that sends tags."""
+    return (long_option_matches(name, "--tags")
+            or long_option_matches(name, "--follow-tags"))
+
+
+def _names_tag_namespace(side: str) -> bool:
+    """Return True for one refspec side spelled inside the tag namespace."""
+    folded = side.casefold()
+    return folded.startswith(TAG_REF_PREFIX) or folded.startswith(TAG_SHORTHAND_PREFIX)
+
+
+def _push_refspecs(args: list) -> list:
+    """Return the refspec operands of a git push, without the remote."""
+    operands, index, remote_named = [], 0, False
+    while index < len(args):
+        token = args[index]
+        name = token.split("=", 1)[0]
+        named_option = any(long_option_matches(name, option) for option in PUSH_VALUE_OPTIONS)
+        remote_named = remote_named or long_option_matches(name, "--repo")
+        if token == "-o" or (named_option and "=" not in token):
+            index += 1
+        elif not token.startswith("-"):
+            operands.append(token)
+        index += 1
+    return operands if remote_named else operands[1:]
+
+
+def _is_unsafe_ref_name(name: str) -> bool:
+    """Return True for a name that could leave the refs directory."""
+    return (name.startswith(("/", "\\")) or ":" in name
+            or ".." in name.replace("\\", "/").split("/"))
+
+
+def _read_packed_ref_names(common_dir: str):
+    """Return the ref names in packed-refs, or None when unreadable."""
+    path = os.path.join(common_dir, PACKED_REFS_NAME)
+    try:
+        with open(path, "rb") as handle:
+            raw = handle.read(MAX_PACKED_REFS_BYTES + 1)
+    except FileNotFoundError:
+        return frozenset()
+    except OSError:
+        return None
+    if len(raw) > MAX_PACKED_REFS_BYTES:
+        return None
+    try:
+        lines = raw.decode("utf-8").splitlines()
+    except UnicodeDecodeError:
+        return None
+    return frozenset(line.split(" ", 1)[1] for line in lines
+                     if " " in line and not line.startswith(("#", "^")))
+
+
+def _push_ref_store(args: list, cwd: str, environment: list) -> tuple:
+    """Return (common_dir, packed ref names) for a push, or (None, reason)."""
+    state, reason = _git_global_state(args, cwd, _git_environment(environment or []))
+    if state is None:
+        return None, reason
+    paths, reason = _repo_config_paths(state)
+    if paths is None:
+        return None, reason
+    common_dir = os.path.dirname(paths[0][0])
+    if os.path.exists(os.path.join(common_dir, REFTABLE_DIRECTORY)):
+        return None, "the repository uses a reftable ref store the gate cannot read"
+    packed = _read_packed_ref_names(common_dir)
+    if packed is None:
+        return None, "the repository packed-refs file could not be read"
+    return (common_dir, packed), ""
+
+
+def _ref_exists(store: tuple, ref: str) -> bool:
+    """Return True when a loose or packed ref with this name exists."""
+    common_dir, packed = store
+    return ref in packed or os.path.isfile(os.path.join(common_dir, *ref.split("/")))
+
+
+def _source_tag_verdict(source: str, store: tuple) -> str:
+    """Return deny, ask, or an empty verdict for one refspec source."""
+    if _is_unsafe_ref_name(source):
+        return "ask"
+    if _ref_exists(store, TAG_REF_PREFIX + source):
+        return "deny"
+    shaped = _names_version_tag(source)
+    return "deny" if shaped and not _ref_exists(store, BRANCH_REF_PREFIX + source) else ""
+
+
+def _refspec_tag_verdict(refspecs: list, store_reader) -> tuple:
+    """Return the strictest tag verdict across refspecs, reading refs once."""
+    store, ask = None, ""
+    for refspec in refspecs:
+        source, _separator, destination = refspec.removeprefix("+").partition(":")
+        if _names_tag_namespace(source) or _names_tag_namespace(destination):
+            return "deny", TAG_PUSH_REASON
+        if _names_version_tag(destination):
+            return "deny", TAG_PUSH_REASON
+        if not source:
+            continue
+        if store is None:
+            store, reason = store_reader()
+        if store is None:
+            return "ask", reason
+        verdict = _source_tag_verdict(source, store)
+        if verdict == "deny":
+            return "deny", TAG_PUSH_REASON
+        ask = ask or (UNRESOLVED_REF_REASON if verdict else "")
+    return ("ask", ask) if ask else ("", "")
+
+
+def push_verdict(args: list, cwd: str = "", global_args: list = None,
+                 environment: list = None) -> tuple:
+    """Return (decision, reason) for a git push argument list.
+
+    The gate checks a tag push first and denies it. A forced tag push therefore
+    denies instead of asking. `global_args` carries the git options before
+    the subcommand, so -C and --git-dir locate the ref store.
+    """
+    if any(token.startswith("-") and _push_flag_sends_tag(token.split("=", 1)[0])
+           for token in args):
+        return "deny", TAG_PUSH_REASON
+    tag_decision = _refspec_tag_verdict(
+        _push_refspecs(args),
+        lambda: _push_ref_store(global_args or [], cwd, environment))
+    if tag_decision[0] == "deny":
+        return tag_decision
+    ask = tag_decision[1]
     for token in args:
         name = token.split("=", 1)[0]
         if long_option_matches(name, "--force") or (is_short_group(token) and "f" in token):
-            # Asked rather than refused, at the user's direction. A refusal
+            # Asked and not refused, at the user's direction. A refusal
             # offers no way to consent, and the pushed-history rule is about
-            # consent rather than impossibility.
+            # consent instead of impossibility.
             return "ask", ("git push --force rewrites published history, so "
                            "anyone who has fetched this branch keeps commits "
                            "that no longer exist upstream")
@@ -265,6 +425,24 @@ def push_verdict(args: list) -> tuple:
 
 READ_SUBCOMMANDS = frozenset({"status", "diff", "log", "show", "blame",
                               "grep", "shortlog", "whatchanged"})
+PLAN_MODE = "plan"
+# Plan mode keeps these inspection-only subcommands open. Each one reads
+# objects, refs, or the index without writing any of them.
+PLAN_MODE_GIT_SUBCOMMANDS = READ_SUBCOMMANDS | frozenset({
+    "describe", "rev-parse", "rev-list", "ls-files", "ls-tree",
+    "check-attr", "show-ref", "version",
+})
+# Options that write files or run a program in any position. An inspection
+# subcommand with one of them leaves the inspection set.
+PLAN_MODE_DENIED_GIT_OPTIONS = frozenset({
+    "--output", "--output-directory", "-o", "-O", "--open-files-in-pager",
+    "--ext-diff", "--textconv",
+})
+# Global options before the subcommand that set config, a pager, or the
+# helper path. After the subcommand, `-p` and `-c` carry read meanings.
+PLAN_MODE_DENIED_GLOBAL_GIT_OPTIONS = frozenset({
+    "-c", "--config-env", "-p", "--paginate", "--exec-path",
+})
 
 
 KNOWN_SUBCOMMANDS = frozenset({
@@ -272,15 +450,48 @@ KNOWN_SUBCOMMANDS = frozenset({
     "switch", "restore", "merge", "fetch", "pull", "clone", "branch", "tag",
     "remote", "stash", "config", "init", "rm", "mv", "cherry-pick", "revert",
     "bisect", "worktree", "submodule", "describe", "rev-parse", "ls-files",
-    "clean",
+    "clean", "filter-repo",
     "cat-file", "hash-object", "check-attr", "replace", "update-index",
     "apply", "am", "format-patch", "archive", "gc", "reflog", "notes",
 }) | READ_SUBCOMMANDS
 
 
-def _git_alias_verdict(subcommand: str, rest: list, cwd: str) -> tuple:
-    """Return (decision, reason) for a subcommand git does not define."""
-    expansion = resolve_alias(cwd, subcommand)
+ALIAS_CYCLE = "cycle"
+ALIAS_DEPTH = "depth"
+
+
+def expand_git_alias(subcommand: str, entries: dict, chain: tuple = ()) -> tuple:
+    """Return (expansion, problem) for one git alias step.
+
+    git matches alias names without regard to case, so the lookup does too.
+    `chain` holds the lowercased aliases already expanded. An empty
+    expansion means `subcommand` names no alias. `problem` is ALIAS_CYCLE or
+    ALIAS_DEPTH when the expansion must stop, and empty otherwise. Every
+    alias resolver in the gates shares this step and its limits.
+    """
+    if len(chain) >= MAX_GIT_ALIAS_DEPTH:
+        return "", ALIAS_DEPTH
+    name = subcommand.lower()
+    if name in chain:
+        return "", ALIAS_CYCLE
+    return (entries or {}).get(f"alias.{name}", ""), ""
+
+
+def _git_alias_verdict(subcommand: str, rest: list, cwd: str,
+                       alias_chain: tuple = ()) -> tuple:
+    """Return (decision, reason) for a subcommand git does not define.
+
+    `alias_chain` holds the aliases already expanded. git refuses to run a
+    cyclic alias, so a cycle or an over-deep chain denies instead of asking.
+    """
+    expansion, problem = expand_git_alias(
+        subcommand, parse_git_config(cwd), alias_chain)
+    if problem == ALIAS_CYCLE:
+        return "deny", (f"git alias {sanitize(subcommand)} expands into a "
+                        "cycle, which git refuses to run")
+    if problem == ALIAS_DEPTH:
+        return "deny", (f"git alias expansion exceeds the {MAX_GIT_ALIAS_DEPTH}"
+                        "-alias inspection limit")
     if not expansion:
         return "ask", (f"git {sanitize(subcommand)}: not a git subcommand "
                        "and not a declared alias, so the gate cannot tell "
@@ -289,11 +500,13 @@ def _git_alias_verdict(subcommand: str, rest: list, cwd: str) -> tuple:
         # A shell alias. Classify the text; never expand or run it.
         return "ask", (f"git {sanitize(subcommand)} is a shell alias, "
                        "which the gate cannot read as a git command")
-    return git_verdict(expansion.split() + rest, cwd)
+    return git_verdict(expansion.split() + rest, cwd,
+                       alias_chain=alias_chain + (subcommand.lower(),))
 
 
 def _git_resolution_verdict(subcommand: str, rest: list, args: list,
-                            cwd: str, environment: list) -> tuple:
+                            cwd: str, environment: list,
+                            alias_chain: tuple = ()) -> tuple:
     """Return a verdict for a subcommand needing resolution, else None.
 
     None means git defines the subcommand and it is not a read, so the
@@ -306,7 +519,7 @@ def _git_resolution_verdict(subcommand: str, rest: list, args: list,
         return git_read_verdict(args, cwd, environment)
     if subcommand in KNOWN_SUBCOMMANDS:
         return None
-    return _git_alias_verdict(subcommand, rest, cwd)
+    return _git_alias_verdict(subcommand, rest, cwd, alias_chain)
 
 
 def _git_branch_verdict(rest: list) -> tuple:
@@ -334,6 +547,72 @@ def _git_clean_verdict(rest: list) -> tuple:
                    "decided at run time")
 
 
+TAG_WRITE_REASON = ("git tag creating, signing, forcing, or deleting a tag: "
+                    "agents never create, move, or delete Git tags")
+# Short flags that make git tag write: annotate, delete, force, file,
+# message, sign, local user, and edit.
+TAG_WRITE_SHORT_FLAGS = frozenset("adfFmsue")
+TAG_WRITE_LONG_OPTIONS = ("--annotate", "--delete", "--force", "--file",
+                          "--message", "--sign", "--local-user", "--edit",
+                          "--create-reflog")
+TAG_READ_MODE_SHORT_FLAGS = frozenset("lvn")
+# git treats each commit filter as implying --list.
+TAG_READ_MODE_LONG_OPTIONS = ("--list", "--verify", "--contains", "--no-contains",
+                              "--points-at", "--merged", "--no-merged")
+# Read filters with a value that can arrive as the next token.
+TAG_VALUE_OPTIONS = ("--contains", "--no-contains", "--points-at", "--merged",
+                     "--no-merged", "--sort", "--format")
+
+
+def _is_tag_write_flag(token: str) -> bool:
+    """Return True for one git tag flag that writes a tag."""
+    if is_short_group(token):
+        return any(flag in TAG_WRITE_SHORT_FLAGS for flag in token[1:])
+    return any(long_option_matches(token, option) for option in TAG_WRITE_LONG_OPTIONS)
+
+
+def _is_tag_read_mode_flag(token: str) -> bool:
+    """Return True for one git tag flag that selects listing or verifying."""
+    if is_short_group(token):
+        return token[1] in TAG_READ_MODE_SHORT_FLAGS
+    return any(long_option_matches(token, option) for option in TAG_READ_MODE_LONG_OPTIONS)
+
+
+def _takes_separate_value(token: str) -> bool:
+    """Return True for a git tag read filter that takes the next token as its value."""
+    return "=" not in token and any(
+        long_option_matches(token, option) for option in TAG_VALUE_OPTIONS)
+
+
+def _split_tag_arguments(rest: list) -> tuple:
+    """Return the flags and the operands of a git tag argument list."""
+    flags, operands = [], []
+    index = 0
+    while index < len(rest):
+        token = rest[index]
+        if not token.startswith("-"):
+            operands.append(token)
+        else:
+            flags.append(token)
+            index += 1 if _takes_separate_value(token) else 0
+        index += 1
+    return flags, operands
+
+
+def _git_tag_verdict(rest: list) -> tuple:
+    """Return (decision, reason) for a git tag argument list.
+
+    Listing and verifying pass. A name operand without a listing flag
+    creates a tag, so it denies like an explicit write flag.
+    """
+    flags, operands = _split_tag_arguments(rest)
+    if any(_is_tag_write_flag(flag) for flag in flags):
+        return "deny", TAG_WRITE_REASON
+    if operands and not any(_is_tag_read_mode_flag(flag) for flag in flags):
+        return "deny", TAG_WRITE_REASON
+    return "", ""
+
+
 def _git_flag_verdict(subcommand: str, rest: list) -> tuple:
     """Return (decision, reason) for the subcommands one flag decides."""
     if subcommand == "reset" and any(
@@ -347,23 +626,34 @@ def _git_flag_verdict(subcommand: str, rest: list) -> tuple:
     return "", ""
 
 
-# Subcommands whose whole argument list decides the verdict, rather than
-# one flag. push stays out: it runs before the alias check below.
+# Subcommands where the whole argument list decides the verdict. One flag
+# alone does not decide it. push stays out: it runs before the alias check below.
 GIT_SUBCOMMAND_READERS = {
     "branch": _git_branch_verdict,
     "clean": _git_clean_verdict,
+    "tag": _git_tag_verdict,
 }
 
 
-def git_verdict(args: list, cwd: str = "", environment: list = None) -> tuple:
-    """Return (decision, reason) for a git argument list."""
+def git_verdict(args: list, cwd: str = "", environment: list = None,
+                alias_chain: tuple = ()) -> tuple:
+    """Return (decision, reason) for a git argument list.
+
+    `alias_chain` carries the aliases expanded so far. Only alias
+    expansion sets it.
+    """
     subcommand, rest = git_subcommand(args)
+    # update-ref is not a known subcommand, so other forms keep the
+    # unresolved-subcommand ask. A tag ref operand denies outright.
+    if subcommand == "update-ref" and any(
+            token.casefold().startswith(TAG_REF_PREFIX) for token in rest):
+        return "deny", TAG_WRITE_REASON
     resolved = _git_resolution_verdict(
-        subcommand, rest, args, cwd, environment or [])
+        subcommand, rest, args, cwd, environment or [], alias_chain)
     if resolved is not None:
         return resolved
     if subcommand == "push":
-        return push_verdict(rest)
+        return push_verdict(rest, cwd, args, environment)
     alias_decision = alias_verdict("git", [subcommand] + rest)
     if alias_decision[0]:
         return alias_decision
@@ -373,11 +663,71 @@ def git_verdict(args: list, cwd: str = "", environment: list = None) -> tuple:
     return _git_flag_verdict(subcommand, rest)
 
 
-def unparseable_verdict(command: str, keywords: tuple) -> tuple:
-    """Fail closed when a command naming one of `keywords` will not tokenize.
+def plan_mode_git_verdict(mode: str, args: list, cwd: str = "",
+                          environment: list = None, base: tuple = ("", "")) -> tuple:
+    """Return the final (decision, reason) for a git command under `mode`.
 
-    A command the gate cannot parse but which names a drive root or a
-    system directory denies rather than asks. `rm -rf C:\\` ends in an
+    `base` holds the gate's ordinary git verdict. Every mode except plan
+    returns it unchanged. Plan mode permits inspection only:
+
+    - A git subcommand outside the inspection set denies. A plan-mode
+      session therefore cannot rename a branch, commit, or push.
+    - Each allowed subcommand outside READ_SUBCOMMANDS gets the same
+      config and environment check that `git_read_verdict` gives reads.
+    - An ask denies. An approved ask would still run the named program.
+
+    A bare `git --version` names no subcommand and stays open.
+    """
+    if mode != PLAN_MODE:
+        return base
+    rule = _plan_mode_git_rule(args)
+    if rule[0]:
+        return rule
+    subcommand, _rest = git_subcommand(args)
+    merged = base
+    if subcommand and subcommand.casefold() not in READ_SUBCOMMANDS:
+        merged = strongest(base, git_read_verdict(args, cwd, environment or []))
+    if merged[0] == "ask":
+        return "deny", f"{merged[1]}. Plan mode permits inspection only"
+    return merged
+
+
+def _plan_mode_git_rule(args: list) -> tuple:
+    """Return a plan-mode deny for an unsafe option or a write subcommand."""
+    subcommand, rest = git_subcommand(args)
+    global_options = args[:len(args) - len(rest) - 1] if subcommand else args
+    unsafe = _plan_mode_unsafe_option(global_options, PLAN_MODE_DENIED_GLOBAL_GIT_OPTIONS)
+    unsafe = unsafe or _plan_mode_unsafe_option(args, PLAN_MODE_DENIED_GIT_OPTIONS)
+    if unsafe:
+        return "deny", (f"git option {sanitize(unsafe)} writes files or runs a program. "
+                        "Plan mode permits inspection only")
+    if not subcommand or subcommand.casefold() in PLAN_MODE_GIT_SUBCOMMANDS:
+        return "", ""
+    return "deny", (f"git {sanitize(subcommand)} writes repository state. Plan "
+                    "mode permits inspection only")
+
+
+def _plan_mode_unsafe_option(tokens: list, denied: frozenset) -> str:
+    """Return the first token that names an option in `denied`, or an empty string.
+
+    A long option matches with or without an `=value` suffix. A short option
+    also matches with its value attached, such as `-Ocat`.
+    """
+    for token in tokens:
+        name = token.split("=", 1)[0]
+        if name in denied:
+            return name
+        short = token[:SHORT_OPTION_LENGTH]
+        if not token.startswith("--") and short in denied:
+            return short
+    return ""
+
+
+def unparseable_verdict(command: str, keywords: tuple) -> tuple:
+    """Fail closed when a command naming one of `keywords` will not split into tokens.
+
+    An unparseable command that names a drive root or a
+    system directory denies instead of asking. `rm -rf C:\\` ends in an
     unterminated escape, and no reading of it is one to put to a person.
     """
     if not any(keyword in command for keyword in keywords):
@@ -398,8 +748,8 @@ def unparseable_verdict(command: str, keywords: tuple) -> tuple:
 def read_payload(empty_is_session_start: bool = False):
     """Return the stdin payload, or None when it cannot be parsed.
 
-    `empty_is_session_start` yields an empty dict for empty stdin, which
-    is how a SessionStart invocation arrives. Without it that hook would
+    `empty_is_session_start` yields an empty dict for empty stdin. A
+    SessionStart event arrives that way. Without it that hook would
     deny every session start. A gate that answers "fine" to input it
     could not read is worse than no gate, so anything else that will not
     parse is still None.
@@ -417,9 +767,28 @@ def read_payload(empty_is_session_start: bool = False):
     return parsed if isinstance(parsed, dict) else None
 
 
-def emit(gate: str, decision: str, reason: str) -> int:
-    """Print the gate's decision and return the exit code it needs."""
-    message = f"blocked by hooks/{gate}: {reason}"
+# Every deny ends with one fixed line so an agent stops and reports
+# instead of improvising a variant or a gate change (issue #102).
+DENIAL_RESPONSE = ("Stop. Report this denial to the active human. "
+                   "Do not retry a variant or propose a gate change.")
+
+
+def with_denial_response(message: str) -> str:
+    """Return a deny message that ends with the fixed agent response."""
+    text = message.rstrip()
+    if not text.endswith("."):
+        text += "."
+    return f"{text} {DENIAL_RESPONSE}"
+
+
+def emit(gate: str, decision: str, reason: str, prefix: str = "blocked by") -> int:
+    """Print the gate's decision and return the exit code it needs.
+
+    `prefix` opens the message. The consent gate passes "gated by".
+    """
+    message = f"{prefix} hooks/{gate}: {reason}"
+    if decision == "deny":
+        message = with_denial_response(message)
     output = {
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -434,14 +803,61 @@ def emit(gate: str, decision: str, reason: str) -> int:
     return 0
 
 
-def decide(gate: str, payload: dict, decision: str, reason: str) -> int:
+def decide(gate: str, payload: dict, decision: str, reason: str,
+           prefix: str = "blocked by") -> int:
     """Emit the decision, turning an ask nobody can answer into a deny."""
     if decision == "deny":
-        return emit(gate, "deny", reason)
+        return emit(gate, "deny", reason, prefix)
     if require_str(payload.get("permission_mode")) in INTERACTIVE_MODES:
-        return emit(gate, "ask", reason)
-    return emit(gate, "deny", f"{reason}. No interactive session is available "
-                              f"to consent (permission_mode {mode_label(payload)}).")
+        return emit(gate, "ask", reason, prefix)
+    sentence = reason.rstrip()
+    if not sentence.endswith("."):
+        sentence += "."
+    return emit(gate, "deny", f"{sentence} No interactive session is available "
+                              f"to consent (permission_mode {mode_label(payload)}).",
+                prefix)
+
+
+def emit_context(event: str, text: str) -> int:
+    """Print `text` as session context for `event` and return 0.
+
+    The same text goes to the model as additional context and to the
+    person as a system message.
+    """
+    print(json.dumps({
+        "hookSpecificOutput": {"hookEventName": event, "additionalContext": text},
+        "systemMessage": text,
+    }))
+    return 0
+
+
+def blocked_command(command: str, project_dir: str = "") -> list:
+    """Return every effective or ambiguous Git write context in `command`.
+
+    The parser loads here and not at module level. Scripts load this
+    core by path without the hooks directory on sys.path, and every hook
+    that calls this function has already imported the parser.
+    """
+    import _bash_parser
+    return _bash_parser.git_write_operation(command, git_write_context, project_dir)
+
+
+def write_content(tool_input: dict, cap: int = None) -> str:
+    """Return every text a file-tool write would add, joined by spaces.
+
+    `cap` trims each value to that many characters when given.
+    """
+    values = []
+    for key in ("content", "new_string", "new_source"):
+        value = tool_input.get(key)
+        if isinstance(value, str):
+            values.append(value[:cap])
+    edits = tool_input.get("edits")
+    if isinstance(edits, list):
+        for edit in edits:
+            if isinstance(edit, dict) and isinstance(edit.get("new_string"), str):
+                values.append(edit["new_string"][:cap])
+    return " ".join(values)
 
 
 MAX_REASON_VALUE = 160
@@ -452,7 +868,7 @@ def mode_label(payload: dict) -> str:
 
     INTERACTIVE_MODES is a fixed list, so an interactive mode Claude Code
     adds later denies here. Naming the value is what separates that from a
-    genuinely unattended session, which otherwise read identically.
+    session with no human present. The two otherwise read identically.
     """
     mode = require_str(payload.get("permission_mode"))
     return sanitize(mode) if mode is not None else "absent"
@@ -515,7 +931,7 @@ CMD_TREE_DELETE_FLAGS = {
 }
 WINDOWS_COMMAND_SUFFIXES = (".exe", ".com", ".bat", ".cmd", ".ps1")
 # The shells reach each other through interpreters, so each gate has to
-# read a delete spelled the other way. The readings live here rather than in
+# read a delete spelled the other way. This module holds the readings instead of
 # a gate, so neither can learn a spelling the other does not.
 POSIX_DELETE_PROGRAMS = frozenset({"rm"})
 POWERSHELL_DELETE_PROGRAMS = frozenset({"remove-item", "ri", "remove-itemproperty"})
@@ -560,7 +976,7 @@ def any_delete_verdict(program: str, args: list) -> tuple:
 
     rd, rmdir, del, and erase name both a Remove-Item alias and a CMD verb,
     and the three shells spell recursion differently (-r against -Recurse
-    against /s). Take whichever reading is strongest rather than guessing
+    against /s). Take whichever reading is strongest instead of guessing
     which shell the caller meant, because guessing wrong clears the act.
     """
     return strongest(posix_delete_verdict(args),
@@ -629,7 +1045,7 @@ INFRASTRUCTURE_PATH_MARKERS = (
     "/.terraform.d/",
     "/etc/ssh/",
     # Process environments and developer credential stores hold the same
-    # tokens an agent must never read into its context.
+    # tokens an agent must keep out of its context.
     "/.config/gh/", "/github cli/",
     "/.git-credentials/", "/.docker/config.json/",
 )
@@ -640,9 +1056,15 @@ KUBERNETES_FILENAMES = frozenset({
     "chart.yaml", "chart.yml", "helmfile.yaml", "helmfile.yml",
     "kustomization.yaml", "kustomization.yml", "values.yaml", "values.yml",
 })
+KUBERNETES_VALUE_PREFIXES = ("values-", "values.")
+KUBERNETES_VALUE_SUFFIXES = (".yaml", ".yml")
 INFRASTRUCTURE_SCAN_SKIP = frozenset({".git", ".venv", "node_modules", "__pycache__"})
 MAX_INFRASTRUCTURE_FILE_BYTES = 65536
 MAX_INFRASTRUCTURE_SCAN_FILES = 20000
+SCAN_CLEAR = "clear"
+SCAN_PROTECTED = "protected"
+SCAN_LIMIT = "limit"
+SCAN_UNREADABLE = "unreadable"
 
 
 def _account_delete_command(name: str, args: list) -> bool:
@@ -813,7 +1235,13 @@ def prohibited_command_verdict(program: str, args: list) -> tuple:
 
 
 def _infrastructure_manifest_text(path: str) -> str:
-    """Return a bounded manifest prefix without exposing it to the caller."""
+    """Return a bounded manifest prefix without exposing it to the caller.
+
+    The gate reads the file on every check, so a file that another process
+    replaces within one hook run reaches the gate with its current
+    content. A cached prefix would classify the file by content that the
+    file no longer holds.
+    """
     try:
         details = os.stat(path)
         if not os.path.isfile(path) or details.st_size > MAX_INFRASTRUCTURE_FILE_BYTES:
@@ -836,6 +1264,17 @@ def strip_windows_drive(normalized: str) -> str:
     return normalized[SLASH_DRIVE_PREFIX_LENGTH:] if has_drive else normalized
 
 
+def _is_kubernetes_values_file(basename: str) -> bool:
+    """Return whether a file name is a Helm values file.
+
+    A Helm values file carries a YAML extension. The name alone must not
+    reach the protected set. A source file named `values.ts` carries no
+    Kubernetes configuration.
+    """
+    return (basename.startswith(KUBERNETES_VALUE_PREFIXES)
+            and basename.endswith(KUBERNETES_VALUE_SUFFIXES))
+
+
 def is_protected_infrastructure_path(path: str, cwd: str = "", content: str = "") -> bool:
     """Return whether a path reaches protected infrastructure configuration."""
     candidate = path.strip().strip('"').strip("'")
@@ -853,7 +1292,7 @@ def is_protected_infrastructure_path(path: str, cwd: str = "", content: str = ""
         return True
     if any(marker in padded for marker in KUBERNETES_DIRECTORY_MARKERS):
         return True
-    if basename in KUBERNETES_FILENAMES or basename.startswith(("values-", "values.")):
+    if basename in KUBERNETES_FILENAMES or _is_kubernetes_values_file(basename):
         return True
     terraform_suffixes = (".tf", ".tf.json", ".tfvars", ".tfvars.json")
     if basename.endswith(terraform_suffixes):
@@ -876,26 +1315,74 @@ def is_protected_infrastructure_path(path: str, cwd: str = "", content: str = ""
     return False
 
 
-def tree_contains_protected_infrastructure(root: str, include: str = "") -> bool:
-    """Return whether a bounded search root contains protected files."""
+def _scan_filenames(root: str, current: str, filenames: list,
+                    include: str, seen: int) -> tuple:
+    """Return (status, files seen) after scanning one directory's files."""
+    for filename in filenames:
+        seen += 1
+        if seen > MAX_INFRASTRUCTURE_SCAN_FILES:
+            return SCAN_LIMIT, seen
+        candidate = os.path.join(current, filename)
+        relative = os.path.relpath(candidate, root).replace("\\", "/")
+        matches = (not include or fnmatch.fnmatch(relative, include)
+                   or fnmatch.fnmatch(filename, include))
+        if matches and is_protected_infrastructure_path(candidate, root):
+            return SCAN_PROTECTED, seen
+    return SCAN_CLEAR, seen
+
+
+def _raise_walk_error(error: OSError) -> None:
+    """Re-raise a directory listing failure so the scan reports it."""
+    raise error
+
+
+@lru_cache(maxsize=None)
+def infrastructure_scan_status(root: str, include: str = "") -> str:
+    """Return how a bounded scan of `root` ended.
+
+    The result is SCAN_CLEAR, SCAN_PROTECTED, SCAN_LIMIT, or
+    SCAN_UNREADABLE. Only SCAN_CLEAR proves the tree holds no protected
+    file. The cache lasts one hook run: each hook main calls
+    reset_invocation_caches() first.
+    """
+    # A missing path or a single file holds no tree to walk. Callers check
+    # that path itself before scanning.
+    if not os.path.isdir(root):
+        return SCAN_CLEAR
     seen = 0
     try:
-        for current, directories, filenames in os.walk(root):
+        # os.walk skips a directory it cannot list unless onerror raises.
+        # A skipped directory could hide protected files, so it fails closed.
+        for current, directories, filenames in os.walk(root, onerror=_raise_walk_error):
             directories[:] = [name for name in directories
                                if name not in INFRASTRUCTURE_SCAN_SKIP]
-            for filename in filenames:
-                seen += 1
-                if seen > MAX_INFRASTRUCTURE_SCAN_FILES:
-                    return True
-                candidate = os.path.join(current, filename)
-                relative = os.path.relpath(candidate, root).replace("\\", "/")
-                matches = (not include or fnmatch.fnmatch(relative, include)
-                           or fnmatch.fnmatch(filename, include))
-                if matches and is_protected_infrastructure_path(candidate, root):
-                    return True
+            status, seen = _scan_filenames(root, current, filenames, include, seen)
+            if status != SCAN_CLEAR:
+                return status
     except OSError:
-        return True
-    return False
+        return SCAN_UNREADABLE
+    return SCAN_CLEAR
+
+
+def tree_contains_protected_infrastructure(root: str, include: str = "") -> bool:
+    """Return whether a bounded search root may contain protected files.
+
+    An incomplete scan counts as protected, so every caller fails closed.
+    """
+    return infrastructure_scan_status(root, include) != SCAN_CLEAR
+
+
+def infrastructure_scan_reason(status: str) -> str:
+    """Return the deny reason for a scan status, or an empty string when clear."""
+    if status == SCAN_LIMIT:
+        return (f"a broad search root holds more than {MAX_INFRASTRUCTURE_SCAN_FILES} "
+                "files, too many to clear. Narrow the search root or the include pattern")
+    if status == SCAN_UNREADABLE:
+        return ("a broad search root could not be read in full. Check its "
+                "permissions or search a readable root")
+    if status == SCAN_PROTECTED:
+        return "a broad search includes protected infrastructure files"
+    return ""
 
 
 def infrastructure_path_verdict(program: str, args: list,
@@ -907,12 +1394,13 @@ def infrastructure_path_verdict(program: str, args: list,
         return "deny", "infrastructure credentials and configuration are protected"
     name = normalize_windows_command_name(program)
     broad_readers = {"dir", "find", "get-childitem", "grep", "ls", "rg"}
-    if name in broad_readers:
-        roots = [token for token in args if not token.startswith("-")]
-        if any(token in {".", "./", ".\\"} and
-               tree_contains_protected_infrastructure(cwd) for token in roots):
-            return "deny", "a broad search includes protected infrastructure files"
-    return "", ""
+    if name not in broad_readers:
+        return "", ""
+    roots = [token for token in args if not token.startswith("-")]
+    if not any(token in {".", "./", ".\\"} for token in roots):
+        return "", ""
+    reason = infrastructure_scan_reason(infrastructure_scan_status(cwd))
+    return ("deny", reason) if reason else ("", "")
 
 
 def decode_powershell_command(value: str) -> tuple:
@@ -1136,16 +1624,13 @@ def _powershell_cli_policy(name: str, args: list) -> tuple:
         return (("deny", "event log modification removes security evidence")
                 if lowered and lowered[0] in {"cl", "clear-log", "sl", "set-log"}
                 else ("", ""))
+    # PROHIBITED_COMMANDS denies both names in every shell, read-only forms
+    # included. This layer denies as well, so no path that skips the
+    # prohibited check can treat them as allowed.
     if name == "manage-bde":
-        if lowered and all(token == "-status" or token.startswith("-") is False
-                           for token in lowered):
-            return "", ""
-        return "deny", "BitLocker modification changes storage protection"
+        return "deny", "manage-bde administers BitLocker storage protection, which agents may not run"
     if name == "bcdedit":
-        markers = {"/set", "/delete", "/deletevalue", "/create", "/copy",
-                   "/import", "/export", "/sysstore"}
-        return (("deny", "boot policy modification changes host security")
-                if markers.intersection(lowered) else ("", ""))
+        return "deny", "bcdedit reads or changes boot policy, which agents may not run"
     if name == "secedit":
         if any(token in {"/configure", "/import", "/export"} for token in lowered):
             return "deny", "local security policy modification changes host controls"
@@ -1167,7 +1652,7 @@ def _powershell_cli_policy(name: str, args: list) -> tuple:
 
 
 def _powershell_path_policy(name: str, args: list, redirects: list) -> tuple:
-    """Classify file operations from path properties rather than basenames."""
+    """Classify file operations from path properties instead of basenames."""
     if name not in POWERSHELL_FILE_WRITERS:
         return "", ""
     targets = _known_write_targets(name, args, redirects)
@@ -1353,7 +1838,7 @@ TEST_NAME_SUFFIXES = (
     ".spec.mjs", ".spec.ts", ".spec.tsx", ".test.cjs", ".test.js",
     ".test.jsx", ".test.mjs", ".test.ts", ".test.tsx",
 )
-# Commands whose named operand is a file they overwrite in place.
+# Commands that overwrite the named operand file in place.
 WRITE_PROGRAMS = {
     "tee": 0, "sed": -1, "cp": -1, "mv": -1,
     "set-content": 0, "sc": 0, "add-content": 0, "ac": 0,
@@ -1392,6 +1877,7 @@ POWERSHELL_WRITE_PARAMETERS = {
 }
 PROTECTED_PATH_PARTS = frozenset({
     "hooks", ".claude", "scripts", ".agents", ".codex", ".gemini", ".git",
+    "skills",
 })
 # The canonical policy, its synced copies, and supporting policy documents
 # load as agent instructions.
@@ -1450,25 +1936,43 @@ def test_write_verdict(program: str, args: list, redirect_targets: list) -> tupl
     return "", ""
 
 
-def _powershell_write_operands(name: str, args: list) -> tuple:
-    """Return named targets and unused positional write operands."""
+def _parameter_values(group: list, groups: list, index: int) -> tuple:
+    """Return (values, next index) for a write parameter at `index`.
+
+    An attached `-Path:value` keeps the rest of its comma group. A bare
+    flag takes the whole next group. A bare flag that heads an array has no
+    readable value, so it raises ValueError.
+    """
+    _flag, separator, attached = group[0].partition(":")
+    if separator:
+        return [attached, *group[1:]], index
+    if len(group) > 1:
+        raise ValueError("PowerShell parameter array requires an explicit value")
+    if index + 1 < len(groups):
+        return list(groups[index + 1]), index + 1
+    return [], index
+
+
+def powershell_write_groups(name: str, groups: list, keep_empty: bool = False) -> tuple:
+    """Return named targets and positional operand groups for a write cmdlet.
+
+    `groups` holds comma-joined argument arrays, one list per argument. A
+    scalar caller passes one-element groups. `keep_empty` keeps an empty
+    value as an empty target. The branch gate treats it as unresolvable.
+    The shell gates drop empty values.
+    """
     targets = []
     operands = []
     index = 0
-    while index < len(args):
-        token = args[index]
-        flag, separator, attached = token.lower().partition(":")
-        parameter = _powershell_write_parameter(name, flag)
+    while index < len(groups):
+        group = groups[index]
+        parameter = _powershell_write_parameter(name, group[0].partition(":")[0].lower())
         if parameter:
-            value = attached if separator else ""
-            if not separator and index + 1 < len(args):
-                index += 1
-                value = args[index]
-            _canonical, _minimum, names_target = parameter
-            if names_target and value:
-                targets.append(value)
-        elif not token.startswith("-"):
-            operands.append(token)
+            values, index = _parameter_values(group, groups, index)
+            if parameter[2]:
+                targets.extend(value for value in values if keep_empty or value)
+        elif not group[0].startswith("-"):
+            operands.append(group)
         index += 1
     return targets, operands
 
@@ -1497,10 +2001,10 @@ def _known_write_targets(program: str, args: list, redirects: list) -> list:
     position = WRITE_PROGRAMS.get(name)
     if position is None:
         return targets
-    named_targets, operands = _powershell_write_operands(name, args)
+    named_targets, operands = powershell_write_groups(name, [[token] for token in args])
     targets.extend(named_targets)
     if operands:
-        targets.append(operands[position])
+        targets.extend(operands[position])
     return targets
 
 
@@ -1525,17 +2029,21 @@ def _protected_path(path: str, cwd: str) -> bool:
 
 def protected_write_verdict(program: str, args: list,
                             redirects: list, cwd: str) -> tuple:
-    """Gate known shell writes to repository-controlled hook files."""
+    """Gate known shell writes to hook files that repository writers control."""
     for target in _known_write_targets(program, args, redirects):
         if _protected_path(target, cwd):
             return "ask", ("a known shell write to gate files, .git/, or agent "
-                           "policy. These prompts are best-effort workflow checks")
+                           "policy. These prompts are workflow checks and not "
+                           "a security boundary")
     return "", ""
 
 
 MAX_CONFIG_BYTES = 256 * 1024
 MAX_REPO_DISCOVERY_DEPTH = 100
-# Keys whose value names a program git runs during an ordinary read.
+DOT_GIT_PRESENT = "present"
+DOT_GIT_ABSENT = "absent"
+DOT_GIT_UNREADABLE = "unreadable"
+# Keys with a value naming a program git runs during an ordinary read.
 EXEC_CAPABLE_KEYS = frozenset({
     "core.fsmonitor", "core.pager", "core.editor", "core.sshcommand",
     "core.hookspath", "core.alternaterefscommand", "core.askpass",
@@ -1578,7 +2086,7 @@ def _parse_git_config_path(path: str):
 
     The file is read, never queried through `git config`: running git to
     decide whether running git is safe is the bug this exists to close.
-    Format is git's own, which configparser does not implement.
+    Format is git's own. configparser does not implement it.
     """
     raw = _read_config_path(path)
     if raw is None:
@@ -1631,7 +2139,9 @@ def _exec_capable_key(entries: dict) -> str:
                 and name.endswith(".path") and value):
             return name
         parts = name.split(".")
-        if (len(parts) == GIT_CONFIG_SUBSECTION_PARTS
+        # A subsection may hold dots (filter.a.b.clean), so read the
+        # section and the final key instead of a fixed part count.
+        if (len(parts) >= GIT_CONFIG_SUBSECTION_PARTS
                 and parts[-1] in EXEC_CAPABLE_SUBSECTIONS.get(parts[0], ())
                 and value.lower() not in ("", "false", "0")):
             return name
@@ -1737,7 +2247,7 @@ def _apply_git_global_argument(args: list, index: int, state: dict) -> tuple:
 
 
 def _git_global_state(args: list, cwd: str, environment: dict = None) -> tuple:
-    """Return invocation settings and repository location, or an error."""
+    """Return per-run settings and repository location, or an error."""
     environment = environment or {}
     state = {
         "settings": [],
@@ -1761,11 +2271,15 @@ def _read_gitdir_pointer(path: str, marker: str):
     """Return a path stored in a small git administrative pointer file."""
     try:
         with open(path, encoding="utf-8") as handle:
-            raw = handle.read(MAX_REASON_VALUE).strip()
+            raw = handle.read(MAX_GITDIR_POINTER_CHARACTERS + 1)
     except FileNotFoundError:
         return ""
     except (OSError, UnicodeDecodeError):
         return None
+    if len(raw) > MAX_GITDIR_POINTER_CHARACTERS:
+        # A truncated path would name some other directory, so refuse it.
+        return None
+    raw = raw.strip()
     if marker:
         name, separator, raw = raw.partition(":")
         if name.strip().lower() != marker or not separator:
@@ -1787,6 +2301,21 @@ def _parent_repository_dir(current: str, device: int) -> tuple:
     return parent, ""
 
 
+def _dot_git_status(dot_git: str) -> str:
+    """Classify one .git entry as present, absent, or unreadable.
+
+    Only a missing entry lets discovery continue upward. Any other stat
+    failure stays distinct so the caller fails closed.
+    """
+    try:
+        os.stat(dot_git)
+    except FileNotFoundError:
+        return DOT_GIT_ABSENT
+    except OSError:
+        return DOT_GIT_UNREADABLE
+    return DOT_GIT_PRESENT
+
+
 def _discover_dot_git(cwd: str) -> tuple:
     """Return the .git entry Git discovers upward, or an inspection error."""
     current = os.path.realpath(cwd or ".")
@@ -1796,13 +2325,10 @@ def _discover_dot_git(cwd: str) -> tuple:
         return None, "the repository search root could not be inspected"
     for _depth in range(MAX_REPO_DISCOVERY_DEPTH):
         dot_git = os.path.join(current, ".git")
-        try:
-            os.stat(dot_git)
-        except FileNotFoundError:
-            pass
-        except OSError:
+        status = _dot_git_status(dot_git)
+        if status == DOT_GIT_UNREADABLE:
             return None, "a parent repository entry could not be inspected"
-        else:
+        if status == DOT_GIT_PRESENT:
             return dot_git, ""
         parent, reason = _parent_repository_dir(current, device)
         if parent is None:
@@ -1934,7 +2460,7 @@ def is_relevant_git_environment(name: str) -> bool:
 
 
 def _git_environment(assignments: list) -> dict:
-    """Return effective relevant environment values for one invocation."""
+    """Return effective relevant environment values for one command."""
     environment = {
         name: value for name, value in os.environ.items()
         if is_relevant_git_environment(name)
@@ -1945,7 +2471,7 @@ def _git_environment(assignments: list) -> dict:
 
 def _effective_git_entries(state: dict, environment: dict,
                            assigned_names: set = None) -> tuple:
-    """Return merged config entries and ordered invocation settings."""
+    """Return merged config entries and ordered per-run settings."""
     entries, reason = _read_invocation_configs(
         state, environment, assigned_names)
     if entries is None:
@@ -1978,8 +2504,7 @@ def git_read_verdict(args: list, cwd: str, assignments: list) -> tuple:
     return "ask", (f"a git read sets {found}, which names a program git runs")
 
 
-def _shell_alias_write_label(expansion: str, entries: dict,
-                             depth: int, visited: frozenset) -> tuple:
+def _shell_alias_write_label(expansion: str, entries: dict, chain: tuple) -> tuple:
     """Return a write label found inside a Git shell alias."""
     try:
         shell_tokens = shlex.split(expansion[1:])
@@ -1989,39 +2514,34 @@ def _shell_alias_write_label(expansion: str, entries: dict,
         if os.path.basename(token).lower().removesuffix(".exe") != "git":
             continue
         nested, nested_rest = git_subcommand(shell_tokens[index + 1:])
-        label, reason = _alias_write_label(
-            nested, nested_rest, entries, depth + 1, visited)
+        label, reason = _alias_write_label(nested, nested_rest, entries, chain)
         if label or reason:
             return label, reason
         return "", "git shell alias may hide a Git write"
     return "", "git shell alias may execute an uninspectable command"
 
 
-def _alias_write_label(subcommand: str, rest: list,
-                       entries: dict, depth: int = 0,
-                       visited: frozenset = frozenset()) -> tuple:
+def _alias_write_label(subcommand: str, rest: list, entries: dict,
+                       chain: tuple = ()) -> tuple:
     """Return a resolved write label and an alias-resolution error."""
-    if depth >= MAX_GIT_ALIAS_DEPTH:
-        return "", "git alias expansion exceeds the inspection limit"
     if subcommand in ("commit", "push"):
         return f"git {subcommand}", ""
-    normalized_subcommand = subcommand.lower()
-    if normalized_subcommand in visited:
+    expansion, problem = expand_git_alias(subcommand, entries, chain)
+    if problem == ALIAS_CYCLE:
         return "", "git alias expansion contains a cycle"
-    expansion = entries.get(f"alias.{normalized_subcommand}", "")
+    if problem == ALIAS_DEPTH:
+        return "", "git alias expansion exceeds the inspection limit"
     if not expansion:
         return "", ""
-    next_visited = visited | {normalized_subcommand}
+    next_chain = chain + (subcommand.lower(),)
     if expansion.startswith("!"):
-        return _shell_alias_write_label(
-            expansion, entries, depth, next_visited)
+        return _shell_alias_write_label(expansion, entries, next_chain)
     try:
         expanded = shlex.split(expansion)
     except ValueError:
         return "", "git alias could not be inspected"
     nested, nested_rest = git_subcommand(expanded + rest)
-    return _alias_write_label(
-        nested, nested_rest, entries, depth + 1, next_visited)
+    return _alias_write_label(nested, nested_rest, entries, next_chain)
 
 
 def _git_write_context(state: dict, environment: dict, assignments: list,
@@ -2058,7 +2578,7 @@ def _ambiguous_git_context(state: dict, environment: dict,
 
 
 def _fallback_git_state(cwd: str) -> dict:
-    """Return minimal state for a Git write whose globals were malformed."""
+    """Return minimal state for a Git write with malformed globals."""
     return {
         "cwd": os.path.realpath(cwd or "."), "git_dir": "",
         "common_dir": "", "work_tree": "", "repository_override": True,
@@ -2114,7 +2634,7 @@ def git_write_context(args: list, cwd: str, assignments: list) -> dict:
 
 
 def git_checker_environment(context: dict) -> dict:
-    """Return a constrained child environment matching a Git invocation."""
+    """Return a constrained child environment matching a Git command."""
     environment = dict(os.environ)
     for name, value in context.get("assignments", []):
         if is_relevant_git_environment(name):
@@ -2160,28 +2680,54 @@ def environment_assignment_verdict(program: str, args: list) -> tuple:
     return "", ""
 
 
+def cmd_set_assignment_verdict(program: str, args: list) -> tuple:
+    """Gate a CMD `set` of a variable that alters Git reads."""
+    if normalize_windows_command_name(program) != "set":
+        return "", ""
+    for token in args:
+        if token.startswith("/"):
+            continue
+        name = token.strip('"').split("=", 1)[0].strip().upper()
+        if is_relevant_git_environment(name):
+            return "ask", (f"setting {sanitize(name)} changes how a later git "
+                           "read resolves or executes programs")
+        return "", ""
+    return "", ""
+
+
+def plan_mode_harden(mode: str, verdict: tuple) -> tuple:
+    """Return `verdict` with an ask turned into a deny while `mode` is plan.
+
+    Plan mode permits inspection only. An approved ask would still run the
+    program the assignment names.
+    """
+    if mode != PLAN_MODE or verdict[0] != "ask":
+        return verdict
+    return "deny", f"{verdict[1]}. Plan mode permits inspection only"
+
+
 def resolve_alias(cwd: str, subcommand: str) -> str:
     """Return what `subcommand` expands to, or an empty string."""
-    entries = parse_git_config(cwd)
-    if not entries:
-        return ""
-    return entries.get(f"alias.{subcommand.lower()}", "")
+    expansion, _problem = expand_git_alias(subcommand, parse_git_config(cwd))
+    return expansion
 
 
 def resolve_branch_alias(subcommand: str, arguments: list, entries: dict) -> tuple:
     """Return literal Git arguments or an explicit alias inspection error."""
-    visited = set()
-    for _depth in range(MAX_GIT_ALIAS_DEPTH):
+    chain = ()
+    while True:
         if not subcommand or is_ambiguous(subcommand):
             return subcommand, arguments, "Git subcommand is unresolved"
         if subcommand in KNOWN_SUBCOMMANDS or subcommand in ("symbolic-ref", "update-ref"):
             return subcommand, arguments, ""
-        if subcommand in visited:
+        expansion, problem = expand_git_alias(subcommand, entries, chain)
+        if problem == ALIAS_CYCLE:
             return subcommand, arguments, "Git alias expansion contains a cycle"
-        visited.add(subcommand)
-        expansion = entries.get(f"alias.{subcommand}")
+        if problem == ALIAS_DEPTH:
+            return subcommand, arguments, "Git alias expansion exceeds the inspection limit"
         if not expansion:
             return subcommand, arguments, "Git alias is unresolved"
+        chain += (subcommand.lower(),)
         if expansion.startswith("!"):
             return subcommand, arguments, "Git shell alias has opaque execution"
         if len(expansion) > MAX_CONFIG_BYTES:
@@ -2192,9 +2738,9 @@ def resolve_branch_alias(subcommand: str, arguments: list, entries: dict) -> tup
             return subcommand, arguments, "Git alias syntax is incomplete"
         if not expanded or expanded[0].startswith("-"):
             return subcommand, arguments, "Git alias changes unresolved invocation settings"
+        # expand_git_alias stops the loop at the shared depth limit.
         subcommand = expanded[0]
         arguments = expanded[1:] + arguments
-    return subcommand, arguments, "Git alias expansion exceeds the inspection limit"
 
 
 def _branch_global_arguments(args: list, environment: dict) -> tuple:
@@ -2367,12 +2913,22 @@ DEVICE_WRITERS = frozenset({"mkfs", "diskpart", "format", "cipher", "fdisk",
                             "parted", "sgdisk", "wipefs", "blkdiscard",
                             "shred", "sdelete", "wipe", "dd", "hdparm",
                             "badblocks", "nvme"})
-# Programs denied on any invocation. Most exist only to partition, format,
-# or wipe. dd and hdparm can also run on ordinary files, but their device
-# forms are too easy to miss, so every dd or hdparm call denies too.
+# Programs that deny on every run, except cipher. Most exist only to
+# partition, format, or wipe. dd and hdparm can also run on ordinary files,
+# but their device forms are too easy to miss, so every call denies too.
+# cipher stays listed so an unparseable cipher command fails closed, while
+# device_write_verdict denies a parsed cipher only for its /w: wipe form.
 ALWAYS_DESTRUCTIVE = frozenset({"diskpart", "fdisk", "sgdisk", "parted",
                                 "wipefs", "blkdiscard", "mkfs", "format",
                                 "cipher", "dd", "hdparm"})
+# What each always-destructive program does to a device, for deny reasons.
+DESTRUCTIVE_ACTIONS = {
+    "diskpart": "rewrites partition tables", "fdisk": "rewrites partition tables",
+    "sgdisk": "rewrites partition tables", "parted": "rewrites partition tables",
+    "mkfs": "lays down a new filesystem", "format": "lays down a new filesystem",
+    "wipefs": "erases filesystem signatures", "blkdiscard": "discards every block",
+    "dd": "writes raw blocks", "hdparm": "issues raw drive commands",
+}
 # Programs that fetch a remote resource to standard output.
 DOWNLOADERS = frozenset({"curl", "wget", "fetch", "invoke-webrequest", "iwr",
                          "invoke-restmethod", "irm", "httpie", "http", "aria2c"})
@@ -2383,7 +2939,7 @@ INPUT_EXECUTORS = frozenset({"bash", "sh", "zsh", "dash", "ksh", "busybox",
                              "invoke-expression", "pwsh", "powershell"})
 DEVICE_PATH_MARKERS = ("/dev/", "\\\\.\\physicaldrive", "\\\\.\\",
                        "/dev/disk")
-# Commands whose target set is decided at run time rather than written out.
+# Commands with a target set decided at run time and not written out.
 LOGGING_DISABLERS = {
     "aws": ("stop-logging", "delete-trail", "delete-log-group"),
     "az": ("diagnostic-settings",),
@@ -2407,14 +2963,14 @@ UNBOUNDED_OPERATIONS = {
 # Dry-run flags per program. -n means dry run to git clean only: to sed and
 # perl it suppresses printing, and to xargs it limits arguments per call.
 DRY_RUN_FLAGS = {"git": ("-n", "--dry-run")}
-# Short options whose value follows in the same token. In -ei or -Mi the
+# Short options with a value that follows in the same token. In -ei or -Mi the
 # trailing i is part of that value, not the in-place flag.
 IN_PLACE_VALUE_OPTIONS = {"sed": "efl", "perl": "eEMmIxdDCF"}
 GLOB_CHARACTERS = "*?["
 
 
 def _mentions_device(args: list) -> bool:
-    """Return True if any operand names a raw device rather than a file."""
+    """Return True if any operand names a raw device instead of a file."""
     for token in args:
         lowered = token.lower()
         value = lowered.partition("=")[-1] if "=" in lowered else lowered
@@ -2452,10 +3008,10 @@ def device_write_verdict(program: str, args: list) -> tuple:
     if base not in DEVICE_WRITERS:
         return "", ""
     name = base
-    # These exist only to partition or wipe, so any invocation counts.
-    if name in ALWAYS_DESTRUCTIVE and name not in ("cipher",):
-        return "deny", (f"{name} partitions or lays down a filesystem, which "
-                        "destroys every file on the target at once")
+    # Any run of these counts. cipher denies below only for /w:.
+    if name in DESTRUCTIVE_ACTIONS:
+        return "deny", (f"{name} {DESTRUCTIVE_ACTIONS[name]}, which can "
+                        "destroy every file on the target at once")
     if _mentions_device(args):
         return "deny", (f"{name} writing over a device or filesystem, which "
                         "destroys every file on it at once")
@@ -2465,7 +3021,7 @@ def device_write_verdict(program: str, args: list) -> tuple:
 
 
 def _is_shallow_glob(token: str) -> bool:
-    """Return True for a glob whose parent is a root, such as /* or ~/*."""
+    """Return True for a glob with a root parent, such as /* or ~/*."""
     if not any(character in token for character in GLOB_CHARACTERS):
         return False
     parent = token.rstrip("*?[]/")
@@ -2540,8 +3096,8 @@ def logging_verdict(program: str, args: list) -> tuple:
     """Return (decision, reason) for disabling logging or purging a disk.
 
     Destroying the record of an act belongs to the same campaign as the
-    act. These are read as commands rather than counted as events, which
-    is all a per-call gate can do.
+    act. These are read as commands and not counted as events. A per-call
+    gate can do no more.
     """
     name = os.path.basename(program).lower().removesuffix(".exe")
     markers = LOGGING_DISABLERS.get(name)
@@ -2575,9 +3131,9 @@ def volume_verdict(recursive: bool, operands: list) -> tuple:
 def gated_keywords() -> tuple:
     """Return every program name this core classifies.
 
-    Derived rather than written out. A hardcoded list is a second place to
+    Derived and not written out. A hardcoded list is a second place to
     remember, and the one that decides whether an unparseable command
-    fails closed: cipher /w:C:\\ does not tokenize, and a list that had
+    fails closed: cipher /w:C:\\ does not split into tokens, and a list that had
     not learned "cipher" waved it through.
     """
     names = {"rm", "git"}
@@ -2609,7 +3165,7 @@ def remote_execution_verdict(segments: list) -> tuple:
     the producer of that stream decides what runs. `curl | bash` hands the
     choice to a remote host; `history | sh` hands it to whatever the shell
     happens to remember. Neither is a decision anyone can give consent to
-    in advance, so both are prohibited rather than asked about.
+    in advance, so both are prohibited without a prompt.
     """
     previous = ""
     for segment in segments:
@@ -2625,8 +3181,8 @@ def remote_execution_verdict(segments: list) -> tuple:
     return "", ""
 
 
-# Operators that start the next command after the previous one ends rather
-# than feeding it that command's output. PowerShell's & is its call
+# Operators that start the next command after the previous one ends. These
+# operators pass no output from one command to the next. PowerShell's & is its call
 # operator, so each shell supplies its own set.
 BASH_LIST_OPERATORS = frozenset({"&&", "||", ";", "&"})
 POWERSHELL_LIST_OPERATORS = frozenset({"&&", "||", ";"})
@@ -2907,7 +3463,7 @@ def _git_config_positionals(args: list) -> list:
 def alias_verdict(program: str, args: list) -> tuple:
     """Return (decision, reason) for defining a command alias.
 
-    An alias makes one name run another command, which defeats reading a
+    An alias makes one name run another command. That defeats reading a
     command to know what it does. Listing aliases is not defining one.
     """
     name = os.path.basename(program).lower().removesuffix(".exe")
@@ -2947,7 +3503,11 @@ def truncation_verdict(program: str, args: list, redirects: list) -> tuple:
 
 
 def mode_change_verdict(program: str, args: list) -> tuple:
-    """Return (decision, reason) for a recursive mode change on a root."""
+    """Return (decision, reason) for a mode or owner change.
+
+    Any change on a root or system directory denies. Elsewhere a recursive
+    change goes to the volume check.
+    """
     name = os.path.basename(program).lower().removesuffix(".exe")
     if name not in MODE_PROGRAMS:
         return "", ""
@@ -2957,9 +3517,9 @@ def mode_change_verdict(program: str, args: list) -> tuple:
         if token.startswith("-"):
             continue
         if is_root_target(token) or is_root_target(token.rstrip("/") + "/"):
-            return "deny", (f"recursive {name} across a root or system "
-                            "directory, which breaks every program that "
-                            "depends on those permissions")
+            return "deny", (f"{name} on a root or system directory, which "
+                            "breaks every program that depends on those "
+                            "permissions")
     operands = [token for token in args if not token.startswith("-")]
     return volume_verdict(_recursive_mode_change(name, args), operands)
 
@@ -3003,6 +3563,21 @@ def filesystem_repair_verdict(program: str, args: list) -> tuple:
 # Deleting a repository, a release, or a tag on the forge destroys work
 # that is not in any local clone.
 FORGE_PROGRAMS = frozenset({"gh", "glab", "hub", "tea"})
+# Every CI workflow filters pull requests on the stable branches. A pull
+# request into any other base runs no CI, so the gates deny that base.
+PRIMARY_BRANCH_FILE_PARTS = ("hooks", "primary-branch.txt")
+DEFAULT_PRIMARY_BRANCH = "main"
+# The develop branch is the staging branch. Not every repository has these
+# branches. A pull request into an absent branch fails on the forge.
+EXTRA_STABLE_BRANCHES = ("test", "develop")
+MAX_PRIMARY_BRANCH_BYTES = 256
+MAX_BRANCH_NAME_LENGTH = 200
+REJECTED_PRIMARY_BRANCHES = frozenset({"master", "HEAD"})
+BRANCH_NAME_CHARACTERS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/-")
+GH_PULL_BASE_OPTIONS = frozenset({"--base", "-B"})
+GH_PULL_BASE_COMMANDS = frozenset({("pr", "create"), ("pr", "edit")})
+PRIMARY_READ_FLAGS = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
 FORGE_DELETE_NOUNS = frozenset({"repo", "repository", "release", "project",
                                  "org", "organization", "gist", "secret",
                                  "environment", "cache", "run", "variable",
@@ -3194,23 +3769,30 @@ def _github_auth_verdict(args: list) -> tuple:
     return "", ""
 
 
-def _is_github_host(host: str) -> bool:
-    """Return True when `host` is github.com itself or a subdomain of it.
+def is_github_hostname(host: str) -> bool:
+    """Return True when `host` is a GitHub domain or a subdomain of one.
 
-    A suffix test alone would accept `attacker-github.com`, so the domain
-    boundary is explicit.
+    A port and a trailing dot are stripped first. A suffix test alone would
+    accept `attacker-github.com`, so the domain boundary is explicit.
+    scripts/check_external_pr_refs.py keeps a copy, because hooks cannot
+    import scripts; a parity test pins the two.
     """
-    name = host.lower().partition(":")[0]
-    return name == "github.com" or name.endswith(".github.com")
+    normalized = host.partition(":")[0].rstrip(".").casefold()
+    return any(normalized == domain or normalized.endswith("." + domain)
+               for domain in GITHUB_DOMAINS)
+
+
+# The earlier private name, kept for callers that import it.
+_is_github_host = is_github_hostname
 
 
 def _repository_target_owner(token: str) -> str:
-    """Return the owner of a GitHub CLI repository argument.
+    """Return the repository owner named by a GitHub CLI repository argument.
 
     gh accepts `OWNER/REPO`, `HOST/OWNER/REPO`, and a full URL, so a scheme,
     any user information, and a leading GitHub host are stripped before the
-    owner is read. An unrecognized shape returns an empty string, which the
-    caller treats as unreadable rather than as clearance.
+    owner segment is read. An unrecognized shape returns an empty string. The
+    caller treats it as unreadable and not as clearance.
     """
     if not token or token.startswith("-") or is_ambiguous(token):
         return ""
@@ -3221,7 +3803,7 @@ def _repository_target_owner(token: str) -> str:
         segments = segments[1:]
     if len(segments) != REPOSITORY_SEGMENT_COUNT:
         return ""
-    # Splitting dropped empty segments, so the owner is never empty here.
+    # Splitting dropped empty segments, so the owner segment is never empty here.
     # A separator left inside it means the token was never owner/name.
     owner = segments[0]
     if any(character in owner for character in ":\\"):
@@ -3229,11 +3811,24 @@ def _repository_target_owner(token: str) -> str:
     return owner
 
 
+def reset_invocation_caches() -> None:
+    """Clear the lookups cached for one hook run.
+
+    Each hook main calls this first. A process that serves several
+    requests, such as the test worker, then never reuses an origin owner
+    or a scan result from an earlier request.
+    """
+    _origin_owner.cache_clear()
+    infrastructure_scan_status.cache_clear()
+
+
+@lru_cache(maxsize=None)
 def _origin_owner(cwd: str) -> str:
     """Return the GitHub owner of the origin remote, or an empty string.
 
     The URL is parsed with string operations because this module carries no
     regular expressions: a gate must not depend on backtracking behavior.
+    The cache lasts one hook run (see reset_invocation_caches).
     """
     entries = parse_git_config(cwd)
     if not entries:
@@ -3303,7 +3898,7 @@ def _external_target_verdict(args: list, command: list, noun: str,
             index += 1
     if not repo_owner:
         # An unreadable origin cannot clear any target, implicit ones
-        # included, so the gate asks rather than waving the command through.
+        # included, so the gate asks instead of waving the command through.
         target = sanitize(owner) if owner else "an implicit repository"
         return "ask", (f"{sanitize(noun)} {sanitize(action)} targets "
                        f"{target}, and this repository names no "
@@ -3327,7 +3922,7 @@ def _has_label_option(command: list) -> bool:
 
 
 def github_cli_verdict(args: list, *, repo_owner: str = "") -> tuple:
-    """Return the safety verdict for one GitHub CLI invocation."""
+    """Return the safety verdict for one GitHub CLI command."""
     command = _github_command_args(args)
     if not command:
         return "", ""
@@ -3374,32 +3969,6 @@ def trusted_gh_arguments(program: str, args: list, cwd: str) -> list:
     return args[script_index + TRUSTED_GH_ARGUMENT_OFFSET:]
 
 
-def _git_subcommand(args: list) -> tuple:
-    """Return a Git subcommand and its remaining arguments."""
-    index = 0
-    while index < len(args):
-        token = args[index]
-        lowered = token.lower()
-        if lowered in {"-c", "--git-dir", "--work-tree"}:
-            index += OPTION_WITH_VALUE_TOKEN_COUNT
-            continue
-        if lowered.startswith(("-c", "--git-dir=", "--work-tree=")):
-            index += 1
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        return lowered, args[index + 1:]
-    return "", []
-
-
-def _is_github_hostname(hostname: str) -> bool:
-    """Return whether a hostname belongs to GitHub."""
-    normalized = hostname.rstrip(".").casefold()
-    return any(normalized == domain or normalized.endswith("." + domain)
-               for domain in GITHUB_DOMAINS)
-
-
 def _token_hostname(token: str) -> str:
     """Return a GitHub-relevant hostname parsed from one command token."""
     candidate = token.strip()
@@ -3418,7 +3987,7 @@ def _token_hostname(token: str) -> str:
 def _is_github_target(tokens: list) -> bool:
     """Return whether arguments name GitHub or a pull request ref."""
     for token in tokens:
-        if _is_github_hostname(_token_hostname(token)):
+        if is_github_hostname(_token_hostname(token)):
             return True
     text = " ".join(tokens).casefold()
     return "pull/" in text
@@ -3426,7 +3995,10 @@ def _is_github_target(tokens: list) -> bool:
 
 def _github_git_substitute(args: list) -> bool:
     """Return whether Git substitutes for a selected hosted GitHub operation."""
-    subcommand, remaining = _git_subcommand(args)
+    # git_subcommand skips every global option value, so
+    # `git --namespace x remote add` reads as remote.
+    subcommand, remaining = git_subcommand(args)
+    subcommand = subcommand.lower()
     if subcommand == "remote":
         return True
     if subcommand == "config":
@@ -3465,21 +4037,112 @@ def github_routing_verdict(program: str, args: list, cwd: str) -> tuple:
     return "", ""
 
 
+def is_primary_branch_name(name: str) -> bool:
+    """Return whether a name can serve as the primary branch."""
+    return (0 < len(name) <= MAX_BRANCH_NAME_LENGTH and name[0].isalnum() and name.isascii()
+            and set(name) <= BRANCH_NAME_CHARACTERS and name not in REJECTED_PRIMARY_BRANCHES
+            and not any(part in ("", ".", "..") for part in name.split("/")))
+
+
+def _is_reparse_point(details: os.stat_result) -> bool:
+    """Return whether Windows file attributes mark a reparse point such as a junction."""
+    attributes = getattr(details, "st_file_attributes", 0)
+    return bool(attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+
+
+def primary_branch(repository: str) -> str:
+    """Return the branch in hooks/primary-branch.txt, or main when the file is absent.
+
+    The read follows no link and accepts only a regular file. An unusable
+    file raises ValueError, so callers fail closed.
+    """
+    path = os.path.join(repository, *PRIMARY_BRANCH_FILE_PARTS)
+    try:
+        link_details = os.lstat(path)
+    except FileNotFoundError:
+        return DEFAULT_PRIMARY_BRANCH
+    except OSError as error:
+        raise ValueError(
+            f"hooks/primary-branch.txt cannot be read ({type(error).__name__})") from error
+    # Windows lacks O_NOFOLLOW, so lstat rejects a link or reparse point before the open.
+    if stat.S_ISLNK(link_details.st_mode) or _is_reparse_point(link_details):
+        raise ValueError("hooks/primary-branch.txt is a link")
+    try:
+        descriptor = os.open(path, PRIMARY_READ_FLAGS)
+    except OSError as error:
+        raise ValueError(
+            f"hooks/primary-branch.txt cannot be opened ({type(error).__name__})") from error
+    opened_details = os.fstat(descriptor)
+    # A swap between lstat and open changes the file identity. fdopen rejects a
+    # directory descriptor, so these checks run on the raw descriptor first.
+    if (not stat.S_ISREG(opened_details.st_mode)
+            or (opened_details.st_dev, opened_details.st_ino)
+            != (link_details.st_dev, link_details.st_ino)):
+        os.close(descriptor)
+        raise ValueError("hooks/primary-branch.txt is not the regular file it named")
+    with os.fdopen(descriptor, "rb") as handle:
+        content = handle.read(MAX_PRIMARY_BRANCH_BYTES + 1)
+    lines = content.splitlines()
+    name = lines[0].decode("ascii", errors="replace") if len(lines) == 1 else ""
+    if len(content) > MAX_PRIMARY_BRANCH_BYTES or not is_primary_branch_name(name):
+        raise ValueError("hooks/primary-branch.txt must hold one valid branch name")
+    return name
+
+
+def stable_branches(repository: str) -> frozenset:
+    """Return the primary branch plus test and develop.
+
+    An unusable primary branch file raises ValueError, so callers fail closed.
+    """
+    return frozenset((primary_branch(repository), *EXTRA_STABLE_BRANCHES))
+
+
+def _stable_branch_list(primary: str, stable: frozenset) -> str:
+    """Name the stable branches with the primary branch first."""
+    ordered = [primary, *sorted(stable - {primary})]
+    return ", ".join(f"`{name}`" for name in ordered)
+
+
+def pull_request_base_verdict(args: list, repository: str) -> tuple:
+    """Deny gh pr create or gh pr edit with a base outside the stable branches."""
+    command = _github_command_args(args)
+    if tuple(_github_command_path(command)[:GH_COMMAND_PATH_WORDS]) not in GH_PULL_BASE_COMMANDS:
+        return "", ""
+    bases = _option_values(command, GH_PULL_BASE_OPTIONS)
+    if not bases:
+        return "", ""
+    try:
+        primary = primary_branch(repository)
+    except ValueError as error:
+        return "deny", f"{error}, so the gate cannot check the pull request base"
+    stable = frozenset((primary, *EXTRA_STABLE_BRANCHES))
+    other = next((base for base in bases if base not in stable), None)
+    if other is None:
+        return "", ""
+    return "deny", (f"pull request base `{sanitize(other)}` is not a stable branch "
+                    f"({_stable_branch_list(primary, stable)}). The primary branch is "
+                    f"`{primary}`. CI workflows run only for pull requests into a stable "
+                    f"branch. Open the pull request against a stable branch")
+
+
 def forge_verdict(program: str, args: list, cwd: str = "") -> tuple:
     """Return (decision, reason) for a destructive forge command."""
     name = os.path.basename(program).lower().removesuffix(".exe")
     repository = cwd or os.getcwd()
-    owner = _origin_owner(repository)
     wrapped = trusted_gh_arguments(program, args, repository)
+    # Only a forge CLI needs the `origin` repository owner, so every other program
+    # skips the config parse.
+    if not wrapped and name not in FORGE_PROGRAMS:
+        return "", ""
+    owner = _origin_owner(repository)
     if wrapped:
-        decision, reason = github_cli_verdict(wrapped, repo_owner=owner)
-        if decision:
-            return decision, reason
+        # The trusted wrapper runs gh, so its arguments are gh arguments.
         name = "gh"
         args = wrapped
-    if name not in FORGE_PROGRAMS:
-        return "", ""
-    if name == "gh" and not wrapped:
+    if name == "gh":
+        decision, reason = pull_request_base_verdict(args, repository)
+        if decision:
+            return decision, reason
         decision, reason = github_cli_verdict(args, repo_owner=owner)
         if decision:
             return decision, reason

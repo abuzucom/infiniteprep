@@ -174,7 +174,7 @@ class ScanSummaryWiringTest(unittest.TestCase):
         """Parse the scan job once. No test changes the parsed data."""
         cls.job = load_jobs()["msdo"]
 
-    def test_the_summary_comes_from_the_tested_script(self) -> None:
+    def test_summary_comes_from_tested_script(self) -> None:
         """The SARIF path reaches the builder as an environment value."""
         step = find_step(self.job, "Build the scan summary")
         self.assertEqual(step["run"], BUILD_COMMAND)
@@ -188,11 +188,11 @@ class ScanSummaryWiringTest(unittest.TestCase):
         self.assertEqual(step["with"]["path"], SUMMARY_FILE)
         self.assertEqual(step["with"]["if-no-files-found"], "error")
 
-    def test_the_scan_job_exports_the_light_flag(self) -> None:
+    def test_scan_job_exports_light_flag(self) -> None:
         """The comment job reads the class of the change from the scan job."""
         self.assertEqual(self.job["outputs"], {"light": "${{ steps.classify.outputs.light }}"})
 
-    def test_the_scan_job_cannot_write_to_the_pull_request(self) -> None:
+    def test_scan_job_cannot_write_pr(self) -> None:
         """The job that runs the scanners holds no pull request permission."""
         self.assertNotIn("pull-requests", self.job["permissions"])
 
@@ -209,28 +209,28 @@ class ScanCommentJobTest(unittest.TestCase):
         cls.job = load_jobs()["scan-comment"]
         cls.script = find_step(cls.job, COMMENT_STEP)["with"]["script"]
 
-    def test_the_job_writes_only_the_pull_request_comment(self) -> None:
+    def test_job_writes_only_pr_comment(self) -> None:
         """The job holds the pull request write permission and nothing else."""
         self.assertEqual(self.job["permissions"], {"contents": "read", "pull-requests": "write"})
 
-    def test_the_job_follows_the_scan_job(self) -> None:
+    def test_job_follows_scan_job(self) -> None:
         """The job waits for the scan result."""
         self.assertEqual(self.job["needs"], "msdo")
 
-    def test_the_job_runs_after_a_passed_and_a_failed_scan(self) -> None:
+    def test_job_runs_after_either_outcome(self) -> None:
         """The status function replaces the implicit success check on needs."""
         self.assertIn("!cancelled()", self.job["if"])
         self.assertNotIn("needs.msdo.result", self.job["if"])
 
-    def test_the_job_runs_only_on_a_pull_request(self) -> None:
+    def test_job_runs_only_on_prs(self) -> None:
         """The job stays out of the way on a push to main."""
         self.assertIn("github.event_name == 'pull_request'", self.job["if"])
 
-    def test_the_job_skips_a_light_change(self) -> None:
+    def test_job_skips_light_change(self) -> None:
         """A light change runs no scan, so no result exists to report."""
         self.assertIn("needs.msdo.outputs.light != 'true'", self.job["if"])
 
-    def test_the_job_skips_a_pull_request_from_a_fork(self) -> None:
+    def test_job_skips_fork_pull_request(self) -> None:
         """A pull request from a fork receives a read-only token."""
         self.assertIn(
             "github.event.pull_request.head.repo.full_name == github.repository",
@@ -295,7 +295,7 @@ class ScanCommentScriptTest(unittest.TestCase):
             tmp_path=self.tmp, summary=summary, comments=comments, script=self.script, **options
         )
 
-    def test_a_clean_scan_creates_the_comment(self) -> None:
+    def test_clean_scan_creates_comment(self) -> None:
         """A passed scan with no finding still posts a comment."""
         calls = self.run_comment_script({"total": 0, "tools": []}, [])
 
@@ -306,7 +306,7 @@ class ScanCommentScriptTest(unittest.TestCase):
         self.assertIn("Findings: 0", body)
         self.assertIn(RUN_URL, body)
 
-    def test_the_comment_lists_the_findings_of_each_tool(self) -> None:
+    def test_comment_lists_findings_per_tool(self) -> None:
         """Every tool record becomes one row of the comment."""
         summary = {
             "total": 3,
@@ -329,20 +329,20 @@ class ScanCommentScriptTest(unittest.TestCase):
         self.assertIn(RUN_URL, calls[0]["body"])
         self.assertNotIn("Findings:", calls[0]["body"])
 
-    def test_an_unknown_scan_result_is_rejected(self) -> None:
+    def test_unknown_scan_result_is_rejected(self) -> None:
         """A job result outside the known values never reaches the comment."""
         calls = self.run_comment_script({"total": 0, "tools": []}, [], scan_result="skipped")
 
         self.assertEqual([call["action"] for call in calls], ["error"])
         self.assertIn("scan job result", calls[0]["message"])
 
-    def test_a_passed_scan_without_a_summary_is_rejected(self) -> None:
+    def test_passed_scan_without_summary_rejected(self) -> None:
         """A passed scan with no summary file fails the job."""
         calls = self.run_comment_script(None, [])
 
         self.assertEqual([call["action"] for call in calls], ["error"])
 
-    def test_a_foreign_comment_never_becomes_the_target(self) -> None:
+    def test_foreign_comment_never_becomes_target(self) -> None:
         """A comment from another author that carries the marker is left alone."""
         foreign = {"id": 7, "user": {"login": OTHER}, "body": f"{MARKER}\nold"}
 
@@ -350,7 +350,7 @@ class ScanCommentScriptTest(unittest.TestCase):
 
         self.assertEqual([call["action"] for call in calls], ["create"])
 
-    def test_marker_inside_body_is_left_alone(self) -> None:
+    def test_marker_inside_body_left_alone(self) -> None:
         """A bot comment that only mentions the marker is not the target."""
         mention = {"id": 8, "user": {"login": BOT}, "body": "text before the marker " + MARKER}
 
@@ -358,7 +358,7 @@ class ScanCommentScriptTest(unittest.TestCase):
 
         self.assertEqual([call["action"] for call in calls], ["create"])
 
-    def test_a_second_bot_comment_is_removed(self) -> None:
+    def test_second_bot_comment_is_removed(self) -> None:
         """A second scan comment from the bot does not survive."""
         comments = [bot_comment(11, 90), bot_comment(12, 90)]
 
@@ -368,13 +368,13 @@ class ScanCommentScriptTest(unittest.TestCase):
         self.assertEqual(calls[0]["comment_id"], 11)
         self.assertEqual(calls[1]["comment_id"], 12)
 
-    def test_an_older_run_never_replaces_a_newer_result(self) -> None:
+    def test_older_run_never_replaces_newer(self) -> None:
         """A run older than the posted run writes nothing."""
         calls = self.run_comment_script({"total": 0, "tools": []}, [bot_comment(13, 500)])
 
         self.assertEqual([call["action"] for call in calls], ["info"])
 
-    def test_tool_name_with_fence_is_rejected(self) -> None:
+    def test_fenced_tool_name_is_rejected(self) -> None:
         """A crafted tool name never reaches the comment."""
         summary = {"total": 1, "tools": [{"name": "bandit`\n@someone", "findings": 1}]}
 
@@ -406,7 +406,7 @@ class ScanCommentScriptTest(unittest.TestCase):
         self.assertEqual([call["action"] for call in calls], ["error"])
         self.assertIn("out of range", calls[0]["message"])
 
-    def test_a_tool_record_with_an_extra_field_is_rejected(self) -> None:
+    def test_tool_record_extra_field_rejected(self) -> None:
         """A tool record with an extra field never reaches the comment."""
         summary = {"total": 0, "tools": [{"name": "bandit", "findings": 0, "note": "x"}]}
 

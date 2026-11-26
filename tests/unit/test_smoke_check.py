@@ -22,7 +22,7 @@ def test_smoke_check_writes_the_version(qapp: Any, tmp_path: Path) -> None:
     assert result_file.read_text(encoding="utf-8") == __version__
 
 
-def test_smoke_check_needs_exactly_one_path(tmp_path: Path) -> None:
+def test_smoke_check_needs_one_path(tmp_path: Path) -> None:
     """The flag with no path, or with two, returns the usage error and writes no file."""
     first, second = tmp_path / "first.txt", tmp_path / "second.txt"
 
@@ -32,7 +32,7 @@ def test_smoke_check_needs_exactly_one_path(tmp_path: Path) -> None:
     assert not second.exists()
 
 
-def test_smoke_check_never_overwrites_an_existing_file(tmp_path: Path) -> None:
+def test_smoke_check_keeps_existing_file(tmp_path: Path) -> None:
     """An existing file keeps its content, and the flag returns the usage error."""
     existing = tmp_path / "keep.txt"
     existing.write_text("original", encoding="utf-8")

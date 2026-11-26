@@ -15,7 +15,7 @@ from tests.test_enforce_branch_name import hook
 class MultilineAndIncompleteCommandTest(unittest.TestCase):
     """Multiline and unterminated commands fail on the primary branch."""
 
-    def test_multiline_and_incomplete_commands_are_denied(self):
+    def test_multiline_or_incomplete_denied(self):
         fixture = BranchFixture(self, "main")
         for command in ("git status\ngit status", 'git log "unterminated'):
             with self.subTest(command=command):
@@ -39,7 +39,7 @@ class MasterMalformedCallTest(unittest.TestCase):
 class BrokenGitPointerTest(unittest.TestCase):
     """A .git pointer to a missing directory fails closed."""
 
-    def test_read_is_denied_when_gitdir_target_is_missing(self):
+    def test_missing_gitdir_target_denied(self):
         fixture = BranchFixture(self, "main")
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -57,7 +57,7 @@ class BrokenGitPointerTest(unittest.TestCase):
 class ContextEventValidBranchTest(unittest.TestCase):
     """A prompt on a compliant feature branch receives no context."""
 
-    def test_user_prompt_on_valid_branch_is_silent(self):
+    def test_valid_branch_prompt_silent(self):
         fixture = BranchFixture(self, "feat/valid-work")
         result = fixture.lifecycle("UserPromptSubmit")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -67,7 +67,7 @@ class ContextEventValidBranchTest(unittest.TestCase):
 class WithinPathTest(unittest.TestCase):
     """Containment checks reject paths that cannot share a root."""
 
-    def test_relative_path_is_not_within_absolute_directory(self):
+    def test_relative_path_not_within(self):
         directory = os.path.realpath(tempfile.gettempdir())
         self.assertTrue(hook._is_within(os.path.join(directory, "child"), directory))
         self.assertFalse(hook._is_within("relative", directory))

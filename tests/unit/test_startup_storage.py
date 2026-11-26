@@ -57,7 +57,7 @@ def _blocked_portable_folder(env: dict[str, Any]) -> None:
     (env["app"] / PORTABLE_DATA_DIR_NAME).write_bytes(b"not a folder")
 
 
-def test_opens_the_database_and_sets_the_locations(env: dict[str, Any]) -> None:
+def test_opens_database_and_sets_locations(env: dict[str, Any]) -> None:
     """A normal start opens the database in data_dir and sets the locations once."""
     opened = _open(env, frozen=False, answer=FallbackAnswer(use_per_user=False, remember=False))
 
@@ -69,7 +69,7 @@ def test_opens_the_database_and_sets_the_locations(env: dict[str, Any]) -> None:
     opened.repository.db.close()
 
 
-def test_quit_returns_the_quit_code_without_an_error(env: dict[str, Any]) -> None:
+def test_quit_returns_code_without_error(env: dict[str, Any]) -> None:
     """Quit in the read-only prompt ends the start quietly and sets nothing."""
     _blocked_portable_folder(env)
 
@@ -80,7 +80,7 @@ def test_quit_returns_the_quit_code_without_an_error(env: dict[str, Any]) -> Non
     env["registry"].configure(storage_paths.per_user_locations())
 
 
-def test_unwritable_profile_on_remember_shows_an_error(env: dict[str, Any]) -> None:
+def test_unwritable_remembered_profile_shows_error(env: dict[str, Any]) -> None:
     """A per-user config folder that cannot hold the remembered choice stops with a message."""
     _blocked_portable_folder(env)
     (env["root"] / "user_config_dir").write_bytes(b"not a folder")

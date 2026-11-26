@@ -92,7 +92,7 @@ def tab_page(dialog: SettingsDialog, title: str) -> QWidget:
     raise AssertionError(f"No Settings tab titled {title!r}.")
 
 
-def test_dialog_shows_one_tab_per_area_in_order(qtbot: Any, tmp_path: Path) -> None:
+def test_dialog_shows_ordered_area_tabs(qtbot: Any, tmp_path: Path) -> None:
     """The dialog shows each area with settings as a tab in a fixed order."""
     manager = SettingsManager(tmp_path / "settings.json")
     dialog = open_dialog(qtbot, manager, CredentialStore(use_memory_backend=True))
@@ -104,7 +104,7 @@ def test_dialog_shows_one_tab_per_area_in_order(qtbot: Any, tmp_path: Path) -> N
 
 
 @pytest.mark.parametrize("module_name", TAB_MODULE_NAMES)
-def test_each_area_lives_in_its_own_module(module_name: str) -> None:
+def test_each_area_has_own_module(module_name: str) -> None:
     """Each tab comes from its own module in the ui.settings package."""
     module = importlib.import_module(f"infiniteprep.ui.settings.{module_name}")
 
@@ -113,7 +113,7 @@ def test_each_area_lives_in_its_own_module(module_name: str) -> None:
 
 
 @pytest.mark.parametrize(("title", "attribute_names"), sorted(WIDGETS_BY_TAB.items()))
-def test_every_existing_setting_sits_in_its_tab(
+def test_every_setting_sits_in_tab(
     qtbot: Any, tmp_path: Path, title: str, attribute_names: tuple[str, ...]
 ) -> None:
     """Opening a tab finds each of its existing settings on that tab's page."""
@@ -130,7 +130,7 @@ def test_every_existing_setting_sits_in_its_tab(
 
 
 @pytest.mark.parametrize("title", PLACEHOLDER_TABS)
-def test_areas_without_settings_show_a_note(qtbot: Any, tmp_path: Path, title: str) -> None:
+def test_areas_without_settings_show_note(qtbot: Any, tmp_path: Path, title: str) -> None:
     """Updates shows a one-line note until a setting joins the tab."""
     manager = SettingsManager(tmp_path / "settings.json")
     dialog = open_dialog(qtbot, manager, CredentialStore(use_memory_backend=True))
@@ -140,7 +140,7 @@ def test_areas_without_settings_show_a_note(qtbot: Any, tmp_path: Path, title: s
     assert [label.text() for label in labels] == [f"No {title.lower()} settings yet."]
 
 
-def test_stored_settings_load_into_the_tabs(qtbot: Any, tmp_path: Path) -> None:
+def test_stored_settings_load_into_tabs(qtbot: Any, tmp_path: Path) -> None:
     """Each tab shows the stored non-default value of each of its settings."""
     manager = SettingsManager(tmp_path / "settings.json")
     stored = non_default_settings()
@@ -165,7 +165,7 @@ def test_stored_settings_load_into_the_tabs(qtbot: Any, tmp_path: Path) -> None:
     assert dialog.usb_reserve_mib_spin.value() == STORED_RESERVE_MIB
 
 
-def test_saving_without_changes_keeps_every_setting(qtbot: Any, tmp_path: Path) -> None:
+def test_unchanged_save_keeps_every_setting(qtbot: Any, tmp_path: Path) -> None:
     """A save from the tabbed dialog writes back every stored setting unchanged."""
     manager = SettingsManager(tmp_path / "settings.json")
     stored = non_default_settings()
@@ -182,7 +182,7 @@ def test_saving_without_changes_keeps_every_setting(qtbot: Any, tmp_path: Path) 
     assert creds.get_secret("discogs_token") == DISCOGS_CREDENTIAL
 
 
-def test_edits_on_each_tab_save_and_reload(qtbot: Any, tmp_path: Path) -> None:
+def test_tab_edits_save_and_reload(qtbot: Any, tmp_path: Path) -> None:
     """Values edited on every tab persist and show again in a reopened dialog."""
     manager = SettingsManager(tmp_path / "settings.json")
     creds = CredentialStore(use_memory_backend=True)

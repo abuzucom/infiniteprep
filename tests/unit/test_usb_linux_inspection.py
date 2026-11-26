@@ -418,7 +418,7 @@ class TestUsbLinuxInspection(unittest.TestCase):
         )
         self.assertIsNone(report.space_for_mount("/nonexistent"))
 
-    def test_inspect_specific_device_by_name_and_path(self) -> None:
+    def test_inspect_device_by_name_path(self) -> None:
         """Targeted device inspection locates devices by base name or /dev path."""
         _, inspector = _make_mock_runner(
             lsblk_stdout=FAT32_STICK_LSBLK_JSON,
@@ -434,25 +434,25 @@ class TestUsbLinuxInspection(unittest.TestCase):
         with self.assertRaises(CommandExecutionError):
             inspector.inspect_device("sdz")
 
-    def test_malformed_lsblk_json_raises_parse_error(self) -> None:
+    def test_malformed_lsblk_raises_parse_error(self) -> None:
         """Syntax errors in lsblk output raise InspectionParseError."""
         _, inspector = _make_mock_runner(lsblk_stdout='{"blockdevices": [')
         with self.assertRaises(InspectionParseError):
             inspector.inspect_all()
 
-    def test_missing_blockdevices_key_raises_parse_error(self) -> None:
+    def test_missing_blockdevices_raises_parse_error(self) -> None:
         """Missing 'blockdevices' list in lsblk JSON raises InspectionParseError."""
         _, inspector = _make_mock_runner(lsblk_stdout='{"unrelated": []}')
         with self.assertRaises(InspectionParseError):
             inspector.inspect_all()
 
-    def test_lsblk_command_failure_raises_execution_error(self) -> None:
+    def test_lsblk_failure_raises_execution_error(self) -> None:
         """Non-zero exit code from lsblk raises CommandExecutionError."""
         _, inspector = _make_mock_runner(lsblk_returncode=1)
         with self.assertRaises(CommandExecutionError):
             inspector.inspect_all()
 
-    def test_df_command_failure_raises_execution_error(self) -> None:
+    def test_df_failure_raises_execution_error(self) -> None:
         """Non-zero exit code from df raises CommandExecutionError."""
         _, inspector = _make_mock_runner(
             lsblk_stdout=FAT32_STICK_LSBLK_JSON,
@@ -606,7 +606,7 @@ class TestUsbLinuxInspection(unittest.TestCase):
             with self.assertRaises(InspectionParseError):
                 inspector.inspect_all()
 
-    def test_malformed_child_element_raises_parse_error(self) -> None:
+    def test_malformed_child_raises_parse_error(self) -> None:
         """Child partition entries that are not mappings raise InspectionParseError."""
         for invalid_child in (None, "scalar", 999):
             bad_json = json.dumps(
@@ -639,7 +639,7 @@ class TestUsbLinuxInspection(unittest.TestCase):
         self.assertIsNotNone(space)
         self.assertEqual(space.total_bytes, 32010928128)
 
-    def test_partition_number_from_partn_and_name_pattern(self) -> None:
+    def test_partition_number_from_partn_name(self) -> None:
         """Partition numbers are accurately read from PARTN or parsed from device name."""
         non_consecutive_json = json.dumps(
             {
@@ -706,7 +706,7 @@ class TestUsbLinuxInspection(unittest.TestCase):
         self.assertEqual(report.partitions[0].uuid, "ABCD-1234")
         self.assertEqual(report.partitions[0].filesystem, "vfat")
 
-    def test_unsafe_device_name_and_path_rejected(self) -> None:
+    def test_unsafe_device_name_path_rejected(self) -> None:
         """Path traversal attempts in device names or paths raise InspectionParseError."""
         for unsafe_name in ("../../etc/passwd", "sdb/extra", "..", ""):
             bad_json = json.dumps(
@@ -767,7 +767,7 @@ class TestUsbLinuxInspection(unittest.TestCase):
         report = inspector.inspect_all()[0]
         self.assertEqual(report.partitions[0].mount_points, ("/valid/mount",))
 
-    def test_df_escaped_whitespace_mount_point_decoded(self) -> None:
+    def test_df_escaped_mount_point_decoded(self) -> None:
         """Octal escape sequences in df mount points are decoded to match lsblk mounts."""
         stick_json = json.dumps(
             {

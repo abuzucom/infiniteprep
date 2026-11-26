@@ -63,12 +63,12 @@ class CoverageMeasurementTest(unittest.TestCase):
         self.text = read_workflow_text(CI_WORKFLOW)
         self.matrix = extract_job_block(self.text, "test-matrix")
 
-    def test_the_ubuntu_leg_runs_the_suite_under_coverage(self) -> None:
+    def test_ubuntu_leg_runs_under_coverage(self) -> None:
         """The ubuntu leg runs the suite under coverage."""
         self.assertIn("coverage run -m pytest", self.matrix)
         self.assertIn("if: matrix.os == 'ubuntu-latest'", self.matrix)
 
-    def test_the_other_legs_run_the_suite_without_coverage(self) -> None:
+    def test_other_legs_run_without_coverage(self) -> None:
         """The other legs run the plain suite."""
         self.assertIn("if: matrix.os != 'ubuntu-latest'", self.matrix)
 
@@ -89,21 +89,21 @@ class CoverageMeasurementTest(unittest.TestCase):
         self.assertIn("scripts/build_coverage_summary.py", self.matrix)
         self.assertIn("coverage-summary.json", self.matrix)
 
-    def test_the_report_never_fails_the_pull_request(self) -> None:
+    def test_report_never_fails_pull_request(self) -> None:
         """The coverage number reports and never blocks."""
         self.assertNotIn("--fail-under", self.text)
 
-    def test_the_reporting_steps_never_fail_the_job(self) -> None:
+    def test_reporting_steps_never_fail_job(self) -> None:
         """The reporting runs as ordinary steps. No check is silenced."""
         self.assertNotIn("continue-on-error", self.matrix)
 
-    def test_the_test_job_holds_no_write_permission(self) -> None:
+    def test_test_job_no_write_permission(self) -> None:
         """The suite job declares no permissions and inherits the read-only workflow set."""
         self.assertNotRegex(self.matrix, r"(?m)^\s{4}permissions:")
         workflow = yaml.safe_load(self.text)
         self.assertEqual(workflow["permissions"], {"contents": "read"})
 
-    def test_the_job_allows_time_for_the_measured_suite(self) -> None:
+    def test_job_allows_measured_suite_time(self) -> None:
         """The job timeout covers the suite under coverage."""
         timeout = re.search(r"^\s{4}timeout-minutes:\s*(\d+)\s*$", self.matrix, re.MULTILINE)
         self.assertIsNotNone(timeout, "the matrix job holds no timeout")
@@ -117,7 +117,7 @@ class CoverageCommentJobTest(unittest.TestCase):
         self.text = read_workflow_text(CI_WORKFLOW)
         self.job = extract_job_block(self.text, "coverage-comment")
 
-    def test_the_job_writes_only_the_pull_request_comment(self) -> None:
+    def test_job_writes_only_pr_comment(self) -> None:
         """The job holds the pull request write permission and nothing else."""
         permissions = extract_permissions(self.job)
         self.assertEqual(permissions, {"contents": "read", "pull-requests": "write"})
@@ -136,7 +136,7 @@ class CoverageCommentJobTest(unittest.TestCase):
         """The search reads every comment, not only the first page."""
         self.assertIn("github.paginate(github.rest.issues.listComments", self.job)
 
-    def test_the_comment_search_only_takes_the_bot_comment(self) -> None:
+    def test_comment_search_takes_bot_comment(self) -> None:
         """A comment from another author never becomes the bot comment."""
         self.assertIn("github-actions[bot]", self.job)
         self.assertIn("comment.user?.login === botLogin", self.job)
@@ -151,16 +151,16 @@ class CoverageCommentJobTest(unittest.TestCase):
         self.assertIn("group: coverage-comment-", self.job)
         self.assertIn("cancel-in-progress: true", self.job)
 
-    def test_the_comment_search_removes_duplicate_comments(self) -> None:
+    def test_comment_search_removes_duplicates(self) -> None:
         """A second coverage comment from the bot never survives."""
         self.assertIn("deleteComment", self.job)
 
-    def test_the_comment_search_keeps_the_newest_result(self) -> None:
+    def test_comment_search_keeps_newest_result(self) -> None:
         """An older run never overwrites the result of a newer run."""
         self.assertIn("infiniteprep-coverage-run", self.job)
         self.assertIn("newestPosted > runId", self.job)
 
-    def test_the_job_skips_a_pull_request_from_a_fork(self) -> None:
+    def test_job_skips_fork_pull_request(self) -> None:
         """A pull request from a fork receives a read-only token."""
         self.assertIn(
             "github.event.pull_request.head.repo.full_name == github.repository", self.job
@@ -170,7 +170,7 @@ class CoverageCommentJobTest(unittest.TestCase):
         """The job holds no checkout, so it keeps no credentials."""
         self.assertNotIn("actions/checkout@", self.job)
 
-    def test_the_job_never_fails_the_pull_request(self) -> None:
+    def test_job_never_fails_pull_request(self) -> None:
         """The comment job runs as an ordinary job. No check is silenced."""
         self.assertNotIn("continue-on-error", self.job)
 
@@ -182,11 +182,11 @@ class CoverageDependencyTest(unittest.TestCase):
         self.pyproject = PYPROJECT.read_text(encoding="utf-8")
         self.lockfile = LOCKFILE.read_text(encoding="utf-8")
 
-    def test_the_dev_extra_pins_the_coverage_version(self) -> None:
+    def test_dev_extra_pins_coverage_version(self) -> None:
         """The development extra holds the pinned coverage version."""
         self.assertIn(f'"coverage=={COVERAGE_VERSION}"', self.pyproject)
 
-    def test_the_lockfile_pins_the_coverage_version(self) -> None:
+    def test_lockfile_pins_coverage_version(self) -> None:
         """The lockfile holds the pinned coverage version."""
         self.assertRegex(self.lockfile, rf"(?m)^coverage=={re.escape(COVERAGE_VERSION)} ?\\?$")
 

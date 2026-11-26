@@ -39,7 +39,7 @@ class ModuleStemTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertTrue(CHECKER.is_denied(name))
 
-    def test_qml_plugins_without_the_qt_prefix_are_denied(self) -> None:
+    def test_unprefixed_qml_plugins_are_denied(self) -> None:
         """QML plugins of the GPL-3-only families fail without a 'qt' prefix too."""
         for name in (
             "_internal/PySide6/qml/QtQuick3D/libqquick3dplugin.so",
@@ -63,7 +63,7 @@ class ModuleStemTest(unittest.TestCase):
 class SymlinkEntryTest(unittest.TestCase):
     """Dangling symlinks join the inventory, and links to folders stay out."""
 
-    def test_dangling_symlink_is_listed_and_denied(self) -> None:
+    def test_dangling_symlink_listed_and_denied(self) -> None:
         """A broken link named like a denied library shows up as unlisted and denied."""
         with tempfile.TemporaryDirectory() as temp:
             bundle = Path(temp) / "InfinitePrep"
@@ -76,7 +76,7 @@ class SymlinkEntryTest(unittest.TestCase):
 
         self.assertEqual(report.denied, ["_internal/libQt6Charts.so.6"])
 
-    def test_symlink_to_a_folder_is_not_a_file(self) -> None:
+    def test_folder_symlink_is_not_file(self) -> None:
         """A framework-style link to a folder adds no entry, and its target files count once."""
         with tempfile.TemporaryDirectory() as temp:
             bundle = Path(temp) / "InfinitePrep"

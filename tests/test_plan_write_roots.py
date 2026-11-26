@@ -109,7 +109,7 @@ class HookWriteRootTest(unittest.TestCase):
         plan = self.home / ".claude" / "plans" / "plan.md"
         self.assertEqual(decision(self.write(plan, client="codex")), "deny")
 
-    def test_gemini_default_and_user_setting_roots(self):
+    def test_gemini_write_roots(self):
         default = self.home / ".gemini" / "tmp" / "project" / "plans" / "plan.md"
         self.assertEqual(decision(self.write(default, "gemini"), "gemini"), "allow")
         custom = self.home / "custom-plans"
@@ -120,7 +120,7 @@ class HookWriteRootTest(unittest.TestCase):
         result = self.write(custom / "plan.md", "gemini", tool="replace")
         self.assertEqual(decision(result, "gemini"), "allow", result.stdout)
 
-    def test_gemini_project_and_unsafe_settings_are_ignored(self):
+    def test_gemini_unsafe_settings_ignored(self):
         project_plans = self.home / "project-plans"
         project_settings = self.fixture.root / ".gemini" / "settings.json"
         project_settings.parent.mkdir()
@@ -146,7 +146,7 @@ class HookWriteRootTest(unittest.TestCase):
         outside = self.home / ".gemini" / "antigravity" / "plan.md"
         self.assertEqual(decision(self.write(outside, "antigravity"), "antigravity"), "deny")
 
-    def test_repository_and_symlink_escapes_are_denied(self):
+    def test_root_escapes_denied(self):
         plans = self.home / ".claude" / "plans"
         plans.mkdir(parents=True)
         link = plans / "link"

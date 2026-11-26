@@ -14,12 +14,12 @@ from infiniteprep.domain.ports import MetadataSearchQuery
 HUGE_INTEGER = 10**400
 
 
-def test_provider_number_none_past_float_max() -> None:
+def test_number_none_past_float_max() -> None:
     """float() raises OverflowError for this integer. The check returns None instead."""
     assert provider_number(HUGE_INTEGER) is None
 
 
-def test_musicbrainz_lookup_survives_a_huge_length() -> None:
+def test_musicbrainz_lookup_survives_huge_length() -> None:
     """A recording length past the float range reads as no duration, not a failed lookup."""
     payload: dict[str, Any] = {
         "recordings": [{"id": "rec-1", "title": "The Dream", "length": HUGE_INTEGER}]

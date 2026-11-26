@@ -27,8 +27,10 @@ PROTECTED_PREFIXES = (
     ".gemini/",
     ".github/workflows/",
     "docs/agent-policy/",
+    "skills/",
 )
 PROTECTED_FILES = frozenset({
+    ".compliance-tree-exemptions.json",
     ".github/CODEOWNERS",
     ".local-path-allowlist",
     ".pre-commit-config.yaml",
@@ -52,6 +54,7 @@ PROTECTED_FILES = frozenset({
     "scripts/check_local_paths.py",
     "scripts/complete_gate_adoption.py",
     "scripts/read_git_state.py",
+    "scripts/release.py",
     "scripts/run_tests.py",
     "scripts/sync.py",
     "scripts/trusted_bot_identities.py",
@@ -76,7 +79,7 @@ def requires_approval(paths: list[str]) -> bool:
 
 
 def has_approval_label(labels: list[str]) -> bool:
-    """Return whether trusted pull-request metadata contains the exact label."""
+    """Return whether trusted pull request metadata contains the exact label."""
     return APPROVAL_LABEL in labels
 
 
@@ -165,7 +168,7 @@ def _revision(value: str) -> str:
 
 
 def _labels(value: str) -> list[str]:
-    """Parse bounded pull-request labels as untrusted JSON data."""
+    """Parse bounded pull request labels as untrusted JSON data."""
     if len(value.encode("utf-8")) > MAX_LABEL_BYTES:
         raise ValueError("label data exceeds the size limit")
     parsed = json.loads(value)
@@ -189,7 +192,7 @@ def _run(command: list[str], root: Path, timeout: int) -> subprocess.CompletedPr
 
 
 def _fetch_head(root: Path, number: int) -> None:
-    """Fetch one validated pull-request head through the trusted Git wrapper."""
+    """Fetch one validated pull request head through the trusted Git wrapper."""
     wrapper = root / "scripts" / "trusted_git.py"
     refspec = f"refs/pull/{number}/head"
     result = _run(
@@ -198,7 +201,7 @@ def _fetch_head(root: Path, number: int) -> None:
         FETCH_TIMEOUT_SECONDS,
     )
     if result.returncode != 0:
-        raise RuntimeError("trusted fetch of the pull-request head failed")
+        raise RuntimeError("trusted fetch of the pull request head failed")
 
 
 def _has_revision(root: Path, revision: str) -> bool:
@@ -219,7 +222,7 @@ def _changed_paths(root: Path, base: str, head: str) -> list[str]:
         GIT_TIMEOUT_SECONDS,
     )
     if result.returncode != 0:
-        raise RuntimeError("Git could not list pull-request changes")
+        raise RuntimeError("Git could not list pull request changes")
     paths = [line for line in result.stdout.splitlines() if line]
     if any("\\" in path or path.startswith("/") or ".." in Path(path).parts for path in paths):
         raise ValueError("changed path is not a safe repository-relative path")
@@ -239,7 +242,7 @@ def main(argv: list[str]) -> int:
         base = _revision(options.base)
         head = _revision(options.head)
         if options.pr_number < 1:
-            raise ValueError("pull-request number must be positive")
+            raise ValueError("pull request number must be positive")
         labels = _labels(options.labels_json)
         timeline = (load_timeline(Path(options.timeline_json))
                     if options.timeline_json is not None else None)

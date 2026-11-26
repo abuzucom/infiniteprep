@@ -35,7 +35,7 @@ def theme_package(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return package_dir
 
 
-def test_apply_application_theme_reports_a_failure_with_a_reason() -> None:
+def test_apply_theme_reports_failure_reason() -> None:
     """A missing theme package leaves the native theme in effect and names the reason."""
     app = MagicMock(spec=QApplication)
     with patch("infiniteprep.ui.theme._has_qt_material", return_value=False):
@@ -47,7 +47,7 @@ def test_apply_application_theme_reports_a_failure_with_a_reason() -> None:
     app.setStyleSheet.assert_called_once_with("")
 
 
-def test_apply_application_theme_reports_the_applied_theme() -> None:
+def test_apply_theme_reports_applied_theme() -> None:
     """A theme that the engine accepts reports the theme now in effect."""
     app = MagicMock(spec=QApplication)
     engine = MagicMock()
@@ -66,7 +66,7 @@ def test_apply_application_theme_reports_the_applied_theme() -> None:
     assert Path(call.kwargs["theme"]) == theme_file_path(DEFAULT_DARK_THEME)
 
 
-def test_apply_application_theme_reports_a_failure_when_the_engine_raises() -> None:
+def test_apply_theme_reports_engine_failure() -> None:
     """A theme engine error leaves the native theme in effect and names the cause."""
     app = MagicMock(spec=QApplication)
     engine = MagicMock()
@@ -84,7 +84,7 @@ def test_apply_application_theme_reports_a_failure_when_the_engine_raises() -> N
     app.setStyleSheet.assert_called_once_with("")
 
 
-def test_switch_application_theme_keeps_the_current_theme_when_the_new_one_fails() -> None:
+def test_failed_switch_keeps_current_theme() -> None:
     """A failed switch reapplies the current theme, so the app keeps its look."""
     app = MagicMock(spec=QApplication)
     engine = MagicMock()
@@ -102,7 +102,7 @@ def test_switch_application_theme_keeps_the_current_theme_when_the_new_one_fails
     assert engine.apply_stylesheet.call_count == 2
 
 
-def test_switch_application_theme_reports_the_native_theme_when_both_fail() -> None:
+def test_double_failure_reports_native_theme() -> None:
     """A failed switch and a failed restore leave the native theme in effect."""
     app = MagicMock(spec=QApplication)
     engine = MagicMock()
@@ -118,7 +118,7 @@ def test_switch_application_theme_reports_the_native_theme_when_both_fail() -> N
     assert result.theme == NATIVE_THEME
 
 
-def test_theme_choices_list_only_the_themes_the_build_can_apply(
+def test_theme_choices_list_applicable_themes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A build without the theme package offers the native theme only."""
@@ -127,7 +127,7 @@ def test_theme_choices_list_only_the_themes_the_build_can_apply(
     assert get_theme_choices() == [NATIVE_THEME]
 
 
-def test_theme_choices_include_the_system_theme_when_a_theme_file_exists(
+def test_theme_file_adds_system_choice(
     theme_package: Path,
 ) -> None:
     """A build with the theme files offers them and the system theme. Native stays out."""
@@ -138,7 +138,7 @@ def test_theme_choices_include_the_system_theme_when_a_theme_file_exists(
     ]
 
 
-def test_settings_dialog_keeps_the_stored_theme_when_it_cannot_apply(
+def test_settings_keep_unapplicable_stored_theme(
     qtbot: Any, tmp_path: Path, theme_package: Path
 ) -> None:
     """A theme that cannot apply stays out of the settings file."""

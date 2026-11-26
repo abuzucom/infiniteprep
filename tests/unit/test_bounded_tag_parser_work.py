@@ -41,7 +41,7 @@ def _latin1_frame(frame_id: str, text: bytes) -> Id3Frame:
     return Id3Frame(frame_id, bytes((LATIN1,)) + text)
 
 
-def test_text_frame_at_value_cap_decodes() -> None:
+def test_text_at_value_cap_decodes() -> None:
     """A frame with exactly the allowed number of values keeps all of them."""
     frame = _latin1_frame("TPE1", b"a\x00" * (MAX_TEXT_VALUES - 1) + b"last")
 
@@ -51,7 +51,7 @@ def test_text_frame_at_value_cap_decodes() -> None:
     assert values[-1] == "last"
 
 
-def test_text_frame_past_the_value_cap_is_rejected() -> None:
+def test_text_over_value_cap_rejected() -> None:
     """One value past the cap raises instead of building an unbounded list."""
     frame = _latin1_frame("TPE1", b"a\x00" * MAX_TEXT_VALUES + b"last")
 
@@ -59,7 +59,7 @@ def test_text_frame_past_the_value_cap_is_rejected() -> None:
         decode_text_values(frame)
 
 
-def test_text_frame_past_the_byte_cap_is_rejected() -> None:
+def test_text_over_byte_cap_rejected() -> None:
     """A text frame larger than the byte cap raises before any split."""
     frame = _latin1_frame("TIT2", b"a" * (MAX_TEXT_BYTES + 1))
 
@@ -67,7 +67,7 @@ def test_text_frame_past_the_byte_cap_is_rejected() -> None:
         decode_text_values(frame)
 
 
-def test_txxx_values_past_the_value_cap_are_rejected() -> None:
+def test_txxx_over_value_cap_rejected() -> None:
     """The value cap also covers the values that follow a TXXX description."""
     frame = _latin1_frame("TXXX", b"desc\x00" + b"a\x00" * (MAX_TEXT_VALUES + 1))
 
@@ -109,7 +109,7 @@ def test_large_picture_keeps_description() -> None:
     assert _picture_fields(body) == ("image/png", "Front")
 
 
-def test_long_ogg_packet_assembles_in_linear_time() -> None:
+def test_long_ogg_packet_assembles_linearly() -> None:
     """A packet of thousands of full segments assembles well inside the time limit."""
     lacing = [FULL_SEGMENT] * LONG_PACKET_SEGMENTS + [1]
     body = b"\x01" * (FULL_SEGMENT * LONG_PACKET_SEGMENTS + 1)
@@ -125,7 +125,7 @@ def test_long_ogg_packet_assembles_in_linear_time() -> None:
     assert elapsed < LINEAR_TIME_LIMIT_SECONDS
 
 
-def test_ogg_size_cap_counts_earlier_pages() -> None:
+def test_ogg_cap_counts_earlier_pages() -> None:
     """A fragment carried over from an earlier page counts toward the packet size cap."""
     pending = [b"\x01" * MAX_PACKET_SIZE]
     packets: list[bytes] = []
@@ -134,7 +134,7 @@ def test_ogg_size_cap_counts_earlier_pages() -> None:
         _extract_page_packets([1], b"\x01", pending, packets)
 
 
-def test_ogg_packet_size_resets_per_packet() -> None:
+def test_ogg_size_resets_per_packet() -> None:
     """Two packets on one page each count their own bytes against the cap."""
     first = b"\x01" * 10
     second = b"\x02" * 20
@@ -145,14 +145,14 @@ def test_ogg_packet_size_resets_per_packet() -> None:
     assert packets == [first, second]
 
 
-def test_natural_key_accepts_huge_digit_run() -> None:
+def test_natural_key_accepts_huge_digits() -> None:
     """A digit run that int() refuses still yields a comparable key."""
     long_run = "9" * LONG_DIGIT_RUN
 
     assert natural_key(f"Track {long_run}") > natural_key("Track 10")
 
 
-def test_natural_key_orders_non_ascii_digits_by_value() -> None:
+def test_natural_key_orders_unicode_digits() -> None:
     """A number in Arabic-Indic digits orders by its value against ASCII numbers."""
     arabic_zero = "\N{ARABIC-INDIC DIGIT ZERO}"
     arabic_two = "\N{ARABIC-INDIC DIGIT TWO}"
@@ -163,7 +163,7 @@ def test_natural_key_orders_non_ascii_digits_by_value() -> None:
     assert natural_key(f"Track {arabic_zero}{arabic_two}") == natural_key("Track 2")
 
 
-def test_natural_key_orders_numbers_by_value() -> None:
+def test_natural_key_orders_numbers_numerically() -> None:
     """Numbers inside text order by value, and leading zeros do not change the value."""
     assert natural_key("Track 2") < natural_key("Track 10")
     assert natural_key("Track 007") == natural_key("Track 7")

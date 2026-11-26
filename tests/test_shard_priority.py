@@ -15,7 +15,7 @@ WORKER_COUNT = 3
 class ShardPriorityTest(unittest.TestCase):
     """Measured slow shards start before ordinary lexical shards."""
 
-    def test_slow_shards_run_first_and_unknown_shards_stay_sorted(self):
+    def test_slow_shards_first(self):
         shards = [
             ("test_zeta.py::Zeta", "test_zeta.Zeta"),
             ("test_immutable_compliance.py::ImmutableComplianceScannerTest",

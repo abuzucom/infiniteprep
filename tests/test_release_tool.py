@@ -123,14 +123,14 @@ class ChecksumTest(unittest.TestCase):
 class NotesTest(unittest.TestCase):
     """The notes hold one version's CHANGELOG section and the download block (D318)."""
 
-    def test_section_stops_at_the_next_release(self) -> None:
+    def test_section_stops_at_next_release(self) -> None:
         """The 1.2.0 section holds its own entries and none of 1.1.0."""
         section = RELEASE.extract_changelog_section("1.2.0", CHANGELOG)
         self.assertIn("The new feature.", section)
         self.assertNotIn("The old fix.", section)
         self.assertNotIn("## [1.2.0]", section)
 
-    def test_last_section_runs_to_the_end(self) -> None:
+    def test_last_section_runs_to_end(self) -> None:
         """The oldest section ends at the end of the file."""
         self.assertIn("The old fix.", RELEASE.extract_changelog_section("1.1.0", CHANGELOG))
 
@@ -140,7 +140,7 @@ class NotesTest(unittest.TestCase):
             RELEASE.extract_changelog_section("9.9.9", CHANGELOG)
         self.assertIn("9.9.9", str(caught.exception))
 
-    def test_notes_end_with_the_download_block(self) -> None:
+    def test_notes_end_with_download_block(self) -> None:
         """The notes name SHA256SUMS.txt, the macOS Open Anyway step, and NOTICE."""
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -156,7 +156,7 @@ class NotesTest(unittest.TestCase):
 class CommandTest(unittest.TestCase):
     """The command line runs the tag check against the real repository."""
 
-    def test_check_tag_fails_for_a_wrong_tag(self) -> None:
+    def test_check_tag_fails_wrong_tag(self) -> None:
         """A tag that names no version in the repository returns 1 and says why."""
         output = io.StringIO()
         with contextlib.redirect_stdout(output):

@@ -111,7 +111,7 @@ def test_write_preview_count_is_announced(qtbot: Any, announcements: list[str]) 
     assert announcements[-1] == dialog.status_label.text()
 
 
-def test_toolbar_actions_explain_an_empty_library(
+def test_toolbar_actions_explain_empty_library(
     qtbot: Any, tmp_path: Path, messages: list[tuple[QMessageBox.Icon, str, str]]
 ) -> None:
     """Every toolbar action on the visible files says why it did nothing on an empty table."""
@@ -126,8 +126,8 @@ def test_toolbar_actions_explain_an_empty_library(
         on_transcode_batch=calls.append,
         on_export_playlist=calls,
     )
-    # Identify & Analyze and Preview & Apply Writes keep no button attribute, so their
-    # handlers run directly. The other three run through their buttons.
+    # Identify & Analyze and Preview & Apply Writes keep no button attribute. Those
+    # handlers run directly. The other three actions run through the matching buttons.
     actions = (
         window._trigger_analyze_all,
         window._trigger_open_write_dialog,
@@ -158,7 +158,7 @@ def test_finished_batch_is_announced(
     assert announcements[-1].startswith(BATCH_LABEL)
 
 
-def test_bulk_approve_reports_the_approved_count(
+def test_bulk_approve_reports_approved_count(
     qtbot: Any, tmp_path: Path, messages: list[tuple[QMessageBox.Icon, str, str]]
 ) -> None:
     """Bulk Approve on visible files reports how many fields it approved."""
@@ -172,7 +172,7 @@ def test_bulk_approve_reports_the_approved_count(
     assert text == "Approved 0 fields."
 
 
-def test_status_cell_shows_a_readable_label(
+def test_status_cell_shows_readable_label(
     qtbot: Any, tmp_path: Path, messages: list[tuple[QMessageBox.Icon, str, str]]
 ) -> None:
     """The library shows "Not analyzed", not the stored value "unprocessed"."""
@@ -183,7 +183,7 @@ def test_status_cell_shows_a_readable_label(
     assert format_status_cell("not_a_status") == "not_a_status"
 
 
-def test_detail_header_says_yes_or_no_for_write_support(
+def test_detail_header_states_write_support(
     qtbot: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The detail header shows Yes or No for write support instead of True or False."""

@@ -15,7 +15,7 @@ except ImportError:
 
 
 class MainWorker:
-    """Keep one imported CLI module alive across isolated invocations."""
+    """Keep one imported CLI module alive across isolated runs."""
 
     def __init__(self, module_path: Path,
                  request_timeout: float = DEFAULT_REQUEST_TIMEOUT_SECONDS,

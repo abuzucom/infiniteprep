@@ -56,7 +56,7 @@ def _block_data_folder(folder: Path) -> None:
     (folder / MACOS_DATA_DIR_NAME).write_bytes(b"not a folder")
 
 
-def test_marker_next_to_the_app_keeps_data_beside_it(user_dirs: Path, applications: Path) -> None:
+def test_marker_beside_app_keeps_data(user_dirs: Path, applications: Path) -> None:
     """The database and settings go in InfinitePrep-Data next to the .app (D289, D291)."""
     _add_marker(applications)
     confirm = build_never_asked_confirm()
@@ -101,7 +101,7 @@ def test_source_run_ignores_the_marker(user_dirs: Path, applications: Path) -> N
     assert not (applications / MACOS_DATA_DIR_NAME).exists()
 
 
-def test_marker_inside_the_bundle_is_ignored(user_dirs: Path, applications: Path) -> None:
+def test_marker_inside_bundle_is_ignored(user_dirs: Path, applications: Path) -> None:
     """A marker in Contents/MacOS never writes data inside the signed bundle."""
     macos_dir = _executable(applications).parent
     (macos_dir / PORTABLE_MARKER_NAME).write_bytes(b"")
@@ -130,7 +130,7 @@ def test_translocated_copy_stays_per_user(user_dirs: Path, tmp_path: Path) -> No
     assert confirm.asked == []
 
 
-def test_bundle_lookalike_uses_the_executable_folder(user_dirs: Path, tmp_path: Path) -> None:
+def test_bundle_lookalike_uses_executable_folder(user_dirs: Path, tmp_path: Path) -> None:
     """A MacOS folder without Contents is no bundle, so the plain marker rule applies."""
     folder = tmp_path / "Tools.app" / "MacOS"
     folder.mkdir(parents=True)
@@ -161,7 +161,7 @@ def test_unwritable_remember_saves_choice(user_dirs: Path, applications: Path) -
     assert read_fallback_list(user_dirs) == [str(applications.resolve())]
 
 
-def test_unwritable_folder_without_remember_asks_again(user_dirs: Path, applications: Path) -> None:
+def test_unwritable_unremembered_folder_asks_again(user_dirs: Path, applications: Path) -> None:
     """Without Remember the fallback holds for this run only."""
     _add_marker(applications)
     _block_data_folder(applications)
@@ -189,7 +189,7 @@ def test_unwritable_folder_quit_returns_none(user_dirs: Path, applications: Path
     assert read_fallback_list(user_dirs) == []
 
 
-def test_writable_again_forgets_the_remembered_choice(user_dirs: Path, applications: Path) -> None:
+def test_writable_again_forgets_remembered_choice(user_dirs: Path, applications: Path) -> None:
     """Once the folder can be written, the app uses it again (D259)."""
     _add_marker(applications)
     _block_data_folder(applications)

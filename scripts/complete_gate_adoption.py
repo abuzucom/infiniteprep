@@ -57,6 +57,9 @@ def _candidate_paths(candidate: Path) -> list[str]:
     paths.update(adoption.CONFIG_PATHS)
     paths.update(relative for relative, _event, _matcher in adoption.TRANSACTION_CONFIGS.values())
     paths.update(EXTRA_CLIENT_CONFIGS)
+    # check_gate_adoption.py requires every skill copy, so the install set
+    # carries the same list or the installed tree fails validation.
+    paths.update(adoption.required_skill_files())
     return sorted(paths)
 
 
@@ -146,7 +149,7 @@ def _replace_file(source: Path, target: Path) -> None:
 
 
 def _ordered_paths(paths: list[str]) -> list[str]:
-    """Copy hook registrations last so one invocation completes the transaction."""
+    """Copy hook registrations last so one run completes the transaction."""
     transaction_paths = {relative for relative, _event, _matcher in adoption.TRANSACTION_CONFIGS.values()}
     ordinary = sorted(path for path in paths if path not in transaction_paths)
     registrations = sorted(path for path in paths if path in transaction_paths)
@@ -173,7 +176,9 @@ def _restore_paths(
             _replace_file(_backup_path(backup, relative), target)
         elif target.exists():
             target.unlink()
-    for directory in created_directories:
+    # One parent can gain children from several targets. Removing the
+    # deepest directories first empties each parent before its own turn.
+    for directory in sorted(created_directories, key=lambda path: len(path.parts), reverse=True):
         directory.rmdir()
 
 
