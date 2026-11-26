@@ -8,8 +8,11 @@ from collections import Counter
 from typing import TYPE_CHECKING, Final
 from uuid import uuid4
 
+from infiniteprep.domain.enums import KeyDisplayNotation
+from infiniteprep.domain.library_query import parse_library_query
 from infiniteprep.domain.models import CollectionFolder, CollectionKind, TrackCollection
 from infiniteprep.domain.playlist_order import order_tracks
+from infiniteprep.ui.library_rows import search_playlist
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -163,6 +166,32 @@ class CollectionRepository:
         """Create an empty ordered playlist with repeats off by default."""
         return self._create_collection(name, CollectionKind.PLAYLIST, folder_id, allow_repeats)
 
+    def save_search(
+        self, name: str, query: str, notation: KeyDisplayNotation = KeyDisplayNotation.CAMELOT
+    ) -> TrackCollection:
+        """Save a valid search as a named root playlist in one transaction."""
+        if not query.strip():
+            raise ValueError("Enter a search before saving.")
+        parse_library_query(query)
+        name = _normalize_name(name)
+        playlist = TrackCollection(uuid4().hex, name, CollectionKind.PLAYLIST)
+        with self._repository.batch(immediate=True):
+            _write_named_record(
+                self._repository.db.connect(),
+                "INSERT INTO collections (id, name, name_key, kind, allow_repeats, "
+                "search_query, search_notation) VALUES (?, ?, ?, ?, 0, ?, ?)",
+                (playlist.id, name, name.casefold(), playlist.kind, query, notation.value),
+            )
+        return playlist
+
+    def saved_searches(self) -> list[tuple[str, str]]:
+        """List saved search names and original queries in library order."""
+        rows = self._repository.db.connect().execute(
+            "SELECT name, search_query FROM collections "
+            "WHERE search_query IS NOT NULL ORDER BY name_key"
+        )
+        return [(row["name"], row["search_query"]) for row in rows]
+
     def create_crate(self, name: str, folder_id: str | None = None) -> TrackCollection:
         """Create an empty unordered crate."""
         return self._create_collection(name, CollectionKind.CRATE, folder_id, False)
@@ -211,8 +240,19 @@ class CollectionRepository:
 
     def playlist_tracks(self, playlist_id: str) -> list[str]:
         """Return file IDs in saved order, including repeated occurrences."""
-        self._require_kind(playlist_id, CollectionKind.PLAYLIST)
+        row = self._require_kind(playlist_id, CollectionKind.PLAYLIST)
+        if row["search_query"] is not None:
+            query = parse_library_query(row["search_query"])
+            return search_playlist(
+                self._repository, query, KeyDisplayNotation(row["search_notation"])
+            )
         return self._read_playlist_tracks(playlist_id)
+
+    def _require_manual_playlist(self, playlist_id: str) -> sqlite3.Row:
+        row = self._require_kind(playlist_id, CollectionKind.PLAYLIST)
+        if row["search_query"] is not None:
+            raise ValueError("This playlist follows a saved search. Choose a manual playlist.")
+        return row
 
     def _read_playlist_tracks(self, playlist_id: str) -> list[str]:
         rows = self._repository.db.connect().execute(
@@ -233,7 +273,7 @@ class CollectionRepository:
         """Save playlist membership and manual order. Clear stale sort undo."""
         tracks = tuple(file_ids)
         with self._repository.batch(immediate=True):
-            row = self._require_kind(playlist_id, CollectionKind.PLAYLIST)
+            row = self._require_manual_playlist(playlist_id)
             if not row["allow_repeats"] and len(set(tracks)) != len(tracks):
                 raise ValueError("Remove repeated tracks or enable repeats for this playlist.")
             self._write_playlist_tracks(playlist_id, tracks)
@@ -243,7 +283,7 @@ class CollectionRepository:
         """Change the repeat setting after verifying it fits the saved membership."""
         conn = self._repository.db.connect()
         with self._repository.batch(immediate=True):
-            self._require_kind(playlist_id, CollectionKind.PLAYLIST)
+            self._require_manual_playlist(playlist_id)
             tracks = self._read_playlist_tracks(playlist_id)
             if not allow_repeats and len(set(tracks)) != len(tracks):
                 raise ValueError("Remove repeated tracks before turning repeats off.")
@@ -275,7 +315,7 @@ class CollectionRepository:
     def sort_playlist(self, playlist_id: str, *, bpm_first: bool = False) -> None:
         """Save a stable metadata order and its one-step undo snapshot."""
         with self._repository.batch(immediate=True):
-            self._require_kind(playlist_id, CollectionKind.PLAYLIST)
+            self._require_manual_playlist(playlist_id)
             previous = self._read_playlist_tracks(playlist_id)
             ordered = order_tracks(self._repository, previous, bpm_first=bpm_first)
             if ordered != previous:
@@ -285,7 +325,7 @@ class CollectionRepository:
     def undo_playlist_sort(self, playlist_id: str) -> bool:
         """Restore the prior order once if it still describes current membership."""
         with self._repository.batch(immediate=True):
-            row = self._require_kind(playlist_id, CollectionKind.PLAYLIST)
+            row = self._require_manual_playlist(playlist_id)
             snapshot = row["sort_undo"]
             if snapshot is None:
                 return False

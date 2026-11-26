@@ -13,6 +13,7 @@ from infiniteprep.db.migrations import (
     m0002_collections,
     m0003_change_record_updated_at,
     m0004_library_import,
+    m0005_saved_search,
 )
 
 
@@ -45,6 +46,9 @@ MIGRATIONS: Final[tuple[Migration, ...]] = (
         m0004_library_import.VERSION,
         m0004_library_import.apply,
         m0004_library_import.ROW_COUNT_QUERIES,
+    ),
+    Migration(
+        m0005_saved_search.VERSION, m0005_saved_search.apply, m0005_saved_search.ROW_COUNT_QUERIES
     ),
 )
 LATEST_VERSION: Final[int] = MIGRATIONS[-1].version

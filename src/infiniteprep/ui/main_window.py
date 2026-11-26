@@ -6,7 +6,6 @@ import base64
 import binascii
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
@@ -29,6 +28,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QHeaderView,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -53,17 +53,15 @@ from infiniteprep.config.settings import (
 )
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
-    FieldName,
     KeyDisplayNotation,
     ReviewStatus,
-    format_canonical_key,
-    parse_key_string,
 )
-from infiniteprep.domain.metadata_values import resolve_effective_value, top_proposal_values
-from infiniteprep.domain.models import ApprovedField, FileAsset
+from infiniteprep.domain.library_query import parse_library_query
+from infiniteprep.domain.models import FileAsset
 from infiniteprep.services.import_service import ImportBatchReport, ImportService
 from infiniteprep.services.job_orchestrator import BatchKind, BatchState, QueuedBatch
 from infiniteprep.services.review_service import ReviewService
+from infiniteprep.ui import library_columns, library_rows
 from infiniteprep.ui.accessible_names import announce, name_combo_box
 from infiniteprep.ui.action_handlers import show_plain_message
 from infiniteprep.ui.audio_player import FILE_ID_MIME_TYPE
@@ -86,11 +84,15 @@ from infiniteprep.ui.library_columns import (
     ColumnVisibility,
     LibraryColumn,
     format_column_choices,
-    format_status_cell,
     format_status_label,
     key_cell_style,
     parse_column_choices,
     status_icon,
+)
+from infiniteprep.ui.library_rows import (
+    LibraryRows,
+    LibrarySnapshot,
+    load_library_snapshot,
 )
 from infiniteprep.ui.library_sidebar import LibrarySidebar
 from infiniteprep.ui.stylesheet import BUTTON_VARIANT_PROPERTY, ICON_BUTTON_VARIANT
@@ -98,11 +100,9 @@ from infiniteprep.ui.table_sort import (
     FILENAME_COLUMN,
     SORT_COLUMN_COUNT,
     LibraryRow,
-    parse_bpm_value,
     sort_rows,
 )
 from infiniteprep.ui.theme import DEFAULT_DARK_THEME, THEME_PALETTES, resolve_theme
-from infiniteprep.ui.time_format import split_time_seconds
 from infiniteprep.ui.tokens import (
     DARK_PALETTE,
     STANDARD_TABLE_ROW_HEIGHT,
@@ -126,6 +126,12 @@ from infiniteprep.ui.workflow import (
 )
 from infiniteprep.ui.workflow_bar import WorkflowBar, stage_shortcut
 from infiniteprep.ui.write_preview_model import format_count
+
+# Keep the existing module-level formatters available to table clients.
+format_duration = library_rows.format_duration
+format_warning_summary = library_rows.format_warning_summary
+format_status_cell = library_columns.format_status_cell
+WARNING_LINE_SEPARATOR = library_rows.WARNING_LINE_SEPARATOR
 
 TABLE_COLUMNS: Final[tuple[str, ...]] = (
     "Filename",
@@ -160,14 +166,6 @@ KEY_NOTATION_LABELS: Final[dict[KeyDisplayNotation, str]] = {
     KeyDisplayNotation.CAMELOT: "Camelot",
     KeyDisplayNotation.OPEN_KEY: "Open Key",
 }
-WARNING_LINE_SEPARATOR: Final[str] = "\n"
-
-
-def format_warning_summary(warnings: list[str]) -> str:
-    """Return the Issues cell text: a count such as "2 issues", or nothing for none."""
-    if not warnings:
-        return ""
-    return format_count(len(warnings), "issue", "issues")
 
 
 def format_approved_count(count: int) -> str:
@@ -297,46 +295,7 @@ class LibraryTableWidget(QTableWidget):
         return mime_data
 
 
-@dataclass(frozen=True)
-class LibrarySnapshot:
-    """The per-file values one table refresh reads, loaded in three queries.
-
-    A refresh read approved fields, proposals, and analysis results per file, twice for
-    the analysis. A 5,000-file library ran about 20,000 queries on the GUI thread.
-    """
-
-    approved: dict[str, dict[str, ApprovedField]]
-    top_proposals: dict[str, dict[str, str]]
-    analysis_warnings: dict[str, list[str]]
-
-
-def load_library_snapshot(repo: Repository) -> LibrarySnapshot:
-    """Read the approved fields, top proposals, and analysis warnings of every file."""
-    proposals = repo.field_proposals_by_file()
-    analyses = repo.analysis_results_by_file()
-    return LibrarySnapshot(
-        approved=repo.approved_fields_by_file(),
-        top_proposals={
-            file_id: top_proposal_values(file_proposals)
-            for file_id, file_proposals in proposals.items()
-        },
-        analysis_warnings={
-            file_id: [warning for result in results for warning in result.warnings]
-            for file_id, results in analyses.items()
-        },
-    )
-
-
-def format_duration(seconds: float) -> str:
-    """Format a track duration as M:SS or H:MM:SS, truncating fractions."""
-    whole_seconds = int(max(0.0, float(seconds)))
-    hours, minutes, seconds_part = split_time_seconds(whole_seconds)
-    if hours:
-        return f"{hours}:{minutes:02d}:{seconds_part:02d}"
-    return f"{minutes}:{seconds_part:02d}"
-
-
-class MainWindow(QMainWindow):
+class MainWindow(QMainWindow, LibraryRows):
     """Primary desktop window with batch file table, filter bar, toolbar, and detail panel."""
 
     def __init__(
@@ -517,6 +476,9 @@ class MainWindow(QMainWindow):
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.addLayout(self._build_filter_row())
+        self.search_error = QLabel(self)
+        self.search_error.setAccessibleName("Search feedback")
+        content_layout.addWidget(self.search_error)
         self._setup_file_table()
         self.detail_splitter = QSplitter(Qt.Orientation.Horizontal, content)
         self.detail_splitter.addWidget(self.file_table)
@@ -548,16 +510,47 @@ class MainWindow(QMainWindow):
         toggle.clicked.connect(self._toggle_sidebar_drawer)
         filter_bar.addWidget(toggle)
         self.sidebar_toggle_btn = toggle
-        self.search_input.setPlaceholderText("Filter by filename, artist, title, or label...")
+        self.search_input.setPlaceholderText(
+            "Search tracks, e.g. Daft Punk tracks between 120 and 128 BPM"
+        )
         self.search_input.textChanged.connect(self.refresh_file_table)
         self.search_input.setAccessibleName(SEARCH_INPUT_NAME)
         filter_bar.addWidget(self.search_input, stretch=1)
+        self.search_menu = QMenu(self)
+        self.search_menu.aboutToShow.connect(self._refresh_search_menu)
+        saved = QToolButton(self)
+        saved.setText("Saved searches")
+        saved.setMenu(self.search_menu)
+        saved.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        filter_bar.addWidget(saved)
         key_label = QLabel(KEY_NOTATION_LABEL, self)
         key_label.setBuddy(self.key_notation_combo)
         filter_bar.addWidget(key_label)
         filter_bar.addWidget(self.key_notation_combo)
         self._add_sort_controls(filter_bar)
         return filter_bar
+
+    def _refresh_search_menu(self) -> None:
+        self.search_menu.clear()
+        save = self.search_menu.addAction("Save current search...")
+        save.setEnabled(bool(self.search_input.text().strip()))
+        save.triggered.connect(self._save_search)
+        for name, query in self.repo.collections.saved_searches():
+            action = self.search_menu.addAction(name.replace("&", "&&"))
+            action.triggered.connect(
+                lambda checked=False, text=query: self.search_input.setText(text)
+            )
+
+    def _save_search(self) -> None:
+        name, accepted = QInputDialog.getText(self, "Save search", "Smart playlist name")
+        if accepted:
+            try:
+                self.repo.collections.save_search(
+                    name, self.search_input.text(), self.current_key_notation
+                )
+            except ValueError as error:
+                self.search_error.setText(str(error))
+                self.search_error.show()
 
     def _setup_file_table(self) -> None:
         """Set the headers, sizing, sorting, selection, and actions of the library table."""
@@ -762,6 +755,15 @@ class MainWindow(QMainWindow):
 
     def refresh_file_table(self) -> None:
         """Reload all FileAssets from Repository and populate the filtered table."""
+        search_text = self.search_input.text()
+        try:
+            query = parse_library_query(search_text)
+        except ValueError as error:
+            self.search_error.setText(str(error))
+            self.search_error.show()
+            return
+        self.search_error.clear()
+        self.search_error.hide()
         all_files = self.repo.list_files()
         snapshot = load_library_snapshot(self.repo)
         self._show_library_counts(all_files)
@@ -771,10 +773,13 @@ class MainWindow(QMainWindow):
             if self._matches_status_filter(file_asset, snapshot)
         ]
         rows = [self._build_library_row(asset, snapshot) for asset in filtered]
-        query = self.search_input.text().strip().casefold()
-        if query:
-            # The search reads the cells the table shows, so a match is always visible.
-            rows = [row for row in rows if query in " ".join(row.cells).casefold()]
+        if search_text.strip():
+            records = [
+                self.search_record(asset, row, snapshot)
+                for asset, row in zip(filtered, rows, strict=True)
+            ]
+            matches = set(query.select_ids(self.repo.db.connect(), records))
+            rows = [row for row in rows if row.file_id in matches]
         ordered = sort_rows(
             rows,
             column=self._sort_column,
@@ -935,13 +940,6 @@ class MainWindow(QMainWindow):
         row_index = self.visible_file_ids.index(self._selected_file_id)
         self.file_table.selectRow(row_index)
 
-    @staticmethod
-    def _asset_warnings(asset: FileAsset, snapshot: LibrarySnapshot) -> list[str]:
-        """Collect technical and analysis warnings for one library asset."""
-        warnings: list[str] = list(asset.original_tags.get("technical", {}).get("warnings", []))
-        warnings.extend(snapshot.analysis_warnings.get(asset.id, []))
-        return warnings
-
     def _matches_status_filter(self, asset: FileAsset, snapshot: LibrarySnapshot) -> bool:
         """Return True if the asset passes the library filter checked in the sidebar."""
         chosen: LibraryFilter = self.sidebar.current_filter()
@@ -990,92 +988,6 @@ class MainWindow(QMainWindow):
             return
         item.setBackground(QColor(style.fill))
         item.setForeground(QColor(style.text))
-
-    def _build_library_row(self, asset: FileAsset, snapshot: LibrarySnapshot) -> LibraryRow:
-        """Build the table row for one asset with the values the sort needs."""
-        standard_tags = asset.original_tags.get("standard_tags", {})
-        approved = snapshot.approved.get(asset.id, {})
-        top_by_field = snapshot.top_proposals.get(asset.id, {})
-        raw_key = self._effective_val(standard_tags, approved, top_by_field, FieldName.KEY.value)
-        raw_bpm = self._effective_val(standard_tags, approved, top_by_field, FieldName.BPM.value)
-        warnings = self._asset_warnings(asset, snapshot)
-        cells = self._build_table_row_cells(asset, standard_tags, approved, top_by_field, warnings)
-        return LibraryRow(
-            file_id=asset.id,
-            cells=tuple(cells),
-            path=asset.current_path,
-            duration_seconds=asset.duration,
-            bpm=parse_bpm_value(raw_bpm),
-            key=parse_key_string(raw_key),
-            review_status=str(asset.review_status),
-            warning_details=WARNING_LINE_SEPARATOR.join(warnings),
-        )
-
-    def _build_table_row_cells(
-        self,
-        asset: FileAsset,
-        standard_tags: dict[str, str],
-        approved: dict,
-        top_by_field: dict[str, str],
-        warnings: list[str],
-    ) -> list[str]:
-        """Compute string cells for a single FileAsset row in the batch review table."""
-        label_text = self._effective_val(
-            standard_tags, approved, top_by_field, FieldName.LABEL.value
-        )
-        catalog_number_text = self._effective_val(
-            standard_tags, approved, top_by_field, FieldName.CATALOG_NUMBER.value
-        )
-        raw_key = self._effective_val(standard_tags, approved, top_by_field, FieldName.KEY.value)
-
-        return [
-            Path(asset.current_path).name,
-            str(asset.format).upper(),
-            format_duration(asset.duration) if asset.duration is not None else "-",
-            self._summary_pair(standard_tags, approved, top_by_field, FieldName.ARTIST.value),
-            self._summary_pair(standard_tags, approved, top_by_field, FieldName.TITLE.value),
-            self._effective_val(standard_tags, approved, top_by_field, FieldName.MIX_NAME.value),
-            f"{label_text} [{catalog_number_text}]" if catalog_number_text else label_text,
-            self._effective_val(standard_tags, approved, top_by_field, FieldName.BPM.value),
-            self._format_key_cell(raw_key),
-            format_status_cell(str(asset.review_status)),
-            format_warning_summary(warnings),
-        ]
-
-    def _summary_pair(
-        self,
-        standard_tags: dict[str, str],
-        approved: dict,
-        top_by_field: dict[str, str],
-        field_name: str,
-    ) -> str:
-        """Format 'Current -> Approved/Proposed' summary string for table cells."""
-        current_value = standard_tags.get(field_name, "-")
-        target = (
-            approved[field_name].approved_value
-            if field_name in approved
-            else top_by_field.get(field_name, "")
-        )
-        if target and target != current_value:
-            return f"{current_value} -> {target}"
-        return target or current_value
-
-    def _effective_val(
-        self,
-        standard_tags: dict[str, str],
-        approved: dict,
-        top_by_field: dict[str, str],
-        field_name: str,
-    ) -> str:
-        """Return approved value, top proposal, or existing standard tag."""
-        return resolve_effective_value(standard_tags, approved, top_by_field, field_name)
-
-    def _format_key_cell(self, raw_key: str) -> str:
-        """Format musical key according to active KeyDisplayNotation."""
-        parsed = parse_key_string(raw_key)
-        if parsed is None:
-            return raw_key
-        return format_canonical_key(parsed[0], parsed[1], self.current_key_notation)
 
     def _on_table_selection_changed(self) -> None:
         """Show the selected file in DetailPanel when table selection changes.

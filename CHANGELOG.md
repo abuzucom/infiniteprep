@@ -5,9 +5,11 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.90.3] (2026-11-26)
+## [0.91.0] (2026-11-26)
 
 ### Added
+
+- Library search accepts natural language and field comparisons. Saved searches create live smart playlists.
 
 - The agents policy template moves from `abuzucom/agents` `88f58b5` to `4797f14` (v2.46.0).
   - The template adds the session zone, single question, prose option, anti-delegation, pull request base, and GitHub MCP write hooks. Each hook brings its shared modules, checkers, and tests.
@@ -34,7 +36,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tests/test_review_wiring.py` covers the wrapper pins, the permissions, the secret mapping, and the check names.
 - `ci/README.md` kept the `ci` path that the CodeQL configuration declared. The default setup reads that configuration from `main`.
 - The CodeQL configuration drops the `ci` path.
-- The version advances from 0.88.0 to 0.90.3 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.88.0 to 0.91.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 

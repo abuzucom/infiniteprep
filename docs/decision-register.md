@@ -431,6 +431,13 @@ and D148 apply to Update.
 | --- | --- |
 | D408 | Update matches a track by verified stable ID, then by exact normalized path (D135). Relative path, title, and artist (D148) only propose a match. The DJ confirms each proposed match. Ambiguous and proposed matches go to the DJ (D134). D148 stays the identity the manifest records (issue 309). |
 
+## Library search (issue 262)
+
+| ID | Decision |
+| --- | --- |
+| D409 | Library search combines ordinary track text with natural-language filters. |
+| D410 | Saved searches appear as smart playlists. Each read evaluates current library metadata. |
+
 ## Open questions
 
 | Source | Question |
