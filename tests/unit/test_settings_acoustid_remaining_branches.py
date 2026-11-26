@@ -67,9 +67,7 @@ def test_https_dns_rejects_mixed_public_and_private_answers(
         "getaddrinfo",
         lambda *_args, **_kwargs: records(),
     )
-
     valid, reason = validate_endpoint_url("https://example.test/v1", resolve_dns=True)
-
     assert valid is False
     assert reason is not None
     assert "disallowed IP" in reason
@@ -83,7 +81,6 @@ def test_https_dns_accepts_only_public_answers(monkeypatch: pytest.MonkeyPatch) 
         "getaddrinfo",
         lambda *_args, **_kwargs: answers,
     )
-
     assert validate_endpoint_url("https://example.test/v1", resolve_dns=True) == (True, None)
 
 
@@ -121,9 +118,7 @@ def test_localhost_dns_rejects_a_non_loopback_answer(
         "getaddrinfo",
         lambda *_args, **_kwargs: answers,
     )
-
     valid, reason = validate_endpoint_url("http://localhost:8080/v1", resolve_dns=True)
-
     assert valid is False
     assert reason is not None
     assert "non-loopback" in reason
