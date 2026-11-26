@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.90.1] (2026-11-26)
+## [0.90.2] (2026-11-26)
 
 ### Added
 
@@ -32,14 +32,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Every completed `ci` run gets a review. No existing check run skips it, since any workflow with `checks: write` can publish a check with any title.
 - `tests/test_review_wiring.py` covers the wrapper pins, the permissions, the secret mapping, and the check names.
 - `ci/README.md` kept the `ci` path that the CodeQL configuration declared. The default setup reads that configuration from `main`.
-- The CodeQL configuration drops the `ci` path. `ci/README.md` stays until `main` carries the shorter path list.
-- The version advances from 0.88.0 to 0.90.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The CodeQL configuration drops the `ci` path.
+- The version advances from 0.88.0 to 0.90.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 
 - The foucault adapter copies `ci/build_pr_case.py`, `ci/build_retry_case.py`, `ci/call_model.py`, `ci/model_providers.json`, and `ci/run_model_command.py`. The agents-personas engine supplies the adapter.
 - `scripts/check_pr_review_response.py`. The engine validates each reply.
 - The `ci/call_model.py` entry in `hooks/workflow-scripts.txt`.
+- `ci/README.md` and the `ci` directory. `main` no longer declares `ci` in the CodeQL configuration.
 
 ## [0.88.0] (2026-11-24)
 
