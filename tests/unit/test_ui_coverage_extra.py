@@ -79,7 +79,7 @@ def make_change_record(backup_reference: str) -> ChangeRecord:
     )
 
 
-def test_storage_error_box_runs_to_completion(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_storage_error_box_runs_to(monkeypatch: pytest.MonkeyPatch) -> None:
     """The storage error helper waits for the message box to close."""
     box = MagicMock()
     monkeypatch.setattr(
@@ -92,7 +92,7 @@ def test_storage_error_box_runs_to_completion(monkeypatch: pytest.MonkeyPatch) -
     box.exec.assert_called_once_with()
 
 
-def test_restore_confirmation_returns_the_button_answer(
+def test_restore_confirmation_returns_the_button(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The restore helper runs the prompt and reports its answer."""
@@ -106,7 +106,7 @@ def test_restore_confirmation_returns_the_button_answer(
     prompt.box.exec.assert_called_once_with()
 
 
-def test_fallback_confirmation_returns_the_prompt_answer(
+def test_fallback_confirmation_returns_the_prompt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The fallback helper runs the prompt and returns its answer."""
@@ -121,7 +121,7 @@ def test_fallback_confirmation_returns_the_prompt_answer(
     prompt.box.exec.assert_called_once_with()
 
 
-def test_restore_prompt_uses_plain_text_and_quit_default(qtbot: Any) -> None:
+def test_restore_prompt_uses_plain_text(qtbot: Any) -> None:
     """The restore prompt names Restore and keeps Quit as the default."""
     prompt = build_restore_prompt("The library is newer.")
     qtbot.addWidget(prompt.box)
@@ -131,7 +131,7 @@ def test_restore_prompt_uses_plain_text_and_quit_default(qtbot: Any) -> None:
     assert prompt.box.defaultButton().text() != RESTORE_LABEL
 
 
-def test_fallback_prompt_uses_plain_text_and_quit_default(qtbot: Any) -> None:
+def test_fallback_prompt_uses_plain_text(qtbot: Any) -> None:
     """The fallback prompt names both choices and keeps Quit as the default."""
     prompt = build_fallback_prompt(Path("stick"))
     qtbot.addWidget(prompt.box)
@@ -142,7 +142,7 @@ def test_fallback_prompt_uses_plain_text_and_quit_default(qtbot: Any) -> None:
     assert prompt.box.defaultButton().text() == QUIT_LABEL
 
 
-def test_tag_frame_names_cover_vorbiss_and_unknown_formats() -> None:
+def test_tag_frame_names_cover_vorbiss() -> None:
     """Vorbis formats list comment fields and unknown formats list none."""
     vorbis = tag_frame_names(AudioFormat.FLAC, lambda field: field.upper())
     id3 = tag_frame_names(AudioFormat.MP3, lambda field: field.upper())
@@ -152,7 +152,7 @@ def test_tag_frame_names_cover_vorbiss_and_unknown_formats() -> None:
     assert tag_frame_names(AudioFormat.UNSUPPORTED, str) == []
 
 
-def test_technical_rows_include_backup_and_decoder_message() -> None:
+def test_technical_rows_include_backup_and() -> None:
     """The rows show the latest backup and a decoder error when present."""
     asset = make_asset(AudioFormat.MP3, "The decoder failed.")
     rows = technical_detail_rows(
@@ -167,7 +167,7 @@ def test_technical_rows_include_backup_and_decoder_message() -> None:
     assert labels[DECODER_LABEL] == "The decoder failed."
 
 
-def test_technical_rows_name_the_missing_backup() -> None:
+def test_technical_rows_name_the_missing() -> None:
     """A track with no backup names that fact in the backup row."""
     rows = technical_detail_rows(make_asset(AudioFormat.FLAC), [], lambda field: field)
     labels = dict(rows)
@@ -176,12 +176,12 @@ def test_technical_rows_name_the_missing_backup() -> None:
     assert DECODER_LABEL not in labels
 
 
-def test_theme_label_keeps_an_unknown_identifier() -> None:
+def test_theme_label_keeps_an_unknown() -> None:
     """An unknown theme identifier stays visible in the picker."""
     assert theme_label("custom-theme") == "custom-theme"
 
 
-def test_theme_picker_uses_labels_and_identifiers(qtbot: Any) -> None:
+def test_theme_picker_uses_labels_and(qtbot: Any) -> None:
     """The picker shows readable labels and keeps the theme identifiers."""
     combo = QComboBox()
     qtbot.addWidget(combo)
@@ -191,7 +191,7 @@ def test_theme_picker_uses_labels_and_identifiers(qtbot: Any) -> None:
     assert combo.itemData(0) == DEFAULT_DARK_THEME
 
 
-def test_select_theme_maps_legacy_values_and_rejects_unknown(
+def test_select_theme_maps_legacy_values(
     qtbot: Any,
 ) -> None:
     """A legacy theme selects its project theme and an unknown theme fails."""
@@ -204,7 +204,7 @@ def test_select_theme_maps_legacy_values_and_rejects_unknown(
     assert select_theme(combo, "missing-theme") is False
 
 
-def test_qt_material_package_directory_handles_missing_metadata(
+def test_qt_material_package_case_2(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A package spec without an origin has no theme directory."""
@@ -213,7 +213,7 @@ def test_qt_material_package_directory_handles_missing_metadata(
     assert theme_module._qt_material_package_dir() is None
 
 
-def test_qt_material_package_directory_handles_lookup_error(
+def test_qt_material_package_directory_handles(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A failed package lookup leaves the theme package unavailable."""
@@ -226,7 +226,7 @@ def test_qt_material_package_directory_handles_lookup_error(
     assert theme_module._qt_material_package_dir() is None
 
 
-def test_system_theme_detection_handles_missing_qt_objects(
+def test_system_theme_detection_case_3(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A build without Qt objects treats the system as dark."""
@@ -236,7 +236,7 @@ def test_system_theme_detection_handles_missing_qt_objects(
     assert theme_module._is_system_in_dark_mode() is True
 
 
-def test_system_theme_detection_handles_missing_application(
+def test_system_theme_detection_handles_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A missing GUI application treats the system as dark."""
@@ -246,7 +246,7 @@ def test_system_theme_detection_handles_missing_application(
     assert theme_module._is_system_in_dark_mode() is True
 
 
-def test_system_theme_detection_handles_missing_hints(
+def test_system_theme_detection_case_2(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An application without style hints treats the system as dark."""
@@ -257,7 +257,7 @@ def test_system_theme_detection_handles_missing_hints(
     assert theme_module._is_system_in_dark_mode() is True
 
 
-def test_load_qt_material_handles_import_failure(
+def test_load_qt_material_handles_import(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A missing optional theme package leaves no engine loaded."""
@@ -275,7 +275,7 @@ def test_clear_stylesheet_accepts_missing_application() -> None:
     theme_module._clear_stylesheet(None)
 
 
-def test_applicable_themes_include_only_real_files(
+def test_applicable_themes_include_only_real(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -290,7 +290,7 @@ def test_applicable_themes_include_only_real_files(
     assert get_applicable_themes() == [DEFAULT_DARK_THEME, NATIVE_THEME]
 
 
-def test_missing_theme_file_has_a_failure_reason(
+def test_missing_theme_file_has_a(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -303,7 +303,7 @@ def test_missing_theme_file_has_a_failure_reason(
     assert "theme file" in reason
 
 
-def test_missing_theme_engine_leaves_native_theme(
+def test_missing_theme_engine_leaves_native(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A theme engine that cannot load leaves the native theme in effect."""
@@ -322,7 +322,7 @@ def test_missing_theme_engine_leaves_native_theme(
     assert "cannot be imported" in result.reason
 
 
-def test_switch_without_current_theme_falls_back_to_native(
+def test_switch_without_current_theme_falls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A failed theme switch with no current theme leaves the native theme."""
@@ -334,7 +334,7 @@ def test_switch_without_current_theme_falls_back_to_native(
     assert result.theme == NATIVE_THEME
 
 
-def test_system_theme_resolves_to_a_project_theme(
+def test_system_theme_resolves_to_a(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The system choice resolves to a concrete project theme."""

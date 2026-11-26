@@ -72,18 +72,18 @@ class FakeKernel32:
         return 1
 
 
-def test_load_json_text_reports_deep_nesting_as_malformed() -> None:
+def test_load_json_text_reports_deep() -> None:
     """JSON nesting beyond the parser recursion limit becomes a ValueError."""
     with pytest.raises(ValueError, match="nesting is too deep"):
         shared.load_json_text("[" * 200_000 + "]" * 200_000, "payload")
 
 
-def test_load_json_text_accepts_valid_json_objects() -> None:
+def test_load_json_text_accepts_valid() -> None:
     """The JSON helper returns parsed objects unchanged."""
     assert shared.load_json_text('{"name": "value"}', "payload") == {"name": "value"}
 
 
-def test_timestamp_helpers_require_offsets_and_normalize_to_utc() -> None:
+def test_timestamp_helpers_require_offsets_and() -> None:
     """Aware timestamps normalize to UTC and naive timestamps fail."""
     parsed = shared.parse_utc_datetime("2026-11-26T08:00:00-04:00")
 
@@ -93,7 +93,7 @@ def test_timestamp_helpers_require_offsets_and_normalize_to_utc() -> None:
         shared.parse_utc_datetime("2026-11-26T08:00:00")
 
 
-def test_timestamp_helper_rejects_an_offset_overflow() -> None:
+def test_timestamp_helper_rejects_an_offset() -> None:
     """A valid offset that crosses the datetime range becomes a ValueError."""
     with pytest.raises(ValueError, match="outside the supported range"):
         shared.parse_utc_datetime("0001-01-01T00:00:00+01:00")
@@ -116,12 +116,12 @@ def test_unsafe_absolute_paths_are_rejected(path: str) -> None:
         ("C:\\USB", "C:\\USB"),
     ],
 )
-def test_win32_final_path_prefixes_are_normalized(raw: str, expected: str) -> None:
+def test_win32_final_path_prefixes_are(raw: str, expected: str) -> None:
     """Extended-length Win32 prefixes are removed before canonical comparison."""
     assert shared._normalize_win32_final_path(raw) == expected
 
 
-def test_write_json_atomic_creates_parent_and_replaces_target(tmp_path: Path) -> None:
+def test_write_json_atomic_creates_parent(tmp_path: Path) -> None:
     """The path writer creates UTF-8 JSON and atomically replaces an existing target."""
     parent = tmp_path / "nested" / "metadata"
     target = parent / "data.json"
@@ -135,9 +135,7 @@ def test_write_json_atomic_creates_parent_and_replaces_target(tmp_path: Path) ->
     assert list(parent.glob(".data.json.*.tmp")) == []
 
 
-def test_write_json_atomic_cleans_a_temporary_file_after_replace_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_write_json_atomic_cleans_a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed replacement leaves the old target and removes the temporary file."""
     parent = tmp_path / "metadata"
     parent.mkdir()
@@ -156,7 +154,7 @@ def test_write_json_atomic_cleans_a_temporary_file_after_replace_failure(
 
 
 @pytest.mark.skipif(not POSIX_DIR_FD_SUPPORT, reason="This platform lacks POSIX dir_fd support.")
-def test_temporary_file_collision_limit_preserves_existing_file(
+def test_temporary_file_collision_limit_preserves(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A repeatedly occupied temporary name fails without deleting the occupant."""
@@ -176,7 +174,7 @@ def test_temporary_file_collision_limit_preserves_existing_file(
 
 
 @pytest.mark.skipif(not POSIX_DIR_FD_SUPPORT, reason="This platform lacks POSIX dir_fd support.")
-def test_write_json_atomic_uses_a_confined_directory_descriptor(tmp_path: Path) -> None:
+def test_write_json_atomic_uses_a(tmp_path: Path) -> None:
     """The dir_fd writer places the final file inside the opened directory."""
     flags = os.O_RDONLY | os.O_DIRECTORY
     descriptor = os.open(tmp_path, flags)
@@ -195,7 +193,7 @@ def test_write_json_atomic_uses_a_confined_directory_descriptor(tmp_path: Path) 
     assert json.loads(result.read_text(encoding="utf-8")) == {"name": "confined"}
 
 
-def test_read_bounded_fd_utf8_rejects_an_oversized_regular_file(tmp_path: Path) -> None:
+def test_read_bounded_fd_utf8_rejects(tmp_path: Path) -> None:
     """A regular file larger than the limit fails and closes its descriptor."""
     path = tmp_path / "large.json"
     path.write_text("12345", encoding="utf-8")
@@ -208,7 +206,7 @@ def test_read_bounded_fd_utf8_rejects_an_oversized_regular_file(tmp_path: Path) 
         os.fstat(descriptor)
 
 
-def test_read_bounded_fd_utf8_rejects_invalid_utf8_and_closes(tmp_path: Path) -> None:
+def test_read_bounded_fd_case_2(tmp_path: Path) -> None:
     """Invalid UTF-8 fails during decoding after the descriptor closes."""
     path = tmp_path / "invalid.json"
     path.write_bytes(b"\xff")
@@ -221,7 +219,7 @@ def test_read_bounded_fd_utf8_rejects_invalid_utf8_and_closes(tmp_path: Path) ->
         os.fstat(descriptor)
 
 
-def test_read_bounded_json_file_reads_a_regular_file(tmp_path: Path) -> None:
+def test_read_bounded_json_file_reads(tmp_path: Path) -> None:
     """The bounded JSON reader returns regular UTF-8 file content."""
     path = tmp_path / "data.json"
     path.write_text('{"ok": true}', encoding="utf-8")
@@ -229,7 +227,7 @@ def test_read_bounded_json_file_reads_a_regular_file(tmp_path: Path) -> None:
     assert shared.read_bounded_json_file(path, max_bytes=64) == '{"ok": true}'
 
 
-def test_validate_confined_ancestors_creates_and_rejects_escapes(tmp_path: Path) -> None:
+def test_validate_confined_ancestors_creates_and(tmp_path: Path) -> None:
     """Confined ancestor validation creates children and rejects outside targets."""
     root = tmp_path / "root"
     root.mkdir()
@@ -243,7 +241,7 @@ def test_validate_confined_ancestors_creates_and_rejects_escapes(tmp_path: Path)
 
 
 @pytest.mark.skipif(not POSIX_DIR_FD_SUPPORT, reason="This platform lacks POSIX dir_fd support.")
-def test_posix_confined_directory_walk_uses_nofollow(tmp_path: Path) -> None:
+def test_posix_confined_directory_walk_uses(tmp_path: Path) -> None:
     """The POSIX walker opens every component relative to the allowed root."""
     root = tmp_path / "root"
     root.mkdir()
@@ -261,7 +259,7 @@ def test_posix_confined_directory_walk_uses_nofollow(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(not POSIX_DIR_FD_SUPPORT, reason="This platform lacks POSIX dir_fd support.")
-def test_posix_confined_directory_walk_reports_a_missing_child(tmp_path: Path) -> None:
+def test_posix_confined_directory_walk_reports(tmp_path: Path) -> None:
     """The POSIX walker returns None when a requested child does not exist."""
     root = tmp_path / "root"
     root.mkdir()
@@ -271,9 +269,7 @@ def test_posix_confined_directory_walk_reports_a_missing_child(tmp_path: Path) -
     assert opened is None
 
 
-def test_win32_locked_directory_closes_the_handle_after_validation_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_win32_locked_directory_closes_the(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A rejected Win32 directory handle closes before the error propagates."""
     fake_kernel = FakeKernel32(attributes=shared._WIN32_ATTRIBUTE_REPARSE_POINT)
     monkeypatch.setattr(shared, "_win32_kernel32", lambda: fake_kernel)
@@ -285,9 +281,7 @@ def test_win32_locked_directory_closes_the_handle_after_validation_failure(
     assert fake_kernel.closed_handles == [42]
 
 
-def test_win32_unlink_sets_disposition_and_closes_the_handle(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_win32_unlink_sets_disposition_and(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The Win32 unlink helper sets disposition information and closes its handle."""
     target = tmp_path / "data.json"
     target.write_text("{}", encoding="utf-8")
@@ -305,9 +299,7 @@ def test_win32_unlink_sets_disposition_and_closes_the_handle(
     assert fake_kernel.closed_handles == [42]
 
 
-def test_win32_open_treats_missing_files_as_absent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_win32_open_treats_missing_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A missing Win32 file returns None without raising."""
     if sys.platform != "win32":
         pytest.skip("Win32 last-error state is available only on Windows.")
@@ -327,9 +319,7 @@ def test_win32_open_treats_missing_files_as_absent(
     assert result is None
 
 
-def test_posix_open_reports_a_symlink_component_as_a_value_error(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_posix_open_reports_a_symlink(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A POSIX open failure with ELOOP becomes a confined-path ValueError."""
     if not POSIX_DIR_FD_SUPPORT:
         pytest.skip("This platform lacks POSIX dir_fd support.")

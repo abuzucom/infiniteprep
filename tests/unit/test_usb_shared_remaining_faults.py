@@ -62,7 +62,7 @@ def link_stat() -> SimpleNamespace:
     return SimpleNamespace(st_mode=stat.S_IFLNK, st_dev=1, st_ino=1, st_size=0)
 
 
-def test_validate_win32_handle_reports_missing_information(
+def test_validate_win32_handle_reports_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A failed file information query becomes a Win32 error."""
@@ -73,7 +73,7 @@ def test_validate_win32_handle_reports_missing_information(
         shared._validate_win32_handle(42, Path("target"), expect_dir=True, check_parent=False)
 
 
-def test_validate_win32_handle_reports_a_missing_final_path(
+def test_validate_win32_handle_reports_a(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A failed final path query becomes a Win32 error."""
@@ -84,7 +84,7 @@ def test_validate_win32_handle_reports_a_missing_final_path(
         shared._validate_win32_handle(42, Path("target"), expect_dir=True, check_parent=False)
 
 
-def test_validate_win32_handle_reports_an_overlong_final_path(
+def test_validate_win32_handle_reports_an(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A final path beyond the buffer becomes a bounded path error."""
@@ -95,7 +95,7 @@ def test_validate_win32_handle_reports_an_overlong_final_path(
         shared._validate_win32_handle(42, Path("target"), expect_dir=True, check_parent=False)
 
 
-def test_open_win32_locked_dir_reports_a_missing_directory(
+def test_open_win32_locked_dir_reports(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A missing Win32 directory has no handle to return."""
@@ -104,7 +104,7 @@ def test_open_win32_locked_dir_reports_a_missing_directory(
     assert shared.open_win32_locked_dir(Path("missing"), Path("missing")) is None
 
 
-def test_open_win32_confined_read_fd_closes_a_failed_handle(
+def test_open_win32_confined_read_fd(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A failed validation closes the Win32 handle before the error reaches the caller."""
@@ -123,7 +123,7 @@ def test_open_win32_confined_read_fd_closes_a_failed_handle(
     assert fake_kernel.closed_handles == [42]
 
 
-def test_verify_fd_identity_rejects_a_linked_path(
+def test_verify_fd_identity_case_2(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The descriptor identity check refuses a linked directory entry."""
@@ -134,7 +134,7 @@ def test_verify_fd_identity_rejects_a_linked_path(
         shared.verify_fd_identity_and_parent(1, Path("target"), Path("parent"))
 
 
-def test_verify_fd_identity_rejects_a_changed_inode(
+def test_verify_fd_identity_rejects_a(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The descriptor identity check refuses a replaced file."""
@@ -145,9 +145,7 @@ def test_verify_fd_identity_rejects_a_changed_inode(
         shared.verify_fd_identity_and_parent(1, Path("target"), Path("parent"))
 
 
-def test_verify_fd_identity_rejects_an_outside_parent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_verify_fd_identity_rejects_an(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The descriptor identity check refuses a target outside the expected parent."""
     target_dir = tmp_path / "target"
     expected_dir = tmp_path / "expected"
@@ -162,9 +160,7 @@ def test_verify_fd_identity_rejects_an_outside_parent(
         shared.verify_fd_identity_and_parent(1, target, expected_dir)
 
 
-def test_read_bounded_fd_rejects_a_file_that_grows(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_read_bounded_fd_rejects_a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A file that grows past the limit fails after the read."""
     path = tmp_path / "data.json"
     path.write_bytes(b"too long")
@@ -175,7 +171,7 @@ def test_read_bounded_fd_rejects_a_file_that_grows(
         shared.read_bounded_fd_utf8(descriptor, max_bytes=1)
 
 
-def test_ensure_confined_root_refuses_a_linked_root(
+def test_ensure_confined_root_refuses_a(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The confined root check refuses a linked root at the first check."""
@@ -185,7 +181,7 @@ def test_ensure_confined_root_refuses_a_linked_root(
         shared._ensure_confined_root(Path("root"), create=False)
 
 
-def test_posix_dir_step_reports_a_missing_child(
+def test_posix_dir_step_reports_a(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The POSIX directory step returns no descriptor for a missing child."""
@@ -199,9 +195,7 @@ def test_posix_dir_step_reports_a_missing_child(
 
 
 @pytest.mark.parametrize("error_number", [errno.ELOOP, errno.ENOTDIR])
-def test_posix_dir_step_translates_link_errors(
-    monkeypatch: pytest.MonkeyPatch, error_number: int
-) -> None:
+def test_posix_dir_step_translates_link(monkeypatch: pytest.MonkeyPatch, error_number: int) -> None:
     """The POSIX directory step translates link and type errors."""
     monkeypatch.setattr(shared.os, "O_DIRECTORY", 0, raising=False)
     monkeypatch.setattr(shared.os, "O_NOFOLLOW", 0, raising=False)
@@ -215,7 +209,7 @@ def test_posix_dir_step_translates_link_errors(
         shared._open_posix_dir_step(1, "child", create=False)
 
 
-def test_posix_confined_walk_refuses_a_linked_root(
+def test_posix_confined_walk_refuses_a(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The POSIX confined walk refuses a linked allowed root."""
@@ -225,7 +219,7 @@ def test_posix_confined_walk_refuses_a_linked_root(
         shared._open_posix_confined_dir(Path("root/child"), Path("root"), create=False)
 
 
-def test_open_confined_context_reports_a_missing_posix_target(
+def test_open_confined_context_case_2(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The confined context reports a missing POSIX target."""
@@ -242,7 +236,7 @@ def test_open_confined_context_reports_a_missing_posix_target(
         assert opened is None
 
 
-def test_open_confined_context_reports_a_missing_fallback_target(
+def test_open_confined_context_reports_a(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The confined context reports a missing fallback target."""
@@ -259,9 +253,7 @@ def test_open_confined_context_reports_a_missing_fallback_target(
         assert opened is None
 
 
-def test_open_confined_context_closes_a_win32_handle(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_open_confined_context_closes_a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The confined context closes its locked Win32 directory handle."""
     closed: list[int] = []
     monkeypatch.setattr(shared, "supports_dir_fd_nofollow", lambda: False)
@@ -282,7 +274,7 @@ def test_open_confined_context_closes_a_win32_handle(
     assert closed == [42]
 
 
-def test_confined_json_read_reports_a_missing_dir_fd_entry(
+def test_confined_json_read_reports_a(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A confined descriptor read reports a missing entry."""
@@ -296,7 +288,7 @@ def test_confined_json_read_reports_a_missing_dir_fd_entry(
     assert shared.read_confined_dir_json_text(Path("parent"), "missing.json", dir_fd=1) is None
 
 
-def test_confined_json_read_handles_a_missing_win32_file(
+def test_confined_json_read_handles_a(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A confined Win32 read reports a missing file."""
@@ -306,7 +298,7 @@ def test_confined_json_read_handles_a_missing_win32_file(
     assert shared.read_confined_dir_json_text(Path("parent"), "missing.json", dir_fd=None) is None
 
 
-def test_confined_json_read_reports_a_missing_posix_file(
+def test_confined_json_read_case_2(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A confined POSIX read reports a missing file."""
@@ -321,7 +313,7 @@ def test_confined_json_read_reports_a_missing_posix_file(
     assert shared.read_confined_dir_json_text(Path("parent"), "missing.json", dir_fd=None) is None
 
 
-def test_temp_fd_writer_reports_a_name_collision(
+def test_temp_fd_writer_reports_a(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The descriptor writer reports an exhausted set of temporary names."""
@@ -336,7 +328,7 @@ def test_temp_fd_writer_reports_a_name_collision(
         shared._write_temp_json_via_fd(1, "data.json", "text")
 
 
-def test_temp_fd_writer_cleans_up_after_a_flush_failure(
+def test_temp_fd_writer_cleans_up(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The descriptor writer removes its temporary file after a flush failure."""

@@ -21,7 +21,7 @@ POSIX_DIR_FD_SUPPORT = (
 )
 
 
-def test_digest_matches_the_canonical_vocabulary_and_assignment_payload() -> None:
+def test_digest_matches_the_canonical_vocabulary() -> None:
     """The digest uses canonical key, vocabulary, assignment, and tag ordering."""
     vocabulary = [
         manifest.ManifestTagEntry(category="Zed", name="B", parent="P"),
@@ -37,7 +37,7 @@ def test_digest_matches_the_canonical_vocabulary_and_assignment_payload() -> Non
     assert digest == "6621de332ec16863dbc766d123f1f6ea0a86e5793cb805fccab7969f1accf6dc"
 
 
-def test_manifest_dictionary_round_trip_uses_the_scope_text() -> None:
+def test_manifest_dictionary_round_trip_uses() -> None:
     """Manifest conversion serializes the scope and preserves every field."""
     original = build_manifest()
 
@@ -52,7 +52,7 @@ def test_manifest_dictionary_round_trip_uses_the_scope_text() -> None:
     "file_name",
     ["", ".", "..", "folder/manifest.json", "folder\\manifest.json", "manifest\x00.json"],
 )
-def test_manifest_file_names_reject_separators_and_traversal(file_name: str) -> None:
+def test_manifest_file_names_reject_separators(file_name: str) -> None:
     """Manifest names cannot name a directory or parent entry."""
     with pytest.raises(ValueError, match="Invalid USB manifest file name"):
         manifest._validate_manifest_file_name(file_name)
@@ -66,13 +66,13 @@ def test_string_validation_rejects_non_strings(value: object) -> None:
 
 
 @pytest.mark.parametrize("value", ["", "   ", None, 1])
-def test_non_empty_string_validation_rejects_blank_values(value: object) -> None:
+def test_non_empty_string_validation_rejects(value: object) -> None:
     """Required string manifest fields reject blank values."""
     with pytest.raises(ValueError, match=r"cannot be empty|must be a string"):
         manifest._require_non_empty_str(value, "field")
 
 
-def test_relative_path_validation_accepts_a_confined_child() -> None:
+def test_relative_path_validation_accepts_a() -> None:
     """A relative manifest path names a file below the drive root."""
     assert manifest._require_relative_path("crate/track.aiff", "track") == "crate/track.aiff"
 
@@ -85,7 +85,7 @@ def test_relative_path_validation_rejects_escapes(path: str) -> None:
 
 
 @pytest.mark.parametrize("value", [True, -1, "1", 1.5, None])
-def test_non_negative_integer_validation_rejects_invalid_values(value: object) -> None:
+def test_non_negative_integer_validation_rejects(value: object) -> None:
     """Count fields reject booleans, negative values, and non-integers."""
     with pytest.raises(ValueError, match="non-negative integer"):
         manifest._require_non_negative_int(value, "count")
@@ -108,7 +108,7 @@ def test_reader_validation_rejects_invalid_entries(raw: object) -> None:
         {"target": {"failed": -1}},
     ],
 )
-def test_target_count_validation_rejects_invalid_entries(raw: object) -> None:
+def test_target_count_validation_rejects_invalid(raw: object) -> None:
     """Target counts require named object records with nonnegative integer counts."""
     with pytest.raises(ValueError, match=r"target_counts|target_counts entry|non-negative"):
         manifest._parse_target_counts(raw)
@@ -173,7 +173,7 @@ def test_missing_manifest_metadata_returns_none(tmp_path: Path) -> None:
     assert manifest.read_in_progress_manifest(mount_root) is None
 
 
-def test_in_progress_manifest_is_atomic_json_with_a_trailing_newline(tmp_path: Path) -> None:
+def test_in_progress_manifest_is_atomic(tmp_path: Path) -> None:
     """The in-progress writer produces sorted, indented JSON in its metadata folder."""
     mount_root = tmp_path / "usb"
     mount_root.mkdir()
@@ -187,7 +187,7 @@ def test_in_progress_manifest_is_atomic_json_with_a_trailing_newline(tmp_path: P
     assert manifest.read_in_progress_manifest(mount_root) == original
 
 
-def test_manifest_writers_reject_invalid_state_before_creating_metadata(tmp_path: Path) -> None:
+def test_manifest_writers_reject_invalid_state(tmp_path: Path) -> None:
     """Invalid manifest state fails before the metadata folder appears."""
     mount_root = tmp_path / "usb"
     mount_root.mkdir()
@@ -203,7 +203,7 @@ def test_manifest_writers_reject_invalid_state_before_creating_metadata(tmp_path
     assert not (mount_root / manifest.USB_METADATA_DIR_NAME).exists()
 
 
-def test_completed_writer_requires_a_completion_timestamp(tmp_path: Path) -> None:
+def test_completed_writer_requires_a_completion(tmp_path: Path) -> None:
     """A completed manifest needs a completion timestamp before writing starts."""
     mount_root = tmp_path / "usb"
     mount_root.mkdir()
@@ -213,7 +213,7 @@ def test_completed_writer_requires_a_completion_timestamp(tmp_path: Path) -> Non
         manifest.write_completed_manifest(mount_root, original)
 
 
-def test_mount_root_resolution_rejects_missing_and_non_directory_paths(tmp_path: Path) -> None:
+def test_mount_root_resolution_rejects_missing(tmp_path: Path) -> None:
     """The mount root must exist and name a directory."""
     missing = tmp_path / "missing"
     file_path = tmp_path / "file.txt"
@@ -225,7 +225,7 @@ def test_mount_root_resolution_rejects_missing_and_non_directory_paths(tmp_path:
         manifest._resolve_mount_root(file_path)
 
 
-def test_metadata_and_manifest_paths_stay_inside_the_mount_root(tmp_path: Path) -> None:
+def test_metadata_and_manifest_paths_stay(tmp_path: Path) -> None:
     """Metadata and manifest paths resolve below the mount root."""
     mount_root = tmp_path / "usb"
     mount_root.mkdir()
@@ -240,7 +240,7 @@ def test_metadata_and_manifest_paths_stay_inside_the_mount_root(tmp_path: Path) 
     assert manifest_path.resolve().is_relative_to(mount_root.resolve())
 
 
-def test_confined_metadata_context_reports_missing_and_creates_directories(
+def test_confined_metadata_context_reports_missing(
     tmp_path: Path,
 ) -> None:
     """The metadata context reports absence without creation and creates on request."""
@@ -258,7 +258,7 @@ def test_confined_metadata_context_reports_missing_and_creates_directories(
 
 
 @pytest.mark.skipif(not POSIX_DIR_FD_SUPPORT, reason="This platform lacks POSIX dir_fd support.")
-def test_posix_manifest_directory_and_file_operations_use_dir_fd(tmp_path: Path) -> None:
+def test_posix_manifest_directory_and_file(tmp_path: Path) -> None:
     """POSIX metadata and manifest operations use confined directory descriptors."""
     mount_root = tmp_path / "usb"
     mount_root.mkdir()
@@ -287,7 +287,7 @@ def test_posix_manifest_directory_and_file_operations_use_dir_fd(tmp_path: Path)
         os.close(descriptor)
 
 
-def test_confined_unlink_reports_absence_and_removes_a_regular_file(tmp_path: Path) -> None:
+def test_confined_unlink_reports_absence_and(tmp_path: Path) -> None:
     """The confined unlink helper removes regular files and reports absent ones."""
     mount_root = tmp_path / "usb"
     meta_dir = mount_root / manifest.USB_METADATA_DIR_NAME
@@ -304,9 +304,7 @@ def test_confined_unlink_reports_absence_and_removes_a_regular_file(tmp_path: Pa
     assert not target.exists()
 
 
-def test_win32_manifest_context_closes_the_locked_metadata_handle(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_win32_manifest_context_closes_the(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The Win32 metadata branch closes its locked directory handle."""
     mount_root = tmp_path / "usb"
     mount_root.mkdir()

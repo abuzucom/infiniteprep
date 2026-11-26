@@ -112,7 +112,7 @@ class FakeWriter:
         (0, True, "unexpected filesystem type"),
     ],
 )
-def test_win32_handle_validation_rejects_unsafe_types(
+def test_win32_handle_validation_rejects_unsafe(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     attributes: int,
@@ -126,7 +126,7 @@ def test_win32_handle_validation_rejects_unsafe_types(
         shared._validate_win32_handle(7, tmp_path, expect_dir=expect_dir, check_parent=False)
 
 
-def test_win32_handle_validation_rejects_outside_paths(
+def test_win32_handle_validation_rejects_outside(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A final path outside the expected directory fails validation."""
@@ -146,9 +146,7 @@ def test_win32_open_raises_unexpected_errors(monkeypatch: pytest.MonkeyPatch) ->
     assert error.value.winerror == 5
 
 
-def test_win32_unlink_reports_a_failed_disposition(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_win32_unlink_reports_a_failed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed disposition raises and still closes the handle."""
     target = tmp_path / "data.json"
     target.write_text("{}", encoding="utf-8")
@@ -164,9 +162,7 @@ def test_win32_unlink_reports_a_failed_disposition(
     assert fake_kernel.closed_handles == [42]
 
 
-def test_verify_fd_identity_rejects_non_regular_files(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_verify_fd_identity_rejects_non(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A directory descriptor cannot identify a regular manifest target."""
     monkeypatch.setattr(shared.os, "fstat", lambda descriptor: FakeStat(stat.S_IFDIR))
     with pytest.raises(ValueError, match="regular file"):
@@ -183,9 +179,7 @@ def test_read_bounded_fd_rejects_directories(
         shared.read_bounded_fd_utf8(3)
 
 
-def test_read_bounded_json_file_rejects_links_and_closes_failed_descriptors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_read_bounded_json_file_rejects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """JSON reads reject links and close descriptors when identity checks fail."""
     target = tmp_path / "data.json"
     target.write_text("{}", encoding="utf-8")
@@ -203,7 +197,7 @@ def test_read_bounded_json_file_rejects_links_and_closes_failed_descriptors(
         shared.read_bounded_json_file(target)
 
 
-def test_confined_root_rejects_missing_and_non_directory_roots(tmp_path: Path) -> None:
+def test_confined_root_rejects_missing_and(tmp_path: Path) -> None:
     """A confined root must exist and name a directory."""
     missing = tmp_path / "missing"
     with pytest.raises(FileNotFoundError):
@@ -214,9 +208,7 @@ def test_confined_root_rejects_missing_and_non_directory_roots(tmp_path: Path) -
         shared.validate_confined_ancestors(file_path, file_path, create=False)
 
 
-def test_posix_confined_dir_walk_closes_each_descriptor(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_posix_confined_dir_walk_closes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The confined POSIX walk closes every descriptor it replaces."""
     root = tmp_path / "root"
     root.mkdir()
@@ -240,7 +232,7 @@ def test_posix_confined_dir_walk_closes_each_descriptor(
     assert closed == [10]
 
 
-def test_posix_confined_dir_rejects_outside_and_linked_roots(
+def test_posix_confined_dir_rejects_outside(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The confined POSIX walk rejects outside targets and linked roots."""
@@ -254,7 +246,7 @@ def test_posix_confined_dir_rejects_outside_and_linked_roots(
         shared._open_posix_confined_dir(root, root, create=False)
 
 
-def test_open_confined_context_handles_missing_and_closed_directories(
+def test_open_confined_context_handles_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The confined context yields None for missing directories and closes handles."""
@@ -275,7 +267,7 @@ def test_open_confined_context_handles_missing_and_closed_directories(
     assert closed == [44]
 
 
-def test_temp_json_via_fd_cleans_up_after_write_failure(
+def test_temp_json_via_fd_cleans(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A failed descriptor write removes the temporary file."""
@@ -294,9 +286,7 @@ def test_temp_json_via_fd_cleans_up_after_write_failure(
     assert len(removed) == 1
 
 
-def test_temp_json_via_path_cleans_up_after_write_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_temp_json_via_path_cleans(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed path write removes its temporary file."""
     monkeypatch.setattr(
         shared.os,
@@ -308,7 +298,7 @@ def test_temp_json_via_path_cleans_up_after_write_failure(
     assert list(tmp_path.glob(".data.json.*.tmp")) == []
 
 
-def test_atomic_write_rejects_linked_parent_and_target(
+def test_atomic_write_rejects_linked_parent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Atomic writes reject a linked parent and a linked target."""
@@ -328,9 +318,7 @@ def test_atomic_write_rejects_linked_parent_and_target(
         shared.write_json_atomic(parent, "data.json", {}, reject_target_symlink=True)
 
 
-def test_atomic_write_cleans_up_when_parent_becomes_linked(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_atomic_write_cleans_up_when(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A parent that becomes linked during the write removes the temporary file."""
     parent = tmp_path / "parent"
     parent.mkdir()

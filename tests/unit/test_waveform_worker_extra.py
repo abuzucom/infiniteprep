@@ -24,7 +24,7 @@ def make_task(cancel_event: threading.Event) -> _AnalysisTask:
     return _AnalysisTask("track", 1, Path("track.wav"), cancel_event)
 
 
-def test_task_emits_overview_completion_and_fake_result(
+def test_task_emits_overview_completion_and(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A successful task reports the overview, waveform, and fake-lossless result."""
@@ -58,7 +58,7 @@ def test_task_emits_overview_completion_and_fake_result(
     assert fake_results == [("track", 1, "fake-result")]
 
 
-def test_task_stops_when_cancelled_after_the_overview(
+def test_task_stops_when_cancelled_after(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A task cancelled after the overview emits no later result."""
@@ -111,7 +111,7 @@ def test_waveform_cancellation_emits_no_result(
     assert fake_results == []
 
 
-def test_waveform_failure_reports_value_error_text(
+def test_waveform_failure_reports_value_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A value error keeps its safe message in the failure signal."""
@@ -157,7 +157,7 @@ def test_waveform_failure_reports_unexpected_error(
     assert failures == [UNEXPECTED_FAILURE_MESSAGE]
 
 
-def test_fake_lossless_file_error_reports_safe_message(
+def test_fake_lossless_file_error_reports(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A fake-lossless file error uses the unreadable source message."""
@@ -185,7 +185,7 @@ def test_fake_lossless_file_error_reports_safe_message(
     assert failures == [UNREADABLE_SOURCE_MESSAGE]
 
 
-def test_fake_lossless_cancellation_emits_no_result(
+def test_fake_lossless_cancellation_emits_no(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A cancelled fake-lossless pass emits no result."""
@@ -235,7 +235,7 @@ def test_pool_shutdown_is_idempotent() -> None:
     assert pool._shutdown is True
 
 
-def test_pool_drops_results_from_an_inactive_request(
+def test_pool_drops_results_from_an(
     qtbot: Any,
 ) -> None:
     """A stale worker result does not reach the panel."""
@@ -248,7 +248,7 @@ def test_pool_drops_results_from_an_inactive_request(
     assert events == []
 
 
-def test_cancel_all_reports_a_worker_that_did_not_finish(
+def test_cancel_all_reports_a_worker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A bounded cancel reports that a worker is still running."""

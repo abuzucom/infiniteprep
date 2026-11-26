@@ -31,7 +31,7 @@ def _make_task(cancel_event: threading.Event) -> _AnalysisTask:
     return _AnalysisTask("track", 1, Path("track.wav"), cancel_event)
 
 
-def test_cancelled_analysis_suppresses_failure_and_detection(
+def test_cancelled_analysis_suppresses_failure_and(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A cancellation during analysis suppresses failure and later detection."""
@@ -63,7 +63,7 @@ def test_cancelled_analysis_suppresses_failure_and_detection(
     assert fake_failures == []
 
 
-def test_cancelled_analysis_suppresses_completion_and_detection(
+def test_cancelled_analysis_suppresses_completion_and(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A cancellation after analysis suppresses completion and later detection."""
@@ -95,7 +95,7 @@ def test_cancelled_analysis_suppresses_completion_and_detection(
     assert fake_results == []
 
 
-def test_cancelled_detection_failure_suppresses_failure_signal(
+def test_cancelled_detection_failure_suppresses_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A cancellation during fake-lossless decoding suppresses its failure signal."""
@@ -125,7 +125,7 @@ def test_cancelled_detection_failure_suppresses_failure_signal(
     assert failures == []
 
 
-def test_cancelled_detection_result_suppresses_ready_signal(
+def test_cancelled_detection_result_suppresses_ready(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A cancellation during fake-lossless decoding suppresses its result."""
@@ -155,7 +155,7 @@ def test_cancelled_detection_result_suppresses_ready_signal(
     assert results == []
 
 
-def test_pool_forwards_current_signals_and_drops_every_stale_signal() -> None:
+def test_pool_forwards_current_signals_and() -> None:
     """Every stale signal type stops at the pool boundary."""
     pool = WaveformAnalysisPool()
     events = CallRecorder()
@@ -188,7 +188,7 @@ def test_pool_forwards_current_signals_and_drops_every_stale_signal() -> None:
     ("scheme", "expected"),
     [(Qt.ColorScheme.Light, DEFAULT_LIGHT_THEME), (Qt.ColorScheme.Dark, DEFAULT_DARK_THEME)],
 )
-def test_system_theme_uses_the_host_color_scheme(
+def test_system_theme_uses_the_host(
     monkeypatch: pytest.MonkeyPatch,
     scheme: Qt.ColorScheme,
     expected: str,
@@ -205,7 +205,7 @@ def test_system_theme_uses_the_host_color_scheme(
     assert theme_module.resolve_theme(None) == expected
 
 
-def test_failed_module_loading_leaves_the_native_theme(
+def test_failed_module_loading_leaves_the(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An import failure during theme loading leaves the native theme in effect."""
@@ -224,7 +224,7 @@ def test_failed_module_loading_leaves_the_native_theme(
     app.setStyleSheet.assert_called_once_with("")
 
 
-def test_cli_falls_back_to_desktop_for_an_unknown_argument(
+def test_cli_falls_back_to_desktop(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An unknown command reaches desktop launch instead of a command parser."""
@@ -246,7 +246,7 @@ def test_cli_falls_back_to_desktop_for_an_unknown_argument(
     open_storage.assert_called_once()
 
 
-def test_desktop_starts_recovery_before_the_event_loop(
+def test_desktop_starts_recovery_before_the(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:

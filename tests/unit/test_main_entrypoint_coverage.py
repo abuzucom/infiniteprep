@@ -59,7 +59,7 @@ class FakeRepository:
     ("busy", "cleanup_enabled", "dialog_result", "reload_count"),
     [(True, False, QDialog.DialogCode.Accepted, 1), (False, True, QDialog.DialogCode.Rejected, 0)],
 )
-def test_settings_dialog_reflects_busy_state_and_reloads(
+def test_settings_dialog_reflects_busy_state(
     monkeypatch: pytest.MonkeyPatch,
     busy: bool,
     cleanup_enabled: bool,
@@ -92,7 +92,7 @@ def test_settings_dialog_reflects_busy_state_and_reloads(
     assert window.reload_calls == reload_count
 
 
-def test_settings_dialog_runs_the_selected_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_dialog_runs_the_selected(monkeypatch: pytest.MonkeyPatch) -> None:
     """A cleanup choice closes storage, removes selected data, reports it, and quits."""
     choice = CleanupChoice(delete_data=True, delete_keys=False)
     cleanup_calls: list[tuple[CleanupChoice, object]] = []
@@ -124,7 +124,7 @@ def test_settings_dialog_runs_the_selected_cleanup(monkeypatch: pytest.MonkeyPat
     assert app.quit_calls == 1
 
 
-def test_cleanup_is_blocked_when_the_window_refuses_to_close(
+def test_cleanup_is_blocked_when_the(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A refused close preserves the database and reports that cleanup is blocked."""
@@ -143,7 +143,7 @@ def test_cleanup_is_blocked_when_the_window_refuses_to_close(
     assert app.quit_calls == 0
 
 
-def test_analyze_runner_body_passes_reconciliation_and_stop_policy(
+def test_analyze_runner_body_passes_reconciliation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The queued Analyze body reconciles each file and reads the stop policy at start."""
@@ -174,7 +174,7 @@ def test_analyze_runner_body_passes_reconciliation_and_stop_policy(
     assert calls[0]["progress"] is progress
 
 
-def test_write_runner_body_passes_plans_and_stop_policy(
+def test_write_runner_body_passes_plans(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The queued write body applies every previewed plan with the current stop policy."""
@@ -231,7 +231,7 @@ def test_theme_fallback_is_saved(monkeypatch: pytest.MonkeyPatch) -> None:
     assert saved == [settings]
 
 
-def test_usb_notice_wrapper_uses_plain_text(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_usb_notice_wrapper_uses_plain(monkeypatch: pytest.MonkeyPatch) -> None:
     """The USB notice wrapper sets an information icon and preserves message text."""
     box = MagicMock()
     message_box_type = MagicMock(return_value=box)
@@ -271,7 +271,7 @@ def test_cli_routes_hidden_flags(monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     assert smoke_calls == [output_path]
 
 
-def test_cli_routes_evaluation_and_writes_json(tmp_path: Path) -> None:
+def test_cli_routes_evaluation_and_writes(tmp_path: Path) -> None:
     """The evaluation command runs the sample and writes its optional JSON report."""
     input_dir = tmp_path / "input"
     input_dir.mkdir()
@@ -287,9 +287,7 @@ def test_cli_routes_evaluation_and_writes_json(tmp_path: Path) -> None:
     assert metrics["zero_unintended_file_mutations"] is True
 
 
-def test_desktop_launch_wires_its_services_and_runs_the_event_loop(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_desktop_launch_wires_its_services(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Desktop launch builds the window from injected services and starts the Qt loop."""
     app = FakeApplication(exit_code=7)
     repo = FakeRepository()
