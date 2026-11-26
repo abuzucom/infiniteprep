@@ -1315,7 +1315,7 @@ Commands:
 Obtain consent before each workflow that the command execution gate routes to
 consent. Workflows the gate allows run without consent.
 
-Do not touch without active-human approval:
+Do not touch without active human approval:
 
 - `ci/` holds verbatim foucault review adapters.
 - `.github/workflows/security-review-pr.yml` and
@@ -1329,7 +1329,7 @@ Application copy:
 
 - The `AGENTS.md` prose requirements govern code, code comments,
   documentation, and agent interaction with the human.
-- They do not govern application or website copy.
+- The requirements do not govern application or website copy.
 - On-screen strings under `src/infiniteprep/ui/` use plain UX copy:
   short labels, plain verbs, and second person where it helps.
 - Owner ruling, 2026-11-21, recorded in UI-R (#245).
