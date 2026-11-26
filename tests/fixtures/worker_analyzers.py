@@ -20,6 +20,17 @@ CRASH_EXIT_CODE = 9
 # The slow analyzer sleeps for this many seconds. A cancel then reaches the worker
 # before the result arrives.
 SLOW_SLEEP_SECONDS = 20.0
+# The counter file records one line per analysis call.
+COUNTER_ENVIRONMENT_VARIABLE = "INFINITEPREP_ANALYSIS_COUNTER"
+
+
+def record_call(audio_reference: Path) -> None:
+    """Write one line to the counter file, so a test can count the analyses."""
+    counter_path = os.environ.get(COUNTER_ENVIRONMENT_VARIABLE)
+    if not counter_path:
+        return
+    with open(counter_path, "a", encoding="utf-8") as handle:
+        handle.write(f"{Path(audio_reference).name}\n")
 
 
 def _result(file_id: str, analyzer_name: str) -> AnalysisResult:
@@ -49,6 +60,7 @@ class CrashingAnalyzer:
 
     def analyze(self, audio_reference: Path, file_id: str = "") -> AnalysisResult:
         """Stop the worker process on the named file, and analyze the other files."""
+        record_call(audio_reference)
         if Path(audio_reference).name == CRASHING_FILE_NAME:
             os._exit(CRASH_EXIT_CODE)
         return _result(file_id, self.analyzer_name)

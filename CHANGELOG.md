@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.93.3] (2026-11-26)
+## [0.93.4] (2026-11-26)
 
 ### Added
 
@@ -46,6 +46,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - A batch that stops at its first failed file ends at once. The prefetched analyses of the files ahead no longer delay the batch.
 - A rollback to an earlier analyzer version makes the results of that version current again.
 - A file that ended before a worker crash keeps its result. The pool no longer analyzes that file twice.
+- The pool runs each file at most twice. The first run and one retry settle a file after a worker died.
 - The analysis pool logs an unexpected worker error with the file path and the traceback.
 
 ### Changed
@@ -73,7 +74,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The mount point itself may remain an OS-managed mount link.
 - Relocation hash caching in `relocation.py` keys cached digests by device, inode, size, and modification timestamp, and rechecks file metadata after reading (IMPORT-1, #143).
 - File URL normalization and remainder extraction in `path_mapping.py` collapse slashes, normalize Windows drive letters, and split canonical segments (IMPORT-1, #143).
-- The version advances from 0.88.0 to 0.93.3 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.88.0 to 0.93.4 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 

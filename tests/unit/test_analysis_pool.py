@@ -22,6 +22,7 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.job_orchestrator import JobOrchestrator
 from tests.fixtures.audio_factory import create_wav_fixture
 from tests.fixtures.worker_analyzers import (
+    COUNTER_ENVIRONMENT_VARIABLE,
     CRASHING_FILE_NAME,
     CrashingAnalyzer,
     FailingSlowAnalyzer,
@@ -85,8 +86,10 @@ def test_pool_cancel_stops_worker_processes(crate: Path) -> None:
     assert len(multiprocessing.active_children()) == children_before
 
 
-def test_pool_retries_crashed_file(crate: Path) -> None:
+def test_pool_retries_crashed_file(crate: Path, tmp_path: Path, monkeypatch: Any) -> None:
     """A worker that dies costs one file. The other files keep their results."""
+    counter = tmp_path / "calls.txt"
+    monkeypatch.setenv(COUNTER_ENVIRONMENT_VARIABLE, str(counter))
     paths = [crate / name for name in TRACK_NAMES]
 
     with AnalysisPool(analyzer_factory=CrashingAnalyzer, worker_count=1) as pool:
@@ -99,6 +102,10 @@ def test_pool_retries_crashed_file(crate: Path) -> None:
     assert by_id["file-1"].error == WORKER_CRASH_MESSAGE
     assert by_id["file-0"].result is not None
     assert by_id["file-2"].result is not None
+    calls = counter.read_text(encoding="utf-8").split()
+    assert calls.count(TRACK_NAMES[0]) == 1
+    assert calls.count(CRASHING_FILE_NAME) == 2
+    assert calls.count(TRACK_NAMES[2]) == 1
 
 
 def test_worker_count_follows_cpu_limit() -> None:

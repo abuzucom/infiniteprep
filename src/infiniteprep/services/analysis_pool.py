@@ -48,6 +48,8 @@ WORKER_CRASH_MESSAGE: Final[str] = (
 )
 # The message a file gets when the batch was cancelled before its analysis ran.
 CANCELLED_MESSAGE: Final[str] = "The analysis was cancelled before this file ran."
+# A file runs at most twice. The second run is the retry after a worker died.
+MAX_TASK_ATTEMPTS: Final[int] = 2
 
 
 class PoolCancelled(Exception):
@@ -77,7 +79,7 @@ class _Task:
     file_id: str
     path: Path
     future: Future | None = None
-    retried: bool = False
+    attempts: int = 0
     error: str | None = None
 
 
@@ -188,6 +190,7 @@ class AnalysisPool:
         executor = self._executor
         if executor is None:
             executor = self._new_executor(self._max_workers)
+        task.attempts += 1
         try:
             task.future = executor.submit(
                 analyze_track, str(task.path), task.file_id, self._analyzer_factory
@@ -247,9 +250,8 @@ class AnalysisPool:
     def _run_alone(self, task: _Task) -> AnalysisOutcome:
         """Run one file on a single worker, then retry it once when the worker dies."""
         outcome, crashed = self._run_task(task)
-        if not crashed or task.retried:
+        if not crashed or task.attempts >= MAX_TASK_ATTEMPTS:
             return outcome
-        task.retried = True
         logger.warning("The analysis worker died on %s. The file runs again.", task.path)
         outcome, _crashed = self._run_task(task)
         return outcome
@@ -257,6 +259,7 @@ class AnalysisPool:
     def _run_task(self, task: _Task) -> tuple[AnalysisOutcome, bool]:
         """Run one task on a fresh pool. Return the outcome and whether the worker died."""
         executor = self._new_executor(1)
+        task.attempts += 1
         try:
             future = executor.submit(
                 analyze_track, str(task.path), task.file_id, self._analyzer_factory
