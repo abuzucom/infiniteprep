@@ -5,9 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.91.0] (2026-11-26)
+## [0.92.0] (2026-11-26)
 
 ### Added
+
+- Regression tests distinguish missing numeric metadata from zero in library searches and smart playlists.
+
+- Library search accepts natural language and field comparisons. Saved searches create live smart playlists.
 
 - `WorkflowBar` adds an Import DJ library tool button wired to `MainWindow` (IMPORT-1, #143).
   - The button stays disabled while the batch queue is busy.
@@ -45,7 +49,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The mount point itself may remain an OS-managed mount link.
 - Relocation hash caching in `relocation.py` keys cached digests by device, inode, size, and modification timestamp, and rechecks file metadata after reading (IMPORT-1, #143).
 - File URL normalization and remainder extraction in `path_mapping.py` collapse slashes, normalize Windows drive letters, and split canonical segments (IMPORT-1, #143).
-- The version advances from 0.88.0 to 0.91.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.88.0 to 0.92.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 
