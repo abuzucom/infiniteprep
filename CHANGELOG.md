@@ -5,6 +5,13 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.88.1] (2026-11-26)
+
+### Changed
+
+- The test suite now covers the desktop entrypoint, USB manifest confinement, library import boundaries, adapter fallbacks, credential storage, settings validation, and waveform worker outcomes.
+- The version advances from 0.88.0 to 0.88.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+
 ## [0.88.0] (2026-11-24)
 
 ### Added
