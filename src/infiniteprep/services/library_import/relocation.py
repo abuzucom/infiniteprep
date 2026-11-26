@@ -146,7 +146,7 @@ class _HashCache:
     def __init__(self, root: Path) -> None:
         """Create an empty cache for the search root."""
         self._root = root
-        self._digests: dict[tuple[int, int], str] = {}
+        self._digests: dict[tuple[int, int, int, int], str] = {}
         self._operations = 0
         self._bytes = 0
 
@@ -156,33 +156,60 @@ class _HashCache:
         if opened is None:
             return None
         with opened:
-            key = (opened.identity.device, opened.identity.inode)
+            stat_info = _opened_stat(opened)
+            if stat_info is None:
+                return None
+            key = (
+                opened.identity.device,
+                opened.identity.inode,
+                stat_info.st_size,
+                stat_info.st_mtime_ns,
+            )
             cached = self._digests.get(key)
             if cached is not None:
                 return cached
-            if self._operations >= MAX_HASH_OPERATIONS or self._bytes >= MAX_HASH_BYTES:
-                logger.warning("Relocation stopped hashing at the work bound.")
-                return None
-            size = _opened_size(opened)
-            if size is None or self._bytes + size > MAX_HASH_BYTES:
+            if not self._can_hash(stat_info.st_size):
                 return None
             digest = _digest_of_handle(opened.handle)
-            if not identity_still_matches(opened):
+            if not _handle_unchanged(opened, stat_info):
                 logger.warning("Relocation skipped one file that changed while it was read.")
                 return None
             self._digests[key] = digest
             self._operations += 1
-            self._bytes += size
+            self._bytes += stat_info.st_size
             return digest
+
+    def _can_hash(self, size: int) -> bool:
+        """Return True when hashing size bytes stays within the work bounds."""
+        if self._operations >= MAX_HASH_OPERATIONS or self._bytes >= MAX_HASH_BYTES:
+            logger.warning("Relocation stopped hashing at the work bound.")
+            return False
+        return self._bytes + size <= MAX_HASH_BYTES
+
+
+def _opened_stat(opened: OpenedFile) -> os.stat_result | None:
+    """Return stat metadata of an open file, or None when it cannot be read."""
+    try:
+        return os.fstat(opened.handle.fileno())
+    except OSError:
+        logger.warning("Relocation skipped one file after an unreadable stat.")
+        return None
 
 
 def _opened_size(opened: OpenedFile) -> int | None:
     """Return the size of an open file, or None when it cannot be read."""
-    try:
-        return os.fstat(opened.handle.fileno()).st_size
-    except OSError:
-        logger.warning("Relocation skipped one file after an unreadable stat.")
-        return None
+    stat_info = _opened_stat(opened)
+    return None if stat_info is None else stat_info.st_size
+
+
+def _handle_unchanged(opened: OpenedFile, before: os.stat_result) -> bool:
+    """Return True when path identity, size, and mtime still match after reading."""
+    if not identity_still_matches(opened):
+        return False
+    after = _opened_stat(opened)
+    if after is None:
+        return False
+    return after.st_size == before.st_size and after.st_mtime_ns == before.st_mtime_ns
 
 
 def _digest_of_handle(handle: IO[bytes]) -> str:
