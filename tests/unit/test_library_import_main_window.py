@@ -174,9 +174,7 @@ def test_dialog_handles_missing_importer_error(
     library_file.write_text("<NML/>", encoding="utf-8")
     shown: list[tuple[str, str]] = []
 
-    def record_warning(
-        parent: Any, icon: QMessageBox.Icon, title: str, text: str
-    ) -> None:
+    def record_warning(parent: Any, icon: QMessageBox.Icon, title: str, text: str) -> None:
         shown.append((title, text))
 
     monkeypatch.setattr(dialog_module, "show_plain_message", record_warning)
