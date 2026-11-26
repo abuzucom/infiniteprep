@@ -8,7 +8,7 @@ renders as plain text.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Final
 
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QStackedWidget,
     QTableWidget,
@@ -30,10 +31,12 @@ from PySide6.QtWidgets import (
 )
 
 from infiniteprep.services.library_import.format_detection import detect_format
-from infiniteprep.services.library_import.importer import production_registry
+from infiniteprep.services.library_import.importer import NoImporterError, production_registry
 from infiniteprep.services.library_import.locations import format_display_name
 from infiniteprep.services.library_import.locator import LocatedLibrary, read_library_version
 from infiniteprep.services.library_import.path_mapping import PathMapping
+from infiniteprep.services.library_import.service import LibraryImportResult
+from infiniteprep.ui.action_handlers import show_plain_message
 from infiniteprep.ui.library_import_model import (
     ADD_MAPPING_BUTTON,
     BACK_BUTTON,
@@ -72,6 +75,9 @@ COLUMN_SOURCE: Final[int] = 0
 COLUMN_TARGET: Final[int] = 1
 
 
+PlanBuilder = Callable[[LocatedLibrary, list[PathMapping], str], LibraryImportResult]
+
+
 class LibraryImportDialog(QDialog):
     """Modal dialog that finds a DJ library and imports it.
 
@@ -86,6 +92,7 @@ class LibraryImportDialog(QDialog):
         libraries: list[LocatedLibrary],
         parent: QWidget | None = None,
         readable_formats: Iterable[str] | None = None,
+        plan_builder: PlanBuilder | None = None,
     ) -> None:
         """Build the dialog from the libraries the locator found.
 
@@ -104,6 +111,8 @@ class LibraryImportDialog(QDialog):
             if readable_formats is not None
             else set(production_registry().format_ids())
         )
+        self._plan_builder = plan_builder
+        self._pending_result: LibraryImportResult | None = None
         self._shown: list[LocatedLibrary] = []
         self._chosen: LocatedLibrary | None = None
 
@@ -145,6 +154,10 @@ class LibraryImportDialog(QDialog):
     def chosen_root(self) -> str:
         """Return the folder every imported file must sit inside."""
         return self.root_edit.text().strip()
+
+    def pending_result(self) -> LibraryImportResult | None:
+        """Return the built import plan waiting for commit, or None."""
+        return self._pending_result
 
     def set_conflicts(self, conflict_lines: list[str]) -> None:
         """Show the conflicts the merge found."""
@@ -302,16 +315,53 @@ class LibraryImportDialog(QDialog):
         return item.text() if item else ""
 
     def _go_next(self) -> None:
-        """Move to the next step."""
+        """Move to the next step, building the review plan before Review."""
         current = self.steps.currentIndex()
         if current == STEP_FIND:
             self.steps.setCurrentIndex(STEP_MAP)
         elif current == STEP_MAP:
+            if self._plan_builder is not None and not self._build_review_plan():
+                return
             self.steps.setCurrentIndex(STEP_REVIEW)
         self._apply_step_state(self.steps.currentIndex())
 
+    def _build_review_plan(self) -> bool:
+        """Build the pending plan and fill the Review lists, or warn on error."""
+        if self._chosen is None:
+            show_plain_message(
+                self, QMessageBox.Icon.Warning, WINDOW_TITLE, "Pick a library first."
+            )
+            return False
+        root_text = self.chosen_root()
+        if not root_text:
+            show_plain_message(
+                self, QMessageBox.Icon.Warning, WINDOW_TITLE, "Choose a music root folder first."
+            )
+            return False
+        assert self._plan_builder is not None
+        try:
+            result = self._plan_builder(self._chosen, self.saved_mappings(), root_text)
+        except NoImporterError as exc:
+            show_plain_message(self, QMessageBox.Icon.Warning, WINDOW_TITLE, str(exc))
+            return False
+        if result.error:
+            show_plain_message(self, QMessageBox.Icon.Warning, WINDOW_TITLE, result.error)
+            return False
+        self.set_conflicts(
+            [
+                format_conflict_line(c.field_name, c.imported_value, c.stored_value)
+                for c in result.conflicts
+            ]
+        )
+        self.set_pending([format_pending_line(name) for name in result.pending_fields])
+        self.set_unresolved(list(result.unresolved_paths))
+        self._pending_result = result
+        return True
+
     def _go_back(self) -> None:
-        """Move to the previous step."""
+        """Move to the previous step and discard any unapplied review plan."""
+        if self.steps.currentIndex() == STEP_REVIEW:
+            self._pending_result = None
         self.steps.setCurrentIndex(max(0, self.steps.currentIndex() - 1))
         self._apply_step_state(self.steps.currentIndex())
 

@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.91.1] (2026-11-26)
+## [0.92.0] (2026-11-26)
 
 ### Added
 
@@ -13,6 +13,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Library search accepts natural language and field comparisons. Saved searches create live smart playlists.
 
+- `WorkflowBar` adds an Import DJ library tool button wired to `MainWindow` (IMPORT-1, #143).
+  - The button stays disabled while the batch queue is busy.
+  - `LibraryImportDialog` builds the import plan when advancing from the Map step to the Review step.
+  - The Review step displays conflicts, pending values, and unresolved paths before commit.
+  - Accepting the dialog commits the plan in one transaction and refreshes the library table.
+  - `NoImporterError` and invalid roots display a plain-text warning and keep the dialog on the Map step.
 - The agents policy template moves from `abuzucom/agents` `88f58b5` to `4797f14` (v2.46.0).
   - The template adds the session zone, single question, prose option, anti-delegation, pull request base, and GitHub MCP write hooks. Each hook brings its shared modules, checkers, and tests.
   - The template adds the client skills under `skills/`, `.claude/skills/`, and `.agents/skills/`, plus `docs/enforcement-matrix.md`.
@@ -38,7 +44,12 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tests/test_review_wiring.py` covers the wrapper pins, the permissions, the secret mapping, and the check names.
 - `ci/README.md` kept the `ci` path that the CodeQL configuration declared. The default setup reads that configuration from `main`.
 - The CodeQL configuration drops the `ci` path.
-- The version advances from 0.88.0 to 0.91.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- Mounted device discovery in `locator.py` enforces containment inside the mount point (IMPORT-1, #143).
+  - Every component beneath the mount point and the library file itself must be a real path resolving inside the mount point.
+  - The mount point itself may remain an OS-managed mount link.
+- Relocation hash caching in `relocation.py` keys cached digests by device, inode, size, and modification timestamp, and rechecks file metadata after reading (IMPORT-1, #143).
+- File URL normalization and remainder extraction in `path_mapping.py` collapse slashes, normalize Windows drive letters, and split canonical segments (IMPORT-1, #143).
+- The version advances from 0.88.0 to 0.92.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 

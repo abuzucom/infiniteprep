@@ -14,7 +14,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from infiniteprep.services.library_import.filesystem import is_link_or_junction, real_children
+from infiniteprep.services.library_import.filesystem import (
+    is_link_or_junction,
+    real_children,
+    resolve_inside_root,
+)
 from infiniteprep.services.library_import.locations import (
     FormatId,
     KnownLocation,
@@ -185,29 +189,18 @@ def _library_in_folder(
 
 
 def _candidate_inside_profile(folder: Path, file_path: Path, profile_folder: Path | None) -> bool:
-    """Return True when the folder and the candidate stay inside the profile.
+    """Return True when the folder and the candidate stay inside the containment root.
 
-    The resolved paths settle the question. A folder that a link replaced
-    resolves outside the profile folder, so the candidate holds nothing the
-    framework reads. A profile folder of None means the candidate sits on a
-    mounted device, where the profile does not apply.
+    Every component beneath the containment root and the candidate file itself
+    must be a real directory or file resolving inside the resolved root. The
+    containment root itself may be an OS-managed mount link.
     """
     if profile_folder is None:
-        return True
-    if is_link_or_junction(folder) or is_link_or_junction(file_path):
-        return False
-    try:
-        resolved_folder = folder.resolve(strict=False)
-        resolved_file = file_path.resolve(strict=False)
-        resolved_profile = profile_folder.resolve(strict=False)
-    except OSError:
-        return False
-    for resolved in (resolved_folder, resolved_file):
-        try:
-            resolved.relative_to(resolved_profile)
-        except ValueError:
-            return False
-    return True
+        return not is_link_or_junction(folder) and not is_link_or_junction(file_path)
+    return (
+        resolve_inside_root(folder, profile_folder) is not None
+        and resolve_inside_root(file_path, profile_folder) is not None
+    )
 
 
 def _folder_version(folder: Path) -> str | None:
@@ -353,5 +346,5 @@ def _mount_matches(locations: tuple[KnownLocation, ...], mount_point: Path) -> l
     matches: list[LocatedLibrary] = []
     for location in locations:
         for folder in folders_for(location, Platform.ANY):
-            matches.extend(_library_in_folder(location, mount_point / folder))
+            matches.extend(_library_in_folder(location, mount_point / folder, mount_point))
     return matches
