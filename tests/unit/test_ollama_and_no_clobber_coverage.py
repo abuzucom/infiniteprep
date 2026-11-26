@@ -57,14 +57,14 @@ class FakeNativeRename:
         return self.result
 
 
-def test_build_tags_url_removes_the_openai_suffix() -> None:
+def test_build_tags_url_removes_the() -> None:
     """The tags URL keeps the server root and removes only an OpenAI suffix."""
     assert build_tags_url("http://127.0.0.1:11434") == "http://127.0.0.1:11434/api/tags"
     assert build_tags_url("http://127.0.0.1:11434/v1/") == "http://127.0.0.1:11434/api/tags"
     assert build_tags_url(" http://localhost:8080/v1 ") == "http://localhost:8080/api/tags"
 
 
-def test_parse_model_names_filters_malformed_and_duplicate_entries() -> None:
+def test_parse_model_names_filters_malformed() -> None:
     """Only safe names survive and duplicate names keep their first position."""
     payload = {
         "models": [
@@ -94,18 +94,18 @@ def test_parse_model_names_filters_malformed_and_duplicate_entries() -> None:
         "a/b/c/d:tag",
     ],
 )
-def test_is_safe_model_reference_rejects_unsafe_names(name: str) -> None:
+def test_is_safe_model_reference_rejects(name: str) -> None:
     """The reference grammar rejects missing tags and unsafe path segments."""
     assert is_safe_model_reference(name) is False
 
 
-def test_is_safe_model_reference_accepts_supported_segments() -> None:
+def test_is_safe_model_reference_accepts() -> None:
     """The reference grammar accepts one to three safe name segments."""
     assert is_safe_model_reference("qwen2.5:3b") is True
     assert is_safe_model_reference("hf.co/user/model:q4") is True
 
 
-def test_ollama_list_installed_models_handles_invalid_and_malformed_responses(
+def test_ollama_list_installed_models_handles(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Invalid endpoints, network errors, bad JSON, and oversized bodies return no models."""
@@ -143,7 +143,7 @@ def test_ollama_list_installed_models_handles_invalid_and_malformed_responses(
     assert OllamaBootstrapService().list_installed_models() == []
 
 
-def test_ollama_list_installed_models_returns_safe_names(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ollama_list_installed_models_returns(monkeypatch: pytest.MonkeyPatch) -> None:
     """A valid tags response returns safe model names in response order."""
     body = b'{"models": [{"name": "qwen2.5:3b"}, {"name": "llama3:8b"}]}'
     monkeypatch.setattr(
@@ -155,7 +155,7 @@ def test_ollama_list_installed_models_returns_safe_names(monkeypatch: pytest.Mon
     assert OllamaBootstrapService().list_installed_models() == ["qwen2.5:3b", "llama3:8b"]
 
 
-def test_ollama_install_requires_consent_and_uses_platform_commands(
+def test_ollama_install_requires_consent_and(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Consent gates installation and the platform selects one fixed command."""
@@ -181,7 +181,7 @@ def test_ollama_install_requires_consent_and_uses_platform_commands(
     assert commands[1] == ["brew", "install", "--cask", "ollama"]
 
 
-def test_ollama_pull_validates_name_and_consent() -> None:
+def test_ollama_pull_validates_name_and() -> None:
     """A pull rejects an unsafe name before it checks consent."""
     service = OllamaBootstrapService(
         runner=lambda command: subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
@@ -194,7 +194,7 @@ def test_ollama_pull_validates_name_and_consent() -> None:
     assert service.pull_model("qwen2.5:3b", user_consented=True) == "ok"
 
 
-def test_ollama_exec_array_uses_shell_false(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ollama_exec_array_uses_shell(monkeypatch: pytest.MonkeyPatch) -> None:
     """The subprocess seam receives an argument array and disables the shell."""
     calls: list[tuple[list[str], dict[str, Any]]] = []
 
@@ -210,7 +210,7 @@ def test_ollama_exec_array_uses_shell_false(monkeypatch: pytest.MonkeyPatch) -> 
     assert calls[0][1]["shell"] is False
 
 
-def test_ollama_detects_and_resolves_the_executable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ollama_detects_and_resolves_the(monkeypatch: pytest.MonkeyPatch) -> None:
     """The executable lookup returns a path only when the PATH lookup succeeds."""
     monkeypatch.setattr(ollama_bootstrap.shutil, "which", lambda name: None)
     service = OllamaBootstrapService()
@@ -222,7 +222,7 @@ def test_ollama_detects_and_resolves_the_executable(monkeypatch: pytest.MonkeyPa
     assert service.resolve_ollama_path() == Path("/usr/bin/ollama")
 
 
-def test_linux_renameat2_binding_uses_noreplace_flag() -> None:
+def test_linux_renameat2_binding_uses_noreplace() -> None:
     """The Linux binding passes both current-directory descriptors and the no-replace flag."""
     native = FakeNativeRename()
     libc = cast(Any, type("Libc", (), {"renameat2": native})())
@@ -233,7 +233,7 @@ def test_linux_renameat2_binding_uses_noreplace_flag() -> None:
     assert native.calls == [(-100, b"source", -100, b"destination", 1)]
 
 
-def test_macos_renamex_binding_uses_exclusive_flag() -> None:
+def test_macos_renamex_binding_uses_exclusive() -> None:
     """The macOS binding passes the exclusive rename flag."""
     native = FakeNativeRename()
     libc = cast(Any, type("Libc", (), {"renamex_np": native})())
@@ -244,7 +244,7 @@ def test_macos_renamex_binding_uses_exclusive_flag() -> None:
     assert native.calls == [(b"source", b"destination", 4)]
 
 
-def test_native_rename_binding_handles_missing_platforms_and_libraries(
+def test_native_rename_binding_handles_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Missing symbols, unsupported platforms, and unavailable C libraries return None."""
@@ -269,7 +269,7 @@ def test_native_rename_binding_handles_missing_platforms_and_libraries(
     no_clobber_move.native_no_replace_rename.cache_clear()
 
 
-def test_rename_error_paths_report_existing_and_unsupported_destinations(
+def test_rename_error_paths_report_existing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Native errors distinguish an existing destination from an unsupported operation."""
@@ -290,7 +290,7 @@ def test_rename_error_paths_report_existing_and_unsupported_destinations(
     assert no_clobber_move._rename_without_replacing(Path("source"), Path("destination")) is False
 
 
-def test_windows_move_binding_uses_os_rename(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_windows_move_binding_uses_os(monkeypatch: pytest.MonkeyPatch) -> None:
     """The Windows path uses os.rename without an existence check."""
     calls: list[tuple[Path, Path]] = []
     monkeypatch.setattr(sys, "platform", "win32")
@@ -305,7 +305,7 @@ def test_windows_move_binding_uses_os_rename(monkeypatch: pytest.MonkeyPatch) ->
     assert calls == [(Path("source"), Path("destination"))]
 
 
-def test_discard_if_same_file_checks_identity_and_hash(tmp_path: Path) -> None:
+def test_discard_if_same_file_checks(tmp_path: Path) -> None:
     """Discard removes only the expected file and restores a changed file."""
     source = tmp_path / "track.wav"
     source.write_bytes(b"audio")
@@ -324,9 +324,7 @@ def test_discard_if_same_file_checks_identity_and_hash(tmp_path: Path) -> None:
     assert source.read_bytes() == b"changed"
 
 
-def test_discard_if_same_file_handles_missing_and_move_failures(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_discard_if_same_file_handles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A missing source and a failed private move both preserve the source."""
     source = tmp_path / "track.wav"
     source.write_bytes(b"audio")

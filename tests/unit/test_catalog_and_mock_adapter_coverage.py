@@ -66,7 +66,7 @@ def test_mock_catalog_returns_deterministic_defaults() -> None:
     assert details.genre == "Progressive House"
 
 
-def test_mock_catalog_uses_every_supplied_query_field() -> None:
+def test_mock_catalog_uses_every_supplied() -> None:
     """Supplied query fields replace each offline default."""
     adapter = MockCatalogProviderAdapter()
     query = MetadataSearchQuery(
@@ -96,7 +96,7 @@ def test_mock_catalog_uses_every_supplied_query_field() -> None:
     assert details.catalog_number == "CAT-1"
 
 
-def test_mock_catalog_search_candidates_and_fetch_override_identity() -> None:
+def test_mock_catalog_search_candidates_and() -> None:
     """The convenience search passes its file ID, and fetch overrides entity identity."""
     adapter = MockCatalogProviderAdapter()
 
@@ -119,7 +119,7 @@ def test_mock_catalog_search_candidates_and_fetch_override_identity() -> None:
     assert fetched[0].file_id == "file-3"
 
 
-def test_beatport_stub_never_reports_availability_or_results() -> None:
+def test_beatport_stub_never_reports_availability() -> None:
     """Beatport stays unavailable with and without a token and returns no candidates."""
     without_token = BeatportStubAdapter()
     with_token = BeatportStubAdapter("synthetic-token")
@@ -131,7 +131,7 @@ def test_beatport_stub_never_reports_availability_or_results() -> None:
     assert without_token.fetch("entity-1", EntityType.RECORDING, file_id="file-1") == []
 
 
-def test_mock_reasoning_adapter_selects_the_first_allowed_candidate() -> None:
+def test_mock_reasoning_adapter_selects_the() -> None:
     """The mock selects the first dictionary candidate and preserves its fields."""
     adapter = MockReasoningAdapter()
 
@@ -143,7 +143,7 @@ def test_mock_reasoning_adapter_selects_the_first_allowed_candidate() -> None:
     assert "top allowed candidate" in result["rationale"]
 
 
-def test_mock_reasoning_adapter_handles_empty_and_scalar_candidates() -> None:
+def test_mock_reasoning_adapter_handles_empty() -> None:
     """An empty packet returns no selection, and a scalar candidate becomes text."""
     adapter = MockReasoningAdapter()
 
@@ -157,7 +157,7 @@ def test_mock_reasoning_adapter_handles_empty_and_scalar_candidates() -> None:
     assert scalar["proposed_value"] == "candidate-2"
 
 
-def test_unconfigured_providers_report_the_same_reason_and_find_nothing() -> None:
+def test_unconfigured_providers_report_the_same() -> None:
     """Unconfigured providers stay unavailable and never invent an identification."""
     fingerprint = UnconfiguredFingerprintProvider()
     catalog = UnconfiguredCatalogProvider()
@@ -174,7 +174,7 @@ def test_unconfigured_providers_report_the_same_reason_and_find_nothing() -> Non
     assert catalog.fetch("entity-1", EntityType.RECORDING, file_id="file-1") == []
 
 
-def test_mock_reasoning_adapter_ignores_unrelated_packet_fields() -> None:
+def test_mock_reasoning_adapter_ignores_unrelated() -> None:
     """Only allowed_candidates controls deterministic mock arbitration."""
     packet: dict[str, Any] = {"allowed_candidates": [{"id": "candidate-3", "value": "Value"}]}
 
@@ -201,7 +201,7 @@ def test_credentials_prefer_environment_then_memory(monkeypatch: pytest.MonkeyPa
     assert store.get_secret("llm_api_key") is None
 
 
-def test_credential_store_converts_keyring_get_and_set_failures(
+def test_credential_store_converts_keyring_get(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Keyring read and write failures fail closed with CredentialStoreError."""
@@ -224,7 +224,7 @@ def test_credential_store_converts_keyring_get_and_set_failures(
     assert store._memory == {}
 
 
-def test_credential_store_ignores_missing_delete_and_reports_other_failures(
+def test_credential_store_ignores_missing_delete(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A missing key is harmless, while a backend failure reports an error."""
@@ -261,12 +261,12 @@ def test_credential_store_ignores_missing_delete_and_reports_other_failures(
         ("not a url", False),
     ],
 )
-def test_validate_endpoint_url_rejects_unsafe_endpoints(url: str, expected: bool) -> None:
+def test_validate_endpoint_url_rejects_unsafe(url: str, expected: bool) -> None:
     """Endpoint validation accepts only local HTTP or public HTTPS endpoints."""
     assert validate_endpoint_url(url)[0] is expected
 
 
-def test_validate_endpoint_url_checks_dns_results(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_validate_endpoint_url_checks_dns(monkeypatch: pytest.MonkeyPatch) -> None:
     """HTTPS and localhost endpoints reject DNS answers that leave the allowed range."""
 
     def records(address: str) -> list[tuple[Any, ...]]:

@@ -20,7 +20,7 @@ from tests.fixtures.memory_repository import build_memory_repository
 STUB_KEY = "synthetic"
 
 
-def test_non_ip_text_is_not_classified_as_a_disallowed_ip() -> None:
+def test_non_ip_text_is_not() -> None:
     """A hostname that does not parse as an IP address passes the IP classifier."""
     assert settings_module._is_disallowed_ip("example.test") is False
 
@@ -33,7 +33,7 @@ def test_non_ip_text_is_not_classified_as_a_disallowed_ip() -> None:
         "https://0.999/v1",
     ],
 )
-def test_numeric_and_ambiguous_https_hosts_are_refused(url: str) -> None:
+def test_numeric_and_ambiguous_https_hosts(url: str) -> None:
     """Decimal, hexadecimal, and octal-looking hosts cannot bypass IP validation."""
     valid, reason = validate_endpoint_url(url)
 
@@ -51,7 +51,7 @@ def test_unsupported_url_scheme_is_refused() -> None:
     assert "Unsupported URL scheme" in reason
 
 
-def test_https_dns_rejects_mixed_public_and_private_answers(
+def test_https_dns_rejects_mixed_public(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One private DNS answer rejects an otherwise public hostname."""
@@ -73,7 +73,7 @@ def test_https_dns_rejects_mixed_public_and_private_answers(
     assert "disallowed IP" in reason
 
 
-def test_https_dns_accepts_only_public_answers(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_https_dns_accepts_only_public(monkeypatch: pytest.MonkeyPatch) -> None:
     """A hostname with only public DNS answers passes HTTPS validation."""
     answers = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]
     monkeypatch.setattr(
@@ -84,7 +84,7 @@ def test_https_dns_accepts_only_public_answers(monkeypatch: pytest.MonkeyPatch) 
     assert validate_endpoint_url("https://example.test/v1", resolve_dns=True) == (True, None)
 
 
-def test_https_dns_rejects_empty_and_failed_answers(
+def test_https_dns_rejects_empty_and(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An empty answer and a resolver failure both reject the endpoint."""
@@ -108,7 +108,7 @@ def test_https_dns_rejects_empty_and_failed_answers(
     assert "DNS resolution failed" in reason
 
 
-def test_localhost_dns_rejects_a_non_loopback_answer(
+def test_localhost_dns_rejects_a_non(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A localhost name that resolves to a public address cannot use plain HTTP."""
@@ -139,7 +139,7 @@ def test_loopback_literals_skip_dns_resolution(monkeypatch: pytest.MonkeyPatch) 
     assert validate_endpoint_url("http://[::1]:11434/v1", resolve_dns=True) == (True, None)
 
 
-def test_localhost_trailing_dot_resolves_as_localhost(
+def test_localhost_trailing_dot_resolves_as(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A trailing root dot does not bypass the localhost-only HTTP rule."""
@@ -173,9 +173,7 @@ def test_sync_directory_skips_windows(monkeypatch: pytest.MonkeyPatch) -> None:
     settings_module._sync_directory(Path("settings"))
 
 
-def test_sync_directory_handles_an_open_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sync_directory_handles_an_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A POSIX directory that cannot open leaves the written settings in place."""
 
     def fail_open(*_args: Any) -> Any:
@@ -187,9 +185,7 @@ def test_sync_directory_handles_an_open_failure(
     settings_module._sync_directory(tmp_path)
 
 
-def test_sync_directory_closes_after_an_fsync_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sync_directory_closes_after_an(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed directory flush still closes the directory descriptor."""
     closed: list[int] = []
 
@@ -209,9 +205,7 @@ def test_sync_directory_closes_after_an_fsync_failure(
     assert closed == [7]
 
 
-def test_sync_directory_flushes_and_closes_on_success(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_sync_directory_flushes_and_closes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A successful POSIX directory flush closes its descriptor."""
     flushed: list[int] = []
     closed: list[int] = []
@@ -229,9 +223,7 @@ def test_sync_directory_flushes_and_closes_on_success(
     assert closed == [9]
 
 
-def test_atomic_settings_write_keeps_the_old_file_after_fsync_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_atomic_settings_write_keeps_the(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A temporary-file flush failure preserves the old settings and removes the temp file."""
     path = tmp_path / "settings.json"
     path.write_text('{"old": true}', encoding="utf-8")
@@ -249,9 +241,7 @@ def test_atomic_settings_write_keeps_the_old_file_after_fsync_failure(
     assert list(tmp_path.glob("settings.json.*.tmp")) == []
 
 
-def test_atomic_settings_write_cleans_up_after_replace_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_atomic_settings_write_case_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed atomic replace preserves the old settings and removes the temp file."""
     path = tmp_path / "settings.json"
     path.write_text('{"old": true}', encoding="utf-8")
@@ -269,9 +259,7 @@ def test_atomic_settings_write_cleans_up_after_replace_failure(
     assert list(tmp_path.glob("settings.json.*.tmp")) == []
 
 
-def test_atomic_settings_write_cleans_up_after_an_interrupt(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_atomic_settings_write_cleans_up(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """An interrupted replace still removes the temporary settings file."""
     path = tmp_path / "settings.json"
     path.write_text('{"old": true}', encoding="utf-8")
@@ -289,9 +277,7 @@ def test_atomic_settings_write_cleans_up_after_an_interrupt(
     assert list(tmp_path.glob("settings.json.*.tmp")) == []
 
 
-def test_default_settings_path_uses_the_configured_storage(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_default_settings_path_uses_the(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A manager without an explicit path uses the current config directory."""
     monkeypatch.setattr(
         settings_module.storage_paths,
@@ -304,7 +290,7 @@ def test_default_settings_path_uses_the_configured_storage(
     assert manager.settings_path == tmp_path / "settings.json"
 
 
-def test_load_tag_output_returns_saved_preferences(tmp_path: Path) -> None:
+def test_load_tag_output_returns_saved(tmp_path: Path) -> None:
     """The tag-output helper returns the saved notation, padding, and precision."""
     manager = SettingsManager(tmp_path / "settings.json")
     manager.save(
@@ -330,7 +316,7 @@ class MissingFpcalcBootstrap:
         return None
 
 
-def test_identify_reports_a_missing_default_fpcalc_binary(
+def test_identify_reports_a_missing_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The public identify path reports a missing default fpcalc binary as a warning."""

@@ -17,7 +17,7 @@ STUB_KEY = "synthetic"
 STUB_FINGERPRINT = "AQAA_TEST"
 
 
-def test_settings_load_validates_types_choices_and_ranges(tmp_path: Path) -> None:
+def test_settings_load_validates_types_choices(tmp_path: Path) -> None:
     """Persisted settings replace invalid values with their field defaults."""
     path = tmp_path / "settings.json"
     path.write_text(
@@ -57,7 +57,7 @@ def test_settings_load_validates_types_choices_and_ranges(tmp_path: Path) -> Non
     assert loaded.theme == "infiniteprep_light.xml"
 
 
-def test_settings_load_handles_missing_malformed_and_non_object_files(tmp_path: Path) -> None:
+def test_settings_load_handles_missing_malformed(tmp_path: Path) -> None:
     """Missing, malformed, and non-object settings files use the defaults."""
     manager = SettingsManager(tmp_path / "settings.json")
     assert manager.load() == AppSettings()
@@ -69,7 +69,7 @@ def test_settings_load_handles_missing_malformed_and_non_object_files(tmp_path: 
     assert manager.load() == AppSettings()
 
 
-def test_settings_update_rejects_unknown_and_invalid_values(tmp_path: Path) -> None:
+def test_settings_update_rejects_unknown_and(tmp_path: Path) -> None:
     """Update rejects unknown fields and invalid values without writing them."""
     path = tmp_path / "settings.json"
     manager = SettingsManager(path)
@@ -83,7 +83,7 @@ def test_settings_update_rejects_unknown_and_invalid_values(tmp_path: Path) -> N
     assert not path.exists()
 
 
-def test_settings_update_persists_a_valid_value(tmp_path: Path) -> None:
+def test_settings_update_persists_a_valid(tmp_path: Path) -> None:
     """A valid update persists and retains unrelated settings."""
     path = tmp_path / "settings.json"
     manager = SettingsManager(path)
@@ -106,7 +106,7 @@ class FakeBootstrap:
         return self.path
 
 
-def test_acoustid_availability_requires_key_and_fpcalc(tmp_path: Path) -> None:
+def test_acoustid_availability_requires_key_and(tmp_path: Path) -> None:
     """The adapter reports each missing prerequisite separately."""
     missing_key = ChromaprintAcoustIDAdapter(
         repository=build_memory_repository(),
@@ -131,7 +131,7 @@ def test_acoustid_availability_requires_key_and_fpcalc(tmp_path: Path) -> None:
     assert ready.is_available() == (True, None)
 
 
-def test_acoustid_identify_returns_empty_result_when_unavailable(tmp_path: Path) -> None:
+def test_acoustid_identify_returns_empty_result(tmp_path: Path) -> None:
     """An unavailable adapter returns no fingerprint and one warning."""
     adapter = ChromaprintAcoustIDAdapter(repository=build_memory_repository())
 
@@ -211,7 +211,7 @@ def test_acoustid_cache_serves_repeated_lookup(tmp_path: Path) -> None:
     assert len(calls) == 1
 
 
-def test_acoustid_does_not_cache_non_object_response(tmp_path: Path) -> None:
+def test_acoustid_does_not_cache_non(tmp_path: Path) -> None:
     """A malformed response fails the lookup and remains outside the cache."""
     calls: list[str] = []
 
@@ -234,7 +234,7 @@ def test_acoustid_does_not_cache_non_object_response(tmp_path: Path) -> None:
     assert len(calls) == 2
 
 
-def test_acoustid_default_fpcalc_subprocess_parses_json(
+def test_acoustid_default_fpcalc_subprocess_parses(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The default fpcalc seam parses duration and fingerprint from JSON output."""
@@ -264,7 +264,7 @@ def test_acoustid_default_fpcalc_subprocess_parses_json(
     assert calls[0][0].endswith("fpcalc")
 
 
-def test_acoustid_parses_scores_artists_and_release_groups(tmp_path: Path) -> None:
+def test_acoustid_parses_scores_artists_and(tmp_path: Path) -> None:
     """The response parser preserves valid evidence and drops unsafe scores."""
     payload = {
         "results": [
@@ -302,7 +302,7 @@ def test_acoustid_parses_scores_artists_and_release_groups(tmp_path: Path) -> No
     assert match.raw_evidence["acoustid_id"] == "acoustid-1"
 
 
-def test_acoustid_missing_default_fpcalc_is_reported(tmp_path: Path) -> None:
+def test_acoustid_missing_default_fpcalc_is(tmp_path: Path) -> None:
     """A missing default fpcalc binary becomes a warning through the normal path."""
     adapter = ChromaprintAcoustIDAdapter(
         repository=build_memory_repository(),
