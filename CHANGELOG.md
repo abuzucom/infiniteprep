@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.92.0] (2026-11-26)
+## [0.92.1] (2026-11-26)
 
 ### Added
 
@@ -27,6 +27,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The main window opens at a share of the available screen and restores saved geometry when available.
+- A large-window layout gives the sidebar and track details more room from 1680 logical pixels.
+- The waveform and playback controls stay visible above the library. The queue and workflow controls leave the remaining height to the library (UI-7, #362).
 - The test suite now covers the desktop entrypoint, USB manifest confinement, library import boundaries, adapter fallbacks, credential storage, settings validation, and waveform worker outcomes.
 - Every taken hook, checker, test, client setting, and policy document matches the template revision. The policy copies come from `scripts/sync.py`.
 - The `pr-checks` job of `agents-compliance.yml` runs on draft pull requests. `agents-md-compliance.yml` has no branch filter and also runs on the `edited` event.

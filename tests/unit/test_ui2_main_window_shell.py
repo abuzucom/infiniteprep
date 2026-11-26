@@ -361,7 +361,7 @@ def test_panel_width(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager
     window, _repository = build_window(qtbot, tmp_path, ("a.wav",))
     show_at_width(qtbot, window, NARROW_WIDTH)
 
-    show_at_width(qtbot, window, WIDE_WIDTH)
+    show_at_width(qtbot, window, 1600)
 
     assert window.layout_mode is LayoutMode.WIDE
     qtbot.waitUntil(lambda: window.detail_splitter.sizes()[1] == DETAIL_PANEL_WIDTH)
@@ -396,12 +396,14 @@ def test_geometry_saved(
 
 
 def test_damaged_geometry(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:
-    """A saved geometry that is not base64 opens the window at its default size."""
+    """Invalid saved geometry opens the window at a share of the available screen."""
     settings.settings.window_geometry = "not base64 !"
 
     window, _repository = build_window(qtbot, tmp_path)
 
-    assert window.width() == main_window_module.MAIN_WINDOW_WIDTH
+    available = window.screen().availableGeometry()
+    assert window.width() == max(MINIMUM_WINDOW_WIDTH, round(available.width() * 0.9))
+    assert window.height() == max(MINIMUM_WINDOW_HEIGHT, round(available.height() * 0.9))
 
 
 def test_key_picker_placement(qtbot: Any, tmp_path: Path, settings: MemorySettingsManager) -> None:

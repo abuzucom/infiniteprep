@@ -120,11 +120,16 @@ class LayoutMode(StrEnum):
 
 
 WIDE_MIN_WIDTH: Final[int] = 1600
+LARGE_MIN_WIDTH: Final[int] = 1680
 MEDIUM_MIN_WIDTH: Final[int] = 1280
 MINIMUM_WINDOW_WIDTH: Final[int] = 960
 MINIMUM_WINDOW_HEIGHT: Final[int] = 600
 SIDEBAR_WIDTH: Final[int] = 200
 DETAIL_PANEL_WIDTH: Final[int] = 480
+LARGE_SIDEBAR_SHARE: Final[float] = 0.12
+LARGE_DETAIL_SHARE: Final[float] = 0.31
+LARGE_SIDEBAR_BOUNDS: Final[tuple[int, int]] = (240, 360)
+LARGE_DETAIL_BOUNDS: Final[tuple[int, int]] = (520, 960)
 # A restored window stays where it was only while this much of its top strip shows.
 GRAB_STRIP_HEIGHT: Final[int] = 32
 MIN_GRAB_WIDTH: Final[int] = 120
@@ -137,6 +142,16 @@ def find_layout_mode(window_width: int) -> LayoutMode:
     if window_width >= MEDIUM_MIN_WIDTH:
         return LayoutMode.MEDIUM
     return LayoutMode.NARROW
+
+
+def get_large_pane_widths(body_width: int) -> tuple[int, int]:
+    """Return the sidebar and detail defaults for a large three-pane window."""
+    sidebar_min, sidebar_max = LARGE_SIDEBAR_BOUNDS
+    detail_min, detail_max = LARGE_DETAIL_BOUNDS
+    return (
+        max(sidebar_min, min(sidebar_max, round(body_width * LARGE_SIDEBAR_SHARE))),
+        max(detail_min, min(detail_max, round(body_width * LARGE_DETAIL_SHARE))),
+    )
 
 
 def shows_grab_strip(window: QRect, screen: QRect) -> bool:

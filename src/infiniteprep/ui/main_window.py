@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -124,6 +125,7 @@ from infiniteprep.ui.tokens import (
 )
 from infiniteprep.ui.workflow import (
     DETAIL_PANEL_WIDTH,
+    LARGE_MIN_WIDTH,
     MINIMUM_WINDOW_HEIGHT,
     MINIMUM_WINDOW_WIDTH,
     SIDEBAR_WIDTH,
@@ -134,6 +136,7 @@ from infiniteprep.ui.workflow import (
     find_current_stage,
     find_layout_mode,
     fit_window_on_screens,
+    get_large_pane_widths,
     matches_library_filter,
 )
 from infiniteprep.ui.workflow_bar import WorkflowBar, stage_shortcut
@@ -160,6 +163,9 @@ TABLE_COLUMNS: Final[tuple[str, ...]] = (
 )
 MAIN_WINDOW_WIDTH: Final[int] = 1360
 MAIN_WINDOW_HEIGHT: Final[int] = 820
+INITIAL_WINDOW_SHARE: Final[float] = 0.90
+PLAYER_DECK_HEIGHT_SHARE: Final[float] = 0.16
+PLAYER_DECK_STANDARD_BOUNDS: Final[tuple[int, int]] = (144, 288)
 if len(TABLE_COLUMNS) != SORT_COLUMN_COUNT or len(TABLE_COLUMNS) != len(LibraryColumn):
     raise RuntimeError("The library table columns and the sort kinds must stay aligned.")
 WARNINGS_COLUMN: Final[int] = int(LibraryColumn.WARNINGS)
@@ -226,8 +232,8 @@ SETTINGS_SHORTCUT: Final[str] = "Ctrl+,"
 PLAY_PAUSE_SHORTCUT: Final[str] = "Ctrl+P"
 MEDIA_PLAY_PAUSE_SHORTCUT: Final[str] = "Media Play/Pause"
 PLAY_BUTTON_TOOLTIP_TEMPLATE: Final[str] = "Play or pause the preview ({shortcut})"
-# Below the table, the detail panel starts at this height. Splitters reset each launch.
-DETAIL_PANEL_HEIGHT: Final[int] = 420
+# Below the table, the detail panel starts at this share of the body height.
+NARROW_DETAIL_HEIGHT_SHARE: Final[float] = 0.45
 PLAYLIST_SUFFIX: Final[str] = ".m3u8"
 CLOSE_WAIT: Final[str] = "wait"
 CLOSE_CANCEL: Final[str] = "cancel"
@@ -361,7 +367,7 @@ class MainWindow(QMainWindow, LibraryRows):
 
         self.setWindowTitle(WINDOW_TITLE)
         self.setMinimumSize(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
-        self.resize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
+        self._resize_to_available_screen()
         self._create_widgets(enable_audio_backend)
         self._setup_workflow_bar()
         self._setup_central_widget()
@@ -370,7 +376,7 @@ class MainWindow(QMainWindow, LibraryRows):
         self._apply_theme_palette()
         self.refresh_file_table()
         self._restore_window_geometry()
-        self._apply_layout_mode(find_layout_mode(self.width()))
+        self._update_window_layout()
 
     def _create_widgets(self, enable_audio_backend: bool) -> None:
         """Create the search field, pickers, bar, sidebar, table, and detail panel."""
@@ -379,6 +385,10 @@ class MainWindow(QMainWindow, LibraryRows):
         self.workflow_bar = WorkflowBar(self)
         self.sidebar = LibrarySidebar(self)
         self.layout_mode: LayoutMode | None = None
+        self._large_layout = False
+        self._sidebar_moved = False
+        self._detail_moved = False
+        self._text_size = TEXT_SIZE_STANDARD
         self._library_folders: list[tuple[Path, int]] = []
         self.file_table = LibraryTableWidget(self)
         self.file_table.setColumnCount(len(TABLE_COLUMNS))
@@ -388,6 +398,7 @@ class MainWindow(QMainWindow, LibraryRows):
             on_change_callback=self.refresh_file_table,
             parent=self,
             enable_audio_backend=enable_audio_backend,
+            player_in_deck=True,
         )
 
     def _setup_batch_queue(self) -> None:
@@ -400,12 +411,13 @@ class MainWindow(QMainWindow, LibraryRows):
         )
         self.batch_dock = BatchQueueDock(self.batch_queue, self)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.batch_dock)
-        # The strip shows progress. The full queue opens above it on a click.
+        # The full queue replaces the progress strip when opened.
         self.batch_dock.hide()
-        self.batch_strip = BatchQueueStrip(self.batch_queue, self)
+        self.batch_strip = BatchQueueStrip(self.batch_queue, self, collapse_when_open=True)
+        self.batch_strip.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self.centralWidget().layout().addWidget(self.batch_strip)
         self.batch_strip.queue_toggled.connect(self.batch_dock.setVisible)
-        self.batch_dock.visibilityChanged.connect(self.batch_strip.set_queue_shown)
+        self.batch_dock.visibilityChanged.connect(self._on_queue_visibility_changed)
         self._close_after_queue = False
         self.import_failure_box: QMessageBox | None = None
         self.batch_result_box: QMessageBox | None = None
@@ -413,6 +425,12 @@ class MainWindow(QMainWindow, LibraryRows):
         self.batch_queue.changed.connect(self._update_action_locks)
         self.batch_queue.idle.connect(self._on_queue_idle)
         self.batch_dock.result_requested.connect(self.show_batch_result)
+
+    def _on_queue_visibility_changed(self, shown: bool) -> None:
+        """Show progress in one place and reset the narrow split after the dock moves."""
+        self.batch_strip.set_queue_shown(shown)
+        if self.layout_mode is LayoutMode.NARROW:
+            QTimer.singleShot(0, self._reset_splitter_sizes)
 
     def _setup_workflow_bar(self) -> None:
         """Connect the workflow bar and the sidebar to the stage actions and tools.
@@ -493,10 +511,13 @@ class MainWindow(QMainWindow, LibraryRows):
         play_button.setToolTip(PLAY_BUTTON_TOOLTIP_TEMPLATE.format(shortcut=shown_key))
 
     def _setup_central_widget(self) -> None:
-        """Build the workflow bar, the sidebar, the filter row, the table, and the panel."""
+        """Build the workflow bar and deck above the expanding library body."""
         central = QWidget(self)
         root_layout = QVBoxLayout(central)
+        self.workflow_bar.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         root_layout.addWidget(self.workflow_bar)
+        self.detail_panel.audio_player.place_in_deck()
+        root_layout.addWidget(self.detail_panel.audio_player)
         content = QWidget(central)
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
@@ -507,8 +528,7 @@ class MainWindow(QMainWindow, LibraryRows):
         self._setup_file_table()
         self.detail_splitter = QSplitter(Qt.Orientation.Horizontal, content)
         self.detail_splitter.addWidget(self.file_table)
-        # The panel's contents need more than 480 px. The scroll area lets the splitter
-        # hold the panel at its set size, and the contents scroll inside it.
+        # The scroll area lets the splitter size the panel independently of its contents.
         self.detail_scroll = QScrollArea(content)
         self.detail_scroll.setWidgetResizable(True)
         self.detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -520,7 +540,9 @@ class MainWindow(QMainWindow, LibraryRows):
         self.body_splitter = QSplitter(Qt.Orientation.Horizontal, central)
         self.body_splitter.addWidget(self.sidebar)
         self.body_splitter.addWidget(content)
-        root_layout.addWidget(self.body_splitter)
+        self.body_splitter.splitterMoved.connect(lambda: setattr(self, "_sidebar_moved", True))
+        self.detail_splitter.splitterMoved.connect(lambda: setattr(self, "_detail_moved", True))
+        root_layout.addWidget(self.body_splitter, 1)
         self.setCentralWidget(central)
 
     def _build_filter_row(self) -> QHBoxLayout:
@@ -634,8 +656,11 @@ class MainWindow(QMainWindow, LibraryRows):
         if mode is self.layout_mode:
             return
         self.layout_mode = mode
+        self._sidebar_moved = False
+        self._detail_moved = False
         wide = mode is LayoutMode.WIDE
         self.workflow_bar.set_compact(not wide)
+        self.detail_panel.audio_player.set_deck_compact(not wide)
         self.sidebar_toggle_btn.setVisible(not wide)
         if wide:
             self.body_splitter.insertWidget(0, self.sidebar)
@@ -647,26 +672,30 @@ class MainWindow(QMainWindow, LibraryRows):
             Qt.Orientation.Vertical if mode is LayoutMode.NARROW else Qt.Orientation.Horizontal
         )
         self.detail_splitter.setOrientation(orientation)
-        # The splitters learn their new size only after this resize event, so the reset
-        # waits for the layout pass. The table takes the stretch, so the panel keeps its size.
+        # The table takes the stretch when a dragged pane keeps its size.
         if wide:
             self.body_splitter.setStretchFactor(0, 0)
             self.body_splitter.setStretchFactor(1, 1)
         self.detail_splitter.setStretchFactor(0, 1)
         self.detail_splitter.setStretchFactor(1, 0)
-        QTimer.singleShot(0, self._reset_splitter_sizes)
 
     def _reset_splitter_sizes(self) -> None:
-        """Give the sidebar and the detail panel their starting sizes for the layout."""
-        if self.layout_mode is LayoutMode.WIDE:
-            content_width = max(0, self.body_splitter.width() - SIDEBAR_WIDTH)
-            self.body_splitter.setSizes([SIDEBAR_WIDTH, content_width])
-        if self.detail_splitter.orientation() == Qt.Orientation.Vertical:
-            table_height = max(0, self.detail_splitter.height() - DETAIL_PANEL_HEIGHT)
-            self.detail_splitter.setSizes([table_height, DETAIL_PANEL_HEIGHT])
+        """Size the panes to the current layout until the splitter handles move."""
+        body_width = self.body_splitter.width() - self.body_splitter.handleWidth()
+        sidebar_width, detail_width = SIDEBAR_WIDTH, DETAIL_PANEL_WIDTH
+        if self._large_layout:
+            sidebar_width, detail_width = get_large_pane_widths(body_width)
+        if self.layout_mode is LayoutMode.WIDE and not self._sidebar_moved:
+            self.body_splitter.setSizes([sidebar_width, max(0, body_width - sidebar_width)])
+        if self._detail_moved:
             return
-        table_width = max(0, self.detail_splitter.width() - DETAIL_PANEL_WIDTH)
-        self.detail_splitter.setSizes([table_width, DETAIL_PANEL_WIDTH])
+        if self.detail_splitter.orientation() == Qt.Orientation.Vertical:
+            height = max(0, self.detail_splitter.height() - self.detail_splitter.handleWidth())
+            detail_height = round(height * NARROW_DETAIL_HEIGHT_SHARE)
+            self.detail_splitter.setSizes([height - detail_height, detail_height])
+            return
+        width = self.detail_splitter.width() - self.detail_splitter.handleWidth()
+        self.detail_splitter.setSizes([max(0, width - detail_width), detail_width])
 
     def _toggle_sidebar_drawer(self) -> None:
         """Open the sidebar over the content as a drawer, or close an open drawer."""
@@ -683,11 +712,34 @@ class MainWindow(QMainWindow, LibraryRows):
         self.sidebar.setGeometry(area.x(), area.y(), SIDEBAR_WIDTH, area.height())
 
     def resizeEvent(self, event: QResizeEvent) -> None:
-        """Switch the layout when the window width crosses a breakpoint."""
+        """Update the deck height and switch pane layout when the window crosses a breakpoint."""
         super().resizeEvent(event)
-        self._apply_layout_mode(find_layout_mode(self.width()))
+        self._update_window_layout()
+
+    def _update_window_layout(self) -> None:
+        """Apply width bands, then size the panes after Qt places the body."""
+        mode = find_layout_mode(self.width())
+        large = self.width() >= LARGE_MIN_WIDTH
+        changed = mode is not self.layout_mode or large != self._large_layout
+        if large != self._large_layout:
+            self._sidebar_moved = False
+            self._detail_moved = False
+        self._large_layout = large
+        self._apply_layout_mode(mode)
+        self._resize_player_deck()
+        if hasattr(self, "batch_dock"):
+            self.batch_dock.fit_visible_rows(self.height())
+        if changed or large or mode is LayoutMode.NARROW:
+            # Qt needs to place the splitters before their dimensions can set the pane sizes.
+            QTimer.singleShot(0, self._reset_splitter_sizes)
         if self.layout_mode is not LayoutMode.WIDE and not self.sidebar.isHidden():
             self._place_sidebar_drawer()
+
+    def _resize_player_deck(self) -> None:
+        """Size the deck by window height and the active text size."""
+        lower, upper = PLAYER_DECK_STANDARD_BOUNDS
+        height = max(lower, min(upper, round(self.height() * PLAYER_DECK_HEIGHT_SHARE)))
+        self.detail_panel.audio_player.setFixedHeight(scaled_size(height, self._text_size))
 
     def _restore_table_layouts(self) -> None:
         """Restore saved file and detail column layouts when column counts match."""
@@ -852,6 +904,8 @@ class MainWindow(QMainWindow, LibraryRows):
         palette: Palette = THEME_PALETTES.get(resolve_theme(stored_theme), DARK_PALETTE)
         self._palette = palette
         text_size = getattr(settings, "text_size", TEXT_SIZE_STANDARD)
+        self._text_size = text_size
+        self._resize_player_deck()
         row_height = scaled_size(STANDARD_TABLE_ROW_HEIGHT, text_size)
         rows = self.file_table.verticalHeader()
         rows.setMinimumSectionSize(min(rows.minimumSectionSize(), row_height))
@@ -860,6 +914,18 @@ class MainWindow(QMainWindow, LibraryRows):
         self.sidebar.set_palette(palette)
         self.detail_panel.set_palette(palette)
         self.sidebar_toggle_btn.setIcon(themed_icon(SIDEBAR_TOGGLE_ICON, palette.text))
+
+    def _resize_to_available_screen(self) -> None:
+        """Start at a share of the current screen before trying saved geometry."""
+        screen = self.screen()
+        if screen is None:
+            self.resize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT)
+            return
+        available = screen.availableGeometry()
+        self.resize(
+            round(available.width() * INITIAL_WINDOW_SHARE),
+            round(available.height() * INITIAL_WINDOW_SHARE),
+        )
 
     def _restore_window_geometry(self) -> None:
         """Restore the saved window size and position, on a screen that still exists."""

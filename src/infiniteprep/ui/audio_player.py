@@ -23,11 +23,14 @@ from PySide6.QtGui import (
 )
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import (
+    QBoxLayout,
     QComboBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSizePolicy,
     QSlider,
+    QStylePainter,
     QVBoxLayout,
     QWidget,
 )
@@ -92,6 +95,9 @@ ZOOM_SECONDS: Final[tuple[int, ...]] = SUPPORTED_WAVEFORM_ZOOM_SECONDS
 OVERVIEW_MODE: Final[str] = "Overview"
 ZOOM_MODE: Final[str] = "Zoom"
 LAYOUT_MARGIN_PX: Final[int] = 4
+DECK_ROW_SPACING: Final[int] = 2
+DECK_WAVEFORM_MIN_HEIGHT: Final[int] = 16
+DECK_EMPTY_TEXT: Final[str] = "Pick a track and press Play, or drag a track here."
 MS_PER_SECOND: Final[float] = 1000.0
 SECONDS_PER_MINUTE: Final[float] = 60.0
 SLIDER_SINGLE_STEP_MS: Final[int] = 1000
@@ -565,6 +571,45 @@ class WaveformOverviewBar(QWidget):
         )
 
 
+class DeckTextLabel(QLabel):
+    """Keep full track and status text available when the deck has limited width."""
+
+    def __init__(self, text: str, parent: QWidget) -> None:
+        super().__init__(text, parent)
+        self.setTextFormat(Qt.TextFormat.PlainText)
+        self._elide_text = False
+
+    def use_deck_width(self) -> None:
+        """Keep the label within the space left by the deck controls."""
+        self._elide_text = True
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setWordWrap(False)
+        self.setToolTip(self.text())
+
+    def setText(self, text: str) -> None:
+        """Update the accessible text and the full text available on hover."""
+        super().setText(text)
+        if self._elide_text:
+            self.setToolTip(text)
+
+    def paintEvent(self, event: QPaintEvent) -> None:
+        """Elide a long label without raising the minimum width of the deck."""
+        if not self._elide_text:
+            super().paintEvent(event)
+            return
+        rect = self.contentsRect()
+        text = self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideRight, rect.width())
+        painter = QStylePainter(self)
+        painter.drawItemText(
+            rect,
+            int(self.alignment()),
+            self.palette(),
+            self.isEnabled(),
+            text,
+            self.foregroundRole(),
+        )
+
+
 class AudioPreviewWidget(QWidget):
     """Audio preview transport with waveform overview and needle-drop cue buttons."""
 
@@ -602,6 +647,7 @@ class AudioPreviewWidget(QWidget):
             self.audio_output = QAudioOutput(self)
             self.player.setAudioOutput(self.audio_output)
 
+        self._in_deck = False
         self._build_controls()
         self._build_layout()
         self._connect_signals()
@@ -625,18 +671,15 @@ class AudioPreviewWidget(QWidget):
         self.position_slider.setPageStep(SLIDER_PAGE_STEP_MS)
         self.position_slider.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.position_slider.setAccessibleName(POSITION_SLIDER_NAME)
-        self.status_label = QLabel("", self)
-        self.status_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.status_label = DeckTextLabel("", self)
         self.status_label.setWordWrap(True)
-        self.analysis_status_label = QLabel("", self)
-        self.analysis_status_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.analysis_status_label = DeckTextLabel("", self)
         self.analysis_status_label.setWordWrap(True)
         # The empty label uses the clock format the player shows once a track loads.
         self.time_label = QLabel(f"{format_clock(0.0)} / {format_clock(0.0)}", self)
         # The label names the track the player holds. The detail panel can show a
         # different file, so the label keeps the mismatch visible.
-        self.loaded_track_label = QLabel(LOADED_TRACK_NONE_TEXT, self)
-        self.loaded_track_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.loaded_track_label = DeckTextLabel(LOADED_TRACK_NONE_TEXT, self)
         self.play_btn = QPushButton("Play", self)
         self.stop_btn = QPushButton("Stop", self)
         self.cue_buttons: dict[str, QPushButton] = {}
@@ -648,33 +691,109 @@ class AudioPreviewWidget(QWidget):
             LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX, LAYOUT_MARGIN_PX
         )
         root.addWidget(self.waveform_bar)
-        self.spectrum_legend = self._build_spectrum_legend()
-        name_combo_box(self.view_combo, "Waveform view")
-        name_combo_box(self.zoom_combo, "Waveform zoom")
-        view_controls = QHBoxLayout()
-        view_controls.addWidget(QLabel("Waveform view", self))
-        view_controls.addWidget(self.view_combo)
-        view_controls.addWidget(QLabel("Zoom", self))
-        view_controls.addWidget(self.zoom_combo)
-        view_controls.addWidget(self.spectrum_legend)
-        view_controls.addStretch()
-        root.addLayout(view_controls)
+        self.deck_views = self._build_view_controls()
+        root.addWidget(self.deck_views, alignment=Qt.AlignmentFlag.AlignLeft)
         root.addWidget(self.position_slider)
 
         controls = QHBoxLayout()
         controls.addWidget(self.play_btn)
         controls.addWidget(self.stop_btn)
         controls.addWidget(self.loaded_track_label)
-        for label in ("Intro", "25%", "50% Drop", "75%", "Outro"):
-            cue_button = QPushButton(label, self)
-            cue_button.clicked.connect(lambda _checked=False, cue=label: self.jump_to_cue(cue))
-            self.cue_buttons[label] = cue_button
-            controls.addWidget(cue_button)
+        self._add_cue_buttons(controls)
         controls.addStretch()
         controls.addWidget(self.time_label)
         root.addLayout(controls)
         root.addWidget(self.status_label)
         root.addWidget(self.analysis_status_label)
+
+    def _build_view_controls(self) -> QWidget:
+        """Group the two waveform settings and the zoom legend."""
+        self.spectrum_legend = self._build_spectrum_legend()
+        name_combo_box(self.view_combo, "Waveform view")
+        name_combo_box(self.zoom_combo, "Waveform zoom")
+        view_group = QWidget(self)
+        view_controls = QHBoxLayout(view_group)
+        view_controls.setContentsMargins(0, 0, 0, 0)
+        view_controls.addWidget(QLabel("Waveform view", self))
+        view_controls.addWidget(self.view_combo)
+        view_controls.addWidget(QLabel("Zoom", self))
+        view_controls.addWidget(self.zoom_combo)
+        view_controls.addWidget(self.spectrum_legend)
+        return view_group
+
+    def _add_cue_buttons(self, controls: QHBoxLayout) -> None:
+        """Place the cue buttons in playback order."""
+        for label in ("Intro", "25%", "50% Drop", "75%", "Outro"):
+            cue_button = QPushButton(label, self)
+            cue_button.clicked.connect(lambda _checked=False, cue=label: self.jump_to_cue(cue))
+            self.cue_buttons[label] = cue_button
+            controls.addWidget(cue_button)
+
+    def place_in_deck(self) -> None:
+        """Pin the player identity and controls around a waveform that takes spare height."""
+        if self._in_deck:
+            return
+        self._in_deck = True
+        root = self.layout()
+        while root.count():
+            item = root.takeAt(0)
+            sublayout = item.layout()
+            if sublayout is not None:
+                sublayout.deleteLater()
+        for label in (self.loaded_track_label, self.status_label, self.analysis_status_label):
+            label.use_deck_width()
+        self._build_deck_layout(root)
+
+    def _build_deck_layout(self, root: QVBoxLayout) -> None:
+        """Lay out the same transport and waveform widgets in the main window deck."""
+        root.setContentsMargins(LAYOUT_MARGIN_PX, 0, LAYOUT_MARGIN_PX, 0)
+        root.setSpacing(DECK_ROW_SPACING)
+        self.deck_heading = QHBoxLayout()
+        self.deck_heading.addWidget(self.loaded_track_label, 3)
+        self.deck_hint = DeckTextLabel(DECK_EMPTY_TEXT, self)
+        self.deck_hint.use_deck_width()
+        self.deck_hint.setVisible(self.current_file_path is None)
+        self.deck_heading.addWidget(self.deck_hint, 5)
+        self.deck_heading.addWidget(self.status_label, 2)
+        self.deck_heading.addWidget(self.analysis_status_label, 2)
+        self.deck_heading.addWidget(self.time_label)
+        self.status_label.setVisible(bool(self.status_label.text()))
+        self.analysis_status_label.setVisible(bool(self.analysis_status_label.text()))
+        root.addLayout(self.deck_heading)
+        self.waveform_bar.setMinimumHeight(DECK_WAVEFORM_MIN_HEIGHT)
+        root.addWidget(self.waveform_bar, 1)
+        root.addWidget(self.position_slider)
+
+        self.deck_controls = QBoxLayout(QBoxLayout.Direction.LeftToRight)
+        self.deck_controls.setSpacing(DECK_ROW_SPACING)
+        self.deck_transport = QHBoxLayout()
+        self.deck_transport.addWidget(self.play_btn)
+        self.deck_transport.addWidget(self.stop_btn)
+        self.deck_transport.addStretch()
+        cues = QHBoxLayout()
+        for cue_button in self.cue_buttons.values():
+            cues.addWidget(cue_button)
+        self.deck_controls.addLayout(self.deck_transport, 1)
+        self.deck_controls.addLayout(cues)
+        root.addLayout(self.deck_controls)
+        self.set_deck_compact(False)
+
+    def set_deck_compact(self, compact: bool) -> None:
+        """Move waveform settings beside transport when cues need their own row."""
+        self.deck_heading.removeWidget(self.deck_views)
+        self.deck_transport.removeWidget(self.deck_views)
+        if compact:
+            self.deck_controls.setDirection(QBoxLayout.Direction.TopToBottom)
+            self.deck_transport.insertWidget(2, self.deck_views)
+        else:
+            self.deck_controls.setDirection(QBoxLayout.Direction.LeftToRight)
+            self.deck_heading.addWidget(self.deck_views)
+
+    def _set_status_text(self, label: QLabel, text: str) -> None:
+        """Reserve room for a deck message only while there is text to show."""
+        label.setText(text)
+        if self._in_deck:
+            label.setVisible(bool(text))
 
     def _build_spectrum_legend(self) -> QWidget:
         """Build the band legend that the zoom view shows.
@@ -708,7 +827,7 @@ class AudioPreviewWidget(QWidget):
 
     def show_status(self, text: str) -> None:
         """Show and announce a plain-text playback status, or clear it with an empty string."""
-        self.status_label.setText(text)
+        self._set_status_text(self.status_label, text)
         announce(self.status_label, text)
 
     def _on_player_error(self, _error: QMediaPlayer.Error, error_string: str) -> None:
@@ -738,6 +857,8 @@ class AudioPreviewWidget(QWidget):
         self.current_file_path = file_path
         self.current_position_sec = 0.0
         self.loaded_track_label.setText(f"{LOADED_TRACK_LABEL_PREFIX}{file_path.name}")
+        if self._in_deck:
+            self.deck_hint.hide()
         probed = self._probe_duration(file_path)
         self.duration_sec = probed if probed > 0.0 else float(fallback_duration_sec or 0.0)
         self.cue_positions = compute_cue_jump_positions(self.duration_sec)
@@ -781,17 +902,17 @@ class AudioPreviewWidget(QWidget):
 
     def show_analysis_pending(self) -> None:
         """Show analysis progress without hiding the current overview."""
-        self.analysis_status_label.setText("Analyzing waveform...")
+        self._set_status_text(self.analysis_status_label, "Analyzing waveform...")
 
     def show_analysis_failure(self, message: str) -> None:
         """Report and announce analysis failure while retaining the current overview."""
         text = format_analysis_failure(message)
-        self.analysis_status_label.setText(text)
+        self._set_status_text(self.analysis_status_label, text)
         announce(self.analysis_status_label, text)
 
     def show_analysis_complete(self) -> None:
         """Clear analysis progress without changing playback status."""
-        self.analysis_status_label.clear()
+        self._set_status_text(self.analysis_status_label, "")
 
     def _probe_duration(self, file_path: Path) -> float:
         """Probe audio duration in seconds via soundfile, logging and returning 0.0 on error."""

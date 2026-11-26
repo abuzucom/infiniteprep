@@ -14,6 +14,9 @@
 
 ### Working in the desktop application
 
+The player deck stays visible above the library while the track details scroll.
+Large windows give the sidebar and track details more width. Small windows place track details below the library.
+
 1. **Import and inventory.**
    - Import reads tags and computes a SHA-256 content hash for each file. It never modifies the file.
    - Import detects duplicates across folders and flags files over 20 minutes as suspected continuous mixes.

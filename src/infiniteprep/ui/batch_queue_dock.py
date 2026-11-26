@@ -19,6 +19,9 @@ from infiniteprep.ui.batch_queue import BatchQueueController, format_batch_row
 
 MOVE_UP_OFFSET = -1
 MOVE_DOWN_OFFSET = 1
+TALL_WINDOW_MIN_HEIGHT = 900
+COMPACT_QUEUE_ROWS = 2
+TALL_QUEUE_ROWS = 5
 
 
 def _can_cancel(batch: QueuedBatch | None) -> bool:
@@ -47,6 +50,7 @@ class BatchQueueDock(QDockWidget):
         self.controller = controller
         self._refreshing = False
         self._drag_sync_pending = False
+        self._visible_rows: int | None = None
         self.batch_list = QListWidget(self)
         self.batch_list.setAccessibleName("Batch queue")
         self.move_up_btn = QPushButton("Move up", self)
@@ -142,6 +146,23 @@ class BatchQueueDock(QDockWidget):
         if selected is not None:
             self.select_batch(selected.id)
         self._update_buttons()
+        self._fit_list_height()
+
+    def fit_visible_rows(self, window_height: int) -> None:
+        """Cap the dock by the host's height while keeping all rows scrollable."""
+        rows = TALL_QUEUE_ROWS if window_height >= TALL_WINDOW_MIN_HEIGHT else COMPACT_QUEUE_ROWS
+        if rows != self._visible_rows:
+            self._visible_rows = rows
+            self._fit_list_height()
+
+    def _fit_list_height(self) -> None:
+        """Give the queue list only the vertical space its visible rows use."""
+        if self._visible_rows is None:
+            return
+        rows = min(self._visible_rows, self.batch_list.count())
+        height = sum(self.batch_list.sizeHintForRow(row) for row in range(rows))
+        self.batch_list.setFixedHeight(height + 2 * self.batch_list.frameWidth())
+        self.setMaximumHeight(self.sizeHint().height())
 
     def _on_progress_changed(self, batch: QueuedBatch) -> None:
         """Update the text of one row without rebuilding the list."""

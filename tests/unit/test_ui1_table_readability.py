@@ -38,9 +38,7 @@ from tests.fixtures.waveform_stub import keep_waveform_pool_idle
 
 WINDOW_HEIGHT = 820
 WINDOW_WIDTHS = (1024, 1360, 1920)
-# The narrowest window whose table area, beside the sidebar and the 480 px panel,
-# reaches the 1100 px that shows every column.
-WIDE_START_WIDTH = 1850
+LARGE_SCREEN_WIDTHS = (2560, 3840)
 FILENAME_COLUMN = 0
 ARTIST_COLUMN = 3
 TITLE_COLUMN = 4
@@ -154,13 +152,15 @@ def test_wider_window_widens_named_columns(
     Both widths use the wide layout with every column shown, so only the spare width
     changes between them.
     """
-    window = open_window(qtbot, tmp_path, WIDE_START_WIDTH)
+    start_width, end_width = LARGE_SCREEN_WIDTHS
+    window = open_window(qtbot, tmp_path, start_width)
     narrow = section_widths(window.file_table)
 
-    window.resize(WINDOW_WIDTHS[-1], WINDOW_HEIGHT)
+    window.resize(end_width, WINDOW_HEIGHT)
     QApplication.processEvents()
     wide = section_widths(window.file_table)
 
+    assert [width > 0 for width in narrow] == [width > 0 for width in wide]
     assert wide[ARTIST_COLUMN] > narrow[ARTIST_COLUMN]
     assert wide[WARNINGS_COLUMN] == narrow[WARNINGS_COLUMN]
 
