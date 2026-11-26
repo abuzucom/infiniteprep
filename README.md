@@ -50,7 +50,7 @@ These modules exist under `src/infiniteprep/` with tests. The desktop launcher a
 
 - Library storage for ordered playlists and unique-track crates in folders up to eight levels deep.
   Playlist sorting uses key and BPM. One undo restores the prior order across restarts.
-- Chromaprint (`fpcalc`) and AcoustID fingerprinting, with the consent-gated, SHA-256 verified `FpcalcBootstrapService` for Windows and macOS.
+- Chromaprint (`fpcalc`) and AcoustID fingerprinting. On Windows and macOS, the SHA-256 verified `FpcalcBootstrapService` asks for consent before it installs `fpcalc`.
 - MusicBrainz (`ws/2`) and Discogs adapters with rate limits of 1 request per second and 60 requests per minute, plus a SQLite TTL response cache.
 - The iTunes Search adapter supplies a coarse genre and a release-date fallback. It waits 3 seconds between calls, caches each response for 24 hours, keeps no artwork from the response, and refuses a row that does not match the artist and the title.
 - Closed-world LLM arbitration through Ollama or an OpenAI-compatible endpoint. `ClosedWorldValidator` limits the model to the supplied candidates. `OllamaBootstrapService` requires explicit consent.
@@ -191,7 +191,7 @@ reads the source folder.
 
 - `fpcalc` (Chromaprint). Linux installs it from the distribution package,
   such as `libchromaprint-tools` on Debian and Ubuntu. Windows and macOS use
-  the consent-gated `FpcalcBootstrapService`.
+  the `FpcalcBootstrapService`. It asks for consent before the install.
 - Ollama for local LLM arbitration. Install it from the Ollama site and pull
   `qwen2.5:3b`. The default endpoint is `http://127.0.0.1:11434/v1`.
 
@@ -362,8 +362,8 @@ between launches.
     - A track on another Windows drive keeps its absolute path.
     - Uncheck **Write paths relative to the playlist** in **Settings &
       Providers** to write absolute paths.
-    - A track whose path holds a control character is left out and named
-      in the result dialog.
+    - The export leaves out a track with a control character in its path.
+      The result dialog names that track.
 
 ### Evaluate a folder from the command line
 
@@ -508,7 +508,7 @@ Before it packages anything, `build-packages` runs `packaging/check_bundle.py` o
 python packaging/check_bundle.py dist/InfinitePrep linux
 ```
 
-After the packages exist, `build-packages` reports the unpacked size of each bundle, the size of every package, and the largest folders in the bundle. A bundle past the limit for its operating system fails the job. The limit is the measured size on `main` plus 50 percent. `packaging/bundle_size_limits.json` holds the measured size of each operating system. Raising a limit means changing that file in a deliberate change. To run the report locally, pass the operating system and the bundle folder:
+After the packages exist, `build-packages` reports the unpacked size of each bundle, the size of every package, and the largest folders in the bundle. A bundle past the limit for its operating system fails the job. The limit is the measured size on `main` plus 50 percent. `packaging/bundle_size_limits.json` holds the measured size of each operating system. Raising a limit takes a reviewed change to that file. To run the report locally, pass the operating system and the bundle folder:
 
 ```bash
 python packaging/bundle_size.py check --os linux --bundle dist/InfinitePrep
@@ -526,7 +526,7 @@ A pushed `v*` tag turns a `build-packages` run into a release:
 4. After all three builds pass, the `release` job waits for owner approval through the `release` environment. After approval, it attests each package and `SHA256SUMS.txt` with GitHub build provenance (D325), saves each package's Sigstore bundle as `<package>.sigstore.json` (D328), and uploads all packages, bundles, and `SHA256SUMS.txt` to a draft release.
 5. Review the draft on GitHub, then publish it by hand.
 
-If the release job fails partway, rerun only the failed job. It reuses the draft and skips assets whose SHA-256 already matches. A full rebuild makes new packages that differ from the uploaded ones. Delete the draft before a full rebuild.
+If the release job fails partway, rerun only the failed job. It reuses the draft and skips each asset with a matching SHA-256. A full rebuild makes new packages that differ from the uploaded ones. Delete the draft before a full rebuild.
 
 To verify a downloaded release package with GitHub CLI:
 
