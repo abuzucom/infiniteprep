@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.93.6] (2026-11-26)
+## [0.93.7] (2026-11-26)
 
 ### Added
 
@@ -55,6 +55,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The analysis pool test records the number of analyses that wait for a worker. The count never passes the worker count of the pool.
 - The analysis pool cancel test runs a slow analyzer. The cancel reaches the worker before the result arrives.
 - The test suite now covers the desktop entrypoint, USB manifest confinement, library import boundaries, adapter fallbacks, credential storage, settings validation, and waveform worker outcomes.
 - Every taken hook, checker, test, client setting, and policy document matches the template revision. The policy copies come from `scripts/sync.py`.
@@ -78,7 +79,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The mount point itself may remain an OS-managed mount link.
 - Relocation hash caching in `relocation.py` keys cached digests by device, inode, size, and modification timestamp, and rechecks file metadata after reading (IMPORT-1, #143).
 - File URL normalization and remainder extraction in `path_mapping.py` collapse slashes, normalize Windows drive letters, and split canonical segments (IMPORT-1, #143).
-- The version advances from 0.88.0 to 0.93.6 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.88.0 to 0.93.7 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 

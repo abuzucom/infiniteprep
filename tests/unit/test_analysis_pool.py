@@ -199,19 +199,28 @@ class RecordingPool(AnalysisPool):
 
 
 def test_batch_fills_the_worker_window(imported_ids: Any) -> None:
-    """The batch keeps the worker window full. Every worker starts at once."""
+    """The batch keeps the worker window full. The waiting analyses never pass the limit."""
     repo, file_ids = imported_ids
     orchestrator = JobOrchestrator(repository=repo)
     pool = RecordingPool(worker_count=2)
-    window_sizes: list[int] = []
+    waiting: list[int] = []
+    consumed = 0
 
-    orchestrator.process_files_continuing(
-        file_ids,
-        progress=lambda done, total, path: window_sizes.append(len(pool.submitted)),
+    def record(done: int, total: int, path: str) -> None:
+        """Record the analyses that wait for a worker at each progress report."""
+        nonlocal consumed
+        waiting.append(len(pool.submitted) - consumed)
+        consumed += 1
+
+    summary = orchestrator.process_files_continuing(
+        ["missing-file-id", *file_ids],
+        progress=record,
         analysis_pool=pool,
     )
 
-    assert window_sizes == [2, 3, 3]
+    assert waiting == [2, 2, 1]
+    assert summary.failed_files == 1
+    assert summary.completed_files == len(file_ids)
 
 
 def test_batch_reports_progress_per_file(imported_ids: Any) -> None:
