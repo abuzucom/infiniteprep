@@ -86,6 +86,11 @@ MAX_USB_RESERVE_BYTES: Final[int] = MAX_USB_RESERVE_MIB * BYTES_PER_MIB
 DEFAULT_USB_RECOVERY_EXPIRY_DAYS: Final[int] = 30
 MIN_USB_RECOVERY_EXPIRY_DAYS: Final[int] = 1
 MAX_USB_RECOVERY_EXPIRY_DAYS: Final[int] = 365
+# The analysis pool runs one worker process per analyzed file. Each worker holds the
+# decoded signal of a whole track, so the count stays low. The CPU count lowers it.
+DEFAULT_ANALYSIS_WORKERS: Final[int] = 4
+MIN_ANALYSIS_WORKERS: Final[int] = 1
+MAX_ANALYSIS_WORKERS: Final[int] = 4
 
 
 def _is_disallowed_ip(ip_text: str) -> bool:
@@ -199,6 +204,8 @@ class AppSettings:
     playlist_relative_paths: bool = True
     # Ends an Analyze or write batch at its first failed file. Imports ignore it.
     stop_batch_on_first_failure: bool = False
+    # Upper bound for the worker processes of the analysis pool. The CPU count lowers it.
+    analysis_workers: int = DEFAULT_ANALYSIS_WORKERS
     # Places the rows without a value for the sorted column first or last.
     unsorted_rows_placement: str = UNSORTED_PLACEMENT_FIRST
     theme: str = DARK_THEME_ID
@@ -242,6 +249,10 @@ CHOICE_SETTINGS: Final[dict[str, tuple[Collection[object], str]]] = {
         "an unsupported unsorted row placement",
     ),
     "text_size": (SUPPORTED_TEXT_SIZES, "an unsupported text size"),
+    "analysis_workers": (
+        tuple(range(MIN_ANALYSIS_WORKERS, MAX_ANALYSIS_WORKERS + 1)),
+        f"a worker count outside {MIN_ANALYSIS_WORKERS} to {MAX_ANALYSIS_WORKERS}",
+    ),
 }
 
 

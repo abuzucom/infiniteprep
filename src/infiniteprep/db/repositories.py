@@ -494,8 +494,8 @@ class Repository:
             INSERT INTO analysis_results (
                 id, file_id, analyzer_name, analyzer_version, configuration,
                 bpm, key_tonic, key_mode, analysis_strength,
-                beat_positions_optional, warnings, analyzed_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                beat_positions_optional, warnings, analyzed_at, stale
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(file_id, analyzer_name, analyzer_version) DO UPDATE SET
                 configuration = excluded.configuration,
                 bpm = excluded.bpm,
@@ -504,7 +504,8 @@ class Repository:
                 analysis_strength = excluded.analysis_strength,
                 beat_positions_optional = excluded.beat_positions_optional,
                 warnings = excluded.warnings,
-                analyzed_at = excluded.analyzed_at
+                analyzed_at = excluded.analyzed_at,
+                stale = excluded.stale
             """,
             (
                 result.id,
@@ -521,15 +522,63 @@ class Repository:
                 else None,
                 json.dumps(result.warnings, ensure_ascii=False),
                 result.analyzed_at,
+                1 if result.stale else 0,
             ),
         )
+        self._mark_other_versions_stale(conn, result)
         self._commit(conn)
         return result
+
+    @staticmethod
+    def _mark_other_versions_stale(conn: sqlite3.Connection, result: AnalysisResult) -> None:
+        """Flag the results of the same analyzer that carry another version.
+
+        A version change writes a second row for the file. The older row stays for
+        reference, and the stale flag keeps it out of the current values.
+        """
+        conn.execute(
+            "UPDATE analysis_results SET stale = 1 "
+            "WHERE file_id = ? AND analyzer_name = ? AND analyzer_version != ? AND stale = 0",
+            (result.file_id, result.analyzer_name, result.analyzer_version),
+        )
+
+    def mark_analysis_results_stale(self, analyzer_name: str, current_version: str) -> int:
+        """Flag the stored results of one analyzer whose version differs from the current one.
+
+        The results of the current version stay current. A rollback to an earlier version
+        clears the flag of that version again.
+
+        Returns the number of rows that the flag changed.
+        """
+        conn = self.db.connect()
+        conn.execute(
+            "UPDATE analysis_results SET stale = 0 "
+            "WHERE analyzer_name = ? AND analyzer_version = ? AND stale = 1",
+            (analyzer_name, current_version),
+        )
+        cursor = conn.execute(
+            "UPDATE analysis_results SET stale = 1 "
+            "WHERE analyzer_name = ? AND analyzer_version != ? AND stale = 0",
+            (analyzer_name, current_version),
+        )
+        changed = cursor.rowcount if cursor.rowcount > 0 else 0
+        self._commit(conn)
+        return changed
 
     def list_analysis_results(self, file_id: str) -> list[AnalysisResult]:
         conn = self.db.connect()
         rows = conn.execute(
             "SELECT * FROM analysis_results WHERE file_id = ? ORDER BY analyzed_at DESC",
+            (file_id,),
+        ).fetchall()
+        return [self._row_to_analysis_result(row) for row in rows]
+
+    def list_current_analysis_results(self, file_id: str) -> list[AnalysisResult]:
+        """Return the results of one file that the running analyzer version wrote."""
+        conn = self.db.connect()
+        rows = conn.execute(
+            "SELECT * FROM analysis_results WHERE file_id = ? AND stale = 0 "
+            "ORDER BY analyzed_at DESC",
             (file_id,),
         ).fetchall()
         return [self._row_to_analysis_result(row) for row in rows]
@@ -973,6 +1022,7 @@ class Repository:
             else None,
             warnings=json.loads(row["warnings"] or "[]"),
             analyzed_at=row["analyzed_at"],
+            stale=bool(row["stale"]),
         )
 
     @staticmethod

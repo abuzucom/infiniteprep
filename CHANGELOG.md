@@ -5,10 +5,24 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.92.0] (2026-11-26)
+## [0.93.7] (2026-11-26)
 
 ### Added
 
+- The queued Identify & Analyze batch runs the BPM and key analysis on worker processes (INFRA-2, #110).
+  - The new `services/analysis_pool.py` starts at most four worker processes. The count never passes the processor count.
+  - The new `services/analysis_worker.py` holds the entry point of one analysis task in a worker process.
+  - The batch submits the files ahead of the current one. The workers stay busy while the thread reads the metadata.
+  - The batch keeps its progress reports, its per-file failure rule, and its stop-on-failure rule.
+  - A cancel stops the worker processes at once. The results of the files analyzed before the cancel stay in the library.
+  - A worker that dies costs one file. The file runs once more on a worker of its own, and the batch keeps going.
+  - Every result carries the analyzer version that wrote it.
+- A stale flag marks the analysis results of an older analyzer version (INFRA-2, #110).
+  - Migration 6 adds the flag to `analysis_results`.
+  - The app flags the stored results when it starts. A track then reads as needing a new analysis.
+  - The library shows a warning on such a track. The detail panel marks the row as outdated.
+  - A stale result makes no proposal. It states no BPM and no key.
+- The Analysis tab of the Settings dialog gains an "Analysis workers" count. The count bounds the worker processes of the analysis pool.
 - Regression tests distinguish missing numeric metadata from zero in library searches and smart playlists.
 
 - Library search accepts natural language and field comparisons. Saved searches create live smart playlists.
@@ -25,8 +39,24 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The template adds `policy-size-report.yml`, `policy-digests.json`, and the test name checker `scripts/check_test_names.py`.
   - `docs/template-drift.md` lists the taken and declined files and the local differences.
 
+### Fixed
+
+- A track with a current analysis result shows no warning about a new analysis. The warning appears only while every stored result is stale.
+- The detail panel names an outdated analysis instead of showing the BPM and key of an older analyzer version.
+- A batch that stops at its first failed file ends at once. The prefetched analyses of the files ahead no longer delay the batch.
+- A rollback to an earlier analyzer version makes the results of that version current again.
+- A file that ended before a worker crash keeps its result. The pool no longer analyzes that file twice.
+- The pool runs each file at most twice. The first run and one retry settle a file after a worker died.
+- The crash recovery of the analysis pool observes a cancel request. A cancel ends the pool at once, also after a worker died.
+- A file that takes longer than the time limit of the analysis pool ends as one failed file. The pool rebuilds for the files after it.
+- A requested file that no longer exists in the library counts as one failed file. The batch reports it in the summary.
+- A cancel stops the worker processes of the analysis pool only. A child process of another component stays untouched.
+- The analysis pool logs an unexpected worker error with the file path and the traceback.
+
 ### Changed
 
+- The analysis pool test records the number of analyses that wait for a worker. The count never passes the worker count of the pool.
+- The analysis pool cancel test runs a slow analyzer. The cancel reaches the worker before the result arrives.
 - The test suite now covers the desktop entrypoint, USB manifest confinement, library import boundaries, adapter fallbacks, credential storage, settings validation, and waveform worker outcomes.
 - Every taken hook, checker, test, client setting, and policy document matches the template revision. The policy copies come from `scripts/sync.py`.
 - The `pr-checks` job of `agents-compliance.yml` runs on draft pull requests. `agents-md-compliance.yml` has no branch filter and also runs on the `edited` event.
@@ -49,7 +79,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The mount point itself may remain an OS-managed mount link.
 - Relocation hash caching in `relocation.py` keys cached digests by device, inode, size, and modification timestamp, and rechecks file metadata after reading (IMPORT-1, #143).
 - File URL normalization and remainder extraction in `path_mapping.py` collapse slashes, normalize Windows drive letters, and split canonical segments (IMPORT-1, #143).
-- The version advances from 0.88.0 to 0.92.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.88.0 to 0.93.7 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 

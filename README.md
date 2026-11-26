@@ -21,6 +21,8 @@
    - Pioneer XDJ-RX3 warnings mark sample rates above 48 kHz, 32-bit float WAV files, and OGG containers.
 2. **Local analysis.**
    - `LocalDspAnalyzer` computes BPM, musical key, and a waveform overview with `numpy`, `scipy`, and `soundfile`.
+   - The queued Identify & Analyze batch runs the BPM and key analysis on worker processes. The pool starts at most four workers. The count never passes the processor count. The **Analysis** tab sets the count.
+   - Every result carries the analyzer version that wrote it. A result of an older version turns stale. The track then reads as needing a new analysis.
    - Keys display in Standard (`F#m`), Camelot (`11A`), or Open Key (`4m`) notation.
    - Warnings flag vinyl pitch drift, digital clipping, DC offset, and leading or trailing silence.
 3. **Review.**
@@ -220,7 +222,7 @@ Click **Settings & Providers**. The dialog holds one tab per area:
   BPM tags default to integers. Choose one or two decimal places for finer precision.
   Exact halves round up.
 - **Analysis:** the batch queue option to stop a batch at its first failed
-  file, and the fake-lossless detection method.
+  file, the number of analysis workers, and the fake-lossless detection method.
 - **Transcode:** the XDJ transcode mode and preset, and **Write paths
   relative to the playlist**, on by default, for playlist export.
 - **Identification:** the AcoustID API key, the Discogs personal token, the

@@ -98,7 +98,9 @@ class ReconciliationService:
             return []
 
         candidates = self.repo.list_candidate_matches(file_id)
-        analyses = self.repo.list_analysis_results(file_id)
+        # A result from an older analyzer version stays in the table for reference. It no
+        # longer states the current BPM or key, so it makes no proposal.
+        analyses = self.repo.list_current_analysis_results(file_id)
         generated: list[FieldProposal] = []
 
         for candidate in candidates:

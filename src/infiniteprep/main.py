@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import multiprocessing
 import os
 import sys
 from collections.abc import Callable
@@ -34,6 +35,7 @@ from infiniteprep.domain.enums import FieldName, SourceType
 from infiniteprep.domain.ports import FileWritePlan
 from infiniteprep.hashing import compute_sha256
 from infiniteprep.qt_logging import silence_ffmpeg_logs
+from infiniteprep.services.analysis_pool import AnalysisPool
 from infiniteprep.services.import_service import ImportService, discover_files_bounded
 from infiniteprep.services.job_orchestrator import BatchKind, JobOrchestrator
 from infiniteprep.services.playlist_exporter import PlaylistExporter
@@ -172,7 +174,13 @@ def build_desktop_orchestrator(repo: Repository) -> JobOrchestrator:
     JobOrchestrator falls back to mock providers without explicit providers. The
     desktop app supplies unavailable providers instead. Analyze then stores no
     invented candidate matches in the library.
+
+    A result that an older analyzer version wrote no longer states the current BPM or
+    key. The flag keeps it out of the proposals until the file is analyzed again.
     """
+    repo.mark_analysis_results_stale(
+        LocalDspAnalyzer.analyzer_name, LocalDspAnalyzer.analyzer_version
+    )
     return JobOrchestrator(
         repository=repo,
         fingerprint_provider=UnconfiguredFingerprintProvider(),
@@ -187,19 +195,23 @@ def build_analyze_runner(
     """Return the body of a queued Identify & Analyze batch.
 
     Each file is processed and then reconciled into field proposals. The setting is
-    read when the batch starts, so a change applies to batches that start later.
+    read when the batch starts, so a change applies to batches that start later. The BPM
+    and key analysis runs on the worker processes of an analysis pool.
     """
 
     def run_analyze_batch(
         file_ids: list[str], should_cancel: CancelCheck, progress: ProgressReport
     ) -> object:
-        return orchestrator.process_files_continuing(
-            file_ids,
-            post_process=reconciler.reconcile_file,
-            should_cancel=should_cancel,
-            stop_on_failure=stop_on_first_failure(),
-            progress=progress,
-        )
+        settings = SettingsManager().load()
+        with AnalysisPool(worker_count=settings.analysis_workers) as pool:
+            return orchestrator.process_files_continuing(
+                file_ids,
+                post_process=reconciler.reconcile_file,
+                should_cancel=should_cancel,
+                stop_on_failure=settings.stop_batch_on_first_failure,
+                progress=progress,
+                analysis_pool=pool,
+            )
 
     return run_analyze_batch
 
@@ -349,6 +361,9 @@ def launch_desktop_app() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     """CLI and desktop entrypoint for infiniteprep."""
+    # The frozen build starts worker processes for the analysis pool. The call tells a
+    # child process to run the entrypoint of the application again.
+    multiprocessing.freeze_support()
     args = sys.argv[1:] if argv is None else argv
     if args == [FORGET_CREDENTIALS_FLAG]:
         return forget_all_credentials()
