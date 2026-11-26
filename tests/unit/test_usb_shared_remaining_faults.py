@@ -6,6 +6,7 @@ import ctypes
 import errno
 import os
 import stat
+import sys
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,6 +15,8 @@ from typing import Any
 import pytest
 
 import infiniteprep.services.usb._shared as shared
+
+WIN32_ONLY = pytest.mark.skipif(sys.platform != "win32", reason="Win32 API test.")
 
 
 class FakeKernel32:
@@ -62,6 +65,7 @@ def link_stat() -> SimpleNamespace:
     return SimpleNamespace(st_mode=stat.S_IFLNK, st_dev=1, st_ino=1, st_size=0)
 
 
+@WIN32_ONLY
 def test_validate_win32_handle_reports_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -73,6 +77,7 @@ def test_validate_win32_handle_reports_missing(
         shared._validate_win32_handle(42, Path("target"), expect_dir=True, check_parent=False)
 
 
+@WIN32_ONLY
 def test_validate_win32_handle_reports_a(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -104,6 +109,7 @@ def test_open_win32_locked_dir_reports(
     assert shared.open_win32_locked_dir(Path("missing"), Path("missing")) is None
 
 
+@WIN32_ONLY
 def test_open_win32_confined_read_fd(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

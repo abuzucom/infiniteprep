@@ -22,6 +22,7 @@ POSIX_DIR_FD_SUPPORT = (
     and os.unlink in os.supports_dir_fd
     and os.lstat in os.supports_dir_fd
 )
+WIN32_ONLY = pytest.mark.skipif(sys.platform != "win32", reason="Win32 API test.")
 
 
 class FakeKernel32:
@@ -269,6 +270,7 @@ def test_posix_confined_directory_walk_reports(tmp_path: Path) -> None:
     assert opened is None
 
 
+@WIN32_ONLY
 def test_win32_locked_directory_closes_the(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A rejected Win32 directory handle closes before the error propagates."""
     fake_kernel = FakeKernel32(attributes=shared._WIN32_ATTRIBUTE_REPARSE_POINT)
@@ -281,6 +283,7 @@ def test_win32_locked_directory_closes_the(tmp_path: Path, monkeypatch: pytest.M
     assert fake_kernel.closed_handles == [42]
 
 
+@WIN32_ONLY
 def test_win32_unlink_sets_disposition_and(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The Win32 unlink helper sets disposition information and closes its handle."""
     target = tmp_path / "data.json"

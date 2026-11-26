@@ -6,12 +6,15 @@ import contextlib
 import ctypes
 import os
 import stat
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 import infiniteprep.services.usb._shared as shared
+
+WIN32_ONLY = pytest.mark.skipif(sys.platform != "win32", reason="Win32 API test.")
 
 
 class FakeStat:
@@ -136,6 +139,7 @@ def test_win32_handle_validation_rejects_outside(
         shared._validate_win32_handle(7, tmp_path, expect_dir=True, check_parent=False)
 
 
+@WIN32_ONLY
 def test_win32_open_raises_unexpected_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     """An unexpected Win32 open error raises with its Win32 code."""
     fake_kernel = FakeKernel32(create_result=ctypes.c_void_p(-1).value)
@@ -146,6 +150,7 @@ def test_win32_open_raises_unexpected_errors(monkeypatch: pytest.MonkeyPatch) ->
     assert error.value.winerror == 5
 
 
+@WIN32_ONLY
 def test_win32_unlink_reports_a_failed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed disposition raises and still closes the handle."""
     target = tmp_path / "data.json"

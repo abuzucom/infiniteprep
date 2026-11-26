@@ -319,9 +319,12 @@ def test_discard_if_same_file_checks(tmp_path: Path) -> None:
     assert discard_if_same_file(source, identity, digest) is False
     assert source.read_bytes() == b"changed"
 
-    other_identity = (identity[0], identity[1] + 1)
+    other_source = tmp_path / "other.wav"
+    other_source.write_bytes(b"other")
+    other_identity = file_identity(other_source)
     assert discard_if_same_file(source, other_identity) is False
     assert source.read_bytes() == b"changed"
+    assert other_source.read_bytes() == b"other"
 
 
 def test_discard_if_same_file_handles(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
