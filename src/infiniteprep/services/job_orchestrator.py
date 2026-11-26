@@ -15,13 +15,14 @@ from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapte
 from infiniteprep.adapters.fingerprint.mock_fp import MockFingerprintAdapter
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import EntityType, ReviewStatus, TaskStatus
-from infiniteprep.domain.models import CandidateMatch, FileAsset, ReleaseDetails
+from infiniteprep.domain.models import AnalysisResult, CandidateMatch, FileAsset, ReleaseDetails
 from infiniteprep.domain.ports import (
     AudioAnalyzer,
     FingerprintProvider,
     MetadataProvider,
     MetadataSearchQuery,
 )
+from infiniteprep.services.analysis_pool import AnalysisOutcome, AnalysisPool
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +210,13 @@ class BatchQueue:
 
 
 class JobOrchestrator:
-    """Coordinates identification, catalog enrichment, and local audio analysis jobs."""
+    """Coordinates identification, catalog enrichment, and local audio analysis jobs.
+
+    A queued batch can pass an analysis pool. The pool then runs the local audio
+    analysis on worker processes, and the orchestrator keeps the per-file rules. The
+    pool carries its own analyzer, so the analyzer of the orchestrator stays unused
+    while a pool runs the analysis.
+    """
 
     def __init__(
         self,
@@ -268,6 +275,7 @@ class JobOrchestrator:
         should_cancel: CancelCheck | None = None,
         stop_on_failure: bool = False,
         progress: ProgressCallback | None = None,
+        analysis_pool: AnalysisPool | None = None,
     ) -> BatchJobSummary:
         """Process each file for a queued batch, treating any error as one failed file.
 
@@ -275,7 +283,20 @@ class JobOrchestrator:
         A true should_cancel stops before the next file and keeps the finished files.
         stop_on_failure ends the batch after the first failed file. progress receives
         (file number, total, path) before each file.
+
+        An analysis pool runs the audio analysis on worker processes. The files ahead of
+        the current one are submitted before it, so the workers stay busy. The per-file
+        rules stay the same.
         """
+        if analysis_pool is not None:
+            return self._process_files_with_pool(
+                file_ids,
+                analysis_pool,
+                post_process=post_process,
+                should_cancel=should_cancel,
+                stop_on_failure=stop_on_failure,
+                progress=progress,
+            )
         summary = BatchJobSummary()
         total = len(file_ids)
         for index, file_id in enumerate(file_ids):
@@ -293,6 +314,138 @@ class JobOrchestrator:
                 return summary
         return summary
 
+    def _process_files_with_pool(
+        self,
+        file_ids: list[str],
+        pool: AnalysisPool,
+        *,
+        post_process: Callable[[str], object] | None,
+        should_cancel: CancelCheck | None,
+        stop_on_failure: bool,
+        progress: ProgressCallback | None,
+    ) -> BatchJobSummary:
+        """Process each file, running the audio analysis in the worker pool."""
+        summary = BatchJobSummary()
+        assets = self._assets_in_order(file_ids)
+        total = len(file_ids)
+        submitted = 0
+        for position, (number, asset) in enumerate(assets):
+            if should_cancel is not None and should_cancel():
+                pool.cancel()
+                summary.stopped_early = True
+                return summary
+            submitted = self._submit_ahead(pool, assets, submitted, position)
+            if progress is not None:
+                progress(number + 1, total, asset.current_path)
+            error = self._identify_asset(asset)
+            outcome = pool.next_outcome(should_cancel)
+            if outcome.cancelled:
+                summary.stopped_early = True
+                return summary
+            if error is None:
+                error = outcome.error
+            if error is not None:
+                self._record_asset_failure(asset, error, summary)
+            else:
+                self._finish_pooled_asset(asset, outcome, post_process, summary)
+            if stop_on_failure and summary.failed_files:
+                summary.stopped_early = True
+                return summary
+        return summary
+
+    def _assets_in_order(self, file_ids: list[str]) -> list[tuple[int, FileAsset]]:
+        """Return the stored assets of file_ids with their number in the batch."""
+        assets: list[tuple[int, FileAsset]] = []
+        for number, file_id in enumerate(file_ids):
+            asset = self.repo.get_file_by_id(file_id)
+            if asset is not None:
+                assets.append((number, asset))
+        return assets
+
+    def _submit_ahead(
+        self,
+        pool: AnalysisPool,
+        assets: list[tuple[int, FileAsset]],
+        submitted: int,
+        position: int,
+    ) -> int:
+        """Submit the analysis of the files ahead of the current one."""
+        limit = min(len(assets), position + pool.max_workers)
+        while submitted < limit:
+            _number, asset = assets[submitted]
+            pool.submit(Path(asset.current_path), asset.id)
+            submitted += 1
+        return submitted
+
+    def _identify_asset(self, asset: FileAsset) -> str | None:
+        """Run the identification steps of one file. Return the error message on failure."""
+        try:
+            self.repo.update_file_status(asset.id, task_status=TaskStatus.PROCESSING)
+            audio_path = Path(asset.current_path)
+            self._run_job(
+                asset, JOB_FINGERPRINT, lambda: self._run_fingerprint_step(asset, audio_path)
+            )
+            self._run_job(asset, JOB_CATALOG_LOOKUP, lambda: self._run_catalog_step(asset))
+        except Exception as exc:
+            logger.error("Queued job failed for file %s: %r", asset.id, exc, exc_info=True)
+            return self._failure_message(exc)
+        return None
+
+    def _finish_pooled_asset(
+        self,
+        asset: FileAsset,
+        outcome: AnalysisOutcome,
+        post_process: Callable[[str], object] | None,
+        summary: BatchJobSummary,
+    ) -> None:
+        """Store the analysis result of one file and record its outcome."""
+        if outcome.result is None:
+            self._record_asset_failure(
+                asset, outcome.error or "The analysis produced no result.", summary
+            )
+            return
+        try:
+            self._store_pooled_analysis(asset, outcome.result)
+            if post_process is not None:
+                post_process(asset.id)
+        except Exception as exc:
+            logger.error("Queued job failed for file %s: %r", asset.id, exc, exc_info=True)
+            self._record_asset_failure(asset, self._failure_message(exc), summary)
+            return
+        summary.completed_files += 1
+
+    def _store_pooled_analysis(self, asset: FileAsset, result: AnalysisResult) -> None:
+        """Store the analysis result that a worker process returned."""
+        result.file_id = asset.id
+        self._run_job(asset, JOB_AUDIO_ANALYSIS, lambda: self.repo.upsert_analysis_result(result))
+        self.repo.update_file_status(
+            asset.id,
+            task_status=TaskStatus.COMPLETED,
+            review_status=ReviewStatus.PROPOSED,
+            clear_error=True,
+        )
+
+    @staticmethod
+    def _failure_message(error: Exception) -> str:
+        """Return the message that a failed file carries."""
+        return (
+            f"Processing failed ({error.__class__.__name__}: {error}); "
+            "retry or check provider settings."
+        )
+
+    def _record_asset_failure(
+        self, asset: FileAsset, message: str, summary: BatchJobSummary
+    ) -> None:
+        """Mark one file as failed and count it in the summary."""
+        self.repo.update_file_status(
+            asset.id,
+            task_status=TaskStatus.FAILED,
+            review_status=ReviewStatus.ERROR,
+            error_message=message,
+        )
+        summary.failed_files += 1
+        summary.errors[asset.id] = message
+
     def _process_asset_recording_failure(
         self,
         asset: FileAsset,
@@ -308,18 +461,7 @@ class JobOrchestrator:
         # bad file must not end a queued batch. The traceback goes to the log.
         except Exception as exc:
             logger.error("Queued job failed for file %s: %r", asset.id, exc, exc_info=True)
-            message = (
-                f"Processing failed ({exc.__class__.__name__}: {exc}); "
-                "retry or check provider settings."
-            )
-            self.repo.update_file_status(
-                asset.id,
-                task_status=TaskStatus.FAILED,
-                review_status=ReviewStatus.ERROR,
-                error_message=message,
-            )
-            summary.failed_files += 1
-            summary.errors[asset.id] = message
+            self._record_asset_failure(asset, self._failure_message(exc), summary)
             return False
         summary.completed_files += 1
         return True

@@ -54,6 +54,10 @@ class FakeRepository:
     def __init__(self) -> None:
         self.db = MagicMock()
 
+    def mark_analysis_results_stale(self, analyzer_name: str, current_version: str) -> int:
+        """Record the request that flags the results of an older analyzer version."""
+        return 0
+
 
 @pytest.mark.parametrize(
     ("busy", "cleanup_enabled", "dialog_result", "reload_count"),

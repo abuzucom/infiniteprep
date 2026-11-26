@@ -5,10 +5,24 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.91.0] (2026-11-26)
+## [0.92.0] (2026-11-26)
 
 ### Added
 
+- The queued Identify & Analyze batch runs the BPM and key analysis on worker processes (INFRA-2, #110).
+  - The new `services/analysis_pool.py` starts at most four worker processes. The count never passes the processor count.
+  - The new `services/analysis_worker.py` holds the entry point of one analysis task in a worker process.
+  - The batch submits the files ahead of the current one. The workers stay busy while the thread reads the metadata.
+  - The batch keeps its progress reports, its per-file failure rule, and its stop-on-failure rule.
+  - A cancel stops the worker processes at once. The results of the files analyzed before the cancel stay in the library.
+  - A worker that dies costs one file. The file runs once more on a worker of its own, and the batch keeps going.
+  - Every result carries the analyzer version that wrote it.
+- A stale flag marks the analysis results of an older analyzer version (INFRA-2, #110).
+  - Migration 5 adds the flag to `analysis_results`.
+  - The app flags the stored results when it starts. A track then reads as needing a new analysis.
+  - The library shows a warning on such a track. The detail panel marks the row as outdated.
+  - A stale result makes no proposal. It states no BPM and no key.
+- The Analysis tab of the Settings dialog gains an "Analysis workers" count. The count bounds the worker processes of the analysis pool.
 - `WorkflowBar` adds an Import DJ library tool button wired to `MainWindow` (IMPORT-1, #143).
   - The button stays disabled while the batch queue is busy.
   - `LibraryImportDialog` builds the import plan when advancing from the Map step to the Review step.
@@ -45,7 +59,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The mount point itself may remain an OS-managed mount link.
 - Relocation hash caching in `relocation.py` keys cached digests by device, inode, size, and modification timestamp, and rechecks file metadata after reading (IMPORT-1, #143).
 - File URL normalization and remainder extraction in `path_mapping.py` collapse slashes, normalize Windows drive letters, and split canonical segments (IMPORT-1, #143).
-- The version advances from 0.88.0 to 0.91.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.88.0 to 0.92.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 

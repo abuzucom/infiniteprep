@@ -62,7 +62,7 @@ from infiniteprep.domain.enums import (
     parse_key_string,
 )
 from infiniteprep.domain.metadata_values import resolve_effective_value, top_proposal_values
-from infiniteprep.domain.models import ApprovedField, FileAsset
+from infiniteprep.domain.models import AnalysisResult, ApprovedField, FileAsset
 from infiniteprep.services.import_service import ImportBatchReport, ImportService
 from infiniteprep.services.job_orchestrator import BatchKind, BatchState, QueuedBatch
 from infiniteprep.services.library_import import (
@@ -248,6 +248,10 @@ QUIT_NOW_LABEL: Final[str] = "Quit now"
 AnalyzeRunner = Callable[[list[str], CancelCheck, ProgressReport], object]
 # The first column carries the file ID of the row.
 FILE_ID_COLUMN: Final[int] = 0
+# The warning that marks a file whose analysis no longer states the current values.
+STALE_ANALYSIS_WARNING: Final[str] = (
+    "The analysis of this track is out of date. Analyze the track again."
+)
 PLAY_MENU_ITEM_LABEL: Final[str] = "Play"
 
 
@@ -333,10 +337,21 @@ def load_library_snapshot(repo: Repository) -> LibrarySnapshot:
             for file_id, file_proposals in proposals.items()
         },
         analysis_warnings={
-            file_id: [warning for result in results for warning in result.warnings]
-            for file_id, results in analyses.items()
+            file_id: analysis_warning_lines(results) for file_id, results in analyses.items()
         },
     )
+
+
+def analysis_warning_lines(results: list[AnalysisResult]) -> list[str]:
+    """Return the warning lines of the stored analysis results of one file.
+
+    A result that an older analyzer version wrote no longer states the current values.
+    The file then reads as needing a new analysis.
+    """
+    lines = [warning for result in results if not result.stale for warning in result.warnings]
+    if any(result.stale for result in results):
+        lines.append(STALE_ANALYSIS_WARNING)
+    return lines
 
 
 def _current_import_platform() -> Platform:
