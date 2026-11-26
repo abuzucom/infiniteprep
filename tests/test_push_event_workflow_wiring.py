@@ -91,7 +91,7 @@ class SecurityReviewPushGuardTest(unittest.TestCase):
 
     def test_review_jobs_need_resolved_pr(self) -> None:
         jobs = load_workflow(SECURITY_CALLER)["jobs"]
-        for job_name in ("review", "fork-review", "fork-review-skipped"):
+        for job_name in ("review",):
             self.assertIn("needs.resolve-pr.result == 'success'", jobs[job_name]["if"])
 
 

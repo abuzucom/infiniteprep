@@ -10,7 +10,7 @@ The earlier record named `b452348`. The copied files matched `59c6d95`.
 - `docs/agent-policy/` except `source-orientation.md`.
 - Every file under `hooks/` and the client settings under `.claude/`,
   `.codex/`, `.gemini/`, and `.agents/`.
-- Every checker under `scripts/` except `check_pr_review_response.py`.
+- Every checker under `scripts/`.
 - The agents test suites under `tests/`.
 - `shared-files.json`, `hook-coverage-baseline.json`, `tools/hook-trace/`,
   `Makefile`, `requirements-checkers.txt`, `.pre-commit-config.yaml`,
@@ -31,11 +31,12 @@ The earlier record named `b452348`. The copied files matched `59c6d95`.
 
 - `README.md`, `CHANGELOG.md`, `LICENSE`, `DRIFT.md`, and `adopters/`.
   These files belong to the source repository.
-- `ci/`, `security-review-pr.yml`, `scripts/check_pr_review_response.py`,
+- `ci/`, the template `security-review-pr.yml`,
+  `scripts/check_pr_review_response.py`,
   `tests/test_check_pr_review_response.py`, and
-  `tests/test_security_review_wiring.py`. InfinitePrep pins its review
-  adapters to `abuzucom/foucault`. `tests/test_review_wiring.py` asserts those
-  digests.
+  `tests/test_security_review_wiring.py`. InfinitePrep keeps its own
+  `abuzucom/agents-personas` callers. `tests/test_review_wiring.py` asserts
+  the caller pins.
 - `docs/pr-review.md` and `docs/gate-threat-model.md`. InfinitePrep keeps its
   own review document.
 
@@ -59,5 +60,5 @@ The earlier record named `b452348`. The copied files matched `59c6d95`.
 - `pyproject.toml` excludes the copied gate files from Ruff. The agents lint
   in `ci.yml` covers those files.
 - `docs/project-orientation.md` holds InfinitePrep facts.
-- `hooks/workflow-scripts.txt` ends with nine InfinitePrep entries for
-  `scripts/`, `packaging/`, and `ci/` commands.
+- `hooks/workflow-scripts.txt` ends with eight InfinitePrep entries for
+  `scripts/` and `packaging/` commands.
