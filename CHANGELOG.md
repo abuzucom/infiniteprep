@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.90.0] (2026-11-26)
+## [0.90.1] (2026-11-26)
 
 ### Added
 
@@ -31,8 +31,9 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The engine publishes the skipped check for a fork pull request. Each caller drops its fork job. The classify job keeps the same-repository guard.
 - Every completed `ci` run gets a review. No existing check run skips it, since any workflow with `checks: write` can publish a check with any title.
 - `tests/test_review_wiring.py` covers the wrapper pins, the permissions, the secret mapping, and the check names.
-- `ci/README.md` keeps the `ci` path that the CodeQL configuration declares. The default setup reads that configuration from `main`.
-- The version advances from 0.88.0 to 0.90.0 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- `ci/README.md` kept the `ci` path that the CodeQL configuration declared. The default setup reads that configuration from `main`.
+- The CodeQL configuration drops the `ci` path. `ci/README.md` stays until `main` carries the shorter path list.
+- The version advances from 0.88.0 to 0.90.1 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 
