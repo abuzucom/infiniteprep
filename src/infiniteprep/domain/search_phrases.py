@@ -1,6 +1,9 @@
 """Recognize ordinary language in a library query before boolean parsing."""
 
 import re
+from typing import Final
+
+SECONDS_PER_MINUTE: Final = 60
 
 NUMBER_WORDS = [
     "zero",
@@ -15,7 +18,12 @@ NUMBER_WORDS = [
     "nine",
     "ten",
 ]
-DURATION_UNITS = {"minute": 60, "minutes": 60, "second": 1, "seconds": 1}
+DURATION_UNITS = {
+    "minute": SECONDS_PER_MINUTE,
+    "minutes": SECONDS_PER_MINUTE,
+    "second": 1,
+    "seconds": 1,
+}
 COMPARISONS = {
     "at least": ">=",
     "at most": "<=",

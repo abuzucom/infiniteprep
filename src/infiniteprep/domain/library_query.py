@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from infiniteprep.domain.enums import KeyDisplayNotation, format_canonical_key, parse_key_string
-from infiniteprep.domain.search_phrases import expand_phrase
+from infiniteprep.domain.search_phrases import SECONDS_PER_MINUTE, expand_phrase
 
 MAX_LENGTH: Final = 2048
 MAX_DEPTH: Final = 16
@@ -51,8 +51,8 @@ def canonical_key(value: str) -> str:
 def parse_number(field: str, text: str) -> float:
     if field == "duration" and TIME_VALUE.fullmatch(text):
         minutes, seconds = map(int, text.split(":"))
-        if seconds < 60:
-            return minutes * 60 + seconds
+        if seconds < SECONDS_PER_MINUTE:
+            return minutes * SECONDS_PER_MINUTE + seconds
     try:
         value = float(text)
     except ValueError:

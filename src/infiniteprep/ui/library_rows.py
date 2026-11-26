@@ -23,6 +23,8 @@ from infiniteprep.ui.write_preview_model import format_count
 if TYPE_CHECKING:
     from infiniteprep.db.repositories import Repository
 
+MAX_YEAR_DIGITS: Final = 4
+
 # The plain label of each review status. Each label is unique, so the status filter
 # maps a label back to one stored value.
 STATUS_LABELS: Final[dict[ReviewStatus, str]] = {
@@ -216,7 +218,8 @@ class LibraryRows:
         record["mix"] = record.pop("mix_name")
         record["key"] = canonical_key(record["key"])
         year = str(record["year"])
-        record["year"] = int(year) if year.isascii() and year.isdigit() and len(year) <= 4 else None
+        valid_year = year.isascii() and year.isdigit() and len(year) <= MAX_YEAR_DIGITS
+        record["year"] = int(year) if valid_year else None
         record.update(
             id=asset.id,
             text=" ".join(row.cells),
