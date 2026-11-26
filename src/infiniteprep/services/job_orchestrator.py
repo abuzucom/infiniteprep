@@ -349,6 +349,9 @@ class JobOrchestrator:
             else:
                 self._finish_pooled_asset(asset, outcome, post_process, summary)
             if stop_on_failure and summary.failed_files:
+                # The workers hold the analyses of the files ahead. They stop now, so the
+                # batch ends at once.
+                pool.cancel()
                 summary.stopped_early = True
                 return summary
         return summary

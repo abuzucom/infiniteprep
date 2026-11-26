@@ -96,8 +96,8 @@ CANDIDATES_LIST_NAME: Final[str] = "Possible matches"
 NO_SAVE_SUFFIX: Final[str] = " (can't save tags to this file)"
 ORIGINAL_MIX_TEXT: Final[str] = "Original"
 NOTHING_DETECTED_TEXT: Final[str] = "Nothing detected"
-# The marker on a result that an older analyzer version wrote.
-STALE_ANALYSIS_SUFFIX: Final[str] = " (outdated)"
+# The row of a result that an older analyzer version wrote.
+STALE_ANALYSIS_TEXT: Final[str] = "Detected: outdated analysis. Analyze the track again."
 PERCENT_SCALE: Final[int] = 100
 
 
@@ -142,8 +142,11 @@ def format_candidate_row(
 def format_analysis_row(bpm: str | None, key_text: str | None, stale: bool = False) -> str:
     """Return one analysis row, such as "Detected: 128 BPM, key 8A".
 
-    A result that an older analyzer version wrote carries an outdated marker.
+    A result that an older analyzer version wrote states no BPM and no key. The row then
+    names the outdated analysis instead of the values.
     """
+    if stale:
+        return STALE_ANALYSIS_TEXT
     parts = []
     if bpm:
         parts.append(f"{bpm} BPM")
@@ -151,10 +154,7 @@ def format_analysis_row(bpm: str | None, key_text: str | None, stale: bool = Fal
         parts.append(f"key {key_text}")
     if not parts:
         return NOTHING_DETECTED_TEXT
-    row = "Detected: " + ", ".join(parts)
-    if stale:
-        row += STALE_ANALYSIS_SUFFIX
-    return row
+    return "Detected: " + ", ".join(parts)
 
 
 # Stored in the fake-lossless record configuration when the newest run fails.

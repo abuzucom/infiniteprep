@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.93.2] (2026-11-26)
+## [0.93.3] (2026-11-26)
 
 ### Added
 
@@ -39,6 +39,15 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The template adds `policy-size-report.yml`, `policy-digests.json`, and the test name checker `scripts/check_test_names.py`.
   - `docs/template-drift.md` lists the taken and declined files and the local differences.
 
+### Fixed
+
+- A track with a current analysis result shows no warning about a new analysis. The warning appears only while every stored result is stale.
+- The detail panel names an outdated analysis instead of showing the BPM and key of an older analyzer version.
+- A batch that stops at its first failed file ends at once. The prefetched analyses of the files ahead no longer delay the batch.
+- A rollback to an earlier analyzer version makes the results of that version current again.
+- A file that ended before a worker crash keeps its result. The pool no longer analyzes that file twice.
+- The analysis pool logs an unexpected worker error with the file path and the traceback.
+
 ### Changed
 
 - The analysis pool cancel test runs a slow analyzer. The cancel reaches the worker before the result arrives.
@@ -64,7 +73,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The mount point itself may remain an OS-managed mount link.
 - Relocation hash caching in `relocation.py` keys cached digests by device, inode, size, and modification timestamp, and rechecks file metadata after reading (IMPORT-1, #143).
 - File URL normalization and remainder extraction in `path_mapping.py` collapse slashes, normalize Windows drive letters, and split canonical segments (IMPORT-1, #143).
-- The version advances from 0.88.0 to 0.93.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.88.0 to 0.93.3 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 

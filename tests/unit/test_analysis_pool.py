@@ -24,10 +24,13 @@ from tests.fixtures.audio_factory import create_wav_fixture
 from tests.fixtures.worker_analyzers import (
     CRASHING_FILE_NAME,
     CrashingAnalyzer,
+    FailingSlowAnalyzer,
     SlowAnalyzer,
 )
 
 TRACK_NAMES = ("a_first.wav", CRASHING_FILE_NAME, "c_last.wav")
+# The batch must end before the slow worker finishes its file.
+PROMPT_STOP_SECONDS = 10.0
 
 
 @pytest.fixture
@@ -145,3 +148,22 @@ def test_batch_reports_progress_per_file(imported_ids: Any) -> None:
     stored = repo.list_analysis_results(file_ids[0])
     assert len(stored) == 1
     assert stored[0].analyzer_name == "local_dsp"
+
+
+def test_stop_on_failure_ends_promptly(imported_ids: Any) -> None:
+    """A failed file stops the batch at once. The prefetched analyses do not delay it."""
+    repo, file_ids = imported_ids
+    orchestrator = JobOrchestrator(repository=repo)
+    Path(repo.get_file_by_id(file_ids[0]).current_path).unlink()
+    started = time.monotonic()
+
+    with AnalysisPool(analyzer_factory=FailingSlowAnalyzer, worker_count=2) as pool:
+        summary = orchestrator.process_files_continuing(
+            file_ids, stop_on_failure=True, analysis_pool=pool
+        )
+    elapsed = time.monotonic() - started
+
+    assert summary.stopped_early is True
+    assert summary.failed_files == 1
+    assert summary.completed_files == 0
+    assert elapsed < PROMPT_STOP_SECONDS

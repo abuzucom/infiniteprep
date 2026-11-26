@@ -545,10 +545,17 @@ class Repository:
     def mark_analysis_results_stale(self, analyzer_name: str, current_version: str) -> int:
         """Flag the stored results of one analyzer whose version differs from the current one.
 
-        Returns the number of rows that changed. A result written by the running version
-        keeps its values.
+        The results of the current version stay current. A rollback to an earlier version
+        clears the flag of that version again.
+
+        Returns the number of rows that the flag changed.
         """
         conn = self.db.connect()
+        conn.execute(
+            "UPDATE analysis_results SET stale = 0 "
+            "WHERE analyzer_name = ? AND analyzer_version = ? AND stale = 1",
+            (analyzer_name, current_version),
+        )
         cursor = conn.execute(
             "UPDATE analysis_results SET stale = 1 "
             "WHERE analyzer_name = ? AND analyzer_version != ? AND stale = 0",

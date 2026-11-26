@@ -12,7 +12,7 @@ from infiniteprep.domain.enums import FieldName, KeyMode, PitchClass
 from infiniteprep.domain.models import AnalysisResult
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.reconciliation import ReconciliationService
-from infiniteprep.ui.detail_panel import format_analysis_row
+from infiniteprep.ui.detail_panel import STALE_ANALYSIS_TEXT, format_analysis_row
 from infiniteprep.ui.library_rows import STALE_ANALYSIS_WARNING, load_library_snapshot
 from tests.fixtures.audio_factory import create_wav_fixture
 
@@ -70,6 +70,45 @@ def test_current_version_keeps_result_current(library: tuple[Repository, str]) -
     assert repo.list_analysis_results(file_id)[0].stale is False
 
 
+def test_rollback_clears_the_stale_flag(library: tuple[Repository, str]) -> None:
+    """A rollback to an earlier version makes that version current again."""
+    repo, file_id = library
+    store_result(repo, file_id, FIRST_VERSION, 128.0)
+    store_result(repo, file_id, SECOND_VERSION, 127.0)
+
+    repo.mark_analysis_results_stale(ANALYZER_NAME, FIRST_VERSION)
+
+    stored = {result.analyzer_version: result for result in repo.list_analysis_results(file_id)}
+    assert stored[FIRST_VERSION].stale is False
+    assert stored[SECOND_VERSION].stale is True
+    current = repo.list_current_analysis_results(file_id)
+    assert [result.analyzer_version for result in current] == [FIRST_VERSION]
+
+
+def test_current_result_clears_stale_warning(library: tuple[Repository, str]) -> None:
+    """A track with a current result shows no warning about a new analysis."""
+    repo, file_id = library
+    store_result(repo, file_id, FIRST_VERSION, 128.0)
+    store_result(repo, file_id, SECOND_VERSION, 127.0)
+
+    snapshot = load_library_snapshot(repo)
+
+    assert STALE_ANALYSIS_WARNING not in snapshot.analysis_warnings[file_id]
+
+
+def test_stale_result_shows_no_values(library: tuple[Repository, str]) -> None:
+    """The detail panel names the outdated analysis and shows no BPM and no key."""
+    repo, file_id = library
+    store_result(repo, file_id, FIRST_VERSION, 128.0)
+    repo.mark_analysis_results_stale(ANALYZER_NAME, SECOND_VERSION)
+
+    stored = repo.list_analysis_results(file_id)[0]
+    row = format_analysis_row(str(stored.bpm), "8A", stale=stored.stale)
+
+    assert row == STALE_ANALYSIS_TEXT
+    assert "128.0" not in row
+
+
 def test_stale_result_makes_no_proposal(library: tuple[Repository, str]) -> None:
     """A stale result states no BPM and no key, so it makes no proposal."""
     repo, file_id = library
@@ -95,5 +134,5 @@ def test_stale_marker_reaches_library_snapshot(library: tuple[Repository, str]) 
 
 def test_detail_row_marks_stale_result() -> None:
     """The detail panel names a result that no longer states the current values."""
-    assert format_analysis_row("128.0", "8A", stale=True).endswith("(outdated)")
+    assert format_analysis_row("128.0", "8A", stale=True) == STALE_ANALYSIS_TEXT
     assert format_analysis_row("128.0", "8A") == "Detected: 128.0 BPM, key 8A"

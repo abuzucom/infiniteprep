@@ -19,7 +19,7 @@ CRASHING_FILE_NAME = "b_crash.wav"
 CRASH_EXIT_CODE = 9
 # The slow analyzer sleeps for this many seconds. A cancel then reaches the worker
 # before the result arrives.
-SLOW_SLEEP_SECONDS = 10.0
+SLOW_SLEEP_SECONDS = 20.0
 
 
 def _result(file_id: str, analyzer_name: str) -> AnalysisResult:
@@ -66,5 +66,24 @@ class SlowAnalyzer:
 
     def analyze(self, audio_reference: Path, file_id: str = "") -> AnalysisResult:
         """Sleep before the result, so the worker runs when the cancel arrives."""
+        time.sleep(SLOW_SLEEP_SECONDS)
+        return _result(file_id, self.analyzer_name)
+
+
+class FailingSlowAnalyzer:
+    """Analyzer that fails at once on a missing file and keeps the worker busy otherwise."""
+
+    analyzer_name = "failing_slow"
+    analyzer_version = "1.0.0"
+
+    def is_available(self) -> tuple[bool, str | None]:
+        """Return the availability of the analyzer."""
+        return True, None
+
+    def analyze(self, audio_reference: Path, file_id: str = "") -> AnalysisResult:
+        """Fail at once on a missing file. Sleep on every other file."""
+        path = Path(audio_reference)
+        if not path.exists():
+            raise FileNotFoundError(f"No such file: {path}")
         time.sleep(SLOW_SLEEP_SECONDS)
         return _result(file_id, self.analyzer_name)

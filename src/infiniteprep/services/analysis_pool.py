@@ -155,6 +155,7 @@ class AnalysisPool:
                 raise RuntimeError("The analysis pool lost the outcome of a task.") from error
             return self._ready.popleft()
         except Exception as error:
+            logger.exception("The analysis of %s failed in the worker.", task.path)
             self._tasks.popleft()
             message = f"{type(error).__name__}: {error}"
             return AnalysisOutcome(file_id=task.file_id, path=task.path, error=message)
@@ -192,6 +193,7 @@ class AnalysisPool:
                 analyze_track, str(task.path), task.file_id, self._analyzer_factory
             )
         except Exception as error:
+            logger.exception("The analysis pool could not start %s.", task.path)
             task.future = None
             task.error = f"{type(error).__name__}: {error}"
 
@@ -217,13 +219,30 @@ class AnalysisPool:
 
         A worker that dies takes every task in flight with it. Each unfinished file then
         runs on a single worker of its own, so one bad file cannot stop the others. A file
-        that crashes again is reported as failed.
+        that crashes again is reported as failed. A file that ended before the crash keeps
+        its result.
         """
         pending = list(self._tasks)
         self._tasks.clear()
         self._shutdown_executor()
         for task in pending:
-            self._ready.append(self._run_alone(task))
+            outcome = self._finished_outcome(task)
+            self._ready.append(outcome if outcome is not None else self._run_alone(task))
+
+    @staticmethod
+    def _finished_outcome(task: _Task) -> AnalysisOutcome | None:
+        """Return the outcome of a task that ended before the pool broke."""
+        future = task.future
+        if future is None or not future.done():
+            return None
+        try:
+            result = future.result()
+        except BrokenExecutor:
+            return None
+        except Exception as error:
+            message = f"{type(error).__name__}: {error}"
+            return AnalysisOutcome(file_id=task.file_id, path=task.path, error=message)
+        return AnalysisOutcome(file_id=task.file_id, path=task.path, result=result)
 
     def _run_alone(self, task: _Task) -> AnalysisOutcome:
         """Run one file on a single worker, then retry it once when the worker dies."""
@@ -248,6 +267,7 @@ class AnalysisPool:
                 file_id=task.file_id, path=task.path, error=WORKER_CRASH_MESSAGE
             ), True
         except Exception as error:
+            logger.exception("The analysis of %s failed in the worker.", task.path)
             message = f"{type(error).__name__}: {error}"
             return AnalysisOutcome(file_id=task.file_id, path=task.path, error=message), False
         else:

@@ -108,10 +108,10 @@ def analysis_warning_lines(results: list[AnalysisResult]) -> list[str]:
     """Return the warning lines of the stored analysis results of one file.
 
     A result that an older analyzer version wrote no longer states the current values.
-    The file then reads as needing a new analysis.
+    The file reads as needing a new analysis only while no current result exists.
     """
     lines = [warning for result in results if not result.stale for warning in result.warnings]
-    if any(result.stale for result in results):
+    if results and all(result.stale for result in results):
         lines.append(STALE_ANALYSIS_WARNING)
     return lines
 
