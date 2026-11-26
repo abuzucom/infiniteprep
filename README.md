@@ -259,6 +259,22 @@ album art included, to promoting store content.
 Live identification runs the adapter once INFRA-5 lands. The adapter has no
 caller before that.
 
+## Library search
+
+Enter a filename, artist, or title in the library search box. Add a tempo range with
+`Daft Punk tracks between 120 and 128 BPM`. Search by duration with
+`house or disco tracks shorter than four minutes`. Use `tracks in the key of 8A` for a musical key.
+
+Field names include artist, title, mix, label, catalog_number, genre, year, bpm, key,
+duration, format, status, and warnings. Use `artist contains Daft Punk` for a partial match.
+Use `format is FLAC` for an exact match. Numeric fields accept comparisons such as
+`year >= 2000`. Duration accepts seconds or minutes:seconds. Ranges include both endpoints.
+Use parentheses to group alternatives. For example, enter `(genre:house OR genre:disco) AND NOT bpm:120-128`.
+Double quotes keep a phrase together. The sidebar filter also applies to the results.
+
+Open **Saved searches** and select **Save current search**. Enter a smart playlist name.
+Select that name from the same menu to run the query against the current library.
+
 ## Usage Walkthrough
 
 The workflow bar at the top lists the five stages: Import, Analyze, Review,

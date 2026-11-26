@@ -13,7 +13,7 @@ from infiniteprep.domain.models import AnalysisResult
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.reconciliation import ReconciliationService
 from infiniteprep.ui.detail_panel import format_analysis_row
-from infiniteprep.ui.main_window import STALE_ANALYSIS_WARNING, load_library_snapshot
+from infiniteprep.ui.library_rows import STALE_ANALYSIS_WARNING, load_library_snapshot
 from tests.fixtures.audio_factory import create_wav_fixture
 
 ANALYZER_NAME = "local_dsp"

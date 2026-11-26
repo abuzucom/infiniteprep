@@ -8,7 +8,7 @@ BPM or key, so the app can show it as outdated and leave it out of the proposals
 import sqlite3
 from typing import Final
 
-VERSION: Final[int] = 5
+VERSION: Final[int] = 6
 # The step adds no table, so backup verification needs no new count query.
 ROW_COUNT_QUERIES: Final[dict[str, str]] = {}
 

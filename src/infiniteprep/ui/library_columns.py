@@ -23,6 +23,7 @@ from infiniteprep.domain.enums import (
     ReviewStatus,
     format_canonical_key,
 )
+from infiniteprep.ui import library_rows
 from infiniteprep.ui.tokens import KeyCellColors, Palette, StatusRole, key_cell_colors
 
 logger = logging.getLogger(__name__)
@@ -211,40 +212,10 @@ STATUS_STATES: Final[dict[ReviewStatus, tuple[str, StatusRole]]] = {
 }
 WARNING_ICON: Final[str] = "triangle-exclamation-point"
 MINOR_MODE_SUFFIX: Final[str] = "m"
-# The plain label of each review status. Each label is unique, so the status filter
-# maps a label back to one stored value.
-STATUS_LABELS: Final[dict[ReviewStatus, str]] = {
-    ReviewStatus.UNPROCESSED: "Not analyzed",
-    ReviewStatus.PROCESSING: "Analyzing",
-    ReviewStatus.PROPOSED: "Has suggestions",
-    ReviewStatus.READY_FOR_REVIEW: "Needs review",
-    ReviewStatus.CONFLICTING_CANDIDATES: "Conflicting matches",
-    ReviewStatus.PARTIALLY_IDENTIFIED: "Partly matched",
-    ReviewStatus.PARTIALLY_APPROVED: "Partly approved",
-    ReviewStatus.NO_MATCH: "No match",
-    ReviewStatus.APPROVED: "Approved",
-    ReviewStatus.READY_TO_WRITE: "Ready to save",
-    ReviewStatus.APPLIED: "Applied",
-    ReviewStatus.WRITTEN: "Saved",
-    ReviewStatus.ERROR: "Failed",
-}
-
-
-def format_status_label(status: ReviewStatus) -> str:
-    """Return the plain label of one review status, such as "Needs review"."""
-    return STATUS_LABELS[status]
-
-
-def format_status_cell(value: str) -> str:
-    """Return the label a stored status shows, such as "Ready to save".
-
-    An unknown stored value shows as stored, so no row loses its status.
-    """
-    try:
-        status = ReviewStatus(value)
-    except ValueError:
-        return value
-    return format_status_label(status)
+# Retain the column formatting interface used by library views.
+STATUS_LABELS = library_rows.STATUS_LABELS
+format_status_cell = library_rows.format_status_cell
+format_status_label = library_rows.format_status_label
 
 
 def status_icon(status: str, palette: Palette) -> tuple[str, str] | None:
