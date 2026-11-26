@@ -44,10 +44,10 @@ class ListMarkerTest(unittest.TestCase):
     def test_a_nested_list_marker_passes(self):
         self.assertEqual(violations("   - Set Width to your canvas size.\n"), [])
 
-    def test_a_top_level_list_marker_passes(self):
+    def test_top_level_marker_passes(self):
         self.assertEqual(violations("- Set Width to your canvas size.\n"), [])
 
-    def test_a_dash_substitute_after_a_marker_still_fails(self):
+    def test_dash_after_marker_fails(self):
         """Stripping the marker must not blind the check to the rest."""
         found = violations("   - The build failed - the cache was stale.\n")
         self.assertEqual(len(found), 1)
@@ -57,17 +57,17 @@ class ListMarkerTest(unittest.TestCase):
 class MultiLineCodeSpanTest(unittest.TestCase):
     """An inline code span can open on one line and close on the next."""
 
-    def test_a_hyphen_inside_a_wrapped_span_passes(self):
+    def test_wrapped_span_hyphen_passes(self):
         text = ("Removed the presets named `Hampton GER (Adjustable Mix)`,\n"
                 "`Optiks - Nerve`, and the rest.\n")
         self.assertEqual(violations(text), [])
 
-    def test_a_span_opening_on_the_previous_line_passes(self):
+    def test_span_from_previous_line(self):
         text = ("Removed `Eo.S. + Redi Jedi Phat Mexican Insanity Pepper\n"
                 "edit colors2`, `Optiks - Nerve`), plus every other preset.\n")
         self.assertEqual(violations(text), [])
 
-    def test_prose_after_a_closed_span_is_still_checked(self):
+    def test_prose_after_span_checked(self):
         found = violations("The `build` step failed - the cache was stale.\n")
         self.assertEqual(len(found), 1)
         self.assertIn("spaced hyphen", found[0])
@@ -76,26 +76,26 @@ class MultiLineCodeSpanTest(unittest.TestCase):
 class StillFlaggedTest(unittest.TestCase):
     """What the rule covers keeps failing."""
 
-    def test_a_spaced_hyphen_in_prose_fails(self):
+    def test_spaced_hyphen_fails(self):
         found = violations("The build failed - the cache was stale.\n")
         self.assertEqual(len(found), 1)
         self.assertIn("spaced hyphen", found[0])
 
-    def test_a_double_hyphen_in_prose_fails(self):
+    def test_double_hyphen_fails(self):
         found = violations("The build failed -- the cache was stale.\n")
         self.assertEqual(len(found), 1)
 
     def test_an_em_dash_character_fails(self):
-        found = violations("The build failed — the cache was stale.\n")
+        found = violations("The build failed \u2014 the cache was stale.\n")
         self.assertTrue(any("em/en dash" in line for line in found))
 
     def test_non_ascii_prose_fails(self):
-        found = violations("Initialize the café palette.\n")
+        found = violations("Initialize the caf\xe9 palette.\n")
         self.assertEqual(len(found), 1)
         self.assertIn("non-ASCII", found[0])
 
     def test_non_ascii_inside_code_passes(self):
-        self.assertEqual(violations("Print `café` to the log.\n"), [])
+        self.assertEqual(violations("Print `caf\xe9` to the log.\n"), [])
 
     def test_a_fenced_block_is_skipped(self):
         text = "Prose.\n```\nThe build failed - the cache was stale.\n```\nMore.\n"

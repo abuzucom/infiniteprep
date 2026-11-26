@@ -32,7 +32,7 @@ def write_track(folder: Path, name: str, content: bytes) -> Path:
     return path
 
 
-def test_relocation_hashes_one_candidate_once_for_many_references(
+def test_relocation_hashes_shared_candidate_once(
     root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A file that many references name is read once, not once per reference."""
@@ -65,7 +65,7 @@ def test_relocation_hashes_one_candidate_once_for_many_references(
     assert len(hashes) == 1
 
 
-def test_relocation_stops_hashing_at_the_work_bound(
+def test_relocation_hashing_honors_work_bound(
     root: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The search gives up hashing once the bound is reached."""
@@ -85,7 +85,7 @@ def test_relocation_stops_hashing_at_the_work_bound(
     assert results[0].confirmed is False
 
 
-def test_relocation_finds_a_file_that_moved(root: Path, tmp_path: Path) -> None:
+def test_relocation_finds_moved_file(root: Path, tmp_path: Path) -> None:
     """A file that moved under a new folder is found and confirmed by its hash."""
     original = tmp_path / "old" / "track.wav"
     original.parent.mkdir()
@@ -105,7 +105,7 @@ def test_relocation_finds_a_file_that_moved(root: Path, tmp_path: Path) -> None:
     assert results[0].confirmed is True
 
 
-def test_relocation_leaves_a_missing_file_unresolved(root: Path, tmp_path: Path) -> None:
+def test_relocation_leaves_missing_file_unresolved(root: Path, tmp_path: Path) -> None:
     """A file with no match in the root stays unresolved."""
     original = tmp_path / "old" / "gone.wav"
     original.parent.mkdir()
@@ -122,9 +122,7 @@ def test_relocation_leaves_a_missing_file_unresolved(root: Path, tmp_path: Path)
     assert results[0].confirmed is False
 
 
-def test_relocation_refuses_a_file_with_the_same_name_and_another_content(
-    root: Path, tmp_path: Path
-) -> None:
+def test_relocation_refuses_mismatched_content_file(root: Path, tmp_path: Path) -> None:
     """A candidate with the recorded size but another content is not confirmed."""
     original = tmp_path / "old" / "track.wav"
     original.parent.mkdir()
@@ -142,9 +140,7 @@ def test_relocation_refuses_a_file_with_the_same_name_and_another_content(
     assert results[0].confirmed is False
 
 
-def test_relocation_leaves_a_file_without_a_known_size_unresolved(
-    root: Path, tmp_path: Path
-) -> None:
+def test_relocation_leaves_unknown_size_unresolved(root: Path, tmp_path: Path) -> None:
     """A reference with no recorded size cannot be matched, so it stays unresolved."""
     original = tmp_path / "old" / "track.wav"
     original.parent.mkdir()
@@ -157,7 +153,7 @@ def test_relocation_leaves_a_file_without_a_known_size_unresolved(
     assert results[0].found_path is None
 
 
-def test_relocation_does_not_follow_a_link_out_of_the_root(root: Path, tmp_path: Path) -> None:
+def test_relocation_skips_link_outside_root(root: Path, tmp_path: Path) -> None:
     """A file reached through a link out of the root is not found."""
     original = tmp_path / "old" / "track.wav"
     original.parent.mkdir()
@@ -181,7 +177,7 @@ def test_relocation_does_not_follow_a_link_out_of_the_root(root: Path, tmp_path:
     assert results[0].found_path is None
 
 
-def test_relocation_stops_at_the_depth_bound(root: Path, tmp_path: Path) -> None:
+def test_relocation_stops_at_depth_bound(root: Path, tmp_path: Path) -> None:
     """A file below the depth bound of the search stays out of the results."""
     original = tmp_path / "old" / "track.wav"
     original.parent.mkdir()
@@ -202,7 +198,7 @@ def test_relocation_stops_at_the_depth_bound(root: Path, tmp_path: Path) -> None
     assert results[0].found_path is None
 
 
-def test_relocation_stops_at_the_folder_bound(root: Path, tmp_path: Path) -> None:
+def test_relocation_stops_at_folder_bound(root: Path, tmp_path: Path) -> None:
     """A root full of empty folders ends the search."""
     original = tmp_path / "old" / "track.wav"
     original.parent.mkdir()
@@ -220,7 +216,7 @@ def test_relocation_stops_at_the_folder_bound(root: Path, tmp_path: Path) -> Non
     assert results[0].found_path is None
 
 
-def test_relocation_refuses_a_root_that_is_a_link(root: Path, tmp_path: Path) -> None:
+def test_relocation_refuses_linked_root(root: Path, tmp_path: Path) -> None:
     """A root that is a link bounds nothing, so the search refuses it."""
     original = tmp_path / "old" / "track.wav"
     original.parent.mkdir()
@@ -242,7 +238,7 @@ def test_relocation_refuses_a_root_that_is_a_link(root: Path, tmp_path: Path) ->
     assert results[0].found_path is None
 
 
-def test_relocation_returns_one_result_for_every_reference(root: Path) -> None:
+def test_relocation_returns_result_per_reference(root: Path) -> None:
     """Every reference gets a result, even when the root holds no file."""
     reference = MissingReference(path="/music/gone.wav", file_size=1, content_hash="abc")
 

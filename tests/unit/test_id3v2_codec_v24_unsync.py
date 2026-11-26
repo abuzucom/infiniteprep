@@ -11,7 +11,7 @@ FRAME_FLAG_UNSYNC = b"\x00\x02"
 PRIV_BODY = b"owner\x00\xff\xe0\xff\x00\x00"
 
 
-def test_v24_tag_header_unsync_applies_to_every_frame() -> None:
+def test_v24_header_unsync_covers_frames() -> None:
     """The v2.4 header flag alone means every frame body is unsynchronised."""
     raw = v24_frame("PRIV", unsynchronise(PRIV_BODY)) + v24_frame("TIT2", b"\x03After\x00")
     tag = parse_id3v2(tag_bytes(4, raw, flags=TAG_FLAG_UNSYNC))
@@ -20,7 +20,7 @@ def test_v24_tag_header_unsync_applies_to_every_frame() -> None:
     assert tag.frames == (Id3Frame("PRIV", PRIV_BODY), Id3Frame("TIT2", b"\x03After\x00"))
 
 
-def test_v24_header_and_frame_unsync_reverse_once() -> None:
+def test_v24_double_unsync_reverses_once() -> None:
     """With both the header and the frame flag set, the codec reverses the scheme one time."""
     raw = v24_frame("PRIV", unsynchronise(PRIV_BODY), FRAME_FLAG_UNSYNC)
     tag = parse_id3v2(tag_bytes(4, raw, flags=TAG_FLAG_UNSYNC))
@@ -28,7 +28,7 @@ def test_v24_header_and_frame_unsync_reverse_once() -> None:
     assert tag.frames == (Id3Frame("PRIV", PRIV_BODY),)
 
 
-def test_v24_frame_unsync_needs_no_header() -> None:
+def test_v24_frame_unsync_without_header() -> None:
     """A v2.4 frame flag reverses unsynchronisation for that frame when the header flag is clear."""
     raw = v24_frame("PRIV", unsynchronise(PRIV_BODY), FRAME_FLAG_UNSYNC)
     tag = parse_id3v2(tag_bytes(4, raw))

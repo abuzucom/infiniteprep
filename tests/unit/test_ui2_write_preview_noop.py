@@ -53,7 +53,7 @@ def make_plan(
     )
 
 
-def test_same_values_skip_with_a_reason() -> None:
+def test_same_values_skip_with_reason() -> None:
     """A safe file whose new values match its tags reads Skipped and says why."""
     plan = make_plan(existing={"artist": OLD_ARTIST}, proposed={"artist": OLD_ARTIST})
 

@@ -17,7 +17,6 @@ paths:
   # so that a new source directory cannot enter or leave the analysis without
   # a matching change to this file.
   - .github
-  - ci
   - hooks
   - packaging
   - scripts

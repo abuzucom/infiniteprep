@@ -66,7 +66,7 @@ def library(tmp_path: Path) -> Path:
     return db_path
 
 
-def test_restore_swaps_in_backup_keeps_newer(library: Path) -> None:
+def test_restore_swaps_backup_keeps_newer(library: Path) -> None:
     """Restore keeps the newer library under a timestamped name and installs the backup."""
     kept = restore_pre_migration_backup(library, now=RESTORE_TIME)
 
@@ -78,7 +78,7 @@ def test_restore_swaps_in_backup_keeps_newer(library: Path) -> None:
         assert conn.execute("SELECT id FROM legacy").fetchone()[0] == 1
 
 
-def test_restore_moves_wal_and_shm_with_the_newer_copy(library: Path) -> None:
+def test_restore_moves_newer_wal_shm(library: Path) -> None:
     """Side files of the newer library travel with it and never attach to the backup."""
     for suffix in SIDE_FILE_SUFFIXES:
         Path(f"{library}{suffix}").write_bytes(b"side file")
@@ -126,7 +126,7 @@ def test_restore_rejects_mismatched_backup(library: Path) -> None:
     assert backup_path_for(library).is_file()
 
 
-def test_restore_refuses_to_overwrite_an_existing_copy(library: Path) -> None:
+def test_restore_refuses_overwriting_existing_copy(library: Path) -> None:
     """A second restore in the same second never overwrites the first kept copy."""
     newer_copy_path_for(library, RESTORE_TIME).write_bytes(b"earlier copy")
 
@@ -183,7 +183,7 @@ def test_open_storage_restores_on_confirmation(env: dict[str, Any]) -> None:
     assert kept[0].name in message
 
 
-def test_open_storage_quits_when_restore_declined(env: dict[str, Any]) -> None:
+def test_open_storage_quits_on_decline(env: dict[str, Any]) -> None:
     """Declining Restore leaves every file alone. The start ends."""
     assert _open(env, restore=False) == QUIT_EXIT_CODE
 
@@ -192,7 +192,7 @@ def test_open_storage_quits_when_restore_declined(env: dict[str, Any]) -> None:
     assert env["errors"] == []
 
 
-def test_open_storage_without_confirmer_shows_error(env: dict[str, Any]) -> None:
+def test_storage_without_confirmer_shows_error(env: dict[str, Any]) -> None:
     """A caller with no confirmer gets the plain storage error. The error names the backup."""
     assert _open(env, restore=None) == STORAGE_ERROR_EXIT_CODE
 
@@ -201,7 +201,7 @@ def test_open_storage_without_confirmer_shows_error(env: dict[str, Any]) -> None
     assert str(backup_path_for(env["db"])) in message
 
 
-def test_open_storage_without_backup_shows_error(env: dict[str, Any]) -> None:
+def test_storage_without_backup_shows_error(env: dict[str, Any]) -> None:
     """With no usable backup the app offers no Restore. The storage error shows."""
     backup_path_for(env["db"]).unlink()
 
@@ -212,7 +212,7 @@ def test_open_storage_without_backup_shows_error(env: dict[str, Any]) -> None:
     assert "newer version of InfinitePrep" in message
 
 
-def test_restore_prompt_plain_text_quit_default(qtbot: Any) -> None:
+def test_restore_prompt_plain_quit_default(qtbot: Any) -> None:
     """The prompt shows paths literally, and Quit is the default button."""
     message = "Backup at <b>/music</b>/infiniteprep.sqlite3.pre-migration-backup"
     prompt = build_restore_prompt(message)
@@ -224,7 +224,7 @@ def test_restore_prompt_plain_text_quit_default(qtbot: Any) -> None:
     assert prompt.restore_button.text() == RESTORE_LABEL
 
 
-def test_restore_prompt_reports_the_clicked_button(qtbot: Any) -> None:
+def test_restore_prompt_reports_clicked_button(qtbot: Any) -> None:
     """A click on Restore confirms. Any other button declines."""
     prompt = build_restore_prompt("message")
     qtbot.addWidget(prompt.box)

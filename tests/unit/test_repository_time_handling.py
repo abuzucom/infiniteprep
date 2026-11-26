@@ -71,7 +71,7 @@ def _record(operation_id: str, file_id: str, timestamp: str) -> ChangeRecord:
     )
 
 
-def test_second_upsert_keeps_the_first_timestamp(repo: Repository) -> None:
+def test_second_upsert_keeps_first_timestamp(repo: Repository) -> None:
     """A status update changes the status. The stored time of the operation stays."""
     _add_file(repo, "file-a")
     repo.upsert_change_record(_record("op-1", "file-a", FIRST_WRITE_TIME))
@@ -86,9 +86,7 @@ def test_second_upsert_keeps_the_first_timestamp(repo: Repository) -> None:
     assert stored.operation_status == STATUSES[-1]
 
 
-def test_second_upsert_advances_updated_at_only(
-    repo: Repository, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_upsert_advances_only_updated_at(repo: Repository, monkeypatch: pytest.MonkeyPatch) -> None:
     """updated_at takes the time of each write. The first write sets both columns apart."""
     _add_file(repo, "file-a")
     clock_readings = iter([LATER_WRITE_TIME, LAST_WRITE_TIME])
@@ -161,7 +159,7 @@ def test_migration_3_backfills_updated_at(tmp_path: Path) -> None:
     assert stored.updated_at == FIRST_WRITE_TIME
 
 
-def test_journal_keeps_order_on_clock_rewind(repo: Repository) -> None:
+def test_journal_order_survives_clock_rewind(repo: Repository) -> None:
     """The newest record comes first even when its timestamp reads older."""
     _add_file(repo, "file-a")
     repo.upsert_change_record(_record("op-old", "file-a", FIRST_WRITE_TIME))
@@ -174,7 +172,7 @@ def test_journal_keeps_order_on_clock_rewind(repo: Repository) -> None:
     ]
 
 
-def test_jobs_keep_order_on_clock_rewind(repo: Repository, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_jobs_keep_order_on_rewind(repo: Repository, monkeypatch: pytest.MonkeyPatch) -> None:
     """The first queued job stays first when the clock stamps the second one earlier."""
     _add_file(repo, "file-a")
     _add_file(repo, "file-b")
@@ -187,7 +185,7 @@ def test_jobs_keep_order_on_clock_rewind(repo: Repository, monkeypatch: pytest.M
     assert [job["id"] for job in repo.list_pending_jobs()] == ["job-1", "job-2"]
 
 
-def test_utc_now_iso_has_one_fixed_width_form() -> None:
+def test_utc_now_iso_fixed_width() -> None:
     """Every reading carries microseconds and the +00:00 offset, so text order equals time order."""
     reading = utc_now_iso()
 
@@ -197,7 +195,7 @@ def test_utc_now_iso_has_one_fixed_width_form() -> None:
 
 
 @pytest.mark.parametrize("suffix_form", ["z", "offset"])
-def test_cache_expiry_accepts_any_offset_form(repo: Repository, suffix_form: str) -> None:
+def test_cache_expiry_accepts_any_offset(repo: Repository, suffix_form: str) -> None:
     """A caller expiry with Z or a non-UTC offset still expires at the right instant."""
     now = datetime.now(UTC)
 
@@ -223,7 +221,7 @@ def test_cache_expiry_accepts_any_offset_form(repo: Repository, suffix_form: str
         ("2026-11-16T11:59:59+00:00", False),
     ],
 )
-def test_legacy_cache_rows_expire_on_time(
+def test_legacy_cache_expires_on_time(
     repo: Repository, monkeypatch: pytest.MonkeyPatch, legacy_expiry: str, expected_live: bool
 ) -> None:
     """A row an older version stored without microseconds keeps its true expiry."""
@@ -253,7 +251,7 @@ def test_rejected_timestamp_keeps_record(repo: Repository) -> None:
     assert record.timestamp == "2026-11-16T12:00:00"
 
 
-def test_cache_expiry_rejects_a_time_without_an_offset(repo: Repository) -> None:
+def test_cache_expiry_rejects_offsetless_time(repo: Repository) -> None:
     """An expiry with no offset names no instant. The repository refuses it."""
     with pytest.raises(ValueError, match="offset"):
         repo.set_cached_response("key", "provider", {}, expires_at_iso="2026-11-16T12:00:00")

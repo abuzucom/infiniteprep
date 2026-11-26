@@ -29,7 +29,7 @@ RELEASE = _load_release()
 class NotesCommandTest(unittest.TestCase):
     """main(["notes", ...]) writes the notes of the top CHANGELOG entry."""
 
-    def test_notes_writes_the_top_changelog_section(self) -> None:
+    def test_notes_writes_top_changelog_section(self) -> None:
         """The notes file holds the download block, and main returns 0."""
         version = RELEASE.read_versions(ROOT)["CHANGELOG.md"]
         output_text = io.StringIO()

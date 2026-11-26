@@ -73,7 +73,7 @@ def test_locator_finds_a_registered_location(profile: Path) -> None:
     assert found[0].folder_path == root
 
 
-def test_locator_reads_the_version_from_the_traktor_folder_name(profile: Path) -> None:
+def test_locator_reads_traktor_folder_version(profile: Path) -> None:
     """The Traktor version sits in the folder name, so the header is not needed."""
     write_traktor_root(profile, version="Traktor 3.2.1")
 
@@ -96,7 +96,7 @@ def test_locator_finds_several_libraries(profile: Path) -> None:
 
 
 @posix_only
-def test_locator_skips_a_symlink_that_leaves_the_profile(profile: Path, tmp_path: Path) -> None:
+def test_locator_skips_escaping_profile_symlink(profile: Path, tmp_path: Path) -> None:
     """A folder that links out of the profile is not followed."""
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -111,7 +111,7 @@ def test_locator_skips_a_symlink_that_leaves_the_profile(profile: Path, tmp_path
     assert found == []
 
 
-def test_locator_stops_at_the_depth_bound(profile: Path) -> None:
+def test_locator_stops_at_depth_bound(profile: Path) -> None:
     """A library below the depth bound of the scan stays out of the list."""
     deep = profile / "Documents" / "a" / "b" / "c" / "d" / "e"
     deep.mkdir(parents=True)
@@ -123,9 +123,7 @@ def test_locator_stops_at_the_depth_bound(profile: Path) -> None:
     assert MAX_SCAN_DEPTH <= 4
 
 
-def test_locator_reads_no_file_before_the_dj_picks(
-    profile: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_locator_reads_nothing_before_pick(profile: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The locator opens no file, so nothing changes before the choice."""
     root = write_traktor_root(profile)
     collection = root / "collection.nml"
@@ -145,7 +143,7 @@ def test_locator_reads_no_file_before_the_dj_picks(
     assert opened == []
 
 
-def test_locator_reads_no_file_of_a_format_without_a_folder_version(
+def test_locator_skips_unversioned_format_files(
     profile: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A format with no version in its folder name is not opened either."""
@@ -167,7 +165,7 @@ def test_locator_reads_no_file_of_a_format_without_a_folder_version(
     assert opened == []
 
 
-def test_the_locator_finds_a_rekordbox_export_on_a_mounted_drive(tmp_path: Path) -> None:
+def test_locator_finds_mounted_rekordbox_export(tmp_path: Path) -> None:
     """A stick that holds a rekordbox export offers the database files it holds."""
     stick = tmp_path / "stick"
     library = stick / "PIONEER" / "rekordbox"
@@ -192,7 +190,7 @@ def test_the_locator_finds_a_rekordbox_export_on_a_mounted_drive(tmp_path: Path)
     assert all(item.file_path.parent == library for item in usb)
 
 
-def test_the_locator_finds_a_rekordbox_export_on_an_hfs_drive(tmp_path: Path) -> None:
+def test_locator_finds_hfs_rekordbox_export(tmp_path: Path) -> None:
     """A stick formatted with HFS names the hidden folder with a leading dot."""
     stick = tmp_path / "stick"
     library = stick / ".PIONEER" / "rekordbox"
@@ -215,7 +213,7 @@ def test_the_locator_finds_a_rekordbox_export_on_an_hfs_drive(tmp_path: Path) ->
     assert [item.file_path.name for item in usb] == ["export.pdb"]
 
 
-def test_the_locator_ignores_a_usb_folder_in_the_profile_folder(profile: Path) -> None:
+def test_locator_ignores_profile_usb_folder(profile: Path) -> None:
     """A device location never holds a candidate in the user profile folder."""
     library = profile / "PIONEER" / "rekordbox"
     library.mkdir(parents=True)
@@ -226,7 +224,7 @@ def test_the_locator_ignores_a_usb_folder_in_the_profile_folder(profile: Path) -
     assert all(item.format_id is not FormatId.REKORDBOX_USB for item in found)
 
 
-def test_the_locator_skips_a_scan_root_that_is_a_link(profile: Path, tmp_path: Path) -> None:
+def test_locator_skips_linked_scan_root(profile: Path, tmp_path: Path) -> None:
     """A scan root that points outside the profile holds no candidate."""
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -243,7 +241,7 @@ def test_the_locator_skips_a_scan_root_that_is_a_link(profile: Path, tmp_path: P
     assert all(item.file_path != outside / "collection.nml" for item in found)
 
 
-def test_the_locator_skips_a_known_folder_that_is_a_link(profile: Path, tmp_path: Path) -> None:
+def test_locator_skips_linked_known_folder(profile: Path, tmp_path: Path) -> None:
     """A known folder that points outside the profile holds no candidate."""
     outside = tmp_path / "outside"
     native = outside / "Native Instruments"
@@ -261,7 +259,7 @@ def test_the_locator_skips_a_known_folder_that_is_a_link(profile: Path, tmp_path
     assert all(item.file_path != native / "collection.nml" for item in found)
 
 
-def test_the_known_folders_of_a_location_belong_to_one_platform() -> None:
+def test_location_known_folders_share_platform() -> None:
     """A folder declared for another platform never holds a candidate."""
     mixxx = _location_for(FormatId.MIXXX)
 
@@ -276,7 +274,7 @@ def test_the_known_folders_of_a_location_belong_to_one_platform() -> None:
     assert not set(windows) & set(linux)
 
 
-def test_locator_marks_the_observed_rekordbox_folder(profile: Path) -> None:
+def test_locator_marks_observed_rekordbox_folder(profile: Path) -> None:
     """A location with no vendor page is marked observed."""
     folder = profile / "AppData" / "Roaming" / "rekordbox" / "rekordbox"
     folder.mkdir(parents=True)

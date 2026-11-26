@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Gate destructive and history-rewriting Bash commands via a PreToolUse hook.
 
-Not part of AGENTS.md, which stays tool-agnostic and is synced to non-Claude
-tools verbatim. This is a Claude-Code-specific hook under hooks/, wired via
+Not part of AGENTS.md. AGENTS.md stays independent of any one tool.
+Synchronization copies it unchanged to non-Claude tools. This is a Claude-Code-specific hook under hooks/, wired via
 `.claude/settings.json` (live in this repo) or
 hooks/claude-code-settings.example.json (for adopting repos). It reads the
 PreToolUse JSON payload from stdin and checks only Bash tool calls.
 
 The command is tokenized and normalized before any decision. Matching the raw
-string matches spelling rather than meaning, and every destructive command has
+string matches spelling instead of meaning, and every destructive command has
 many spellings: `rm -Rf` for `rm -rf`, `git -C dir push --force` for
 `git push --force`, `--force-with-lease=main:<oid>` for `--force-with-lease`,
 `git push origin +HEAD:main` for a forced push with no flag at all. A gate
@@ -31,8 +31,8 @@ no scope qualifier, so a scratch directory the session created itself is
 gated like any other target, and a lease does not make a history rewrite
 consented to.
 
-Ambiguity fails closed. A command that will not tokenize, or a `git` whose
-subcommand is hidden behind a variable, is gated rather than waved through:
+Ambiguity fails closed. A command that will not split into tokens, or a `git` with a
+subcommand hidden behind a variable, receives a gate verdict:
 the gate cannot clear what it cannot read.
 
 An `ask` needs a human to answer it. When `permission_mode` reports an
@@ -58,13 +58,15 @@ try:
     import _gate_core as core
     import _bash_parser as bash_parser
     import _platform_policy as platform_policy
-except ImportError as error:  # pragma: no cover
+except ImportError as error:
     # The adoption test exercises this import failure.
     # Fail closed. Claude Code treats any non-zero exit other than 2 as a
     # non-blocking error, so an unhandled ImportError would wave the command
     # through in exactly the repos that installed this gate.
     _REASON = (f"the shared hook parser or core could not be imported ({error}), "
-               "so the gate cannot clear this command")
+               "so the gate cannot clear this command. Stop. Report this "
+               "denial to the active human. Do not retry a variant or "
+               "propose a gate change.")
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
@@ -74,10 +76,12 @@ except ImportError as error:  # pragma: no cover
     sys.exit(POLICY_DENIAL_EXIT_CODE)
 
 _CWD = [""]
+# The payload permission mode for the current call. Plan mode denies git writes.
+_MODE = [""]
 GATE = "block_destructive_bash.py"
 GATED_KEYWORDS = core.gated_keywords()
-# A shell handed a command string is a wrapper whose payload is another
-# command. Reading only the program name sees "bash" and stops there.
+# A shell handed a command string is a wrapper with another command as its
+# payload. Reading only the program name sees "bash" and stops there.
 # Both shells are here, not only this one. A gate that knows only its own
 # interpreters leaves `powershell -Command 'Remove-Item -Recurse -Force /etc'`
 # as a hole, and on Windows that line runs.
@@ -90,7 +94,7 @@ def _is_plausible_program(token: str) -> bool:
 
     A leading flag, a bare file descriptor, or a stray operator means the
     prefix strip did not reach the real program, so the caller fails closed
-    rather than reporting that nothing gated was found.
+    instead of reporting that nothing gated was found.
     """
     if not token or token.startswith("-") or token.isdigit():
         return False
@@ -113,8 +117,7 @@ def _nested_command_verdict(command: str, depth: int, shell: str) -> tuple:
     return classify(command, depth + 1)
 
 
-def _powershell_interpreter_verdict(program: str, args: list,
-                                    depth: int):
+def _powershell_interpreter_verdict(program: str, args: list):
     """Return a PowerShell payload verdict, or None when none is present."""
     if program.lower() not in core.POWERSHELL_PROGRAMS:
         return None
@@ -135,17 +138,17 @@ def _interpreter_argument_verdict(token: str, has_payload: bool):
     return None
 
 
-def _interpreter_verdict(program: str, args: list, depth: int) -> tuple:
+def _interpreter_verdict(program: str, args: list) -> tuple:
     """Return (decision, reason) for a shell handed a command string.
 
-    Only the payload after -c, /c, or /k is another command. A shell
-    invoked without one runs a script or a REPL, which this gate cannot
-    read either way, so it is not gated on the interpreter's own name.
+    Only the payload after -c, /c, or /k is another command, and a payload
+    denies. A shell invoked without one runs a script or a REPL. This gate
+    cannot read either one, so it asks. Only `--version` passes.
     A shell name among the arguments (busybox sh -c) hands the rest to that
-    shell. The scan follows it in place rather than recursing, so a long
+    shell. The scan follows it in place instead of recursing, so a long
     run of names cannot exhaust the stack and crash the gate open.
     """
-    verdict = _powershell_interpreter_verdict(program, args, depth)
+    verdict = _powershell_interpreter_verdict(program, args)
     if verdict is not None:
         return verdict
     start = 0
@@ -158,7 +161,7 @@ def _interpreter_verdict(program: str, args: list, depth: int) -> tuple:
             continue
         start = index + 1
         if lowered in core.POWERSHELL_PROGRAMS:
-            verdict = _powershell_interpreter_verdict(lowered, args[start:], depth)
+            verdict = _powershell_interpreter_verdict(lowered, args[start:])
             if verdict is not None:
                 return verdict
     args = args[start:]
@@ -183,11 +186,11 @@ def _eval_verdict(args: list, depth: int) -> tuple:
 
 
 def _xargs_verdict(original: list, executable: list) -> tuple:
-    """Return the xargs verdict for a segment whose prefix runs xargs.
+    """Return the xargs verdict for a segment with a prefix that runs xargs.
 
     The parser strips xargs as a wrapper, so `xargs rm` reaches the delete
     check as a bare `rm` with no operands. The operands arrive on standard
-    input at run time, which only the xargs view of the segment shows.
+    input at run time. Only the xargs view of the segment shows that input.
     """
     prefix = original[:len(original) - len(executable)]
     if not any(os.path.basename(token).lower() == "xargs" for token in prefix):
@@ -217,8 +220,9 @@ def _named_program_verdict(program: str, args: list,
                            environment: list, depth: int) -> tuple:
     """Return the verdict for a program read by name, or None.
 
-    None means the program is not one of the three the gate reads whole,
-    so the caller runs it past every other check instead.
+    The gate reads six kinds whole: prohibited programs, curl transfers,
+    eval, interpreters, delete programs, and git. None means the program is
+    none of them, so the caller runs it past every other check instead.
     """
     lowered = program.lower()
     prohibited = core.prohibited_command_verdict(program, args)
@@ -230,11 +234,13 @@ def _named_program_verdict(program: str, args: list,
     if lowered == "eval":
         return _eval_verdict(args, depth)
     if lowered in INTERPRETERS:
-        return _interpreter_verdict(program, args, depth)
+        return _interpreter_verdict(program, args)
     if lowered in core.DELETE_PROGRAMS:
         return core.any_delete_verdict(lowered, args)
     if core.normalize_windows_command_name(program) == "git":
-        return core.git_verdict(args, _CWD[0], environment)
+        return core.plan_mode_git_verdict(
+            _MODE[0], args, _CWD[0], environment,
+            core.git_verdict(args, _CWD[0], environment))
     return None
 
 
@@ -266,7 +272,8 @@ def _program_verdict(tokens: list, redirects: list,
                           sys.platform, program, args),
                       core.destruction_verdict(program, args),
                       core.alias_verdict(program, args),
-                      core.environment_assignment_verdict(program, args),
+                      core.plan_mode_harden(
+                          _MODE[0], core.environment_assignment_verdict(program, args)),
                       core.mode_change_verdict(program, args),
                       core.truncation_verdict(program, args, redirects),
                       core.process_verdict(program, args),
@@ -317,6 +324,7 @@ def emit(decision: str, reason: str) -> int:
 
 def main() -> int:
     """Classify one Bash tool call, denying on any unexpected error."""
+    core.reset_invocation_caches()
     return core.run_fail_closed(_run, functools.partial(emit, "deny"))
 
 
@@ -330,6 +338,7 @@ def _run() -> int:
     if not isinstance(tool_input, dict):
         return emit("deny", "the tool input is malformed, so the gate cannot read this command")
     _CWD[0] = core.project_dir(payload)
+    _MODE[0] = core.require_str(payload.get("permission_mode", "")) or ""
     command = core.require_str(tool_input.get("command", ""))
     if command is None:
         return emit("deny", "the command field is not a string, so the gate cannot read it")

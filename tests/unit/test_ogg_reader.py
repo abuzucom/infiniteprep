@@ -171,7 +171,7 @@ def test_invalid_type_raises_type_error() -> None:
         read_ogg(12345)
 
 
-def test_damage_non_ogg_magic_raises_ogg_format_error() -> None:
+def test_damage_non_ogg_magic_raises() -> None:
     """Raise OggFormatError when data does not start with OggS."""
     with pytest.raises(OggFormatError, match="Expected OggS capture pattern"):
         read_ogg(b"RIFF\x00\x00\x00\x00WAVEfmt ")
@@ -211,7 +211,7 @@ def test_damage_truncated_lacing_table_raises() -> None:
         read_ogg(raw)
 
 
-def test_damage_truncated_body_raises_ogg_format_error() -> None:
+def test_damage_truncated_body_raises() -> None:
     """Raise OggFormatError when page body is truncated."""
     id_pkt = make_vorbis_id_header()
     full_page = make_ogg_page(
@@ -262,7 +262,7 @@ def test_damage_continuation_mismatch_raises() -> None:
         packets=[id_pkt],
         header_type=0x02,
     )
-    # Next page claims continuation (0x01) but previous page ended cleanly
+    # The second page claims continuation (0x01) after a cleanly ended page
     p2 = make_ogg_page(
         serial=1,
         sequence_number=1,
@@ -274,14 +274,14 @@ def test_damage_continuation_mismatch_raises() -> None:
         read_ogg(p1 + p2)
 
 
-def test_damage_vorbis_zero_sample_rate_raises() -> None:
+def test_damage_vorbis_zero_rate_raises() -> None:
     """Raise OggFormatError when Vorbis sample rate is zero."""
     raw = make_synthetic_vorbis_ogg(sample_rate=0)
     with pytest.raises(OggFormatError, match="Vorbis sample rate must be greater than zero"):
         read_ogg(raw)
 
 
-def test_opus_duration_zero_when_granule_below_preskip() -> None:
+def test_opus_zero_duration_below_preskip() -> None:
     """Return 0.0 duration when Opus granule position is <= pre_skip."""
     raw = make_synthetic_opus_ogg(pre_skip=500, granule=300)
     metadata = read_ogg(raw)

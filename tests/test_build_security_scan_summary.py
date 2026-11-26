@@ -42,13 +42,13 @@ class BuildSecurityScanSummaryTest(unittest.TestCase):
         path.write_text(json.dumps(document), encoding="utf-8")
         return path
 
-    def test_a_report_without_runs_holds_no_finding(self) -> None:
+    def test_report_without_runs_no_finding(self) -> None:
         """A clean scan with no run yields a zero total and no tool."""
         summary = builder.read_summary(self.write_report({"version": "2.1.0", "runs": []}))
 
         self.assertEqual(summary, {"total": 0, "tools": []})
 
-    def test_a_clean_tool_run_reports_zero_findings(self) -> None:
+    def test_clean_tool_run_zero_findings(self) -> None:
         """A tool that ran clean still appears with a zero count."""
         summary = builder.read_summary(self.write_report({"runs": [make_run("bandit", 0)]}))
 
@@ -62,7 +62,7 @@ class BuildSecurityScanSummaryTest(unittest.TestCase):
 
         self.assertEqual(summary["total"], 5)
 
-    def test_two_runs_of_one_tool_share_one_record(self) -> None:
+    def test_one_tool_runs_share_record(self) -> None:
         """The runs of one tool add up in one record."""
         report = {"runs": [make_run("checkov", 1), make_run("checkov", 2)]}
 
@@ -70,7 +70,7 @@ class BuildSecurityScanSummaryTest(unittest.TestCase):
 
         self.assertEqual(summary["tools"], [{"name": "checkov", "findings": 3}])
 
-    def test_the_tool_with_the_most_findings_comes_first(self) -> None:
+    def test_most_findings_tool_comes_first(self) -> None:
         """The tools sort by the finding count and then by the name."""
         report = {"runs": [make_run("bandit", 1), make_run("checkov", 4), make_run("alpha", 1)]}
 
@@ -88,18 +88,18 @@ class BuildSecurityScanSummaryTest(unittest.TestCase):
         self.assertEqual(len(summary["tools"]), builder.MAX_TOOLS)
         self.assertEqual(summary["total"], 30)
 
-    def test_unnamed_tool_run_gets_fallback_name(self) -> None:
+    def test_unnamed_tool_gets_fallback_name(self) -> None:
         """A run that names no tool still counts under the fallback name."""
         summary = builder.read_summary(self.write_report({"runs": [{"results": [{}]}]}))
 
         self.assertEqual(summary["tools"], [{"name": builder.UNNAMED_TOOL, "findings": 1}])
 
-    def test_a_report_that_is_not_an_object_is_rejected(self) -> None:
+    def test_non_object_report_is_rejected(self) -> None:
         """A report with the wrong shape raises an error."""
         with self.assertRaises(ValueError):
             builder.read_summary(self.write_report(["runs"]))
 
-    def test_a_run_list_with_the_wrong_type_is_rejected(self) -> None:
+    def test_wrong_type_run_list_rejected(self) -> None:
         """A run list that is not a list raises an error."""
         with self.assertRaises(ValueError):
             builder.read_summary(self.write_report({"runs": "none"}))

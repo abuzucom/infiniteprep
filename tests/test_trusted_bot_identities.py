@@ -130,7 +130,7 @@ class EventLoaderTest(EventFileTestCase):
             self.bots.load_event_author(self.write_event(payload))
         self.assertNotIn("secret", str(caught.exception))
 
-    def test_lazy_loader_reads_once_and_keeps_error(self):
+    def test_lazy_loader_caches_result(self):
         path = Path(self.temp.name) / "bad.json"
         path.write_text("{", encoding="utf-8")
         events = self.bots.LazyEventAuthor(str(path))
@@ -164,7 +164,7 @@ class BranchExemptionTest(EventFileTestCase):
         self.assertEqual(self.scan(COVERAGE_LOGIN, COVERAGE_BRANCH, path), [])
         self.assertEqual(self.branch_checker.branches, [])
 
-    def test_reregistered_slug_with_other_id_is_rejected(self):
+    def test_reregistered_slug_rejected(self):
         path = self.write_event(event_payload(COVERAGE_LOGIN, 1, COVERAGE_BRANCH))
         violations = self.scan(COVERAGE_LOGIN, COVERAGE_BRANCH, path)
         self.assertIn(INVALID_BRANCH, violations)
@@ -175,7 +175,7 @@ class BranchExemptionTest(EventFileTestCase):
         violations = self.scan(COVERAGE_LOGIN, COVERAGE_BRANCH, path)
         self.assertIn(INVALID_BRANCH, violations)
 
-    def test_coverage_bot_without_event_is_rejected(self):
+    def test_coverage_bot_needs_event(self):
         violations = self.scan(COVERAGE_LOGIN, COVERAGE_BRANCH, "")
         self.assertIn(INVALID_BRANCH, violations)
         self.assertTrue(any("needs the GitHub pull request event" in v for v in violations))
@@ -194,7 +194,7 @@ class BranchExemptionTest(EventFileTestCase):
         violations = self.scan(COVERAGE_LOGIN, "coverage/setup", str(path))
         self.assertEqual(violations, [INVALID_BRANCH])
 
-    def test_human_author_on_bot_branch_is_rejected(self):
+    def test_human_on_bot_branch_rejected(self):
         path = self.write_event(event_payload("octocat", HUMAN_ACCOUNT_ID, COVERAGE_BRANCH))
         self.assertEqual(self.scan("octocat", COVERAGE_BRANCH, path), [INVALID_BRANCH])
 
@@ -262,7 +262,7 @@ class BotCommitIdentityTest(unittest.TestCase):
         events = self.bots.LazyEventAuthor(event_path)
         return self.bots.bot_commit_violations(identities, author, events)
 
-    def test_human_pull_request_with_dependabot_commit_fails(self):
+    def test_human_pr_dependabot_commit_fails(self):
         found = self.violations("dependabot", "itsjustatank")
         self.assertEqual(len(found), BOT_COMMIT_VIOLATION_COUNT)
         self.assertIn("pull request author is itsjustatank", found[0])
@@ -282,7 +282,7 @@ class BotCommitIdentityTest(unittest.TestCase):
     def test_github_actions_own_commits_pass(self):
         self.assertEqual(self.violations("actions", ACTIONS_LOGIN), [])
 
-    def test_registered_bot_id_mismatch_fails_offline(self):
+    def test_registered_bot_id_mismatch(self):
         found = self.violations("coverage_wrong_id", COVERAGE_LOGIN)
         self.assertTrue(found)
         self.assertIn("account ID", found[0])

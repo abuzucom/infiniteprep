@@ -37,6 +37,14 @@
               "${CLAUDE_PROJECT_DIR}/hooks/require_consent.py"
             ],
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/hooks/prepare_session_workspace.py"
+            ],
+            "timeout": 30
           }
         ]
       }
@@ -69,6 +77,34 @@
               "claude"
             ],
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/hooks/enforce_anti_delegation.py",
+              "--client",
+              "claude"
+            ],
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/hooks/reinject_agents_policy.py",
+              "--client",
+              "claude"
+            ],
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/hooks/detect_prose_options.py"
+            ],
+            "timeout": 30
           }
         ]
       }
@@ -82,6 +118,16 @@
             "command": "python",
             "args": [
               "${CLAUDE_PROJECT_DIR}/hooks/enforce_branch_name.py",
+              "--client",
+              "claude"
+            ],
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/hooks/enforce_anti_delegation.py",
               "--client",
               "claude"
             ],
@@ -226,6 +272,40 @@
             "command": "python",
             "args": [
               "${CLAUDE_PROJECT_DIR}/hooks/block_destructive_powershell.py"
+            ],
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/hooks/enforce_pr_base.py"
+            ],
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/hooks/deny_mcp_github_writes.py"
+            ],
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/hooks/enforce_single_question.py"
             ],
             "timeout": 30
           }

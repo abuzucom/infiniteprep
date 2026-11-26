@@ -64,7 +64,7 @@ def list_texts(widget: QListWidget) -> list[str]:
         (FIVE_GIB, "5.0 GiB (5,368,709,120 bytes)"),
     ],
 )
-def test_byte_counts_show_a_unit_and_the_exact_value(byte_count: int, expected: str) -> None:
+def test_byte_counts_show_unit_value(byte_count: int, expected: str) -> None:
     """A byte count shows a binary unit with one decimal and the exact byte value."""
     assert format_byte_count(byte_count) == expected
 
@@ -108,7 +108,7 @@ def test_confirm_accepts_and_cancel_rejects(qtbot) -> None:
     assert cancelled.result() == QDialog.DialogCode.Rejected
 
 
-def test_absent_identifiers_show_as_not_available(qtbot) -> None:
+def test_absent_identifiers_show_not_available(qtbot) -> None:
     """A missing label, model, hardware ID, or serial shows fixed placeholder text."""
     inspection = build_inspection(
         drive=build_drive(model=None, hardware_id=None),
@@ -121,7 +121,7 @@ def test_absent_identifiers_show_as_not_available(qtbot) -> None:
     assert dialog.identity_values[FIELD_MOUNT_PATH].text() == MOUNT_PATH
 
 
-def test_drive_text_renders_as_plain_text(qtbot) -> None:
+def test_drive_text_renders_as_plain(qtbot) -> None:
     """A volume label that holds markup reaches the dialog as literal text."""
     inspection = build_inspection(partitions=(build_partition(label=MARKUP_LABEL),))
     dialog = open_dialog(qtbot, inspection)
@@ -159,7 +159,7 @@ def test_every_refusal_gets_a_row(qtbot) -> None:
         assert refusal.message in dialog.refusals_list.item(row).text()
 
 
-def test_safety_refusal_hides_identity_and_space(qtbot) -> None:
+def test_safety_refusal_hides_identity_space(qtbot) -> None:
     """A drive that must never receive an export shows no identity and no space figures."""
     dialog = open_dialog(qtbot, build_inspection(drive=build_drive(is_system=True)))
 
@@ -169,7 +169,7 @@ def test_safety_refusal_hides_identity_and_space(qtbot) -> None:
     assert dialog.refusals_list.count() == 1
 
 
-def test_unverified_facts_are_listed_and_do_not_block(qtbot) -> None:
+def test_unverified_facts_listed_not_blocking(qtbot) -> None:
     """A fact without a source shows as not verified. Confirm stays enabled."""
     inspection = build_inspection(partitions=(build_partition(is_active=None),))
     result = evaluate_preflight(inspection, build_request())
@@ -181,7 +181,7 @@ def test_unverified_facts_are_listed_and_do_not_block(qtbot) -> None:
     assert dialog.confirm_btn.isEnabled()
 
 
-def test_verified_target_shows_no_unverified_rows(qtbot) -> None:
+def test_verified_target_hides_unverified_rows(qtbot) -> None:
     """A fully verified target shows an empty not-verified list."""
     dialog = open_dialog(qtbot, build_inspection())
 

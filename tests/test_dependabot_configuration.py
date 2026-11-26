@@ -53,7 +53,7 @@ class DependabotConfigurationTest(unittest.TestCase):
         declared = {entry.get("package-ecosystem") for entry in updates()}
         self.assertEqual(declared, EXPECTED_ECOSYSTEMS)
 
-    def test_every_ecosystem_scans_the_repository_root(self) -> None:
+    def test_every_ecosystem_scans_repository_root(self) -> None:
         for entry in updates():
             self.assertIn(
                 entry.get("directory"), EXPECTED_DIRECTORIES, str(entry.get("package-ecosystem"))
@@ -65,7 +65,7 @@ class DependabotConfigurationTest(unittest.TestCase):
             self.assertIsInstance(schedule, dict, str(entry.get("package-ecosystem")))
             self.assertIn(schedule.get("interval"), {"daily", "weekly", "monthly"})
 
-    def test_every_ecosystem_bounds_the_open_pull_requests(self) -> None:
+    def test_every_ecosystem_bounds_open_prs(self) -> None:
         for entry in updates():
             limit = entry.get("open-pull-requests-limit")
             self.assertIsInstance(limit, int, str(entry.get("package-ecosystem")))
@@ -79,7 +79,7 @@ class DependabotConfigurationTest(unittest.TestCase):
                 self.assertIsInstance(group, dict, name)
                 self.assertIn("*", group.get("patterns", []), name)
 
-    def test_no_group_collects_a_major_update(self) -> None:
+    def test_no_group_collects_major_update(self) -> None:
         # A major bump arrives alone so that a breaking release cannot block
         # the safe updates that share the same ecosystem.
         for entry in updates():
@@ -95,7 +95,7 @@ class DependabotConfigurationTest(unittest.TestCase):
             self.assertIsInstance(prefix, str, str(entry.get("package-ecosystem")))
             self.assertRegex(prefix, r"^(feat|fix|chore|docs|test|ci):?$")
 
-    def test_branch_names_keep_the_dependabot_prefix(self) -> None:
+    def test_branch_names_keep_dependabot_prefix(self) -> None:
         # The bot exemption in scripts/trusted_bot_identities.py recognizes
         # only the dependabot branch prefix.
         for entry in updates():

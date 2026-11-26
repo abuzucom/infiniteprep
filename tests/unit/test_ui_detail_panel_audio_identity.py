@@ -22,9 +22,7 @@ PEAK_SAMPLE_COUNT = 2
 ANALYSIS_WAIT_TIMEOUT_MS = 3_000
 
 
-def test_new_stored_path_under_same_id_keeps_playback(
-    qtbot: Any, tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_path_change_keeps_playback(qtbot: Any, tmp_path: Path, monkeypatch: Any) -> None:
     """A changed path refreshes analysis without reloading or resetting playback."""
     track = create_wav_fixture(tmp_path / "music" / "track.wav", duration_sec=TRACK_SECONDS)
     repository = Repository(DatabaseManager(":memory:"))

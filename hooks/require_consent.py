@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Route writes to existing test files through a per-act human decision.
 
-Not part of AGENTS.md, which stays tool-agnostic and is synced to non-Claude
-tools verbatim. This is a Claude-Code-specific hook under hooks/, wired via
+Not part of AGENTS.md. AGENTS.md stays independent of any one tool.
+Synchronization copies it unchanged to non-Claude tools. This is a Claude-Code-specific hook under hooks/, wired via
 `.claude/settings.json` (live in this repo) or
 hooks/claude-code-settings.example.json (for adopting repos). One file serves
 two registrations, dispatched on `hook_event_name` and `tool_name`.
@@ -17,11 +17,11 @@ Creating a test file that does not exist yet is the only exemption, and it is
 the one the mandated test-first workflow needs. Every edit to a file that
 already exists asks, in any language.
 
-An earlier form cleared an end-of-file append as additive. Textual checks
+An earlier form cleared an end-of-file append as additive. Checks on raw text
 cannot carry that claim: appending `ExistingTest.__unittest_skip__ = True`,
 or rebinding the class to `None`, leaves every assertion above it present and
 inert. Enumerating those spellings is a denylist over text an attacker
-chooses, so the carve-out is gone rather than patched. The cost is real: an
+chooses, so the exemption is gone and not patched. The cost is real: an
 iteration on an existing test now prompts.
 
 `SessionStart` states which gates are live.
@@ -29,8 +29,8 @@ iteration on an existing test now prompts.
 An `ask` needs a human to answer it. When `permission_mode` reports an
 unattended session, or a mode this hook does not recognize, the ask becomes a
 deny: absence of a human is absence of consent. The unrecognized value is
-named in the reason, so a mode Claude Code adds later is visible rather than
-silently denied.
+named in the reason, so a mode Claude Code adds later is visible instead of
+denied without notice.
 
 Paths are resolved before anything is decided about them. A path is only as
 trustworthy as the file it reaches, so classification runs on the name given,
@@ -38,8 +38,8 @@ its canonical target, and, when the file has more than one link, the inodes
 of the project's test tree: `realpath` resolves a symlink but a hard link has
 no target to resolve.
 
-Unattended modes deny every gated act. Repository-controlled hooks are
-best-effort prompts for compliant workflows, not an authorization boundary.
+Unattended modes deny every gated act. Hooks inside the repository are
+prompts for compliant workflows, not an authorization boundary.
 Repository writers can alter this hook or its settings before it runs.
 
 A Bash call can also write a test file, through a redirect, a
@@ -59,12 +59,14 @@ POLICY_DENIAL_EXIT_CODE = 2
 
 try:
     import _gate_core as core
-except ImportError as error:  # pragma: no cover (exercised by the adoption test)
+except ImportError as error:  # The adoption test exercises this import failure.
     # Fail closed. Claude Code treats any non-zero exit other than 2 as a
     # non-blocking error, so an unhandled ImportError would wave the write
     # through in exactly the repos that installed this gate.
     _REASON = (f"hooks/_gate_core.py could not be imported ({error}), "
-               "so the gate cannot clear this call")
+               "so the gate cannot clear this call. Stop. Report this "
+               "denial to the active human. Do not retry a variant or "
+               "propose a gate change.")
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
@@ -75,7 +77,9 @@ except ImportError as error:  # pragma: no cover (exercised by the adoption test
 
 GATED_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 PATH_KEYS = ("file_path", "notebook_path")
-PROTECTED_PARTS = ("hooks", ".claude", ".git", ".agents", ".codex", ".gemini")
+# Matches _gate_core.PROTECTED_PATH_PARTS, so a file-tool write and a shell
+# write to the same path meet the same gate.
+PROTECTED_PARTS = ("hooks", ".claude", ".git", ".agents", ".codex", ".gemini", "scripts", "skills")
 POLICY_REASON = "rewrites agent policy text that later sessions load as instructions"
 OUTSIDE_ROOT_REASON = ("creates a file outside the project root, which the "
                        "gate cannot vouch for")
@@ -91,7 +95,7 @@ verifiable. Destructive and history rewriting Bash commands route the same way
 (Rule 2). Writes to hooks/, .claude/, .git/, and scripts/banned_models.txt route
 the same way (Rule 22), because they decide whether these gates run at all.
 
-These repository-controlled hooks are best-effort prompts for compliant
+These hooks inside the repository are prompts for compliant
 workflows, not an authorization boundary. Repository writers can alter them or
 their settings. Tamper resistance requires controls outside this repository.
 
@@ -108,7 +112,7 @@ must say it requires the user's sign-off. Do not label it Recommended. State
 the rule-governed cost, not only the engineering trade-off: the user cannot
 make a call you did not put in front of them.
 
-This arrives now rather than when a question is asked, because by the time a
+This arrives now instead of when a question is asked, because by the time a
 question reaches a hook its options are already written."""
 
 
@@ -132,10 +136,7 @@ def is_protected_path(target: str, project_dir: str) -> bool:
     stripped = _relative_name(target, project_dir)
     if stripped is None:
         return False
-    head = stripped.split("/", 1)[0]
-    if head in PROTECTED_PARTS:
-        return True
-    return stripped == "scripts/banned_models.txt"
+    return stripped.split("/", 1)[0] in PROTECTED_PARTS
 
 
 def is_policy_path(target: str, project_dir: str) -> bool:
@@ -149,8 +150,8 @@ def _same_file(first: os.stat_result, second: os.stat_result) -> bool:
     return (first.st_dev, first.st_ino) == (second.st_dev, second.st_ino)
 
 
-def reaches_a_test_inode(target: str, project_dir: str) -> bool:
-    """Return True if `target` is hard-linked to a file in the test tree.
+def reaches_a_test_inode(target: str, project_dir: str) -> bool | None:
+    """Return True if `target` shares a hard link with a file in the test tree.
 
     `realpath` resolves a symlink because a symlink has a target. A hard
     link has none: two names are the same file with equal standing, so a
@@ -177,20 +178,35 @@ def reaches_a_test_inode(target: str, project_dir: str) -> bool:
 
     for current, dirnames, filenames in os.walk(
             os.path.realpath(project_dir), onerror=record_walk_error):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_WALK_DIRS]
-        for name in filenames:
-            seen += 1
-            if seen > MAX_INODE_WALK:
-                return None
-            candidate = os.path.join(current, name)
-            if not is_test_path(os.path.relpath(candidate, project_dir)):
-                continue
-            try:
-                if _same_file(target_stat, os.stat(candidate)):
-                    return True
-            except OSError:
-                return None
+        dirnames[:] = [directory_name for directory_name in dirnames
+                       if directory_name not in SKIP_WALK_DIRS]
+        found, seen = _test_inode_in(target_stat, current, filenames, project_dir, seen)
+        if found is not False:
+            return found
     return None if traversal_failed[0] else False
+
+
+def _test_inode_in(target_stat: os.stat_result, current: str, filenames: list,
+                   project_dir: str, seen: int) -> tuple:
+    """Return (found, files seen) for one directory of the test-inode walk.
+
+    `found` is True on a match, None when the walk must stop incomplete,
+    and False to keep walking.
+    """
+    for name in filenames:
+        seen += 1
+        if seen > MAX_INODE_WALK:
+            return None, seen
+        candidate = os.path.join(current, name)
+        if not is_test_path(os.path.relpath(candidate, project_dir)):
+            continue
+        try:
+            candidate_stat = os.stat(candidate)
+        except OSError:
+            return None, seen
+        if _same_file(target_stat, candidate_stat):
+            return True, seen
+    return False, seen
 
 
 def given_path(tool_input: dict):
@@ -225,7 +241,7 @@ def names_a_test(raw: str, target: str, project_dir: str) -> bool:
 def escapes_root(target: str, project_dir: str) -> bool:
     """Return True if `target` sits outside the project root.
 
-    commonpath rather than a string prefix: Windows short names and \\\\?\\
+    commonpath instead of a string prefix: Windows short names and \\\\?\\
     prefixes make two spellings of one directory compare unequal.
     """
     root = os.path.realpath(project_dir)
@@ -311,18 +327,7 @@ def build_reason(target: str, reason: str) -> str:
 
 def emit(decision: str, reason: str) -> int:
     """Print the hook's decision and return the exit code it needs."""
-    message = f"gated by hooks/{GATE}: {reason}"
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": decision,
-            "permissionDecisionReason": message,
-        }
-    }))
-    if decision == "deny":
-        print(message, file=sys.stderr)
-        return POLICY_DENIAL_EXIT_CODE
-    return 0
+    return core.emit(GATE, decision, reason, prefix="gated by")
 
 
 def emit_context(event: str, context: str) -> int:
@@ -335,12 +340,8 @@ def emit_context(event: str, context: str) -> int:
 
 def _decide(payload: dict, target: str, reason: str) -> int:
     """Emit the decision, turning an ask nobody can answer into a deny."""
-    message = build_reason(target, reason)
-    mode = core.require_str(payload.get("permission_mode"))
-    if mode in core.INTERACTIVE_MODES:
-        return emit("ask", message)
-    return emit("deny", f"{message} No interactive session is available to "
-                        f"consent (permission_mode {core.mode_label(payload)}).")
+    return core.decide(GATE, payload, "ask", build_reason(target, reason),
+                       prefix="gated by")
 
 
 def _write_reason(payload: dict, raw: str, target: str,
@@ -399,7 +400,7 @@ def _run() -> int:
 def main() -> int:
     try:
         return _run()
-    except Exception:  # noqa: BLE001 (the boundary is the point)
+    except Exception:
         # Claude Code treats any non-zero exit other than 2 as a
         # non-blocking error, so an unhandled exception waves the write
         # through. Emit a fixed reason: a traceback here would carry

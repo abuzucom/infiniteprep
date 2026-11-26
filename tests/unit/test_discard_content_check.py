@@ -32,7 +32,7 @@ def discard_leftovers(folder: Path) -> list[str]:
     return [path.name for path in folder.iterdir() if path.name.startswith(DISCARD_NAME_PREFIX)]
 
 
-def test_discard_keeps_a_file_edited_in_place(tmp_path: Path) -> None:
+def test_discard_keeps_in_place_edit(tmp_path: Path) -> None:
     """Same identity with other content keeps the file under its name."""
     target = tmp_path / "renamed.wav"
     target.write_bytes(WRITTEN_BYTES)

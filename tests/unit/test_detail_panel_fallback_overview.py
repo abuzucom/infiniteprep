@@ -29,7 +29,7 @@ GENERATION = 1
 FAILURE_TEXT = "decode failed"
 
 
-def test_failed_analysis_keeps_the_extracted_overview(
+def test_failed_analysis_keeps_extracted_overview(
     qtbot: Any, tmp_path: Path, monkeypatch: Any
 ) -> None:
     """A spectrum failure leaves the track overview drawn from real audio peaks."""

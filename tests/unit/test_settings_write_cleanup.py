@@ -13,7 +13,7 @@ ORIGINAL_TEMPLATE = "{artist} - {title}"
 REPLACEMENT_TEMPLATE = "{title}"
 
 
-def test_cleanup_failure_does_not_mask_the_write_error(tmp_path: Path, monkeypatch: Any) -> None:
+def test_cleanup_failure_keeps_write_error(tmp_path: Path, monkeypatch: Any) -> None:
     """The caller sees the write failure even when temporary-file removal also fails."""
     manager = SettingsManager(tmp_path / "settings.json")
     manager.save(AppSettings(rename_template=ORIGINAL_TEMPLATE))

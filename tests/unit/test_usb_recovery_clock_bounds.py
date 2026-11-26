@@ -67,7 +67,7 @@ class UsbRecoveryClockBoundsTests(unittest.TestCase):
         self.store = UsbRecoveryJournalStore(self.root / "usb_recovery_journal.json")
         self.store.save_entries([_build_entry()])
 
-    def test_clock_behind_entry_keeps_and_reports(self) -> None:
+    def test_clock_behind_keeps_and_reports(self) -> None:
         """A clock before the start time gives a negative age. The entry stays."""
         scan = self.store.evaluate_expiry(STARTED_AT_UTC - ONE_SECOND, at_launch=True)
 
@@ -78,7 +78,7 @@ class UsbRecoveryClockBoundsTests(unittest.TestCase):
         self.assertEqual(_stored_ids(self.store), [ENTRY_ID])
         self.assertFalse(self.store.load_entries()[0].warned_expiry)
 
-    def test_clock_far_ahead_keeps_and_reports_the_entry(self) -> None:
+    def test_far_ahead_clock_keeps_reports(self) -> None:
         """An age beyond the ceiling marks the clock as suspect. No cleanup runs."""
         far_future = STARTED_AT_UTC + PLAUSIBLE_AGE_CEILING + ONE_SECOND
 
@@ -93,7 +93,7 @@ class UsbRecoveryClockBoundsTests(unittest.TestCase):
                 self.assertEqual(scan.overdue_notice_entries, ())
                 self.assertEqual(_stored_ids(self.store), [ENTRY_ID])
 
-    def test_age_at_the_ceiling_still_expires(self) -> None:
+    def test_age_at_ceiling_still_expires(self) -> None:
         """The ceiling itself counts as plausible. The launch scan removes the entry."""
         scan = self.store.evaluate_expiry(
             STARTED_AT_UTC + PLAUSIBLE_AGE_CEILING, expiry_days=EXPIRY_DAYS, at_launch=True
@@ -103,11 +103,11 @@ class UsbRecoveryClockBoundsTests(unittest.TestCase):
         self.assertEqual([item.export_id for item in scan.overdue_notice_entries], [ENTRY_ID])
         self.assertEqual(_stored_ids(self.store), [])
 
-    def test_scan_result_keeps_its_three_field_form(self) -> None:
+    def test_scan_result_keeps_three_fields(self) -> None:
         """Existing three-argument construction still works and reports no suspect entry."""
         self.assertEqual(UsbExpiryScanResult((), (), ()).clock_suspect_entries, ())
 
-    def test_launch_shows_one_notice_for_suspect_entries(self) -> None:
+    def test_launch_shows_one_suspect_notice(self) -> None:
         """The launch scan shows a clock notice that names the kept entry."""
         settings_manager = SettingsManager(self.root / "settings.json")
         settings_manager.update(

@@ -75,7 +75,7 @@ class AppVersionTest(unittest.TestCase):
 class LinkedLibraryNamesTest(unittest.TestCase):
     """The spec reads the links of each binary once per build."""
 
-    def test_each_source_reads_its_links_once(self) -> None:
+    def test_each_source_reads_links_once(self) -> None:
         """A second call for the same binary reuses the first result."""
         imports = RecordingImports()
         linked_library_names = load_spec_function(
@@ -91,7 +91,7 @@ class LinkedLibraryNamesTest(unittest.TestCase):
 class SpecShapeTest(unittest.TestCase):
     """The spec declares return types and keeps the PyInstaller object names."""
 
-    def test_every_spec_function_has_a_return_hint(self) -> None:
+    def test_spec_functions_have_return_hints(self) -> None:
         """No top-level function in the spec lacks a return annotation."""
         unhinted = [
             node.name
@@ -100,7 +100,7 @@ class SpecShapeTest(unittest.TestCase):
         ]
         self.assertEqual(unhinted, [])
 
-    def test_the_build_objects_keep_their_names(self) -> None:
+    def test_build_objects_keep_names(self) -> None:
         """a, pyz, exe, and coll stay assigned at the top level."""
         assigned = {
             target.id

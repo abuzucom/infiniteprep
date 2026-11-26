@@ -60,7 +60,7 @@ class VersionReadTest(unittest.TestCase):
 class SizeStepTest(unittest.TestCase):
     """One bundle size step covers every operating system."""
 
-    def test_one_step_runs_the_size_report(self) -> None:
+    def test_one_step_runs_size_report(self) -> None:
         """Exactly one bundle step calls packaging/bundle_size.py."""
         steps = load_jobs()["bundle"]["steps"]
         size_steps = [step for step in steps if SIZE_SCRIPT in step.get("run", "")]
@@ -78,13 +78,13 @@ class ReleaseStepTest(unittest.TestCase):
         """Parse the workflow once."""
         cls.steps = load_jobs()["release"]["steps"]
 
-    def test_each_release_step_views_the_release_once(self) -> None:
+    def test_release_steps_view_release_once(self) -> None:
         """The save and upload steps each call gh release view one time."""
         for name in (SAVE_STEP_NAME, UPLOAD_STEP_NAME):
             with self.subTest(step=name):
                 self.assertEqual(find_step(self.steps, name)["run"].count(RELEASE_VIEW), 1)
 
-    def test_asset_names_use_an_associative_array(self) -> None:
+    def test_asset_names_use_associative_array(self) -> None:
         """The steps look up draft asset names in a bash associative array."""
         for name in (SAVE_STEP_NAME, UPLOAD_STEP_NAME):
             run = find_step(self.steps, name)["run"]
@@ -92,13 +92,13 @@ class ReleaseStepTest(unittest.TestCase):
                 self.assertIn("declare -A", run)
                 self.assertNotIn("grep -Fxq", run)
 
-    def test_no_capture_is_tested_inside_an_if(self) -> None:
+    def test_no_capture_tested_inside_if(self) -> None:
         """Each command substitution runs before the status test, not inside it."""
         for name in (SAVE_STEP_NAME, UPLOAD_STEP_NAME):
             with self.subTest(step=name):
                 self.assertIsNone(CAPTURE_IN_CONDITION.search(find_step(self.steps, name)["run"]))
 
-    def test_bundle_reuse_lives_in_a_named_function(self) -> None:
+    def test_bundle_reuse_in_named_function(self) -> None:
         """The save step defines reuse_draft_bundle and calls it."""
         run = find_step(self.steps, SAVE_STEP_NAME)["run"]
         self.assertIn("reuse_draft_bundle() {", run)

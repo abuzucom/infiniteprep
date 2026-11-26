@@ -72,7 +72,7 @@ def _fpcalc_download(tmp_path: Path) -> Any:
     return FpcalcBootstrapService(install_dir=tmp_path).downloader(REQUEST_URL)
 
 
-def test_user_agent_names_version_and_repository() -> None:
+def test_user_agent_names_version_repository() -> None:
     """The User-Agent carries the app version and the real repository URL, and no email."""
     assert f"InfinitePrep/{__version__} (+{PROJECT_URL})" == USER_AGENT
     assert PROJECT_URL == "https://github.com/abuzucom/infiniteprep"
@@ -89,7 +89,7 @@ def test_user_agent_names_version_and_repository() -> None:
     ],
     ids=["musicbrainz", "discogs", "acoustid", "fpcalc-download"],
 )
-def test_every_site_sends_the_shared_user_agent(
+def test_every_site_sends_shared_agent(
     sent_requests: list[urllib.request.Request],
     tmp_path: Path,
     send_request: Callable[[Path], Any],

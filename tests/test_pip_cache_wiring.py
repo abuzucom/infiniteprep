@@ -50,7 +50,7 @@ class PipCacheTest(unittest.TestCase):
             for name in CACHED_JOBS
         }
 
-    def test_each_setup_python_step_caches_pip(self) -> None:
+    def test_setup_python_steps_cache_pip(self) -> None:
         """The cache input names pip in every listed job."""
         for workflow_name, job_names in CACHED_JOBS.items():
             for job_name in job_names:
@@ -59,7 +59,7 @@ class PipCacheTest(unittest.TestCase):
                     with self.subTest(workflow=workflow_name, job=job_name):
                         self.assertEqual(step["with"].get("cache"), PIP_CACHE)
 
-    def test_cache_key_names_every_installed_file(self) -> None:
+    def test_cache_key_names_installed_files(self) -> None:
         """A change to any installed requirements file invalidates the cache."""
         for workflow_name, job_names in CACHED_JOBS.items():
             for job_name in job_names:
@@ -71,7 +71,7 @@ class PipCacheTest(unittest.TestCase):
                         self.assertTrue(installed)
                         self.assertEqual(key_files, installed)
 
-    def test_os_tests_pin_the_matrix_python(self) -> None:
+    def test_os_tests_pin_matrix_python(self) -> None:
         """The platform gate suite runs on the same Python as the test matrix."""
         jobs = self.workflows["os-tests.yml"]["jobs"]
         for job_name in CACHED_JOBS["os-tests.yml"]:

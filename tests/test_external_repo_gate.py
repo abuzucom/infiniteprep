@@ -30,7 +30,7 @@ def repo_with_remote(directory: str, url: str) -> str:
 
 
 class OriginOwnerTest(unittest.TestCase):
-    """The origin owner comes from the bounded config reader."""
+    """The `origin` repository owner comes from the bounded config reader."""
 
     def owner_for(self, url: str) -> str:
         """Return the parsed origin owner for one remote URL."""
@@ -63,7 +63,7 @@ class OriginOwnerTest(unittest.TestCase):
     def test_missing_config_yields_nothing(self):
         self.assertEqual(self.owner_for(""), "")
 
-    def test_remote_with_port_resolves_past_it(self):
+    def test_remote_with_port(self):
         self.assertEqual(
             self.owner_for("https://github.com:443/abuzucom/agents"), OWNER)
 
@@ -137,8 +137,8 @@ class RepositoryTargetTest(unittest.TestCase):
             "owner")
 
     def test_owner_carrying_a_colon_rejected(self):
-        # A separator left inside the owner means the token never had the
-        # owner/name shape, so the gate must not read an owner from it.
+        # A separator left inside the owner segment means the token never had
+        # the owner/name shape, so the gate must not read an owner from it.
         self.assertEqual(
             _gate_core._repository_target_owner("host:owner/name"), "")
 
@@ -190,11 +190,11 @@ class CrossOwnerVerdictTest(unittest.TestCase):
         self.assertEqual(
             self.verdict(["pr", "create", "--repo", EXTERNAL]), "ask")
 
-    def test_issue_create_asks_through_short_flag(self):
+    def test_issue_create_short_flag(self):
         self.assertEqual(
             self.verdict(["issue", "create", "-R", EXTERNAL]), "ask")
 
-    def test_repository_fork_denies_from_positional_target(self):
+    def test_fork_positional_target_denies(self):
         self.assertEqual(self.verdict(["repo", "fork", EXTERNAL]), "deny")
 
     def test_positional_scan_skips_leading_flags(self):
@@ -216,7 +216,7 @@ class CrossOwnerVerdictTest(unittest.TestCase):
 
     def test_unknown_origin_owner_asks(self):
         # Rule 17 prefers a prompt over waving an outward-facing command
-        # through when the origin owner cannot be read.
+        # through when the `origin` repository owner cannot be read.
         self.assertEqual(
             self.verdict(["pr", "comment", "16", "--repo", EXTERNAL], ""),
             "ask")
@@ -233,7 +233,7 @@ class CrossOwnerVerdictTest(unittest.TestCase):
                           f"github.com/{EXTERNAL}"]),
             "ask")
 
-    def test_url_target_from_positional_argument_denies(self):
+    def test_positional_url_target_denies(self):
         self.assertEqual(
             self.verdict(["repo", "fork", f"https://github.com/{EXTERNAL}"]),
             "deny")
@@ -245,7 +245,7 @@ class CrossOwnerVerdictTest(unittest.TestCase):
             "")
 
     def test_unreadable_explicit_target_asks(self):
-        # An explicit --repo the gate cannot parse is not clearance.
+        # An unparseable explicit --repo is not clearance.
         for target in ("https://attacker-github.com/owner/name",
                        "not-a-repository",
                        "owner/name/extra"):
@@ -253,7 +253,7 @@ class CrossOwnerVerdictTest(unittest.TestCase):
                 self.assertEqual(
                     self.verdict(["pr", "create", "--repo", target]), "ask")
 
-    def test_read_only_command_with_unreadable_target_passes(self):
+    def test_read_only_unreadable_target_passes(self):
         self.assertEqual(
             self.verdict(["pr", "view", "1", "--repo", "not-a-repository"]),
             "")
@@ -279,10 +279,10 @@ class CrossOwnerVerdictTest(unittest.TestCase):
 
 
 class ForgeVerdictTest(unittest.TestCase):
-    """forge_verdict resolves the owner from the working directory."""
+    """forge_verdict resolves the repository owner from the working directory."""
 
     def verdict(self, args: list, url: str) -> str:
-        """Return the decision for one gh invocation in a crafted repository."""
+        """Return the decision for one gh command in a crafted repository."""
         with RetryingTemporaryDirectory() as tmp_dir:
             repo = repo_with_remote(tmp_dir, url)
             return _gate_core.forge_verdict("gh", args, repo)[0]

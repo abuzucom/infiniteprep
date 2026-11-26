@@ -59,7 +59,7 @@ def _fill(folders: list[Path]) -> None:
         (folder / "item.bin").write_bytes(b"data")
 
 
-def test_per_user_folders_drop_nested_ones(tmp_path: Path) -> None:
+def test_per_user_folders_drop_nested(tmp_path: Path) -> None:
     """Backups and bin sit inside the data folder, so only the outer folders are listed."""
     locations = _per_user(tmp_path)
 
@@ -70,7 +70,7 @@ def test_per_user_folders_drop_nested_ones(tmp_path: Path) -> None:
     )
 
 
-def test_portable_folders_include_the_per_user_rest(tmp_path: Path) -> None:
+def test_portable_folders_include_per_user(tmp_path: Path) -> None:
     """Portable mode lists Data once, plus the per-user backups, bin, and cache."""
     user = _per_user(tmp_path / "user")
     locations = _portable(tmp_path / "usb", user)
@@ -81,7 +81,7 @@ def test_portable_folders_include_the_per_user_rest(tmp_path: Path) -> None:
     assert set(folders) == {locations.data_dir, user.backup_dir, user.bin_dir, user.cache_dir}
 
 
-def test_data_choice_clears_data_keeps_music(tmp_path: Path) -> None:
+def test_data_choice_clears_except_music(tmp_path: Path) -> None:
     """The data box removes each listed folder, and a music folder nearby stays."""
     locations = _per_user(tmp_path)
     folders = data_folders(locations)
@@ -140,7 +140,7 @@ def test_foreign_folder_is_refused(tmp_path: Path) -> None:
     assert not report.succeeded
 
 
-def test_guard_checks_the_folder_name_not_any_ancestor(tmp_path: Path) -> None:
+def test_guard_checks_folder_not_ancestors(tmp_path: Path) -> None:
     """A folder merely inside an InfinitePrep folder is refused. Known subfolders pass."""
     app_root = tmp_path / "InfinitePrep"
 
@@ -155,7 +155,7 @@ def test_guard_checks_the_folder_name_not_any_ancestor(tmp_path: Path) -> None:
     assert not is_app_folder(tmp_path / "Data")
 
 
-def test_one_failure_does_not_stop_the_rest(tmp_path: Path) -> None:
+def test_one_failure_never_stops_rest(tmp_path: Path) -> None:
     """A file where a folder should be is reported, and the other folders still go."""
     locations = _per_user(tmp_path)
     _fill([locations.data_dir, locations.config_dir])
@@ -171,7 +171,7 @@ def test_one_failure_does_not_stop_the_rest(tmp_path: Path) -> None:
 
 
 @pytest.mark.usefixtures("restore_keyring")
-def test_keys_choice_removes_keys_and_keeps_data(tmp_path: Path) -> None:
+def test_keys_choice_removes_only_keys(tmp_path: Path) -> None:
     """The keys box removes the saved keys only. The data folders stay."""
     backend = MemoryKeyring()
     keyring.set_keyring(backend)

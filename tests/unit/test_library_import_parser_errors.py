@@ -27,7 +27,7 @@ class DamagedAdapter(MetadataTagAdapter):
         raise ValueError("the container is damaged")
 
 
-def test_a_defect_in_the_adapter_reaches_the_caller(tmp_path: Path) -> None:
+def test_adapter_defect_reaches_caller(tmp_path: Path) -> None:
     """An error the parser does not document stops the import instead of hiding it."""
     track = tmp_path / "track.wav"
     track.write_bytes(b"RIFF")
@@ -36,7 +36,7 @@ def test_a_defect_in_the_adapter_reaches_the_caller(tmp_path: Path) -> None:
         read_track_file_facts(track, tag_adapter=BrokenAdapter())
 
 
-def test_a_documented_parser_error_leaves_the_track_unresolved(tmp_path: Path) -> None:
+def test_documented_parser_error_leaves_unresolved(tmp_path: Path) -> None:
     """A parser error the framework documents leaves the track unresolved."""
     track = tmp_path / "track.wav"
     track.write_bytes(b"RIFF")

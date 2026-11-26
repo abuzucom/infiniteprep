@@ -16,7 +16,7 @@ USAGE_ERROR_EXIT_CODE = 2
 
 
 def load_target_module(target_path: Path):
-    """Import one explicit Python target for persistent test invocation."""
+    """Import one explicit Python target for persistent test runs."""
     target_directory = str(target_path.parent)
     if target_directory not in sys.path:
         sys.path.insert(0, target_directory)

@@ -29,7 +29,7 @@ class BuildPackagesWorkflowTest(unittest.TestCase):
         """Return every step of the bundle job."""
         return self.workflow["jobs"]["bundle"]["steps"]
 
-    def test_runs_by_hand_or_on_version_tags(self) -> None:
+    def test_runs_manually_or_version_tags(self) -> None:
         """A manual run or a pushed v* tag starts the workflow, and nothing else (D248, D314)."""
         self.assertEqual(list(self.workflow["on"]), ["workflow_dispatch", "push"])
         self.assertEqual(self.workflow["on"]["push"], {"tags": ["v*"]})
@@ -48,7 +48,7 @@ class BuildPackagesWorkflowTest(unittest.TestCase):
         for step in checkouts:
             self.assertIs(step["with"]["persist-credentials"], False)
 
-    def test_every_action_is_pinned_to_a_full_sha(self) -> None:
+    def test_every_action_pinned_full_sha(self) -> None:
         """Every external action names a 40-character commit SHA."""
         references = [step["uses"] for step in self._steps() if "uses" in step]
         self.assertTrue(references)
@@ -62,7 +62,7 @@ class BuildPackagesWorkflowTest(unittest.TestCase):
         self.assertIs(job["strategy"]["fail-fast"], False)
         self.assertEqual(job["runs-on"], "${{ matrix.os }}")
 
-    def test_build_runs_the_spec_then_the_smoke_check(self) -> None:
+    def test_spec_build_precedes_smoke_check(self) -> None:
         """The spec build comes before the built app's smoke check."""
         runs = [step.get("run", "") for step in self._steps()]
         build_index = next(i for i, run in enumerate(runs) if "pyinstaller" in run)
@@ -70,7 +70,7 @@ class BuildPackagesWorkflowTest(unittest.TestCase):
         self.assertIn("infiniteprep.spec", runs[build_index])
         self.assertLess(build_index, smoke_index)
 
-    def test_upload_keeps_bundles_for_three_days(self) -> None:
+    def test_upload_keeps_bundles_three_days(self) -> None:
         """Every upload expires after 3 days and fails when its files are missing (D255).
 
         The bundle upload of dist/InfinitePrep still runs on every OS (D271).
@@ -94,7 +94,7 @@ class BuildPackagesWorkflowTest(unittest.TestCase):
         self.assertIn("requirements-lock.txt", runs)
         self.assertNotIn("--upgrade pip", runs)
 
-    def test_pip_check_runs_before_the_build(self) -> None:
+    def test_pip_check_runs_before_build(self) -> None:
         """pip check confirms the installed requirements before PyInstaller runs."""
         runs = [step.get("run", "") for step in self._steps()]
         check_index = runs.index("python -m pip check")

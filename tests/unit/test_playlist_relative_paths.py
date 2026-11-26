@@ -61,7 +61,7 @@ def test_default_export_keeps_absolute_paths(tmp_path: Path) -> None:
     assert path_lines(destination) == [str(track.resolve())]
 
 
-def test_hash_line_gets_dot_slash_prefix(tmp_path: Path) -> None:
+def test_hash_line_gets_dotslash_prefix(tmp_path: Path) -> None:
     """A file name that starts with # cannot turn into a comment or directive line."""
     repo, file_ids = import_tracks([tmp_path / "crate" / "#1 hit.wav"])
     destination = tmp_path / "crate" / "set.m3u8"
@@ -89,7 +89,7 @@ def test_other_drive_uses_absolute_path(tmp_path: Path, monkeypatch: pytest.Monk
     assert path_lines(destination) == [str(track.resolve())]
 
 
-def test_relative_default_on_old_settings_load(tmp_path: Path) -> None:
+def test_relative_default_for_old_settings(tmp_path: Path) -> None:
     """New settings default to relative paths, and a file without the key loads that default."""
     settings_path = tmp_path / "settings.json"
     settings_path.write_text(json.dumps({"transcode_mode": "sibling_export"}), encoding="utf-8")

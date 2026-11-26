@@ -3,7 +3,7 @@
 
 Each removed statement sat behind an earlier check that already handled its
 input. These cases run the real hook code on those inputs, so a later change
-to the earlier check cannot silently drop the outcome.
+to the earlier check cannot drop the outcome without notice.
 """
 import importlib.util
 import json
@@ -63,12 +63,12 @@ class CmdStorageDestructionTest(unittest.TestCase):
 class StagingDirectoryWriteTest(unittest.TestCase):
     """Only paths below the staging directory count as staging writes."""
 
-    def test_staging_directory_itself_is_not_a_staging_write(self) -> None:
+    def test_staging_root_excluded(self) -> None:
         hook = load_gate_adoption_hook()
         staging = str(REPO_ROOT / hook.STAGING_DIRECTORY)
         self.assertFalse(hook._staging_write("Write", {"file_path": staging}))
 
-    def test_file_below_staging_directory_is_a_staging_write(self) -> None:
+    def test_staging_child_included(self) -> None:
         hook = load_gate_adoption_hook()
         target = str(REPO_ROOT / hook.STAGING_DIRECTORY / "candidate" / "a.py")
         self.assertTrue(hook._staging_write("Write", {"file_path": target}))
@@ -77,7 +77,7 @@ class StagingDirectoryWriteTest(unittest.TestCase):
 class GateFileConsentReasonTest(unittest.TestCase):
     """A write under hooks/ asks with the Rule 22 instructions."""
 
-    def test_hook_file_write_cites_rule_22(self) -> None:
+    def test_hook_write_cites_rule(self) -> None:
         with tempfile.TemporaryDirectory() as project:
             target = os.path.join(project, "hooks", "new_gate.py")
             payload = {"hook_event_name": "PreToolUse", "permission_mode": "default",
@@ -111,7 +111,7 @@ class PowerShellAmbiguousPathTest(unittest.TestCase):
 class ClaudeCopyLineEndingTest(unittest.TestCase):
     """The Claude copy check compares both sides after full CRLF folding."""
 
-    def test_copy_matching_twice_folded_policy_is_accepted(self) -> None:
+    def test_twice_folded_copy_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".git").mkdir()

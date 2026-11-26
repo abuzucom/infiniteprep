@@ -91,7 +91,7 @@ def test_import_waits_behind_running_batch(qtbot: Any, window_parts: WindowParts
     assert window.batch_result_box is None
 
 
-def test_identify_and_analyze_runs_as_a_queued_batch(qtbot: Any, window_parts: WindowParts) -> None:
+def test_identify_analyze_runs_as_batch(qtbot: Any, window_parts: WindowParts) -> None:
     """The toolbar action queues the visible files, and the worker analyzes each one."""
     window, repository, _jobs, folder = window_parts
     with qtbot.waitSignal(window.batch_queue.idle, timeout=SIGNAL_TIMEOUT_MS):
@@ -153,7 +153,7 @@ def test_keep_working_leaves_queue_running(
     assert jobs.log == ["first", "second"]
 
 
-def test_cancel_and_exit_cancels_the_queue_then_closes(
+def test_cancel_exit_cancels_queue_closes(
     qtbot: Any, window_parts: WindowParts, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Cancel and Exit stops the running batch, drops waiting ones, and closes the window."""
@@ -184,7 +184,7 @@ def test_cancel_and_exit_cancels_the_queue_then_closes(
     assert prompts == [1]
 
 
-def test_an_idle_window_closes_without_a_prompt(
+def test_idle_window_closes_without_prompt(
     qtbot: Any, window_parts: WindowParts, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """With no batch running or waiting, close asks nothing."""
@@ -201,7 +201,7 @@ def test_an_idle_window_closes_without_a_prompt(
 
 
 @pytest.mark.parametrize("button_case", [("Keep working", CLOSE_STAY), ("Quit now", CLOSE_CANCEL)])
-def test_close_prompt_offers_exactly_the_two_choices(
+def test_close_prompt_offers_two_choices(
     qtbot: Any, window_parts: WindowParts, button_case: tuple[str, str]
 ) -> None:
     """The prompt holds Keep working and Quit now, and returns the clicked choice."""
@@ -226,9 +226,7 @@ def test_close_prompt_offers_exactly_the_two_choices(
     assert seen_buttons == ["Keep working", "Quit now"]
 
 
-def test_view_result_shows_a_job_result_in_plain_text(
-    qtbot: Any, window_parts: WindowParts
-) -> None:
+def test_view_result_shows_plain_text(qtbot: Any, window_parts: WindowParts) -> None:
     """A finished batch opens its counts only when asked."""
     window, _repository, jobs, _folder = window_parts
     jobs.gate.set()
@@ -245,7 +243,7 @@ def test_view_result_shows_a_job_result_in_plain_text(
     box.close()
 
 
-def test_view_result_opens_the_import_report(qtbot: Any, window_parts: WindowParts) -> None:
+def test_view_result_opens_import_report(qtbot: Any, window_parts: WindowParts) -> None:
     """A finished import opens the import report dialog from View Result."""
     window, _repository, _jobs, folder = window_parts
     with qtbot.waitSignal(window.batch_queue.idle, timeout=SIGNAL_TIMEOUT_MS):

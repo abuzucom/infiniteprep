@@ -10,7 +10,7 @@ from infiniteprep.services.matching_engine import parse_dj_title_and_mix
 class RemixerInferenceTests(unittest.TestCase):
     """A remixer is a name, never a mix descriptor."""
 
-    def test_descriptor_only_mix_names_yield_no_remixer(self) -> None:
+    def test_descriptor_mix_yields_no_remixer(self) -> None:
         """A mix name made only of descriptors gives a mix and no remixer."""
         descriptor_titles = (
             "Track (Extended Club Mix)",
@@ -27,7 +27,7 @@ class RemixerInferenceTests(unittest.TestCase):
                 self.assertIsNotNone(mix)
                 self.assertIsNone(remixer)
 
-    def test_contraction_is_not_a_possessive_remixer(self) -> None:
+    def test_contraction_is_not_possessive_remixer(self) -> None:
         """A contraction such as It's gives no remixer."""
         for title in ("Track (It's Alright Mix)", "Track (Let's Dance Mix)"):
             with self.subTest(title=title):
@@ -43,7 +43,7 @@ class RemixerInferenceTests(unittest.TestCase):
 class MixKeywordTests(unittest.TestCase):
     """A mix keyword counts only as a whole word."""
 
-    def test_keyword_inside_another_word_is_not_a_mix(self) -> None:
+    def test_embedded_keyword_is_not_mix(self) -> None:
         """A mix keyword inside a longer word leaves the title whole."""
         plain_titles = (
             "Song (Live in Dublin)",
@@ -54,7 +54,7 @@ class MixKeywordTests(unittest.TestCase):
             with self.subTest(title=title):
                 self.assertEqual(parse_dj_title_and_mix(title), (title, None, None))
 
-    def test_whole_word_keyword_is_a_mix(self) -> None:
+    def test_whole_word_keyword_is_mix(self) -> None:
         """A whole-word keyword such as Edit splits the mix from the base title."""
         base, mix, _ = parse_dj_title_and_mix("Song (Radio Edit)")
 

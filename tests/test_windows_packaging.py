@@ -34,7 +34,7 @@ class WindowsPackagingWorkflowTest(unittest.TestCase):
         [step] = [step for step in self.steps if step.get("name") == name]
         return step
 
-    def test_windows_steps_run_only_on_windows(self) -> None:
+    def test_windows_steps_run_windows_only(self) -> None:
         """Each packaging step is gated to the Windows runner."""
         for name in (
             "Build Windows portable ZIP",
@@ -60,7 +60,7 @@ class WindowsPackagingWorkflowTest(unittest.TestCase):
         self.assertIn("portable.mode", run)
         self.assertIn(ZIP_NAME, run)
 
-    def test_nsis_archive_is_pinned_and_checked(self) -> None:
+    def test_nsis_archive_pinned_and_checked(self) -> None:
         """The NSIS download is checked against the pinned SHA-256 before it unpacks (D267)."""
         step = self._step("Fetch pinned NSIS")
         self.assertEqual(step["env"]["NSIS_SHA256"], NSIS_SHA256)
@@ -106,7 +106,7 @@ class InstallerScriptTest(unittest.TestCase):
         """Read the installer script once."""
         cls.script = INSTALLER_PATH.read_text(encoding="utf-8")
 
-    def test_installs_per_user_outside_the_data_root(self) -> None:
+    def test_user_install_avoids_data_root(self) -> None:
         """No admin rights, and the program folder is apart from the data root (D264)."""
         self.assertIn("RequestExecutionLevel user", self.script)
         self.assertIn('InstallDir "$LOCALAPPDATA\\Programs\\${APP_NAME}"', self.script)
@@ -122,7 +122,7 @@ class InstallerScriptTest(unittest.TestCase):
         self.assertIn("StrCpy $DeleteKeys ${BST_UNCHECKED}", self.script)
         self.assertNotIn("NSD_Check", self.script)
 
-    def test_data_and_keys_go_only_when_checked(self) -> None:
+    def test_checked_boxes_remove_data_keys(self) -> None:
         """The data root and the saved keys are removed only inside their checked branches."""
         data_branch = '${If} $DeleteData == ${BST_CHECKED}\n    RMDir /r "${DATA_ROOT}"'
         keys_branch = "${If} $DeleteKeys == ${BST_CHECKED}\n    ExecWait"

@@ -22,7 +22,13 @@ PULL_REQUEST_ONLY_WORKFLOWS: Final[tuple[str, ...]] = (
     "os-tests.yml",
     "agents-md-compliance.yml",
 )
-COMPLIANCE_TYPES: Final[list[str]] = ["opened", "synchronize", "reopened", "ready_for_review"]
+COMPLIANCE_TYPES: Final[list[str]] = [
+    "opened",
+    "synchronize",
+    "reopened",
+    "ready_for_review",
+    "edited",
+]
 
 
 def load_workflow(workflow_name: str) -> dict[Any, Any]:
@@ -52,13 +58,17 @@ class PullRequestOnlyWorkflowTest(unittest.TestCase):
 class SyncCheckJobTest(unittest.TestCase):
     """The sync check job runs on pull requests only."""
 
-    def test_check_sync_runs_only_for_pull_requests(self) -> None:
+    def test_check_sync_runs_prs_only(self) -> None:
         job = load_workflow("sync-check.yml")["jobs"]["check-sync"]
         self.assertEqual(job.get("if"), PULL_REQUEST_EVENT)
 
 
 class ComplianceTriggerTest(unittest.TestCase):
-    """The AGENTS.md compliance workflow runs on pull requests to main."""
+    """The AGENTS.md compliance workflow runs on pull requests to any base.
+
+    Gate integrity rejects a base outside the stable branches. A branch filter
+    cannot read hooks/primary-branch.txt.
+    """
 
     triggers: dict[str, Any]
 
@@ -67,10 +77,10 @@ class ComplianceTriggerTest(unittest.TestCase):
         """Parse the compliance workflow once. No test changes the parsed data."""
         cls.triggers = read_triggers(load_workflow("agents-md-compliance.yml"))
 
-    def test_pull_request_trigger_targets_main(self) -> None:
-        self.assertEqual(self.triggers["pull_request"]["branches"], ["main"])
+    def test_trigger_has_no_branch_filter(self) -> None:
+        self.assertNotIn("branches", self.triggers["pull_request"])
 
-    def test_ready_for_review_starts_the_non_draft_checks(self) -> None:
+    def test_ready_for_review_starts_checks(self) -> None:
         self.assertEqual(self.triggers["pull_request"]["types"], COMPLIANCE_TYPES)
 
 

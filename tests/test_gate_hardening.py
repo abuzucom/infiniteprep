@@ -127,17 +127,17 @@ class RepositoryProgramPathTest(TemporaryTree):
         with patch.dict(os.environ, {"PATH": search_path}):
             return self.gate.workflow_decision(command, str(self.root))
 
-    def test_outside_program_keeps_the_plain_prompt(self) -> None:
+    def test_outside_program_plain_prompt(self) -> None:
         for command in ("make lint PYTHON=python", "python scripts/run_tests.py"):
             with self.subTest(command=command):
                 self.assertEqual(self.decide(command, self.outside), ("ask", WORKFLOW_CONSENT))
         self.assertEqual(self.decide("rg -n x README.md", self.outside), ("allow", ""))
 
-    def test_missing_program_keeps_the_plain_prompt(self) -> None:
+    def test_missing_program_plain_prompt(self) -> None:
         self.assertEqual(self.decide("make lint PYTHON=python", self.base / "empty"),
                          ("ask", WORKFLOW_CONSENT))
 
-    def test_repository_program_is_named_in_the_prompt(self) -> None:
+    def test_repository_program_named(self) -> None:
         cases = (("make lint PYTHON=python", "bin", "make"), ("rg -n x README.md", "bin", "rg"),
                  ("python scripts/run_tests.py", ".venv/bin", "python"))
         for command, directory, program in cases:
@@ -157,7 +157,7 @@ class RepositoryProgramPathTest(TemporaryTree):
         self.assertEqual(decision, "deny", reason)
         self.assertIn("inside the repository", reason)
 
-    def test_bare_npm_is_not_a_workflow(self) -> None:
+    def test_bare_npm_not_workflow(self) -> None:
         self.assertEqual(self.decide("npm", self.outside), ("", ""))
 
 

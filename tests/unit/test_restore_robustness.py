@@ -65,7 +65,7 @@ def _assert_library_untouched(db_path: Path) -> None:
     assert read_user_version(db_path) == LATEST_VERSION + 1
 
 
-def test_restore_rejects_backup_with_changed_rows(library: Path) -> None:
+def test_restore_rejects_changed_row_backup(library: Path) -> None:
     """A backup edited after creation fails the row counts recorded at backup time."""
     with closing(sqlite3.connect(backup_path_for(library))) as conn, conn:
         conn.execute("DELETE FROM source_groups")
@@ -76,9 +76,7 @@ def test_restore_rejects_backup_with_changed_rows(library: Path) -> None:
     assert read_user_version(library) == LATEST_VERSION + 1
 
 
-def test_failed_library_rename_puts_side_files_back(
-    library: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_failed_rename_restores_side_files(library: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A rename that fails partway moves every file back. A later restore succeeds."""
     _add_side_files(library)
     real_replace = os.replace
@@ -102,9 +100,7 @@ def test_failed_library_rename_puts_side_files_back(
     assert read_user_version(library) == 0
 
 
-def test_failed_staging_copy_leaves_no_partial_file(
-    library: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_failed_staging_copy_no_partial(library: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A copy that fails partway removes the partial staging file and moves nothing."""
     _add_side_files(library)
 
@@ -121,7 +117,7 @@ def test_failed_staging_copy_leaves_no_partial_file(
     _assert_library_untouched(library)
 
 
-def test_stale_staging_file_from_a_crash_is_replaced(library: Path) -> None:
+def test_stale_crash_staging_file_replaced(library: Path) -> None:
     """A staging file left by an earlier crash never reaches the library."""
     library.with_name(library.name + STAGED_SUFFIX).write_bytes(b"stale")
 

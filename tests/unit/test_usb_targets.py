@@ -57,7 +57,7 @@ def build_named_inspection(name: str, **drive_changes: object) -> DriveInspectio
     return build_inspection(drive=build_drive(name=name, **drive_changes))
 
 
-def test_failed_probe_still_lists_all_drives() -> None:
+def test_failed_probe_still_lists_drives() -> None:
     """One failed probe yields an error entry. Other drives still load."""
     inspector = FixedInspector((build_named_inspection("sdb"), build_named_inspection("sdc")))
     probe = RecordingProbe(failing_names=frozenset({"sdb"}))

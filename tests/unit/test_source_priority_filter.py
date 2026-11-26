@@ -261,7 +261,7 @@ def test_unordered_field_keeps_all_proposals() -> None:
 
 
 @pytest.mark.parametrize("field_name", ["genre", "year"])
-def test_the_lowest_ranked_source_loses_the_field(field_name: str) -> None:
+def test_lowest_ranked_source_loses_field(field_name: str) -> None:
     """Each ranked field names one winner and drops the lower ranked sources."""
     order = FIELD_PRIORITY[field_name]
     repository = build_memory_repository()

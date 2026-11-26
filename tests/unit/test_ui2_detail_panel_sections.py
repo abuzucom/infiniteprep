@@ -120,7 +120,7 @@ def test_changed_rows_come_first(panel_and_file: tuple[DetailPanel, str]) -> Non
     assert [item.font().bold() for item in name_items] == [True, True, False]
 
 
-def test_badges_show_status_format_bpm_key(
+def test_badges_status_format_bpm_key(
     panel_and_file: tuple[DetailPanel, str],
 ) -> None:
     """The header badges show the status, the format, the BPM, and the key."""
@@ -152,7 +152,7 @@ def test_clear_hides_badges(panel_and_file: tuple[DetailPanel, str]) -> None:
     assert panel.technical_label.text() == ""
 
 
-def test_technical_details_hold_frames_and_hash(
+def test_technical_details_hold_frames_hash(
     panel_and_file: tuple[DetailPanel, str],
 ) -> None:
     """Technical details name each tag frame and the content hash, behind the closed toggle."""

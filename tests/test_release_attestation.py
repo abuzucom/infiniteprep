@@ -65,7 +65,7 @@ class AttestationWorkflowTest(unittest.TestCase):
         """The release job holds id-token, attestations, and artifact-metadata (D325)."""
         self.assertEqual(self.release_job["permissions"], REQUIRED_PERMISSIONS)
 
-    def test_actions_attest_uses_pinned_commit_sha(self) -> None:
+    def test_attest_action_uses_pinned_sha(self) -> None:
         """Every actions/attest invocation matches the pinned v4.2.2 SHA (D325)."""
         attest_steps = [
             step for step in self.steps if step.get("uses", "").startswith("actions/attest@")
@@ -74,7 +74,7 @@ class AttestationWorkflowTest(unittest.TestCase):
         for step in attest_steps:
             self.assertEqual(step["uses"], ATTEST_ACTION)
 
-    def test_all_six_packages_and_checksums_are_attested(self) -> None:
+    def test_six_packages_checksums_are_attested(self) -> None:
         """Each of the six packages and SHA256SUMS.txt has a dedicated attestation step."""
         attest_steps = [
             step for step in self.steps if step.get("uses", "").startswith("actions/attest@")
@@ -118,7 +118,7 @@ class AttestationWorkflowTest(unittest.TestCase):
 class AttestationReleaseToolingTest(unittest.TestCase):
     """packaging/release.py identifies packages and Sigstore bundles (D328)."""
 
-    def test_expected_bundles_names_six_sigstore_files(self) -> None:
+    def test_expected_bundles_six_sigstore_files(self) -> None:
         """list_expected_bundles returns the six .sigstore.json file names."""
         bundles = RELEASE.list_expected_bundles(TEST_VERSION)
         packages = RELEASE.list_expected_packages(TEST_VERSION)
@@ -145,7 +145,7 @@ class AttestationReleaseToolingTest(unittest.TestCase):
             problems = RELEASE.find_asset_problems(dir_path, TEST_VERSION, require_bundles=True)
             self.assertEqual(problems, [])
 
-    def test_require_bundles_flag_reports_missing_bundles(self) -> None:
+    def test_require_bundles_reports_missing_bundles(self) -> None:
         """check-assets --require-bundles reports missing bundles even when packages are present."""
         with tempfile.TemporaryDirectory() as folder:
             dir_path = Path(folder)
@@ -157,7 +157,7 @@ class AttestationReleaseToolingTest(unittest.TestCase):
                 self.assertIn("Bundle", problem)
                 self.assertIn(".sigstore.json", problem)
 
-    def test_checksums_writes_all_twelve_assets_sorted(self) -> None:
+    def test_checksums_writes_twelve_assets_sorted(self) -> None:
         """write_checksums hashes all 12 assets and excludes SHA256SUMS.txt."""
         with tempfile.TemporaryDirectory() as folder:
             dir_path = Path(folder)

@@ -46,7 +46,7 @@ def pre_restore_copies(backup_dir: Path) -> list[bytes]:
     return [path.read_bytes() for path in sorted(backup_dir.glob("*_pre_restore_*"))]
 
 
-def test_restore_refuses_a_file_edited_after_the_write(written: Any) -> None:
+def test_restore_refuses_post_write_edit(written: Any) -> None:
     """A later edit raises RestoreConflictError, and the edited file stays as it is."""
     repo, write_svc, operation_id, source, _, _ = written
     source.write_bytes(LATER_EDIT)

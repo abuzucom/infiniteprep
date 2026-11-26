@@ -58,7 +58,7 @@ class SnapshotTests(unittest.TestCase):
         """A snapshot of a mounted target keeps its mount path."""
         self.assertEqual(capture_target_snapshot(build_inspection()).mount_path, MOUNT_PATH)
 
-    def test_snapshot_of_an_unmounted_target_is_rejected(self) -> None:
+    def test_unmounted_target_snapshot_rejected(self) -> None:
         """A snapshot of a target with no mount point raises ValueError."""
         inspection = build_inspection(partitions=(build_partition(mount_points=()),))
         with self.assertRaises(ValueError):
@@ -74,7 +74,7 @@ class UnchangedTargetTests(unittest.TestCase):
         self.assertEqual(result.abort_reasons, ())
         self.assertTrue(result.may_write)
 
-    def test_device_node_rename_alone_does_not_abort(self) -> None:
+    def test_device_node_rename_never_aborts(self) -> None:
         """A new device node name with the same identity still allows the write."""
         fresh = build_inspection(
             drive=build_drive(name="sdc", path="/dev/sdc"),
@@ -82,7 +82,7 @@ class UnchangedTargetTests(unittest.TestCase):
         )
         self.assertTrue(recheck_against(fresh).may_write)
 
-    def test_harmless_free_space_change_does_not_abort(self) -> None:
+    def test_harmless_space_change_never_aborts(self) -> None:
         """Less free space that still fits the export allows the write."""
         fresh = build_inspection(available_bytes=REDUCED_FREE_BYTES)
         self.assertTrue(recheck_against(fresh).may_write)
@@ -165,7 +165,7 @@ class ChangedStateTests(unittest.TestCase):
         )
         self.assertEqual(abort_codes(result), (AbortCode.NOT_WRITABLE,))
 
-    def test_read_only_remount_aborts_through_the_policy(self) -> None:
+    def test_read_only_remount_policy_aborts(self) -> None:
         """A read-only remount aborts through the preflight read-only refusal."""
         fresh = build_inspection(partitions=(build_partition(is_read_only=True),))
         result = recheck_against(fresh)
@@ -198,7 +198,7 @@ class ChangedStateTests(unittest.TestCase):
         codes = tuple(refusal.code for refusal in result.preflight.refusals)
         self.assertEqual(codes, (RefusalCode.INSUFFICIENT_SPACE,))
 
-    def test_changed_identity_and_state_report_both(self) -> None:
+    def test_changed_identity_state_report_both(self) -> None:
         """A changed serial and a read-only remount give both abort codes in order."""
         fresh = build_inspection(
             drive=build_drive(serial="FFFF000011112222"),

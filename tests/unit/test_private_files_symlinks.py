@@ -75,7 +75,7 @@ def test_create_private_refuses_planted_link(tmp_path: Path) -> None:
 
 
 @posix_only
-def test_backup_copy_refuses_a_planted_link(tmp_path: Path) -> None:
+def test_backup_copy_refuses_planted_link(tmp_path: Path) -> None:
     """A link at the backup temporary name fails the copy before SQLite writes to it."""
     link, outside = plant_link(tmp_path, "library.db.pre-migration-backup.tmp")
     library = tmp_path / "app" / "library.db"
@@ -88,7 +88,7 @@ def test_backup_copy_refuses_a_planted_link(tmp_path: Path) -> None:
     assert outside.read_bytes() == OUTSIDE_TEXT
 
 
-def test_create_private_is_empty_owner_only(tmp_path: Path) -> None:
+def test_create_private_empty_owner_only(tmp_path: Path) -> None:
     """A free name receives a new empty file. POSIX gives it mode 0600."""
     target = tmp_path / "staged.db"
 

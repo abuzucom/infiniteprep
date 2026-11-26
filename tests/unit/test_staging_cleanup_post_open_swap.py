@@ -19,7 +19,7 @@ posix_only = pytest.mark.skipif(os.name == "nt", reason="POSIX links and dir_fd 
 
 
 @posix_only
-def test_post_open_swap_clears_real_folder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_post_open_swap_clears_original(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The descriptor keeps the original folder after the name turns into a link."""
     outside = tmp_path / "outside"
     outside.mkdir()

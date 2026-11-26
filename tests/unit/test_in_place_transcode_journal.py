@@ -22,7 +22,7 @@ from infiniteprep.services.import_service import ImportService
 from tests.fixtures.audio_factory import create_wav_fixture
 
 
-def test_operation_status_has_an_in_progress_value() -> None:
+def test_operation_status_has_in_progress() -> None:
     """The journal status used before an in-place replacement exists and round-trips."""
     assert OperationStatus.IN_PROGRESS.value == "in_progress"
     assert OperationStatus("in_progress") is OperationStatus.IN_PROGRESS

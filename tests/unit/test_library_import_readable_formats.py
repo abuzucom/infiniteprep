@@ -38,7 +38,7 @@ def list_texts(dialog: LibraryImportDialog) -> list[str]:
     return [dialog.found_list.item(row).text() for row in range(dialog.found_list.count())]
 
 
-def test_the_dialog_hides_a_library_the_app_cannot_read(qtbot) -> None:
+def test_dialog_hides_unreadable_library(qtbot) -> None:
     """A library whose format has no reader stays out of the list."""
     dialog = LibraryImportDialog(
         [build_library("/music/collection.nml", FormatId.TRAKTOR)],
@@ -49,7 +49,7 @@ def test_the_dialog_hides_a_library_the_app_cannot_read(qtbot) -> None:
     assert list_texts(dialog) == [EMPTY_LIST_TEXT]
 
 
-def test_the_dialog_shows_a_library_the_app_can_read(qtbot) -> None:
+def test_dialog_shows_readable_library(qtbot) -> None:
     """A library whose format has a reader appears in the list."""
     dialog = LibraryImportDialog(
         [build_library("/music/collection.nml", FormatId.TRAKTOR)],
@@ -60,7 +60,7 @@ def test_the_dialog_shows_a_library_the_app_can_read(qtbot) -> None:
     assert list_texts(dialog) == ["collection.nml"]
 
 
-def test_the_dialog_keeps_a_hand_picked_file_the_app_can_read(qtbot, tmp_path: Path) -> None:
+def test_dialog_keeps_readable_picked_file(qtbot, tmp_path: Path) -> None:
     """A file the DJ names joins the list when the app can read its format."""
     chosen = tmp_path / "collection.nml"
     chosen.write_text('<HEAD PROGRAM="fake"/>', encoding="utf-8")
@@ -76,7 +76,7 @@ def test_the_dialog_keeps_a_hand_picked_file_the_app_can_read(qtbot, tmp_path: P
     assert list_texts(dialog) == ["collection.nml", "collection.nml"]
 
 
-def test_the_missing_reader_error_names_the_issue_that_adds_the_reader(
+def test_missing_reader_error_names_issue(
     tmp_path: Path,
 ) -> None:
     """The error names the issue that brings the reader of the format."""
@@ -87,7 +87,7 @@ def test_the_missing_reader_error_names_the_issue_that_adds_the_reader(
         import_library(source, registry, FormatId.TRAKTOR)
 
 
-def test_the_missing_reader_error_names_both_rekordbox_issues(tmp_path: Path) -> None:
+def test_reader_error_names_rekordbox_issues(tmp_path: Path) -> None:
     """The error names both issues that bring a rekordbox reader."""
     registry = ImporterRegistry()
     source = tmp_path / "export.pdb"

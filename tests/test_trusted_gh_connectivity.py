@@ -28,7 +28,7 @@ class ConnectivityClassificationTest(unittest.TestCase):
     def test_connectivity_error_subclasses_oserror(self) -> None:
         self.assertTrue(issubclass(trusted_gh.ConnectivityError, OSError))
 
-    def test_network_stderr_messages_match_connectivity_failure(self) -> None:
+    def test_network_errors_match(self) -> None:
         samples = (
             "error connecting to api.github.com\n",
             "Get \"https://api.github.com/user\": dial tcp: lookup api.github.com: no such host",
@@ -41,7 +41,7 @@ class ConnectivityClassificationTest(unittest.TestCase):
             with self.subTest(sample=sample):
                 self.assertTrue(trusted_gh.is_connectivity_failure(sample))
 
-    def test_auth_stderr_messages_do_not_match_connectivity_failure(self) -> None:
+    def test_auth_errors_not_matched(self) -> None:
         samples = (
             "",
             "To get started with GitHub CLI, please run:  gh auth login",
@@ -52,7 +52,7 @@ class ConnectivityClassificationTest(unittest.TestCase):
             with self.subTest(sample=sample):
                 self.assertFalse(trusted_gh.is_connectivity_failure(sample))
 
-    def test_authenticated_account_raises_connectivity_error_on_network_failure(self) -> None:
+    def test_account_network_failure_error(self) -> None:
         failed_process = subprocess.CompletedProcess(
             ["gh", "api", "user"],
             1,
@@ -63,7 +63,7 @@ class ConnectivityClassificationTest(unittest.TestCase):
             with self.assertRaises(trusted_gh.ConnectivityError):
                 trusted_gh.authenticated_account(REPOSITORY_ROOT)
 
-    def test_authenticated_account_raises_oserror_on_auth_failure(self) -> None:
+    def test_account_auth_failure_error(self) -> None:
         failed_process = subprocess.CompletedProcess(
             ["gh", "api", "user"],
             GH_AUTH_REQUIRED_EXIT_CODE,
@@ -79,7 +79,7 @@ class ConnectivityClassificationTest(unittest.TestCase):
 class ProxySanitizationTest(unittest.TestCase):
     """Strip loopback discard proxies and honor option delimiters."""
 
-    def test_loopback_discard_proxies_are_removed_across_hosts(self) -> None:
+    def test_loopback_proxies_removed(self) -> None:
         direct_environment = {
             "HTTP_PROXY": "http://localhost:9",
             "HTTPS_PROXY": "http://[::1]:9",
@@ -126,7 +126,7 @@ class ProxySanitizationTest(unittest.TestCase):
             "http://proxy.example.test:8080",
         )
 
-    def test_positional_tokens_after_delimiter_do_not_suppress_context(self) -> None:
+    def test_delimiter_tokens_keep_context(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             git_dir = root / ".git"
@@ -148,6 +148,8 @@ class ProxySanitizationTest(unittest.TestCase):
                 [
                     "pr",
                     "create",
+                    "--base",
+                    "main",
                     "--head",
                     "owner:fix/retry-test",
                     "--repo",
@@ -164,7 +166,7 @@ class ProxySanitizationTest(unittest.TestCase):
 class CliDiagnosticOutputTest(unittest.TestCase):
     """Emit secret-safe connectivity diagnostics and recovery instructions."""
 
-    def test_main_account_check_reports_connectivity_recovery(self) -> None:
+    def test_account_check_recovery_hint(self) -> None:
         with patch.object(
             trusted_gh,
             "authenticated_account",
@@ -182,7 +184,7 @@ class CliDiagnosticOutputTest(unittest.TestCase):
         self.assertNotIn("authentication failed", message)
         self.assertNotIn("secret-proxy-credential", message)
 
-    def test_run_command_reports_connectivity_recovery_on_account_lookup(self) -> None:
+    def test_run_account_lookup_recovery(self) -> None:
         with patch.object(
             trusted_gh,
             "with_repository_context",
@@ -206,7 +208,7 @@ class CliDiagnosticOutputTest(unittest.TestCase):
         self.assertIn("request approved external network access or retry", message)
         self.assertNotIn("secret-token-value", message)
 
-    def test_run_command_reports_connectivity_recovery_on_subcommand_drop(self) -> None:
+    def test_run_subcommand_drop_recovery(self) -> None:
         dropped = subprocess.CompletedProcess(
             ["gh", "pr", "view", "1"],
             1,
@@ -241,7 +243,7 @@ class CliDiagnosticOutputTest(unittest.TestCase):
 class PolicyRetryGuidanceTest(unittest.TestCase):
     """Verify retry and network escalation guidance across all client policies."""
 
-    def test_canonical_and_assembled_policy_include_retry_and_network_rules(self) -> None:
+    def test_policy_retry_network_rules(self) -> None:
         violations = check_policy_size.find_violations(REPOSITORY_ROOT / "AGENTS.md")
         self.assertEqual(violations, [])
         policy_text, _digest = reinject_agents_policy.load_policy(REPOSITORY_ROOT)

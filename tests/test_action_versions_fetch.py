@@ -79,7 +79,7 @@ class ActionVersionFetchTest(unittest.TestCase):
             pins, sources.action_tags, sources.reusable_releases, unreadable=sources.unreadable
         )
 
-    def test_a_failed_tag_fetch_names_the_fetch_failure(self) -> None:
+    def test_failed_tag_fetch_names_failure(self) -> None:
         """A refused tag listing reports the fetch, never a missing release."""
         fake = FakeGh({"/tags": completed(returncode=1, stderr=RATE_LIMIT_ERROR)})
 
@@ -90,7 +90,7 @@ class ActionVersionFetchTest(unittest.TestCase):
         self.assertIn(RATE_LIMIT_ERROR, violations[0])
         self.assertNotIn(NO_RELEASE_TEXT, violations[0])
 
-    def test_a_timed_out_tag_fetch_names_the_fetch_failure(self) -> None:
+    def test_tag_fetch_timeout_names_failure(self) -> None:
         """A gh call past its time limit becomes a report, not a crash."""
         timeout = subprocess.TimeoutExpired(cmd="gh", timeout=1)
         fake = FakeGh({"/tags": timeout})
@@ -123,7 +123,7 @@ class ActionVersionFetchTest(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
-    def test_tag_on_other_commit_uses_listing(self) -> None:
+    def test_other_commit_tag_uses_listing(self) -> None:
         """A claim that names a different commit still gets the full tag check."""
         fake = FakeGh(
             {
@@ -137,7 +137,7 @@ class ActionVersionFetchTest(unittest.TestCase):
         self.assertEqual(len(violations), 1)
         self.assertIn("7.0.0", violations[0])
 
-    def test_the_tag_listing_asks_for_full_pages(self) -> None:
+    def test_tag_listing_asks_full_pages(self) -> None:
         """A pin without a claim lists the tags 100 at a time."""
         fake = FakeGh({"/tags?": completed(stdout=f"v7.0.1 {PIN_SHA}\n")})
 
@@ -157,7 +157,7 @@ class ActionVersionFetchTest(unittest.TestCase):
         self.assertIn(UNREADABLE_TEXT, violations[0])
         self.assertIn(RATE_LIMIT_ERROR, violations[0])
 
-    def test_tag_lines_keep_only_full_commit_revisions(self) -> None:
+    def test_tag_lines_keep_full_revisions(self) -> None:
         """A malformed listing line never becomes a release."""
         text = f"v1.0.0 {PIN_SHA}\nv2.0.0 short\nbroken\n"
 

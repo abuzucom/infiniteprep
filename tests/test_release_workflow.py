@@ -52,7 +52,7 @@ class ReleaseWorkflowTest(unittest.TestCase):
         [step] = [step for step in self.jobs[job]["steps"] if step.get("name") == name]
         return step
 
-    def test_check_tag_runs_on_tags_with_full_history(self) -> None:
+    def test_tag_check_reads_full_history(self) -> None:
         """check-tag runs only for tags, reads all history, and keeps no credentials."""
         job = self.jobs["check-tag"]
         self.assertEqual(job["if"], TAG_CONDITION)
@@ -69,7 +69,7 @@ class ReleaseWorkflowTest(unittest.TestCase):
         )
         self.assertNotIn("permissions", job)
 
-    def test_bundle_follows_tag_check_or_manual(self) -> None:
+    def test_bundle_follows_check_or_manual(self) -> None:
         """bundle needs check-tag, runs when it is skipped, and stops when it fails."""
         bundle = self.jobs["bundle"]
         self.assertEqual(bundle["needs"], "check-tag")
@@ -78,7 +78,7 @@ class ReleaseWorkflowTest(unittest.TestCase):
         self.assertIn("!cancelled()", bundle["if"])
         self.assertNotIn("permissions", bundle)
 
-    def test_only_the_release_job_can_write(self) -> None:
+    def test_only_release_job_can_write(self) -> None:
         """The release job alone writes to the repo, after every bundle job (D315, D325)."""
         release = self.jobs["release"]
         self.assertEqual(release["needs"], "bundle")
@@ -88,7 +88,7 @@ class ReleaseWorkflowTest(unittest.TestCase):
             if name != "release":
                 self.assertNotIn("permissions", job, name)
 
-    def test_release_job_uses_no_third_party_action(self) -> None:
+    def test_release_job_avoids_external_actions(self) -> None:
         """Every action in the release job is a first-party checkout, setup, or attest (D325)."""
         uses = [step["uses"] for step in self.jobs["release"]["steps"] if "uses" in step]
         self.assertTrue(uses)

@@ -61,7 +61,7 @@ class TutorialPatternTest(unittest.TestCase):
     def test_blank_line_run_finishes_quickly(self):
         run_child(f"find_violations('\\n' * {BLANK_LINE_COUNT} + 'x', 'sample.md')\n")
 
-    def test_flags_the_same_keywords_as_the_reference(self):
+    def test_flags_same_keywords_as_reference(self):
         for text in build_samples(TUTORIAL_TOKENS, TUTORIAL_MAX_TOKENS):
             expected = [match.end() for match in REFERENCE_TUTORIAL_PATTERN.finditer(text)]
             actual = [match.end() for match in prose_policy.TUTORIAL_PATTERN.finditer(text)]
@@ -84,7 +84,7 @@ class InlineEnumerationPatternTest(unittest.TestCase):
             f"'Values: alpha, beta, gamma' + ' ' * {WHITESPACE_RUN_LENGTH} + 'x', 'sample.md')\n"
         )
 
-    def test_matches_the_same_spans_as_the_reference(self):
+    def test_matches_same_spans_as_reference(self):
         reference = REFERENCE_INLINE_ENUMERATION_PATTERN
         for text in build_samples(ENUMERATION_TOKENS, ENUMERATION_MAX_TOKENS):
             expected = [match.span() for match in reference.finditer(text)]
@@ -93,7 +93,7 @@ class InlineEnumerationPatternTest(unittest.TestCase):
             ]
             self.assertEqual(actual, expected, repr(text))
 
-    def test_and_after_a_line_break_still_warns(self):
+    def test_and_after_line_break_warns(self):
         text = "Values: alpha, beta, gamma\nand delta.\n"
         found = prose_policy.find_violations(text, "sample.md")
         self.assertTrue(any("inline enumeration" in line for line in found), found)

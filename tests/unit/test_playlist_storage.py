@@ -75,7 +75,7 @@ def test_membership_rules_and_casefolded_names() -> None:
         assert collections.crate_tracks(crate.id) == {"one", "two"}
 
 
-def test_folder_move_guards_and_keeps_items() -> None:
+def test_folder_move_guards_keeps_items() -> None:
     """A folder move refuses cycles and excess depth and keeps the nested collections."""
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)
@@ -112,7 +112,7 @@ def test_preflight_reports_first_over_limit() -> None:
         validate_import_folder_paths([path, [*path, "First excess", "Second excess"]])
 
 
-def test_sort_uses_the_library_metadata_precedence() -> None:
+def test_sort_uses_library_metadata_precedence() -> None:
     """The playlist sort reads approved values first, then proposals, then file tags."""
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)

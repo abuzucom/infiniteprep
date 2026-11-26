@@ -56,7 +56,7 @@ class Gpl3ExclusionTest(unittest.TestCase):
         self.assertFalse(FILTERS.is_gpl3_component("libQt6Widgets.so.6"))
         self.assertFalse(FILTERS.is_gpl3_component("PySide6/Qt/lib/libQt6Quick.so.6"))
 
-    def test_drop_entries_reports_each_removed_destination(self) -> None:
+    def test_drop_entries_report_removed_destinations(self) -> None:
         """drop_entries keeps the rest in order and names what it removed."""
         entries = [_entry("libQt6Core.so.6"), _entry("libQt6VirtualKeyboard.so.6")]
 
@@ -134,7 +134,7 @@ class LibraryPruningTest(unittest.TestCase):
         for name in ("libQt6Widgets.so.6", "libQt6Gui.so.6", "libfreetype.so.6"):
             self.assertIn(name, kept_names)
 
-    def test_protected_and_nested_files_are_never_pruned(self) -> None:
+    def test_protected_nested_files_never_pruned(self) -> None:
         """libpython, libgcc_s, and files below a folder stay without any link."""
         for destination in (
             "libpython3.12.so.1.0",
@@ -201,7 +201,7 @@ class SpecAndWorkflowTest(unittest.TestCase):
         prune = self.spec.index("prune_unneeded_libraries(a.binaries")
         self.assertLess(prune, self.spec.index("PYZ("))
 
-    def test_linux_starts_on_x11_after_offscreen(self) -> None:
+    def test_linux_starts_x11_after_offscreen(self) -> None:
         """Xvfb is installed, and the X11 start runs on Linux after the smoke check."""
         names = [step.get("name") for step in self.steps]
         self.assertIn("xvfb", self._step("Install Linux Qt headless system libraries")["run"])

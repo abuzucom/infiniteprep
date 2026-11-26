@@ -38,7 +38,7 @@ def preview(qtbot: Any, tmp_path: Path) -> AudioPreviewWidget:
     return widget
 
 
-def test_the_slider_is_named_and_spans_the_track(preview: AudioPreviewWidget) -> None:
+def test_slider_named_and_spans_track(preview: AudioPreviewWidget) -> None:
     """Assistive technology finds the slider by name, and its range covers the track."""
     slider = preview.position_slider
 
@@ -47,7 +47,7 @@ def test_the_slider_is_named_and_spans_the_track(preview: AudioPreviewWidget) ->
     assert slider.focusPolicy() == Qt.FocusPolicy.StrongFocus
 
 
-def test_arrow_and_page_keys_seek_1s_and_10s(qtbot: Any, preview: AudioPreviewWidget) -> None:
+def test_arrow_and_page_keys_seek(qtbot: Any, preview: AudioPreviewWidget) -> None:
     """Arrow keys move 1 s, Page keys move 10 s, and the accessible time follows."""
     slider = preview.position_slider
     slider.setFocus()
@@ -74,7 +74,7 @@ def test_programmatic_seek_skips_feedback(
     assert seeks == []
 
 
-def test_player_error_shows_text_and_resets(
+def test_player_error_shows_text_resets(
     preview: AudioPreviewWidget,
 ) -> None:
     """A playback failure appears as plain text, and the button returns to Play."""
@@ -87,7 +87,7 @@ def test_player_error_shows_text_and_resets(
     assert preview.play_btn.text() == "Play"
 
 
-def test_loading_a_file_clears_an_old_error(preview: AudioPreviewWidget, tmp_path: Path) -> None:
+def test_loading_file_clears_old_error(preview: AudioPreviewWidget, tmp_path: Path) -> None:
     """A new track starts with an empty status line."""
     preview._on_player_error(QMediaPlayer.Error.ResourceError, "gone")
 
@@ -96,9 +96,7 @@ def test_loading_a_file_clears_an_old_error(preview: AudioPreviewWidget, tmp_pat
     assert preview.status_label.text() == ""
 
 
-def test_the_main_window_passes_the_audio_backend_flag(
-    qtbot: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_main_window_passes_backend_flag(qtbot: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """enable_audio_backend reaches the preview widget without starting a real player."""
     received: list[tuple[bool, bool]] = []
 

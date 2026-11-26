@@ -48,7 +48,7 @@ def make_table_library(db_path: Path) -> None:
 
 
 @posix_only
-def test_new_library_and_folders_owner_only(tmp_path: Path) -> None:
+def test_new_library_folders_owner_only(tmp_path: Path) -> None:
     """A fresh library, its WAL file, and each folder the app creates allow only the owner."""
     db_path = tmp_path / "created" / "nested" / "library.db"
 
@@ -79,7 +79,7 @@ def test_world_readable_library_tightened(tmp_path: Path) -> None:
 
 
 @posix_only
-def test_backup_and_restore_are_owner_only(tmp_path: Path) -> None:
+def test_backup_restore_are_owner_only(tmp_path: Path) -> None:
     """The pre-migration backup and the library a restore installs allow only the owner."""
     db_path = tmp_path / "library.db"
     make_table_library(db_path)
@@ -96,7 +96,7 @@ def test_backup_and_restore_are_owner_only(tmp_path: Path) -> None:
 
 
 @posix_only
-def test_settings_file_and_new_folder_are_owner_only(tmp_path: Path) -> None:
+def test_settings_file_folder_owner_only(tmp_path: Path) -> None:
     """The settings folder the app creates and the settings file allow only the owner."""
     settings_path = tmp_path / "config" / "settings.json"
 
@@ -106,9 +106,7 @@ def test_settings_file_and_new_folder_are_owner_only(tmp_path: Path) -> None:
     assert mode_of(settings_path.parent) == OWNER_ONLY_DIR
 
 
-def test_settings_reach_the_disk_before_the_swap(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_settings_reach_disk_before_swap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The new settings bytes sync before the rename. On POSIX the folder syncs after it."""
     events: list[str] = []
     real_fsync = os.fsync

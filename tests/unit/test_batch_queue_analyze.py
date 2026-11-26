@@ -78,7 +78,7 @@ def test_process_files_raises_unlisted_error(analyze_parts: Any) -> None:
         orchestrator.process_files(file_ids)
 
 
-def test_stop_on_failure_ends_at_first_fail(analyze_parts: Any) -> None:
+def test_stop_on_failure_halts_immediately(analyze_parts: Any) -> None:
     """With the stop rule on, files after the failed one stay untouched."""
     repo, orchestrator, file_ids = analyze_parts
 
@@ -114,7 +114,7 @@ def test_cancel_stops_and_keeps_finished(analyze_parts: Any) -> None:
     assert repo.get_file_by_id(file_ids[1]).task_status == TaskStatus.IDLE
 
 
-def test_progress_and_post_process_cover_each_file(analyze_parts: Any) -> None:
+def test_progress_post_process_cover_files(analyze_parts: Any) -> None:
     """progress names each file before it runs. post_process skips the failed file."""
     repo, orchestrator, file_ids = analyze_parts
     seen = CallRecorder(record=select_progress_name)

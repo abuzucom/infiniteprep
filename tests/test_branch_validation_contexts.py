@@ -101,7 +101,7 @@ class BranchContextTest(unittest.TestCase):
         included.write_text('[alias]\nx = push origin claude/x\n', encoding="utf-8")
         self.assertEqual(self.run_command("git x").returncode, BLOCKING_EXIT_CODE)
 
-    def test_alias_cycles_shell_aliases_and_missing_aliases(self):
+    def test_alias_cycles_and_missing(self):
         for command in (
             "git -c alias.x=y -c alias.y=x x",
             "git -c alias.x='!echo hidden' x", "git absent-alias",
@@ -145,7 +145,7 @@ class BranchContextTest(unittest.TestCase):
         result = self.run_command("echo " + "x" * hook.bash_parser.MAX_COMMAND_CHARACTERS)
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
 
-    def test_environment_conflict_is_explicit_for_ci_reader(self):
+    def test_ci_environment_conflict(self):
         with patch.dict(os.environ, {"GITHUB_HEAD_REF": "feat/different"}):
             with self.assertRaises(ValueError):
                 hook.current_branch(str(self.root), allow_environment=True)
@@ -176,7 +176,7 @@ def evaluate_condition(condition, event):
 class DraftBranchValidationTest(unittest.TestCase):
     """Evaluate real workflow gates for draft and ready pull requests."""
 
-    def test_branch_check_runs_for_draft_and_ready_prs(self):
+    def test_draft_ready_branch_check(self):
         path = REPO_ROOT / ".github" / "workflows" / "agents-compliance.yml"
         workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
         for draft in (True, False):

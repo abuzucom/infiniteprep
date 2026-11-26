@@ -57,7 +57,7 @@ class CommandGateHookTest(unittest.TestCase):
             timeout=TIMEOUT_SECONDS, check=False,
         )
 
-    def test_unlisted_program_denial_names_the_command_gate(self) -> None:
+    def test_unlisted_program_denial(self) -> None:
         for command in ("node script.js", "python -c 'print(1)'", "npx vitest"):
             with self.subTest(command=command):
                 result = self.run_candidate(command)
@@ -65,7 +65,7 @@ class CommandGateHookTest(unittest.TestCase):
                 self.assertIn(f"blocked by {GATE_NAME}: Opaque command execution", result.stderr)
                 self.assertNotIn(BRANCH_GATE_NAME, result.stderr)
 
-    def test_wrapper_and_expansion_denials_name_the_command_gate(self) -> None:
+    def test_wrapper_expansion_denials(self) -> None:
         for command, reason in (("sudo git status", "wrapper"), ("echo $value", "unresolved")):
             with self.subTest(command=command):
                 result = self.run_candidate(command)
@@ -73,20 +73,20 @@ class CommandGateHookTest(unittest.TestCase):
                 self.assertIn(f"blocked by {GATE_NAME}:", result.stderr)
                 self.assertIn(reason, result.stderr)
 
-    def test_workflow_consent_names_the_command_gate(self) -> None:
+    def test_workflow_consent_gate(self) -> None:
         result = self.run_candidate("python scripts/run_tests.py")
         self.assertEqual(result.returncode, 0, result.stderr)
         output = json.loads(result.stdout)["hookSpecificOutput"]
         self.assertEqual(output["permissionDecision"], "ask")
         self.assertIn(f"blocked by {GATE_NAME}:", output["permissionDecisionReason"])
 
-    def test_codex_workflow_denial_names_the_command_gate(self) -> None:
+    def test_codex_workflow_denial(self) -> None:
         result = self.run_candidate("python scripts/run_tests.py", client="codex")
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
         self.assertIn(f"blocked by {GATE_NAME}:", result.stderr)
         self.assertIn("execution consent", result.stderr)
 
-    def test_branch_target_denial_still_names_the_branch_gate(self) -> None:
+    def test_branch_target_denial(self) -> None:
         result = self.run_candidate("git push origin HEAD:claude/x")
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stdout)
         self.assertIn(f"blocked by {BRANCH_GATE_NAME}:", result.stderr)
@@ -113,14 +113,14 @@ class CommandGateModuleTest(unittest.TestCase):
         self.assertEqual(self.gate.arguments_reason(["echo", "hello"]), "")
         self.assertIn("unresolved", self.gate.arguments_reason(["echo", "$value"]))
 
-    def test_workflow_needs_consent_matches_fixed_invocations(self) -> None:
+    def test_workflow_consent_invocations(self) -> None:
         self.assertTrue(self.gate.workflow_needs_consent("make lint PYTHON=python", str(REPO_ROOT)))
         self.assertFalse(self.gate.workflow_needs_consent("rg -n branch README.md", str(REPO_ROOT)))
         self.assertTrue(self.gate.workflow_needs_consent("rg -n branch /etc/hosts", str(REPO_ROOT)))
         self.assertFalse(self.gate.workflow_needs_consent("make lint SHELL=sh", str(REPO_ROOT)))
         self.assertFalse(self.gate.workflow_needs_consent("python other.py", str(REPO_ROOT)))
 
-    def test_read_only_workflow_excludes_writing_workflows(self) -> None:
+    def test_read_only_workflow_scope(self) -> None:
         self.assertTrue(self.gate.read_only_workflow("python scripts/sync.py --check", str(REPO_ROOT)))
         self.assertFalse(self.gate.read_only_workflow("python scripts/sync.py", str(REPO_ROOT)))
         self.assertFalse(self.gate.read_only_workflow("make lint PYTHON=python", str(REPO_ROOT)))

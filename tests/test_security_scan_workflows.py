@@ -41,13 +41,13 @@ def collect_steps(workflow: dict[Any, Any]) -> list[dict[str, Any]]:
 class SecurityScanWorkflowTest(unittest.TestCase):
     """Both scan workflows pin actions, scope tokens, and drop checkout credentials."""
 
-    def test_every_action_is_pinned_to_a_full_commit_sha(self) -> None:
+    def test_every_action_pinned_full_sha(self) -> None:
         for path in (DEPENDENCY_REVIEW, SECURITY_DEVOPS):
             for step in collect_steps(load_workflow(path)):
                 if "uses" in step:
                     self.assertRegex(str(step["uses"]), FULL_SHA_PIN, path.name)
 
-    def test_each_scan_action_uses_its_approved_commit(self) -> None:
+    def test_scan_actions_use_approved_commits(self) -> None:
         # A set per action keeps an earlier conflicting pin visible.
         pinned: dict[str, set[str]] = {}
         for path in (DEPENDENCY_REVIEW, SECURITY_DEVOPS):
@@ -58,7 +58,7 @@ class SecurityScanWorkflowTest(unittest.TestCase):
         expected = {action: {commit} for action, commit in APPROVED_PINS.items()}
         self.assertEqual(pinned, expected)
 
-    def test_checkout_steps_do_not_persist_credentials(self) -> None:
+    def test_checkout_steps_never_persist_credentials(self) -> None:
         for path in (DEPENDENCY_REVIEW, SECURITY_DEVOPS):
             checkouts = [
                 step
@@ -68,17 +68,17 @@ class SecurityScanWorkflowTest(unittest.TestCase):
             self.assertEqual(len(checkouts), 1, path.name)
             self.assertIs(checkouts[0]["with"]["persist-credentials"], False, path.name)
 
-    def test_top_level_token_is_read_only(self) -> None:
+    def test_top_level_token_read_only(self) -> None:
         for path in (DEPENDENCY_REVIEW, SECURITY_DEVOPS):
             self.assertEqual(load_workflow(path)["permissions"], {"contents": "read"}, path.name)
 
-    def test_dependency_review_is_pr_read_only(self) -> None:
+    def test_dependency_review_pr_read_only(self) -> None:
         workflow = load_workflow(DEPENDENCY_REVIEW)
         self.assertEqual(list(workflow[TRIGGER_KEY]), ["pull_request"])
         job = workflow["jobs"]["dependency-review"]
         self.assertEqual(job["permissions"], {"contents": "read", "pull-requests": "read"})
 
-    def test_security_devops_uploads_its_own_sarif_output(self) -> None:
+    def test_security_devops_uploads_own_sarif(self) -> None:
         workflow = load_workflow(SECURITY_DEVOPS)
         job = workflow["jobs"]["msdo"]
         self.assertEqual(job["permissions"]["security-events"], "write")

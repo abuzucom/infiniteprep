@@ -7,40 +7,17 @@ from pathlib import Path
 
 try:
     from scripts import check_commit_message
+    from scripts._pr_event import (
+        DEPENDABOT_LOGIN, MAX_BODY_LENGTH, MAX_EVENT_BYTES, MAX_TITLE_LENGTH, load_pull_request)
     from scripts.prose_policy import find_violations
 except ImportError:
     import check_commit_message
+    from _pr_event import (
+        DEPENDABOT_LOGIN, MAX_BODY_LENGTH, MAX_EVENT_BYTES, MAX_TITLE_LENGTH, load_pull_request)
     from prose_policy import find_violations
 
-MAX_EVENT_BYTES = 1024 * 1024
-MAX_TITLE_LENGTH = 4096
-MAX_BODY_LENGTH = 1024 * 1024
-
-
-def _load_event(path: Path) -> tuple[str, str, str]:
-    """Load bounded pull request prose and author identity from event JSON."""
-    if path.stat().st_size > MAX_EVENT_BYTES:
-        raise ValueError("event payload exceeds the size limit")
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError("event payload must contain an object")
-    pull_request = payload.get("pull_request")
-    if not isinstance(pull_request, dict):
-        raise ValueError("event payload lacks pull request data")
-    title = pull_request.get("title")
-    body = pull_request.get("body")
-    author = pull_request.get("user")
-    if not isinstance(title, str):
-        raise ValueError("pull request title must contain text")
-    if body is None:
-        body = ""
-    if not isinstance(body, str):
-        raise ValueError("pull request body must contain text or null")
-    if not isinstance(author, dict) or not isinstance(author.get("login"), str):
-        raise ValueError("pull request author must contain a login")
-    if len(title) > MAX_TITLE_LENGTH or len(body) > MAX_BODY_LENGTH:
-        raise ValueError("pull request prose exceeds the size limit")
-    return title, body, author["login"]
+# check_agent_prose_gate imports the loader under this name.
+_load_event = load_pull_request
 
 
 def check_event(path: str | Path) -> int:
@@ -48,7 +25,7 @@ def check_event(path: str | Path) -> int:
     try:
         title, body, author = _load_event(Path(path))
         findings = []
-        if author != "dependabot[bot]":
+        if author != DEPENDABOT_LOGIN:
             findings.extend(
                 check_commit_message.find_title_violations(title)
             )

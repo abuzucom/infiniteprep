@@ -1,3 +1,6 @@
+# pre-commit installs additional_dependencies without hash checking, so
+# these hooks pin PyYAML by exact version. requirements-checkers.txt
+# carries the sha256 hashes that CI installs against.
 repos:
   - repo: local
     hooks:
@@ -31,6 +34,18 @@ repos:
         language: python
         pass_filenames: false
         always_run: true
+      - id: check-forbidden-paths
+        name: Keep session zones out of commits (Rule 8)
+        entry: python scripts/check_forbidden_paths.py --staged
+        language: python
+        pass_filenames: false
+        always_run: true
+      - id: check-shared-neutrality
+        name: Keep organization names out of shared files
+        entry: python scripts/check_shared_neutrality.py
+        language: python
+        files: ^(skills/.*/SKILL\.md|AGENTS\.md|docs/agent-policy/.*\.md)$
+        pass_filenames: false
       - id: check-persist-credentials
         name: Check persist-credentials on checkout steps (Rule 11)
         entry: python scripts/check_persist_credentials.py
@@ -41,7 +56,7 @@ repos:
         name: Check for unjustified MD5/SHA-1 (Rule 7)
         entry: python scripts/check_weak_hashing.py
         language: python
-        files: ^scripts/.*\.py$
+        files: ^(scripts|hooks)/.*\.py$
       - id: check-dockerfile-root
         name: Check for non-root containers (Rule 12)
         entry: python scripts/check_dockerfile_root.py
@@ -52,7 +67,7 @@ repos:
         name: Check for likely secrets (Rule 8)
         entry: python scripts/check_secrets_heuristic.py
         language: python
-        files: ^(scripts/.*\.py|\.github/workflows/.*\.ya?ml|\.pre-commit-config\.yaml|Makefile)$
+        files: ^((scripts|hooks)/.*\.py|\.github/workflows/.*\.ya?ml|\.pre-commit-config\.yaml|Makefile)$
       - id: check-local-paths
         name: Check for real local identifiers (Rule 8)
         entry: python -I scripts/check_local_paths.py
@@ -74,7 +89,7 @@ repos:
         entry: python scripts/run_tests.py
         language: python
         additional_dependencies: [PyYAML==6.0.3]
-        files: ^(hooks/.*\.py|tests/.*\.py|\.(claude/settings|codex/hooks|gemini/settings|agents/hooks)\.json|\.codex/config\.toml|\.github/workflows/.*\.ya?ml|scripts/(sync|trusted_gh|trusted_git|read_git_state|run_tests|prose_policy|check_changelog|check_gate_adoption|check_hook_coverage|check_(banned_agents|branch_name|commit_attribution|commit_message|compliance_tree|dockerfile_root|external_pr_refs|git_identity|hedging|local_paths|persist_credentials|pull_request_message|secrets_heuristic|weak_hashing)|complete_gate_adoption)\.py|\.local-path-allowlist|scripts/(prose_bans|banned_models)\.txt)$
+        files: ^(hooks/.*\.py|tests/.*\.py|\.(claude/settings|codex/hooks|gemini/settings|agents/hooks)\.json|\.codex/config\.toml|\.github/workflows/.*\.ya?ml|scripts/(sync|trusted_gh|trusted_git|read_git_state|run_tests|prose_policy|_commit_trailers|_pr_event|check_changelog|check_gate_adoption|check_hook_coverage|check_(banned_agents|branch_name|commit_attribution|commit_message|compliance_tree|dockerfile_root|external_pr_refs|git_identity|hedging|local_paths|persist_credentials|pull_request_message|secrets_heuristic|weak_hashing)|complete_gate_adoption)\.py|\.local-path-allowlist|scripts/(prose_bans|banned_models)\.txt)$
         pass_filenames: false
       - id: check-git-identity
         name: Check git identity (Rule 14)

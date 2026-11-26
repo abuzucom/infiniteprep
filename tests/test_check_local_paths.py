@@ -70,7 +70,7 @@ def profile_forms(name: str) -> list[str]:
 
 
 class ProfilePathTest(unittest.TestCase):
-    """Check 2 flags profile paths whose user segment is a real-looking name."""
+    """Check 2 flags profile paths with a user segment that looks like a real name."""
 
     def test_incident_shaped_link_is_caught(self):
         name = generated_name()
@@ -112,7 +112,7 @@ class ProfilePathTest(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertEqual(scanner().scan_text(line, "a.txt"), [])
 
-    def test_line_numbers_come_from_original_text(self):
+    def test_original_line_numbers(self):
         name = generated_name()
         text = "one\ntwo\n/home/" + name + "/x\n"
         findings = scanner().scan_text(text, "a.txt")
@@ -138,7 +138,7 @@ class NormalizationTest(unittest.TestCase):
             with self.subTest(index=forms.index(line)):
                 self.assertEqual(len(scanner().scan_text(line, "a.txt")), 1)
 
-    def test_escape_decoding_does_not_hide_raw_names(self):
+    def test_escape_decoding_keeps_raw(self):
         name = "u" + "beef" + secrets.token_hex(SHORT_TOKEN_BYTES)
         line = "C:\\Users\\" + name + "\\x"
         self.assertEqual(len(scanner().scan_text(line, "a.txt")), 1)
@@ -149,7 +149,7 @@ class NormalizationTest(unittest.TestCase):
         text = checker.decode_blob(content)
         self.assertEqual(len(scanner().scan_text(text, "a.txt")), 1)
 
-    def test_invalid_bytes_do_not_hide_names(self):
+    def test_invalid_bytes_keep_names(self):
         name = generated_name()
         content = b"\xff\xfe\xfd /home/" + name.encode() + b"/x"
         text = checker.decode_blob(content)
@@ -173,7 +173,7 @@ class AllowlistTest(unittest.TestCase):
         self.assertEqual(active.scan_text(text, "tests/a.ts"), [])
         self.assertEqual(len(active.scan_text(text, "tests/b.ts")), 1)
 
-    def test_comments_and_blank_lines_are_valid(self):
+    def test_comments_blank_lines_valid(self):
         self.assertIsNotNone(scanner("# header\n\n"))
 
     def test_invalid_entries_fail_closed(self):
@@ -194,7 +194,7 @@ class AllowlistTest(unittest.TestCase):
         self.assertNotIn(name, str(raised.exception))
         self.assertIn("line 1", str(raised.exception))
 
-    def test_runtime_home_leaf_entry_is_rejected(self):
+    def test_runtime_home_leaf_rejected(self):
         leaf = generated_name()
         identity = checker.Identity(homes=("/home/" + leaf,))
         with self.assertRaises(checker.AllowlistError):
@@ -210,7 +210,7 @@ class AllowlistTest(unittest.TestCase):
 class IdentityTest(unittest.TestCase):
     """Check 1: runtime identity values, bucketed before matching."""
 
-    def test_full_identity_token_is_caught_anywhere(self):
+    def test_full_identity_token_caught(self):
         name = generated_name()
         host = "h" + secrets.token_hex(HOST_TOKEN_BYTES)
         identity = checker.Identity(names=(name,), hosts=(host,))
@@ -225,14 +225,14 @@ class IdentityTest(unittest.TestCase):
         self.assertEqual(active.scan_text("aXb+c", "a.txt"), [])
         self.assertEqual(len(active.scan_text("by a.b+c", "a.txt")), 1)
 
-    def test_short_name_matches_only_as_path_segment(self):
+    def test_short_name_path_segment(self):
         short = "q" + secrets.choice("bcdfghjkmnpqrstvwxz")
         identity = checker.Identity(names=(short,))
         active = scanner("", identity)
         self.assertEqual(active.scan_text(short + " appears as a word", "a"), [])
         self.assertEqual(len(active.scan_text("/home/" + short + "/x", "a")), 1)
 
-    def test_placeholder_and_system_values_are_skipped(self):
+    def test_placeholder_values_skipped(self):
         identity = checker.Identity(names=("root", "runner", "user"),
                                     hosts=("localhost",))
         active = scanner("", identity)
@@ -243,14 +243,14 @@ class IdentityTest(unittest.TestCase):
         active = scanner("", checker.Identity())
         self.assertFalse(active.has_identity)
 
-    def test_home_at_nonstandard_root_is_caught(self):
+    def test_nonstandard_home_root_caught(self):
         name = generated_name()
         identity = checker.Identity(homes=("D:\\Profiles\\" + name,))
         active = scanner("", identity)
         line = "D:/Profiles/" + name + "/x"
         self.assertEqual(len(active.scan_text(line, "a.txt")), 1)
 
-    def test_environment_values_add_but_never_replace(self):
+    def test_environment_values_additive(self):
         name = generated_name()
         fake = "y" + secrets.token_hex(NAME_TOKEN_BYTES)
         with patch.object(checker, "_os_identity",
@@ -260,7 +260,7 @@ class IdentityTest(unittest.TestCase):
         self.assertIn(name, collected.names)
         self.assertIn(fake, collected.names)
 
-    def test_missing_passwd_entry_is_reported_not_raised(self):
+    def test_missing_passwd_entry_reported(self):
         warnings = []
         with patch.object(checker, "_posix_account", side_effect=KeyError(1)):
             identity = checker._os_identity(warnings.append)
@@ -285,7 +285,7 @@ class OutputTest(unittest.TestCase):
         self.assertNotIn(name, finding.message(reveal=True))
         self.assertIn("account name", finding.message(reveal=True))
 
-    def test_sanitize_neutralizes_control_and_workflow_commands(self):
+    def test_sanitize_control_commands(self):
         text = checker.sanitize("x\n::error::forged\x1b[31m")
         self.assertNotIn("\n", text)
         self.assertNotIn("\x1b", text)
@@ -319,7 +319,7 @@ class CliTest(unittest.TestCase):
     def _cli(self, arguments, environment=None):
         return run_cli(arguments, self.root, environment)
 
-    def test_clean_file_passes_and_dirty_file_fails_redacted(self):
+    def test_clean_and_dirty_files(self):
         name = generated_name()
         (self.root / "clean.txt").write_text("/home/u/x\n", encoding="utf-8")
         (self.root / "dirty.txt").write_text("/home/" + name + "/x\n", encoding="utf-8")
@@ -328,7 +328,7 @@ class CliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertNotIn(name, result.stdout + result.stderr)
 
-    def test_report_lists_every_finding_with_proposals(self):
+    def test_report_lists_findings(self):
         names = [generated_name() for _ in range(REPORTED_NAME_COUNT)]
         body = "".join("/home/" + name + "/x\n" for name in names)
         (self.root / "f.txt").write_text(body, encoding="utf-8")
@@ -361,7 +361,7 @@ class CliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("Recovery", result.stderr)
 
-    def test_event_title_and_body_are_scanned(self):
+    def test_event_title_body_scanned(self):
         name = generated_name()
         event = {"pull_request": {"title": "fix", "body": "/home/" + name + "/x"}}
         path = self.root / "event.json"
@@ -370,7 +370,7 @@ class CliTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertNotIn(name, result.stdout + result.stderr)
 
-    def test_planted_stdlib_module_is_not_imported(self):
+    def test_planted_stdlib_ignored(self):
         scripts = REPO_ROOT / "scripts"
         self.assertFalse((scripts / "re.py").exists())
         result = run_cli(["--help"], self.root)
@@ -438,7 +438,7 @@ class GitRangeTest(unittest.TestCase):
         head = self._commit("d.txt", "/home/u/x\n", "docs: clean")
         self.assertEqual(self._cli(["--base", self.base, "--head", head]).returncode, 0)
 
-    def test_unpushed_without_remote_scans_all_commits(self):
+    def test_unpushed_scans_full_history(self):
         self._commit("e.txt", "/home/" + generated_name() + "/x\n", "feat: e")
         self.assertEqual(self._cli(["--unpushed"]).returncode, 1)
 

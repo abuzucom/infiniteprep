@@ -27,7 +27,7 @@ def test_rescan_drops_the_confirmed_drive(qtbot: Any) -> None:
     assert dialog.selected_inspection() is None
 
 
-def test_failed_rescan_drops_the_confirmed_drive(qtbot: Any) -> None:
+def test_failed_rescan_drops_confirmed_drive(qtbot: Any) -> None:
     """A rescan that fails to list drives also drops the confirmed drive."""
     inspection = build_inspection()
     candidate = TargetCandidate(name=inspection.drive.name, inspection=inspection, error=None)

@@ -14,7 +14,7 @@ def test_utf16_comment_text_after_description() -> None:
     assert decode_language_text(Id3Frame("COMM", body)) == ["Played at sunrise"]
 
 
-def test_latin1_lyrics_drop_the_trailing_terminator() -> None:
+def test_latin1_lyrics_drop_trailing_terminator() -> None:
     """A Latin-1 USLT frame with a final terminator yields one value without an empty tail."""
     body = b"\x00deu" + b"\x00" + "Strophe eins".encode("latin-1") + b"\x00"
     assert decode_language_text(Id3Frame("USLT", body)) == ["Strophe eins"]

@@ -1,0 +1,4 @@
+{
+  "commit": "b5ff55c3a0a1811bfd20e3a20ec32f90ef3c37c4",
+  "payload": "tree d36e5f89b4d31299460f6496f2139afe3fed2f97\nparent 9111795477f4f2193a6c8ab3465370a796cf337c\nparent 2c25b825784d83ae55968a3fd7e8494f9505aa2b\nauthor itsjustatank <654939+itsjustatank@users.noreply.github.com> 1795004434 -0600\ncommitter GitHub <noreply@github.com> 1795004434 -0600\n\nMerge pull request #131 from abuzucom/chore/harden-privileged-install"
+}

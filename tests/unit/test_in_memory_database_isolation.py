@@ -17,7 +17,7 @@ def count_probe_rows(manager: DatabaseManager) -> int:
     return int(conn.execute("SELECT COUNT(*) FROM isolation_probe").fetchone()[0])
 
 
-def test_two_in_memory_managers_never_share_rows() -> None:
+def test_memory_managers_never_share_rows() -> None:
     """Rows written through one manager stay invisible to another, even while both are open."""
     first = DatabaseManager(":memory:")
     first.connect().execute(PROBE_TABLE_SQL)

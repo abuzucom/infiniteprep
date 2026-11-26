@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """Gate destructive PowerShell commands via a PreToolUse hook.
 
-Not part of AGENTS.md, which stays tool-agnostic and is synced to non-Claude
-tools verbatim. This is a Claude-Code-specific hook under hooks/, wired via
+Not part of AGENTS.md. AGENTS.md stays independent of any one tool.
+Synchronization copies it unchanged to non-Claude tools. This is a Claude-Code-specific hook under hooks/, wired via
 `.claude/settings.json` (live in this repo) or
 hooks/claude-code-settings.example.json (for adopting repos). It reads the
 PreToolUse JSON payload from stdin and checks only PowerShell tool calls.
 
-Every decision comes from hooks/_gate_core.py, which
-hooks/block_destructive_bash.py also imports. Only the parsing is
+Every decision comes from hooks/_gate_core.py.
+hooks/block_destructive_bash.py also imports that module. Only the parsing is
 shell-specific: statement boundaries, the call operator and the cmdlets that
 run another command, PowerShell's redirection forms, and `Remove-Item` with
 its aliases and prefix-abbreviated parameters. A verdict reached here is the
 verdict the Bash gate reaches for the equivalent command, by construction
-rather than by promise, and tests/test_gate_parity.py asserts it.
+instead of by promise, and tests/test_gate_parity.py asserts it.
 
 Verified against synthetic payloads only. It has not been exercised against a
 live PowerShell tool call.
@@ -37,6 +37,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 _CWD = [""]
+# The payload permission mode for the current call. Plan mode denies git writes.
+_MODE = [""]
 GATE = "block_destructive_powershell.py"
 POLICY_DENIAL_EXIT_CODE = 2
 BRACED_ENVIRONMENT_PREFIX = "${env:"
@@ -45,13 +47,15 @@ DRIVE_ENVIRONMENT_PREFIX = "env:"
 
 try:
     import _gate_core as core
-except ImportError as error:  # pragma: no cover
+except ImportError as error:
     # The adoption test exercises this import failure.
     # Fail closed. Claude Code treats any non-zero exit other than 2 as a
     # non-blocking error, so an unhandled ImportError would wave the command
     # through in exactly the repos that installed this gate.
     _REASON = (f"hooks/_gate_core.py could not be imported ({error}), so the "
-               "gate cannot clear this command")
+               "gate cannot clear this command. Stop. Report this denial to "
+               "the active human. Do not retry a variant or propose a gate "
+               "change.")
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
@@ -75,11 +79,11 @@ WRAPPERS = frozenset({"&", "start-process", "invoke-expression", "iex",
 INTERPRETERS = core.SHELL_INTERPRETERS
 REDIRECTIONS = frozenset({">", ">>", "2>", "2>>", "*>", "*>>", "3>", "4>",
                           "5>", "6>"})
-# Start-Process hands its target a plain argument list rather than a command
+# Start-Process hands its target a plain argument list instead of a command
 # string, so the payload has to be read as arguments to that program.
 ARGUMENT_LIST_FLAGS = frozenset(
-    [f"-{'argumentlist'[:n]}" for n in range(1, 13)] + ["-args"])
-FILE_PATH_FLAGS = frozenset(f"-{'filepath'[:n]}" for n in range(2, 9))
+    [f"-{'argumentlist'[:n]}" for n in range(1, len("argumentlist") + 1)] + ["-args"])
+FILE_PATH_FLAGS = frozenset(f"-{'filepath'[:n]}" for n in range(2, len("filepath") + 1))
 SCRIPT_BLOCK_DELIMITERS = "{}"
 MAX_WRAPPER_DEPTH = core.MAX_COMMAND_DEPTH
 
@@ -140,7 +144,7 @@ def _argument_list_verdict(program: str, rest: list, depth: int) -> tuple:
     return _interpreter_verdict(program, nested, depth + 1)
 
 
-def _payload_verdict(flag: str, rest: list, depth: int) -> tuple:
+def _payload_verdict(rest: list) -> tuple:
     """Return the verdict for a command string handed to an interpreter."""
     if not rest:
         return "deny", "a shell command-string flag has no payload"
@@ -150,8 +154,8 @@ def _payload_verdict(flag: str, rest: list, depth: int) -> tuple:
 def _interpreter_verdict(program: str, args: list, depth: int = 0) -> tuple:
     """Return (decision, reason) for an interpreter handed a command.
 
-    `depth` bounds the re-entry below, which follows one interpreter into
-    the arguments another handed it. A hostile command can nest launches
+    `depth` bounds the nested scan below. The nested scan follows one interpreter
+    into the arguments another handed it. A hostile command can nest launches
     without limit; the gate reads a fixed number and then denies.
     """
     if depth >= MAX_WRAPPER_DEPTH:
@@ -167,7 +171,7 @@ def _interpreter_verdict(program: str, args: list, depth: int = 0) -> tuple:
         if lowered in ARGUMENT_LIST_FLAGS:
             return _argument_list_verdict(program, args[index + 1:], depth)
         if core.is_shell_payload_flag(token):
-            return _payload_verdict(lowered, args[index + 1:], depth)
+            return _payload_verdict(args[index + 1:])
     return "", ""
 
 
@@ -193,7 +197,7 @@ def _strip_wrappers(tokens: list) -> list:
 def _statement_verdict(tokens: list, depth: int) -> tuple:
     """Return (decision, reason) for one PowerShell statement."""
     privileged = core.privilege_verdict(tokens)
-    environment = _environment_assignment_verdict(tokens)
+    environment = core.plan_mode_harden(_MODE[0], _environment_assignment_verdict(tokens))
     redirects = _redirect_targets(tokens)
     return core.strongest(
         environment,
@@ -234,8 +238,9 @@ def _environment_reference_name(value: str) -> str:
 def _named_program_verdict(program: str, args: list, depth: int) -> tuple:
     """Return the verdict for a cmdlet read by name, or None.
 
-    None means the name is not one of the three the gate reads whole, so
-    the caller runs it past every other check instead.
+    The gate reads five kinds whole: prohibited programs, curl transfers,
+    interpreters, delete programs, and git. None means the name is none of
+    them, so the caller runs it past every other check instead.
     """
     prohibited = core.prohibited_command_verdict(program, args)
     if prohibited[0]:
@@ -248,7 +253,8 @@ def _named_program_verdict(program: str, args: list, depth: int) -> tuple:
     if program in core.DELETE_PROGRAMS:
         return core.any_delete_verdict(program, args)
     if core.normalize_windows_command_name(program) == "git":
-        return core.git_verdict(args, _CWD[0])
+        return core.plan_mode_git_verdict(
+            _MODE[0], args, _CWD[0], None, core.git_verdict(args, _CWD[0]))
     return None
 
 
@@ -318,6 +324,7 @@ def classify(command, depth: int = 0) -> tuple:
 
 def main() -> int:
     """Classify one PowerShell tool call, denying on any unexpected error."""
+    core.reset_invocation_caches()
     return core.run_fail_closed(_run, functools.partial(core.emit, GATE, "deny"))
 
 
@@ -333,6 +340,7 @@ def _run() -> int:
         return core.emit(GATE, "deny", "the tool input is malformed, so the "
                                        "gate cannot read this command")
     _CWD[0] = core.project_dir(payload)
+    _MODE[0] = core.require_str(payload.get("permission_mode", "")) or ""
     command = core.require_str(tool_input.get("command", ""))
     if command is None:
         return core.emit(GATE, "deny", "the command field is not a string, so "

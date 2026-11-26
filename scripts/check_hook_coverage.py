@@ -3,16 +3,17 @@
 
 The gates run as subprocesses, so ordinary in-process coverage sees
 almost none of their decision code and reports the opposite of the truth.
-This runs the suite with tools/hook-trace on PYTHONPATH, which traces
+This runs the suite with tools/hook-trace on PYTHONPATH to trace
 every interpreter, and compares what went unrun against a committed baseline.
 
-The baseline is per function rather than per line, so an edit above a
+The baseline is per function instead of per line, so an edit above a
 function does not churn it. A function gaining unreached statements fails
 the check, and so does a baseline that has gone stale: a gate nobody can
 fail is the failure mode this whole check exists to avoid.
 
 Regenerate with --write-baseline and commit the result.
 """
+import argparse
 import ast
 import concurrent.futures
 import io
@@ -32,9 +33,9 @@ from threading import Lock
 BASELINE = "hook-coverage-baseline.json"
 TARGET = "hooks"
 # Not tools/coverage: a "coverage/" line is one of the commonest
-# .gitignore entries, and it silently excluded this file from an
-# adopting repository, which leaves the gate reporting every statement
-# as unreached.
+# .gitignore entries, and it excluded this file without warning from an
+# adopting repository. The gate would then report every statement as
+# unreached.
 TRACER_DIR = os.path.join("tools", "hook-trace")
 DEFAULT_WORKERS = 4
 TEST_SHARD_TIMEOUT_SECONDS = 30
@@ -112,7 +113,7 @@ class ActiveProcessRegistry:
 
 
 def is_docstring(node, parent) -> bool:
-    """Return True if `node` is `parent`'s docstring rather than code.
+    """Return True if `node` is `parent`'s docstring and not code.
 
     A docstring compiles into __doc__ instead of executing, so it never
     appears in a trace count. Counting one as unreached measures the
@@ -178,29 +179,43 @@ def unreached_counts(root: str, hit: set) -> dict:
     return counts
 
 
-def discover_test_shards(root: str) -> list[tuple[str, str]]:
-    """Return display labels and import names for discovered test classes."""
-    tests = os.path.join(root, "tests")
-    resolved_root = os.path.abspath(root)
-    if resolved_root not in sys.path:
-        sys.path.insert(0, resolved_root)
-    remove_stale_test_modules(tests)
-    loader = unittest.TestLoader()
-    suite = loader.discover(tests, pattern="test_*.py")
+def iterate_tests(suite: unittest.TestSuite):
+    """Yield every test case in a nested suite in discovery order."""
     stack = [suite]
-    shards = {}
     while stack:
         item = stack.pop()
         if isinstance(item, unittest.TestSuite):
             stack.extend(reversed(list(item)))
             continue
-        test_class = item.__class__
+        yield item
+
+
+def discover_tests(root: str) -> unittest.TestSuite:
+    """Return the discovered test suite below root/tests."""
+    tests = os.path.join(root, "tests")
+    resolved_root = os.path.abspath(root)
+    if resolved_root not in sys.path:
+        sys.path.insert(0, resolved_root)
+    remove_stale_test_modules(tests)
+    return unittest.TestLoader().discover(tests, pattern="test_*.py")
+
+
+def shards_from_suite(suite: unittest.TestSuite) -> list[tuple[str, str]]:
+    """Return sorted (display label, import name) pairs, one per test class."""
+    shards = {}
+    for test in iterate_tests(suite):
+        test_class = test.__class__
         import_name = "%s.%s" % (
             test_class.__module__, test_class.__qualname__)
         module_path = test_class.__module__.replace(".", "/") + ".py"
         shards[import_name] = "%s::%s" % (
             module_path, test_class.__qualname__)
     return sorted((label, name) for name, label in shards.items())
+
+
+def discover_test_shards(root: str) -> list[tuple[str, str]]:
+    """Return display labels and import names for discovered test classes."""
+    return shards_from_suite(discover_tests(root))
 
 
 def remove_stale_test_modules(tests_directory: str) -> None:
@@ -440,15 +455,7 @@ def run_test_shards(root: str, environment: dict,
                     timeout: float = TEST_SHARD_TIMEOUT_SECONDS,
                     test_shards: list[tuple[str, str]] | None = None) -> list[str]:
     """Run traced test classes concurrently and return worker problems."""
-    if workers <= 0:
-        raise ValueError("coverage workers must be positive")
-    if timeout <= 0:
-        raise ValueError("coverage timeout must be positive")
-    if test_shards is None:
-        test_shards = discover_test_shards(root)
-    test_shards = prioritize_test_shards(test_shards)
-    if not test_shards:
-        raise ValueError("coverage test discovery returned no shards")
+    test_shards = _validated_test_shards(root, workers, timeout, test_shards)
     exclusive_shards = deque(
         shard for shard in test_shards
         if is_exclusive_shard(shard[0]))
@@ -458,46 +465,71 @@ def run_test_shards(root: str, environment: dict,
     worker_count = min(workers, len(test_shards))
     print("hook coverage: starting %d test shards with %d workers"
           % (len(test_shards), worker_count), file=sys.stderr, flush=True)
-    environment = dict(environment)
-    test_path = os.path.join(root, "tests")
-    environment["PYTHONPATH"] = os.pathsep.join(filter(None, (
-        environment.get("PYTHONPATH", ""), test_path)))
-    process_registry = ActiveProcessRegistry()
-    active_futures = {}
+    shard_arguments = (root, _coverage_environment(root, environment), timeout,
+                       ActiveProcessRegistry())
     executor = concurrent.futures.ThreadPoolExecutor(worker_count)
     try:
-        shard_arguments = (root, environment, timeout, process_registry)
-        submit_available_shards(
-            executor, active_futures, ordinary_shards,
-            exclusive_shards, worker_count, shard_arguments)
-        while active_futures:
-            completed_futures, _pending_futures = concurrent.futures.wait(
-                set(active_futures), timeout=PROGRESS_INTERVAL_SECONDS,
-                return_when=concurrent.futures.FIRST_COMPLETED)
-            if not completed_futures:
-                remaining_count = (
-                    len(active_futures)
-                    + len(ordinary_shards)
-                    + len(exclusive_shards)
-                )
-                print("hook coverage: %d test shards remain"
-                      % remaining_count,
-                      file=sys.stderr, flush=True)
-                continue
-            problem = collect_completed_results(
-                completed_futures, active_futures)
-            if problem:
-                process_registry.terminate_all_processes()
-                for active_future in active_futures:
-                    active_future.cancel()
-                return [problem]
-            submit_available_shards(
-                executor, active_futures, ordinary_shards,
-                exclusive_shards, worker_count, shard_arguments)
+        return _drive_test_shards(
+            executor, ordinary_shards, exclusive_shards, worker_count,
+            shard_arguments)
     finally:
         # Every result is collected before this point. Waiting here would let one stuck
         # worker thread hang the run after its process was terminated.
         executor.shutdown(wait=False, cancel_futures=True)
+
+
+def _validated_test_shards(root: str, workers: int, timeout: float,
+                           test_shards: list[tuple[str, str]] | None) -> list:
+    """Return prioritized shards after the worker and timeout bounds pass."""
+    if workers <= 0:
+        raise ValueError("coverage workers must be positive")
+    if timeout <= 0:
+        raise ValueError("coverage timeout must be positive")
+    if test_shards is None:
+        test_shards = discover_test_shards(root)
+    test_shards = prioritize_test_shards(test_shards)
+    if not test_shards:
+        raise ValueError("coverage test discovery returned no shards")
+    return test_shards
+
+
+def _coverage_environment(root: str, environment: dict) -> dict:
+    """Return a copy of `environment` with the test directory on PYTHONPATH."""
+    environment = dict(environment)
+    test_path = os.path.join(root, "tests")
+    environment["PYTHONPATH"] = os.pathsep.join(filter(None, (
+        environment.get("PYTHONPATH", ""), test_path)))
+    return environment
+
+
+def _drive_test_shards(executor: concurrent.futures.Executor,
+                       ordinary_shards: deque, exclusive_shards: deque,
+                       worker_count: int, shard_arguments: tuple) -> list[str]:
+    """Submit and collect shards until all finish or one reports a problem."""
+    process_registry = shard_arguments[-1]
+    active_futures = {}
+    submit_available_shards(
+        executor, active_futures, ordinary_shards,
+        exclusive_shards, worker_count, shard_arguments)
+    while active_futures:
+        completed_futures, _pending_futures = concurrent.futures.wait(
+            set(active_futures), timeout=PROGRESS_INTERVAL_SECONDS,
+            return_when=concurrent.futures.FIRST_COMPLETED)
+        if not completed_futures:
+            remaining_count = (len(active_futures) + len(ordinary_shards)
+                               + len(exclusive_shards))
+            print("hook coverage: %d test shards remain" % remaining_count,
+                  file=sys.stderr, flush=True)
+            continue
+        problem = collect_completed_results(completed_futures, active_futures)
+        if problem:
+            process_registry.terminate_all_processes()
+            for active_future in active_futures:
+                active_future.cancel()
+            return [problem]
+        submit_available_shards(
+            executor, active_futures, ordinary_shards,
+            exclusive_shards, worker_count, shard_arguments)
     return []
 
 
@@ -544,14 +576,19 @@ def read_baseline(root: str) -> dict:
     if not os.path.isfile(path):
         return {}
     with io.open(path, encoding="utf-8") as handle:
-        return json.load(handle).get("unreached", {})
+        data = json.load(handle)
+    unreached = data.get("unreached", {}) if isinstance(data, dict) else None
+    if not isinstance(unreached, dict):
+        raise ValueError("%s must hold a JSON object whose \"unreached\" entry "
+                         "is a JSON object" % BASELINE)
+    return unreached
 
 
 def write_baseline(root: str, counts: dict) -> int:
     """Record `counts` as the baseline and return an exit code.
 
     Refuses to run as root. Permission-dependent branches do not fire for
-    root, which reads a mode 000 file happily, so a baseline written here
+    root. Root reads a mode 000 file without error. A baseline written here
     records fewer unreached statements than CI finds and fails the check
     it was written to satisfy. Two OSError branches in require_consent.py
     behave exactly this way.
@@ -578,13 +615,30 @@ def write_baseline(root: str, counts: dict) -> int:
     return 0
 
 
+def parse_arguments(argv: list) -> argparse.Namespace:
+    """Parse the optional --write-baseline flag. Unknown flags exit 2."""
+    parser = argparse.ArgumentParser(
+        prog="check_hook_coverage.py", allow_abbrev=False,
+        description="Compare hook statement coverage with the baseline.")
+    parser.add_argument("--write-baseline", action="store_true",
+                        help="record the measured counts as the baseline")
+    return parser.parse_args(argv)
+
+
 def main(argv: list) -> int:
     """Measure, then either record the result or check it. Return an exit code."""
+    arguments = parse_arguments(argv)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     actual = measure(root)
-    if "--write-baseline" in argv:
+    if arguments.write_baseline:
         return write_baseline(root, actual)
-    problems = compare(actual, read_baseline(root))
+    try:
+        recorded = read_baseline(root)
+    except ValueError as error:
+        print("error: %s. Recovery: restore %s from the base branch, then "
+              "rerun this check." % (error, BASELINE), file=sys.stderr)
+        return 1
+    problems = compare(actual, recorded)
     if not problems:
         print("hook coverage matches %s (%d functions recorded)"
               % (BASELINE, len(actual)))

@@ -58,7 +58,7 @@ def test_source_run_ignores_the_marker(user_dirs: Path, app_folder: Path) -> Non
     assert not (app_folder / PORTABLE_DATA_DIR_NAME).exists()
 
 
-def test_frozen_build_without_marker_is_per_user(user_dirs: Path, app_folder: Path) -> None:
+def test_unmarked_frozen_build_per_user(user_dirs: Path, app_folder: Path) -> None:
     """A packaged build with no marker keeps today's per-user folders."""
     (app_folder / PORTABLE_MARKER_NAME).unlink()
     confirm = RecordingConfirm(FallbackAnswer(use_per_user=True, remember=False))
@@ -72,7 +72,7 @@ def test_frozen_build_without_marker_is_per_user(user_dirs: Path, app_folder: Pa
     assert locations.bin_dir == user_dirs / "data" / "bin"
 
 
-def test_portable_keeps_database_and_settings_in_data(user_dirs: Path, app_folder: Path) -> None:
+def test_portable_data_holds_database_settings(user_dirs: Path, app_folder: Path) -> None:
     """Portable mode puts the database and settings in Data, the rest per-user (D260)."""
     confirm = RecordingConfirm(FallbackAnswer(use_per_user=True, remember=False))
 
@@ -105,7 +105,7 @@ def test_unwritable_remember_saves_choice(user_dirs: Path, app_folder: Path) -> 
     assert read_fallback_list(user_dirs) == [str(app_folder.resolve())]
 
 
-def test_unwritable_folder_without_remember_asks_again(user_dirs: Path, app_folder: Path) -> None:
+def test_unwritable_unremembered_folder_asks_again(user_dirs: Path, app_folder: Path) -> None:
     """Without Remember the fallback holds for this run only, and the next run asks again."""
     _block_data_folder(app_folder)
     confirm = RecordingConfirm(FallbackAnswer(use_per_user=True, remember=False))
@@ -120,7 +120,7 @@ def test_unwritable_folder_without_remember_asks_again(user_dirs: Path, app_fold
     assert read_fallback_list(user_dirs) == []
 
 
-def test_quit_returns_none_and_remembers_nothing(user_dirs: Path, app_folder: Path) -> None:
+def test_quit_returns_none_remembers_nothing(user_dirs: Path, app_folder: Path) -> None:
     """Quit ends the launch before any storage is chosen."""
     _block_data_folder(app_folder)
     confirm = RecordingConfirm(FallbackAnswer(use_per_user=False, remember=True))
@@ -145,7 +145,7 @@ def test_remembered_folder_skips_the_prompt(user_dirs: Path, app_folder: Path) -
     assert silent.asked == []
 
 
-def test_writable_again_forgets_the_remembered_choice(user_dirs: Path, app_folder: Path) -> None:
+def test_writable_again_forgets_remembered_choice(user_dirs: Path, app_folder: Path) -> None:
     """Once Data can be written, portable mode resumes and the entry is removed (D259)."""
     _block_data_folder(app_folder)
     remembering = RecordingConfirm(FallbackAnswer(use_per_user=True, remember=True))

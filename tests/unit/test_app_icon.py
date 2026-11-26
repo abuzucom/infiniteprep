@@ -15,20 +15,20 @@ from infiniteprep.ui.app_icon import APP_ICON_PATH, apply_application_icon, load
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
-def test_the_icon_file_ships_beside_its_module() -> None:
+def test_icon_file_ships_beside_module() -> None:
     """The package holds the logo as a PNG file."""
     assert APP_ICON_PATH.is_file()
     assert APP_ICON_PATH.read_bytes().startswith(PNG_SIGNATURE)
 
 
-def test_the_loaded_icon_holds_the_logo(qapp: Any) -> None:
+def test_loaded_icon_holds_logo(qapp: Any) -> None:
     """Qt decodes the bundled PNG into a non-empty icon."""
     icon = load_application_icon()
     assert isinstance(icon, QIcon)
     assert not icon.isNull()
 
 
-def test_the_application_carries_the_logo_icon(qapp: Any) -> None:
+def test_application_carries_logo_icon(qapp: Any) -> None:
     """Every window without its own icon inherits the application icon."""
     # The session app outlives this test, so the original icon goes back afterwards.
     original_icon = qapp.windowIcon()
@@ -40,7 +40,7 @@ def test_the_application_carries_the_logo_icon(qapp: Any) -> None:
         qapp.setWindowIcon(original_icon)
 
 
-def test_a_missing_icon_file_logs_a_warning(
+def test_missing_icon_file_logs_warning(
     qapp: Any,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

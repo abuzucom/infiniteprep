@@ -33,7 +33,7 @@ def assert_source_kept(tmp_path: Path, source: Path, destination: Path) -> None:
     assert [path.name for path in tmp_path.iterdir()] == ["track.wav"]
 
 
-def test_move_to_a_free_name_moves_the_file(tmp_path: Path) -> None:
+def test_free_name_move_moves_file(tmp_path: Path) -> None:
     """The file arrives under the new name and leaves nothing else behind."""
     source = make_source(tmp_path)
     destination = tmp_path / "renamed.wav"
@@ -44,7 +44,7 @@ def test_move_to_a_free_name_moves_the_file(tmp_path: Path) -> None:
     assert [path.name for path in tmp_path.iterdir()] == ["renamed.wav"]
 
 
-def test_move_onto_an_existing_file_keeps_both_files(tmp_path: Path) -> None:
+def test_move_onto_existing_keeps_both(tmp_path: Path) -> None:
     """The existing file stays unchanged, the source keeps its name, and no extra file appears."""
     source = make_source(tmp_path)
     destination = tmp_path / "renamed.wav"

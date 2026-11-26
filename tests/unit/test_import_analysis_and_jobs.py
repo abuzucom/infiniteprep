@@ -80,7 +80,7 @@ def test_import_skips_unreadable_subfolder(tmp_path: Path) -> None:
     assert [Path(asset.current_path).name for asset in report.imported_files] == ["track.wav"]
 
 
-def test_folder_and_file_in_one_selection_import_once(tmp_path: Path) -> None:
+def test_overlapping_selection_imports_once(tmp_path: Path) -> None:
     """A file named directly and through its folder imports once and counts once."""
     track = create_wav_fixture(tmp_path / "crate" / "track.wav", duration_sec=0.5)
 
@@ -104,7 +104,7 @@ def job_rows(repo: Repository) -> dict[str, tuple[str, str | None]]:
     return {row["job_type"]: (row["status"], row["last_error"]) for row in rows}
 
 
-def test_a_failed_job_records_failed_with_its_error(tmp_path: Path) -> None:
+def test_failed_job_records_its_error(tmp_path: Path) -> None:
     """The failing step's job row reads failed and names the error. None stays queued."""
     repo = make_repo()
     file_id = import_one(repo, create_wav_fixture(tmp_path / "track.wav", duration_sec=0.5))
@@ -120,7 +120,7 @@ def test_a_failed_job_records_failed_with_its_error(tmp_path: Path) -> None:
     assert repo.list_pending_jobs() == []
 
 
-def test_raise_on_failure_raises_after_recording(tmp_path: Path) -> None:
+def test_raise_on_failure_records_first(tmp_path: Path) -> None:
     """The renamed keyword raises for an expected job error once the failure is stored."""
     repo = make_repo()
     file_id = import_one(repo, create_wav_fixture(tmp_path / "track.wav", duration_sec=0.5))
@@ -154,7 +154,7 @@ def test_transcode_refuses_untaggable_early(
     assert sorted(path.name for path in source.parent.iterdir()) == ["tagged.wav"]
 
 
-def test_transcode_limit_counts_the_container_header(
+def test_transcode_limit_counts_container_header(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Samples that fit the limit exactly still fail, since the header adds bytes."""
@@ -205,7 +205,7 @@ def test_non_database_file_releases_handle(tmp_path: Path) -> None:
     assert moved.exists()
 
 
-def test_a_failed_queued_write_logs_its_traceback(
+def test_failed_queued_write_logs_traceback(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """The warning for a failed queued write carries the traceback for diagnosis."""

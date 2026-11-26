@@ -49,7 +49,7 @@ READ_ONLY_COMMANDS = (
 
 
 class TrustedScriptRecognitionTest(unittest.TestCase):
-    """Equivalent invocations of one trusted script get one verdict."""
+    """Equivalent commands for one trusted script get one verdict."""
 
     def test_equivalent_spellings_route_to_consent(self) -> None:
         for command in CONSENT_COMMANDS:
@@ -57,7 +57,7 @@ class TrustedScriptRecognitionTest(unittest.TestCase):
                 decision, _reason = GATE.workflow_decision(command, PROJECT_DIR)
                 self.assertEqual(decision, "ask")
 
-    def test_state_reader_spelling_runs_without_consent(self) -> None:
+    def test_state_reader_skips_consent(self) -> None:
         for command in ALLOWED_COMMANDS:
             with self.subTest(command=command):
                 decision, _reason = GATE.workflow_decision(command, PROJECT_DIR)
@@ -69,12 +69,12 @@ class TrustedScriptRecognitionTest(unittest.TestCase):
                 decision, _reason = GATE.workflow_decision(command, PROJECT_DIR)
                 self.assertEqual(decision, "")
 
-    def test_read_only_spellings_stay_read_only(self) -> None:
+    def test_read_only_spellings(self) -> None:
         for command in READ_ONLY_COMMANDS:
             with self.subTest(command=command):
                 self.assertTrue(GATE.read_only_workflow(command, PROJECT_DIR))
 
-    def test_trusted_git_fetch_is_not_read_only(self) -> None:
+    def test_trusted_fetch_not_read_only(self) -> None:
         self.assertFalse(GATE.read_only_workflow(
             "python scripts/trusted_git.py fetch . origin", PROJECT_DIR))
 
@@ -98,7 +98,7 @@ class TrustedScriptSymlinkTest(unittest.TestCase):
     """A trusted script name that resolves outside the project never matches."""
 
     @unittest.skipUnless(CAN_SYMLINK, "Symlinks require elevated privileges on Windows")
-    def test_symlink_to_outside_script_stays_unmatched(self) -> None:
+    def test_outside_symlink_unmatched(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             project = root / "project"

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Cover the foucault security review and euler quality review wiring."""
-import hashlib
+"""Cover the agents-personas foucault and euler review wiring."""
 import re
 import unittest
 from pathlib import Path
@@ -11,33 +10,31 @@ CI_WORKFLOW = WORKFLOWS / "ci.yml"
 SECURITY_CALLER = WORKFLOWS / "security-review-pr.yml"
 QUALITY_CALLER = WORKFLOWS / "quality-review-pr.yml"
 
-FOUCAULT_COMMIT = "9ec9681131841bae8bd80bdffdfcb673b36a6289"
-EULER_COMMIT = "940c53a39b7cc7345b1f6232d43bec7c4d7623df"
-FOUCAULT_USES = (
-    "abuzucom/foucault/.github/workflows/security-review.yml@" + FOUCAULT_COMMIT
-)
-EULER_USES = "abuzucom/euler/.github/workflows/quality-review.yml@" + EULER_COMMIT
+PERSONAS_COMMIT = "c43f4592191b42b9f66072622b082fc2f4dc3217"
+PERSONAS_WORKFLOWS = "abuzucom/agents-personas/.github/workflows/"
+FOUCAULT_USES = PERSONAS_WORKFLOWS + "foucault-security-review.yml@" + PERSONAS_COMMIT
+EULER_USES = PERSONAS_WORKFLOWS + "euler-quality-review.yml@" + PERSONAS_COMMIT
+FOUCAULT_CHECK = "foucault / security"
+EULER_CHECK = "euler / quality"
 PROVIDER_SECRET_MAPPING = "MODEL_API_KEY: ${{ secrets.OLLAMA_API_KEY }}"
-
-# SHA-256 digests of the adapter files at FOUCAULT_COMMIT. The reusable
-# security workflow runs these from this repository's checkout.
-FOUCAULT_ADAPTER_DIGESTS = {
-    "ci/build_pr_case.py":
-        "f2415ec5700c23be97d260593952edd6d47e30d2cd207be1562550b011cc3ede",
-    "ci/build_retry_case.py":
-        "fc7b3dbbecf574da3b0571dc85fa6ac72639a23f535722bd7e71e4190d6d2670",
-    "ci/call_model.py":
-        "dedd9529379a1723170f7ebabac436cd5566923fd7a7c616822038e0e93e4024",
-    "ci/model_providers.json":
-        "c7e8e9e35b0c1dd24e26979372a0d40628df1e148bc33b56525b50e1950b3ee3",
-    "ci/run_model_command.py":
-        "494cb0bfd49b6d490c87f009a0b252cb988c2fa74c1a6efe11435e72173899e5",
-    "scripts/check_pr_review_response.py":
-        "f9272886bf5ae525ca6a61d3eec015e94ede61e79bbdb2ed2ca699aba5c98eaf",
-}
+REVIEW_PERMISSIONS = ("checks: write", "contents: read", "pull-requests: write")
+# A caller that reads existing check runs to skip a review trusts a check that
+# any workflow with checks: write can publish.
+UNTRUSTED_PREFILTER_MARKERS = ("already_reviewed", "checks.listForRef", "checks: read")
+# The engine supplies the adapter. These copies left the repository.
+RETIRED_ADAPTER_FILES = (
+    "ci/build_pr_case.py",
+    "ci/build_retry_case.py",
+    "ci/call_model.py",
+    "ci/model_providers.json",
+    "ci/run_model_command.py",
+    "scripts/check_pr_review_response.py",
+)
+RETIRED_REPOSITORIES = ("abuzucom/foucault", "abuzucom/euler")
 
 USES_LINE = re.compile(r"^\s*(?:-\s+)?uses:\s*(\S+)", re.MULTILINE)
 FULL_SHA_REF = re.compile(r"[^@\s]+@[0-9a-f]{40}")
+JOB_HEADER = re.compile(r"^  [A-Za-z0-9_-]+:\n", re.MULTILINE)
 
 
 def read_workflow_text(path: Path) -> str:
@@ -58,22 +55,28 @@ def extract_job_block(workflow_text: str, job_name: str) -> str:
     return remainder if next_job is None else remainder[:next_job.start()]
 
 
+def list_job_names(workflow_text: str) -> list[str]:
+    """Return the top-level job names below the jobs key."""
+    jobs_text = workflow_text[workflow_text.index("\njobs:\n"):]
+    return [header.strip().rstrip(":") for header in JOB_HEADER.findall(jobs_text)]
+
+
 class CiWorkflowTest(unittest.TestCase):
     """Keep the ci workflow that both review callers trigger on."""
 
-    def test_ci_workflow_name_matches_the_review_triggers(self) -> None:
+    def test_ci_name_matches_review_triggers(self) -> None:
         text = read_workflow_text(CI_WORKFLOW)
         self.assertIn("\nname: ci\n", text)
         self.assertIn("  pull_request:", text)
 
-    def test_ci_checkout_does_not_persist_credentials(self) -> None:
+    def test_ci_checkout_never_persists_credentials(self) -> None:
         text = read_workflow_text(CI_WORKFLOW)
         self.assertEqual(
             text.count("actions/checkout@"),
             text.count("persist-credentials: false"),
         )
 
-    def test_ci_lint_tools_use_lockfile_constraints(self) -> None:
+    def test_lint_tools_use_lockfile_constraints(self) -> None:
         workflow = read_workflow_text(CI_WORKFLOW)
         command = "python -m pip install --require-hashes --constraint requirements-lock.txt ruff pytest"
         self.assertTrue(command in workflow, "CI lint tools must use lockfile constraints")
@@ -93,37 +96,40 @@ class SecurityReviewWiringTest(unittest.TestCase):
         self.assertIn("workflows: [ci]", self.text)
         self.assertIn("types: [completed]", self.text)
         self.assertIn("branches-ignore:\n      - main", self.text)
-        self.assertIn('workflowRun?.name === "ci"', self.text)
 
-    def test_review_jobs_pin_workflow_and_policy_to_one_commit(self) -> None:
-        for job_name in ("review", "fork-review"):
-            job_text = extract_job_block(self.text, job_name)
-            self.assertIn(f"uses: {FOUCAULT_USES}\n", job_text)
-            self.assertIn(f'audit_ref: "{FOUCAULT_COMMIT}"', job_text)
-            self.assertIn("fail_on_block: true", job_text)
-
-    def test_only_the_same_repository_job_maps_the_provider_secret(self) -> None:
+    def test_review_pins_one_personas_commit(self) -> None:
         review_job = extract_job_block(self.text, "review")
-        self.assertIn(PROVIDER_SECRET_MAPPING, review_job)
-        self.assertIn("fork_review: false", review_job)
-        fork_job = extract_job_block(self.text, "fork-review")
-        self.assertNotIn("secrets:", fork_job)
-        self.assertIn("fork_review: true", fork_job)
-        self.assertIn("safe-to-review", self.text)
+        self.assertIn(f"uses: {FOUCAULT_USES}\n", review_job)
+        self.assertIn(f'personas_ref: "{PERSONAS_COMMIT}"', review_job)
+        self.assertIn("fail_on_block: true", review_job)
+        self.assertIn("pr_comment: true", review_job)
+
+    def test_review_job_grants_wrapper_permissions(self) -> None:
+        review_job = extract_job_block(self.text, "review")
+        for permission in REVIEW_PERMISSIONS:
+            self.assertIn(permission, review_job)
+
+    def test_only_review_maps_secret(self) -> None:
+        self.assertEqual(self.text.count("secrets:"), 1)
+        self.assertIn(PROVIDER_SECRET_MAPPING, extract_job_block(self.text, "review"))
         self.assertNotIn("secrets: inherit", self.text)
 
-    def test_unapproved_forks_skip_without_a_secret(self) -> None:
-        skip_job = extract_job_block(self.text, "fork-review-skipped")
-        self.assertIn("same_repository == 'false'", skip_job)
-        self.assertNotIn("secrets", skip_job)
+    def test_engine_owns_fork_handling(self) -> None:
+        job_names = list_job_names(self.text)
+        self.assertNotIn("fork-review", job_names)
+        self.assertNotIn("fork-review-skipped", job_names)
+        self.assertNotIn("fork_review:", self.text)
 
-    def test_adapter_files_match_the_pinned_foucault_commit(self) -> None:
-        self.assertIn('model_call_command: "python3 ci/call_model.py"', self.text)
-        for relative_path, expected_digest in FOUCAULT_ADAPTER_DIGESTS.items():
-            adapter_path = ROOT / relative_path
-            self.assertTrue(adapter_path.is_file(), f"missing {relative_path}")
-            actual_digest = hashlib.sha256(adapter_path.read_bytes()).hexdigest()
-            self.assertEqual(actual_digest, expected_digest, relative_path)
+    def test_checks_use_persona_name(self) -> None:
+        skip_job = extract_job_block(self.text, "docs-only-skipped")
+        self.assertIn(f"name: '{FOUCAULT_CHECK}'", skip_job)
+        self.assertNotIn("security-review'", self.text)
+
+    def test_no_check_skips_review(self) -> None:
+        # Any workflow with checks: write can publish a verdict-titled check.
+        for marker in UNTRUSTED_PREFILTER_MARKERS:
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, self.text)
 
 
 class QualityReviewWiringTest(unittest.TestCase):
@@ -138,36 +144,62 @@ class QualityReviewWiringTest(unittest.TestCase):
         self.assertIn("types: [completed]", self.text)
         self.assertIn("branches-ignore:\n      - main", self.text)
 
-    def test_review_job_pins_workflow_and_policy_to_one_commit(self) -> None:
+    def test_review_pins_one_personas_commit(self) -> None:
         review_job = extract_job_block(self.text, "review")
         self.assertIn(f"uses: {EULER_USES}\n", review_job)
-        self.assertIn(f'quality_ref: "{EULER_COMMIT}"', review_job)
+        self.assertIn(f'personas_ref: "{PERSONAS_COMMIT}"', review_job)
         self.assertIn("fail_on_block: true", review_job)
+        self.assertNotIn("pr_title:", review_job)
+        self.assertNotIn("pr_body:", review_job)
+        self.assertNotIn("fromJSON", review_job)
 
-    def test_review_job_grants_the_reusable_job_permissions(self) -> None:
+    def test_review_job_grants_wrapper_permissions(self) -> None:
         review_job = extract_job_block(self.text, "review")
-        for permission in (
-            "contents: read",
-            "actions: read",
-            "pull-requests: write",
-            "checks: write",
-        ):
+        for permission in REVIEW_PERMISSIONS:
             self.assertIn(permission, review_job)
 
-    def test_only_same_repository_reviews_receive_the_secret(self) -> None:
-        review_job = extract_job_block(self.text, "review")
-        self.assertIn(PROVIDER_SECRET_MAPPING, review_job)
-        self.assertIn("same_repo == 'true'", review_job)
-        fork_job = extract_job_block(self.text, "fork-skip")
-        self.assertIn("same_repo != 'true'", fork_job)
-        self.assertNotIn("secrets", fork_job)
+    def test_only_review_maps_secret(self) -> None:
+        self.assertEqual(self.text.count("secrets:"), 1)
+        self.assertIn(PROVIDER_SECRET_MAPPING, extract_job_block(self.text, "review"))
         self.assertNotIn("secrets: inherit", self.text)
+
+    def test_engine_owns_fork_handling(self) -> None:
+        self.assertNotIn("fork-skip", list_job_names(self.text))
+        self.assertNotIn("fork_review:", self.text)
+
+    def test_checks_use_persona_name(self) -> None:
+        skip_job = extract_job_block(self.text, "docs-only-skipped")
+        self.assertIn(f"name: '{EULER_CHECK}'", skip_job)
+        self.assertNotIn("quality-review'", self.text)
+
+    def test_no_check_skips_review(self) -> None:
+        # Any workflow with checks: write can publish a verdict-titled check.
+        for marker in UNTRUSTED_PREFILTER_MARKERS:
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, self.text)
+
+
+class RetiredReviewerTest(unittest.TestCase):
+    """Keep the standalone reviewer pins and adapter copies out."""
+
+    def test_adapter_copies_are_gone(self) -> None:
+        for relative_path in RETIRED_ADAPTER_FILES:
+            with self.subTest(path=relative_path):
+                self.assertFalse((ROOT / relative_path).exists())
+
+    def test_callers_name_no_retired_repository(self) -> None:
+        for workflow_path in (SECURITY_CALLER, QUALITY_CALLER):
+            text = read_workflow_text(workflow_path)
+            for repository in RETIRED_REPOSITORIES:
+                with self.subTest(workflow=workflow_path.name, repository=repository):
+                    self.assertNotIn(repository + "/", text)
+            self.assertNotIn("ci/", text)
 
 
 class ActionPinTest(unittest.TestCase):
     """Pin every action and reusable workflow to a full commit SHA."""
 
-    def test_every_uses_reference_is_a_full_commit_sha(self) -> None:
+    def test_uses_references_are_full_shas(self) -> None:
         for workflow_path in (CI_WORKFLOW, SECURITY_CALLER, QUALITY_CALLER):
             text = read_workflow_text(workflow_path)
             references = USES_LINE.findall(text)

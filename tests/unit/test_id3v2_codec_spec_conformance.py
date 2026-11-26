@@ -45,7 +45,7 @@ def test_render_keeps_existing_tdat() -> None:
     assert values["TYER"] == ["2021"]
 
 
-def test_render_truncates_tdrc_to_v23_time() -> None:
+def test_render_truncates_tdrc_v23_time() -> None:
     """v2.3 TIME holds HHMM, so TDRC seconds and a time zone offset do not reach it."""
     frame = v24_frame("TDRC", b"\x032021-05-14T10:30:45+02:00\x00")
     values = render_tag_values(tag_bytes(4, frame))

@@ -27,7 +27,7 @@ def _render(tooltip: str) -> QTextDocument:
 
 
 @pytest.mark.parametrize("raw_value", MARKUP_VALUES)
-def test_tooltip_renders_markup_as_literal_text(qapp: Any, raw_value: str) -> None:
+def test_tooltip_shows_markup_literally(qapp: Any, raw_value: str) -> None:
     """Markup in a tag value shows as its own characters, with no element created.
 
     The qapp fixture starts the QApplication that QTextDocument needs.

@@ -45,7 +45,7 @@ class ChangelogCheckerTest(unittest.TestCase):
         findings = checker.find_violations("not a changelog")
         self.assertTrue(any("no versioned" in finding for finding in findings))
 
-    def test_range_requires_version_advance_and_entry(self):
+    def test_range_requires_advance(self):
         base = "## [2.0.0] (2026-09-13)\n\n### Added\n- Old.\n"
         findings = checker.find_range_violations(base, base, ["README.md"])
         self.assertTrue(findings)
@@ -57,12 +57,12 @@ class ChangelogCheckerTest(unittest.TestCase):
             base, head, ["README.md", "CHANGELOG.md"])
         self.assertEqual(findings, [])
 
-    def test_range_missing_base_changelog_passes_with_versioned_head(self):
+    def test_range_missing_base_passes(self):
         head = "## [1.0.0] (2026-09-13)\n\n### Added\n- First release.\n"
         findings = checker.find_range_violations("", head, ["CHANGELOG.md"])
         self.assertEqual(findings, [])
 
-    def test_range_unversioned_boilerplate_base_passes_with_versioned_head(self):
+    def test_range_boilerplate_base_passes(self):
         base = (
             "# Changelog\n\n"
             "All notable changes to this project will be documented here.\n\n"
@@ -72,7 +72,7 @@ class ChangelogCheckerTest(unittest.TestCase):
         findings = checker.find_range_violations(base, head, ["CHANGELOG.md"])
         self.assertEqual(findings, [])
 
-    def test_range_missing_base_changelog_still_requires_head_version(self):
+    def test_range_missing_base_needs_version(self):
         findings = checker.find_range_violations("", "", ["CHANGELOG.md"])
         self.assertTrue(findings)
 
@@ -81,7 +81,7 @@ class ChangelogCheckerTest(unittest.TestCase):
         self.assertTrue(checker.valid_revision("HEAD~1"))
         self.assertTrue(checker.valid_revision("main^"))
 
-    def test_pre_release_versions_order_and_uniqueness(self):
+    def test_pre_release_ordering(self):
         text = ("## [1.0.0] (2026-09-14)\n\n- Final.\n"
                 "## [1.0.0-rc.1] (2026-09-13)\n\n- RC.\n")
         self.assertEqual(checker.find_violations(text), [])
@@ -97,7 +97,7 @@ class ChangelogCheckerTest(unittest.TestCase):
                 "## [1.0.0]\n\n- New.\n", encoding="utf-8")
             self.assertNotEqual(checker.check_staged(repository), 0)
 
-    def test_range_check_passes_for_a_repositorys_first_changelog(self):
+    def test_range_first_changelog_passes(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = Path(directory)
             _run_git(repository, "init", "-q", "-b", "main")

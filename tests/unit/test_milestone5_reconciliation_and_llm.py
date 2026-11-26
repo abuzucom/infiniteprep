@@ -95,7 +95,7 @@ def test_discogs_adapter_cache_and_stubs() -> None:
     ("read_offset_sec", "expected_calls"),
     [(DISCOGS_TTL_SEC - 1, 1), (DISCOGS_TTL_SEC + 1, 2)],
 )
-def test_discogs_cache_serves_until_the_ttl_ends(
+def test_discogs_cache_serves_until_ttl(
     monkeypatch: pytest.MonkeyPatch, read_offset_sec: int, expected_calls: int
 ) -> None:
     """A repeat search reads the cache inside the 6-hour TTL and fetches again after it."""
@@ -184,7 +184,7 @@ def test_closed_world_validator_ollama_consent() -> None:
         bootstrap.pull_model("qwen2.5:3b", user_consented=False)
 
 
-def test_artwork_resized_to_xdj_safe_jpeg(tmp_path: Path) -> None:
+def test_artwork_resized_xdj_safe_jpeg(tmp_path: Path) -> None:
     """Verify ArtworkService scales 1400x1400 cover art down to <= 800x800 JPEG for XDJ-RX3."""
     big_img = QImage(1400, 1400, QImage.Format.Format_RGB32)
     big_img.fill(QColor("#2563eb"))
@@ -345,7 +345,7 @@ def reconcile_proposal_providers(repo: Repository, file_id: str) -> dict[str, li
     return providers
 
 
-def test_rule_1_recording_gives_no_label(tmp_path: Path) -> None:
+def test_rule_1_recording_omits_label(tmp_path: Path) -> None:
     """Rule 1: a recording candidate without a catalog number gives no label proposal."""
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)
@@ -357,7 +357,7 @@ def test_rule_1_recording_gives_no_label(tmp_path: Path) -> None:
     assert FieldName.CATALOG_NUMBER.value not in providers
 
 
-def test_rule_2_catalog_number_admits_label(tmp_path: Path) -> None:
+def test_rule_2_catalog_admits_label(tmp_path: Path) -> None:
     """Rule 2: a recording with a verified catalog number proposes the label and catalog."""
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)
@@ -369,7 +369,7 @@ def test_rule_2_catalog_number_admits_label(tmp_path: Path) -> None:
     assert providers[FieldName.CATALOG_NUMBER.value] == ["musicbrainz"]
 
 
-def test_rule_5_bpm_and_key_from_analysis(tmp_path: Path) -> None:
+def test_rule_5_analysis_bpm_key(tmp_path: Path) -> None:
     """Rule 5: BPM and key proposals come from the local analyzer and never from a candidate."""
     with DatabaseManager(":memory:") as db:
         repo = Repository(db)

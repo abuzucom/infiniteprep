@@ -46,7 +46,7 @@ def _offered_backup(db_path: Path) -> Path | None:
     return caught.value.backup_path
 
 
-def test_record_without_row_counts_is_not_offered(tmp_path: Path) -> None:
+def test_record_without_counts_not_offered(tmp_path: Path) -> None:
     """Restore needs the row counts. A record that lacks the counts gets no offer."""
     db_path = tmp_path / LIBRARY_NAME
     _write_newer_library(db_path)
@@ -55,7 +55,7 @@ def test_record_without_row_counts_is_not_offered(tmp_path: Path) -> None:
     assert _offered_backup(db_path) is None
 
 
-def test_unreadable_backup_file_is_not_offered(tmp_path: Path) -> None:
+def test_unreadable_backup_is_not_offered(tmp_path: Path) -> None:
     """A complete record beside a damaged backup file gets no offer."""
     db_path = tmp_path / LIBRARY_NAME
     _write_newer_library(db_path)
@@ -73,7 +73,7 @@ def test_complete_backup_is_offered(tmp_path: Path) -> None:
     assert _offered_backup(db_path) == backup_path_for(db_path)
 
 
-def test_restore_refuses_a_backup_newer_than_the_app(tmp_path: Path) -> None:
+def test_restore_refuses_newer_backup(tmp_path: Path) -> None:
     """The rollback API never installs a backup this app cannot open."""
     db_path = tmp_path / LIBRARY_NAME
     newer = LATEST_VERSION + 1
@@ -88,7 +88,7 @@ def test_restore_refuses_a_backup_newer_than_the_app(tmp_path: Path) -> None:
     assert list(tmp_path.glob(f"{LIBRARY_NAME}.newer-*")) == []
 
 
-def test_restore_honors_a_lower_known_version(tmp_path: Path) -> None:
+def test_restore_honors_lower_known_version(tmp_path: Path) -> None:
     """A caller that knows fewer versions refuses a backup past its own."""
     db_path = tmp_path / LIBRARY_NAME
     _write_newer_library(db_path)

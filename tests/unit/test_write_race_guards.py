@@ -21,9 +21,7 @@ from tests.fixtures.audio_factory import create_wav_fixture
 OUTSIDE_EDIT = b"saved by another program during the write"
 
 
-def test_an_outside_edit_during_the_write_is_kept(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_outside_edit_during_write_kept(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A source change before the swap stops the write, and no rollback replaces the edit."""
     repo = Repository(DatabaseManager(":memory:"))
     tag_adapter = MetadataTagAdapter()
@@ -57,7 +55,7 @@ def test_backup_names_refuse_unportable_parts(tmp_path: Path, bad_part: str) -> 
         operation_backup_path(tmp_path, "file", "operation", bad_part)
 
 
-def test_a_plain_backup_name_keeps_every_part(tmp_path: Path) -> None:
+def test_plain_backup_name_keeps_parts(tmp_path: Path) -> None:
     """A valid name joins its parts in order inside the backup folder."""
     path = operation_backup_path(tmp_path, "file", "op", "My Track (Mix).wav", kind="transcode")
 

@@ -49,7 +49,7 @@ def tag_map(data: bytes) -> dict[str, tuple[str, ...]]:
     return {tag.key: tag.values for tag in read_mp4(data).tags}
 
 
-def test_text_number_and_freeform_tags_decode() -> None:
+def test_text_number_freeform_tags_decode() -> None:
     """UTF-8 text, track and disc pairs, integers, cover art, and freeform items decode."""
     tags = udta(
         item(b"\xa9nam", data_atom(1, "Ché Song".encode())),
@@ -72,14 +72,14 @@ def test_text_number_and_freeform_tags_decode() -> None:
     }
 
 
-def test_utf16_text_and_repeated_data_atoms_decode() -> None:
+def test_utf16_and_repeated_atoms_decode() -> None:
     """A UTF-16 data atom decodes, and an item with two data atoms keeps both values."""
     genres = item(b"\xa9gen", data_atom(2, "House".encode("utf-16-be")), data_atom(1, b"Techno"))
     result = tag_map(m4a_file(mvhd(RATE_44K, RATE_44K), aac_track(), udta(genres)))
     assert result["\xa9gen"] == ("House", "Techno")
 
 
-def test_aac_properties_from_mvhd_and_entry() -> None:
+def test_aac_properties_from_mvhd_entry() -> None:
     """Duration, channels, sample rate, and the esds average bitrate are reported."""
     info = read_mp4(m4a_file(mvhd(RATE_44K, RATE_44K * SECONDS), aac_track(320_000)))
     assert info.duration == pytest.approx(SECONDS)
@@ -88,7 +88,7 @@ def test_aac_properties_from_mvhd_and_entry() -> None:
     assert info.encrypted is False
 
 
-def test_version_1_mvhd_reads_a_64_bit_duration() -> None:
+def test_v1_mvhd_reads_64bit_duration() -> None:
     """A version 1 mvhd with a duration past 32 bits still gives the right seconds."""
     timescale = 1_000_000
     long_seconds = 7_200
@@ -96,7 +96,7 @@ def test_version_1_mvhd_reads_a_64_bit_duration() -> None:
     assert info.duration == pytest.approx(long_seconds)
 
 
-def test_alac_properties_come_from_the_alac_config() -> None:
+def test_alac_properties_from_alac_config() -> None:
     """A 96 kHz ALAC entry reports its rate, channels, and bit depth from the alac atom."""
     entry = audio_entry(b"alac", 2, 0, alac_config(RATE_96K, 2, 24, 4_000_000), sample_size=24)
     info = read_mp4(m4a_file(mvhd(RATE_96K, RATE_96K * SECONDS), trak(b"soun", entry)))
@@ -109,7 +109,7 @@ def test_alac_properties_come_from_the_alac_config() -> None:
     assert info.bitrate == 4_000_000
 
 
-def test_bitrate_falls_back_to_sample_sizes() -> None:
+def test_bitrate_falls_back_sample_sizes() -> None:
     """With no esds average bitrate, bitrate is the sample size total over the duration."""
     sizes = [FALLBACK_SAMPLE_SIZE] * FALLBACK_SAMPLE_COUNT
     info = read_mp4(m4a_file(mvhd(RATE_44K, RATE_44K * FALLBACK_SECONDS), aac_track(0, sizes)))
@@ -124,7 +124,7 @@ def test_protected_entry_marks_file_encrypted(entry_type: bytes) -> None:
     assert info.encrypted is True
 
 
-def test_first_sound_track_wins_among_many_tracks() -> None:
+def test_first_sound_track_wins() -> None:
     """Video and text tracks are skipped, with no limit on the number of tracks."""
     others = [trak(b"vide"), trak(b"text")] * 6
     stems = [trak(b"soun", audio_entry(b"mp4a", channels, RATE_44K)) for channels in (6, 2, 2)]
@@ -132,7 +132,7 @@ def test_first_sound_track_wins_among_many_tracks() -> None:
     assert info.channels == 6
 
 
-def test_large_and_open_ended_atoms_are_walked() -> None:
+def test_large_open_ended_atoms_walked() -> None:
     """A 64-bit largesize atom and a final size-0 atom do not stop the reader."""
     ftyp = atom(b"ftyp", b"M4A " + bytes(4))
     moov = atom(b"moov", mvhd(RATE_44K, RATE_44K * 2) + aac_track())
@@ -146,7 +146,7 @@ def test_meta_without_header_yields_tags() -> None:
     assert tag_map(m4a_file(mvhd(RATE_44K, RATE_44K), aac_track(), tags)) == {"\xa9nam": ("QT",)}
 
 
-def test_file_without_ilst_has_no_tags() -> None:
+def test_file_without_ilst_lacks_tags() -> None:
     """A file with no udta reads with an empty tag list."""
     assert read_mp4(m4a_file(mvhd(RATE_44K, RATE_44K), aac_track())).tags == ()
 
@@ -166,6 +166,6 @@ def test_foreign_or_damaged_data_raises(data: bytes) -> None:
         read_mp4(data)
 
 
-def test_mp4_format_error_is_a_value_error() -> None:
+def test_mp4_format_error_is_valueerror() -> None:
     """Callers that catch ValueError also catch MP4 damage."""
     assert issubclass(Mp4FormatError, ValueError)

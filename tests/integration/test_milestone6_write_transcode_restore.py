@@ -128,7 +128,7 @@ def test_write_rename_restore_keeps_traktor(
     db.close()
 
 
-def test_write_blocks_changed_file_and_clash(
+def test_write_blocks_changed_file_clash(
     tmp_path: Path,
 ) -> None:
     """Verify WriteService preflight blocks external file tampering and rename collisions."""
@@ -164,7 +164,7 @@ def test_write_blocks_changed_file_and_clash(
     db.close()
 
 
-def test_safe_transcoder_and_m3u8_playlist_exporter(tmp_path: Path) -> None:
+def test_safe_transcoder_m3u8_playlist_exporter(tmp_path: Path) -> None:
     """Verify SafeTranscoderAdapter converts 96kHz/32f to 48kHz/24-bit and exports M3U8."""
     db = DatabaseManager(":memory:")
     repo = Repository(db)

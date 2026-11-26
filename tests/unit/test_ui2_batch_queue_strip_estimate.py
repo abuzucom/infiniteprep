@@ -70,7 +70,7 @@ def report(controller: BatchQueueController, done: int, path: str) -> None:
     controller._show_progress(False, done, TOTAL_FILES, path)
 
 
-def test_estimate_ignores_time_on_the_current_file(strip_parts: StripParts) -> None:
+def test_estimate_ignores_current_file_time(strip_parts: StripParts) -> None:
     """Time spent on the file in progress leaves the pace of the finished files unchanged."""
     controller, strip, clock = strip_parts
     start_batch(controller)
@@ -86,7 +86,7 @@ def test_estimate_ignores_time_on_the_current_file(strip_parts: StripParts) -> N
     assert strip.time_label.text() == "1 min left"
 
 
-def test_finished_batch_leaves_no_start_time(strip_parts: StripParts) -> None:
+def test_finished_batch_clears_start_time(strip_parts: StripParts) -> None:
     """A finished batch drops out of the strip's start times."""
     controller, strip, _clock = strip_parts
     batch = start_batch(controller)

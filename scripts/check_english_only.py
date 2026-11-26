@@ -6,15 +6,20 @@ added; see AGENTS.md Rule 9). Targets Latin-script languages only
 (Spanish, French, German, Portuguese, Italian): Chinese, Japanese, and
 Korean script is already non-ASCII and caught by check_ascii.py instead.
 
-Portable and path-generic: copy this single file into any repo and point
-it at that repo's own source globs and CI. Always exits 0, even when it
-finds violations; this check is advisory, not blocking.
+Works on any path: copy this file with scripts/prose_policy.py and
+scripts/handoff_policy.py into any repo and point it at that repo's own
+source globs and CI. Always exits 0, even when it finds violations; this
+check is advisory, not blocking.
 """
 import re
 import sys
 from pathlib import Path
 
-INLINE_CODE = re.compile(r"`[^`]*`")
+try:
+    from scripts.prose_policy import mask_markdown_code
+except ModuleNotFoundError:
+    from prose_policy import mask_markdown_code
+
 MIN_WORDS = 4
 MIN_FOREIGN_HITS = 2
 
@@ -51,21 +56,18 @@ FOREIGN_PATTERN = re.compile(
 
 
 def strip_code(line: str) -> str:
-    """Remove inline code spans so illustrative Bad/Good examples are ignored."""
-    return INLINE_CODE.sub("", line)
+    """Mask inline code spans so illustrative Bad/Good examples are ignored."""
+    return mask_markdown_code(line)
 
 
 def find_violations(text: str, path: str) -> list[str]:
-    """Return one warning per line that looks like non-English prose."""
+    """Return one warning per line that looks like non-English prose.
+
+    The shared masker blanks backtick and tilde fences and inline code, so
+    line numbers stay aligned with the source.
+    """
     violations = []
-    in_fence = False
-    for number, raw in enumerate(text.splitlines(), start=1):
-        if raw.lstrip().startswith("```"):
-            in_fence = not in_fence
-            continue
-        if in_fence:
-            continue
-        prose = strip_code(raw)
+    for number, prose in enumerate(mask_markdown_code(text).splitlines(), start=1):
         if len(prose.split()) < MIN_WORDS:
             continue
         english_hits = len(ENGLISH_PATTERN.findall(prose))

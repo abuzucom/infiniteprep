@@ -33,7 +33,7 @@ def shown_boxes(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Qt.TextFormat, st
     return shown
 
 
-def test_plain_message_sets_the_plain_text_format(qtbot, shown_boxes: list) -> None:
+def test_plain_message_sets_plain_format(qtbot, shown_boxes: list) -> None:
     """The helper shows its text verbatim with the PlainText format."""
     show_plain_message(None, QMessageBox.Icon.Information, "Title", MARKUP_NAME)
 

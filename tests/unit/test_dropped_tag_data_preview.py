@@ -48,7 +48,7 @@ def preview_title_write(tmp_path: Path, source: Path) -> FileWritePlan:
     return service.build_batch_preview([asset.id])[0]
 
 
-def test_clean_tag_gets_no_dropped_data_warning(tmp_path: Path) -> None:
+def test_clean_tag_no_dropped_warning(tmp_path: Path) -> None:
     """A tag the codec keeps whole produces no warning."""
     source = create_mp3_fixture(tmp_path / "clean.mp3", tags={"title": "Old"})
 
@@ -74,7 +74,7 @@ def test_unreadable_frame_warns_but_writes(tmp_path: Path) -> None:
     assert plan.is_safe_to_apply
 
 
-def test_compressed_id3v22_tag_blocks_the_write(tmp_path: Path) -> None:
+def test_compressed_id3v22_tag_blocks_write(tmp_path: Path) -> None:
     """A rewrite would remove a whole compressed ID3v2.2 tag, so the preview blocks it."""
     source = create_mp3_fixture(tmp_path / "compressed.mp3")
     frames = v22_frame("TT2", b"\x00Old title")
@@ -101,7 +101,7 @@ def test_flac_entry_without_separator_warns(tmp_path: Path) -> None:
     assert plan.is_safe_to_apply
 
 
-def test_preview_status_names_the_data_loss(tmp_path: Path) -> None:
+def test_preview_status_names_data_loss(tmp_path: Path) -> None:
     """The Safety Status cell keeps READY and adds the dropped data warning."""
     source = create_mp3_fixture(tmp_path / "status.mp3")
     frames = v23_frame(ENCRYPTED_FRAME_ID, b"\x01secret-bytes", V23_ENCRYPTED_FLAGS)

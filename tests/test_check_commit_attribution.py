@@ -70,7 +70,7 @@ class TrailerTest(unittest.TestCase):
                 self.assertEqual(checker.trailer_violations([commit(body)]), [])
                 self.assertTrue(checker.has_agent_label(body))
 
-    def test_assisted_by_with_email_is_rejected(self):
+    def test_assisted_by_email_rejected(self):
         checker = load_checker()
         body = "change\n\nAssisted-by: Claude Sonnet 5 <agent@anthropic.com>\n"
         violations = checker.trailer_violations([commit(body)])
@@ -84,7 +84,7 @@ class TrailerTest(unittest.TestCase):
         self.assertEqual(len(violations), 1)
         self.assertIn("malformed assisted-by trailer", violations[0])
 
-    def test_trailer_with_trailing_non_trailer_text_is_flagged_and_has_agent_label(self):
+    def test_trailing_text_flagged_labeled(self):
         checker = load_checker()
         body = "change\n\nCo-authored-by: Claude Code\nNon trailer note\n"
         self.assertTrue(checker.has_agent_label(body))
@@ -92,7 +92,7 @@ class TrailerTest(unittest.TestCase):
         self.assertEqual(len(violations), 1)
         self.assertIn("non-trailer text in terminal trailer paragraph", violations[0])
 
-    def test_assisted_by_with_trailing_note_flags_email_and_non_trailer(self):
+    def test_assisted_by_trailing_note(self):
         checker = load_checker()
         body = "change\n\nAssisted-by: Claude Sonnet 5 <agent@example.com>\nPlain text evasion\n"
         violations = checker.trailer_violations([commit(body)])

@@ -8,7 +8,7 @@ OVERSIZED_POLICY_BYTES = 32 * 1024 + 1
 
 
 class PolicySizeTests(unittest.TestCase):
-    def test_canonical_policy_has_required_size_and_rules(self):
+    def test_canonical_policy_size_rules(self):
         policy = Path("AGENTS.md").read_bytes()
 
         self.assertEqual(find_violations(Path("AGENTS.md")), [])

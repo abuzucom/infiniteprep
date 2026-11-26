@@ -11,7 +11,7 @@ import yaml
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = REPOSITORY_ROOT / ".github" / "workflows"
 # The two review files pin the reusable review workflows. The repository owner
-# approves each edit to them separately. scripts/check_compliance_tree.py accepts
+# approves each edit to those files separately. scripts/check_compliance_tree.py accepts
 # only an exact key set for the privileged pull_request_target job, so a timeout
 # there fails that check. This check leaves all three files out.
 PINNED_WORKFLOWS = frozenset(

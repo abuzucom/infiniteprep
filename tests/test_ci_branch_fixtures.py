@@ -12,13 +12,13 @@ from tests.test_enforce_branch_name import BLOCKING_EXIT_CODE, REPO_ROOT, hook
 class CiBranchFixtureTest(unittest.TestCase):
     """Use real compliant metadata for every valid-branch handler path."""
 
-    def test_valid_branch_dispatch_uses_isolated_metadata(self) -> None:
+    def test_valid_dispatch_isolated_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             (root / ".git").mkdir()
             (root / ".git" / "HEAD").write_text("ref: refs/heads/fix/fixture\n", encoding="utf-8")
             (root / "scripts").mkdir()
-            for name in ("check_branch_name.py", "trusted_git.py"):
+            for name in ("check_branch_name.py", "trusted_git.py", "branch_name_bans.txt"):
                 (root / "scripts" / name).write_bytes((REPO_ROOT / "scripts" / name).read_bytes())
             cases = (
                 ({"tool_name": [], "tool_input": {}}, BLOCKING_EXIT_CODE),
@@ -35,7 +35,7 @@ class CiBranchFixtureTest(unittest.TestCase):
 class ImmutableAuthenticationTest(unittest.TestCase):
     """Require a scoped token for the trusted commit attribution lookup."""
 
-    def test_scanner_receives_read_only_job_token(self) -> None:
+    def test_scanner_read_only_token(self) -> None:
         path = REPO_ROOT / ".github" / "workflows" / "immutable-conflict-check.yml"
         workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
         job = workflow["jobs"]["immutable-compliance"]

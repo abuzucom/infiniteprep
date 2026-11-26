@@ -11,12 +11,12 @@ from infiniteprep.storage_paths import StorageMode
 PROCESS_REGISTRY = storage_paths.STORAGE_REGISTRY
 
 
-def test_each_test_gets_a_fresh_registry() -> None:
+def test_each_test_gets_fresh_registry() -> None:
     """The process-wide registry never reaches a test."""
     assert storage_paths.STORAGE_REGISTRY is not PROCESS_REGISTRY
 
 
-def test_default_locations_stay_inside_the_test_folder(tmp_path: Path) -> None:
+def test_default_locations_inside_test_folder(tmp_path: Path) -> None:
     """Code that reads the default folders writes below tmp_path, never in the real profile."""
     locations = storage_paths.current()
 
@@ -31,6 +31,6 @@ def test_default_locations_stay_inside_the_test_folder(tmp_path: Path) -> None:
     assert locations.mode is StorageMode.PER_USER
 
 
-def test_two_tests_never_share_a_registry(tmp_path: Path) -> None:
+def test_two_tests_never_share_registry(tmp_path: Path) -> None:
     """A registry configured in one test holds that test's folder only."""
     assert storage_paths.current().data_dir.parent == tmp_path

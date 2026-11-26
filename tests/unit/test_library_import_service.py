@@ -79,7 +79,7 @@ def make_service(repository: Repository, tracks: tuple[ImportedTrack, ...]) -> L
     return LibraryImportService(repository, registry)
 
 
-def test_import_commits_the_tracks_of_the_fake_source(repository: Repository, music: Path) -> None:
+def test_import_commits_fake_source_tracks(repository: Repository, music: Path) -> None:
     """A commit stores the track rows, the approved values, and the library record."""
     track_path = music / "track.wav"
     create_wav_fixture(track_path, duration_sec=SHORT_DURATION_SEC)
@@ -103,7 +103,7 @@ def test_import_commits_the_tracks_of_the_fake_source(repository: Repository, mu
     assert len(repository.list_imported_libraries()) == 1
 
 
-def test_import_leaves_the_source_library_untouched(repository: Repository, music: Path) -> None:
+def test_import_leaves_source_library_untouched(repository: Repository, music: Path) -> None:
     """The import reads the source library and never writes to it."""
     track_path = music / "track.wav"
     create_wav_fixture(track_path, duration_sec=SHORT_DURATION_SEC)
@@ -122,7 +122,7 @@ def test_import_leaves_the_source_library_untouched(repository: Repository, musi
     assert library_path.read_bytes() == before
 
 
-def test_import_reports_a_conflict_with_a_stored_value(repository: Repository, music: Path) -> None:
+def test_import_reports_stored_value_conflict(repository: Repository, music: Path) -> None:
     """A track with a stored value of its own raises a conflict and a proposal."""
     track_path = music / "track.wav"
     create_wav_fixture(track_path, duration_sec=SHORT_DURATION_SEC)
@@ -149,9 +149,7 @@ def test_import_reports_a_conflict_with_a_stored_value(repository: Repository, m
     assert second.conflicts[0].imported_value == "New"
 
 
-def test_import_holds_a_value_that_waits_for_its_storage(
-    repository: Repository, music: Path
-) -> None:
+def test_import_holds_value_awaiting_storage(repository: Repository, music: Path) -> None:
     """A cue value has no storage yet, so the import holds it as pending."""
     track_path = music / "track.wav"
     create_wav_fixture(track_path, duration_sec=SHORT_DURATION_SEC)
@@ -174,9 +172,7 @@ def test_import_holds_a_value_that_waits_for_its_storage(
     assert result.pending_fields == ["cues"]
 
 
-def test_import_leaves_a_track_without_an_audio_file_unresolved(
-    repository: Repository, music: Path
-) -> None:
+def test_track_without_audio_stays_unresolved(repository: Repository, music: Path) -> None:
     """A track whose audio file is missing stays unresolved and writes no row."""
     library_path = write_library(music)
     missing = music / "gone.wav"
@@ -209,7 +205,7 @@ def test_a_cancelled_import_writes_nothing(repository: Repository, music: Path) 
     assert repository.list_imported_libraries() == []
 
 
-def test_import_maps_a_library_path_onto_this_computer(
+def test_import_maps_library_path_locally(
     repository: Repository, music: Path, tmp_path: Path
 ) -> None:
     """A mapping moves the path of a track before the import reads the file."""
@@ -232,9 +228,7 @@ def test_import_maps_a_library_path_onto_this_computer(
     assert result.plan.assets[0].current_path == str(track_path)
 
 
-def test_import_leaves_a_path_that_escapes_the_root_unresolved(
-    repository: Repository, music: Path
-) -> None:
+def test_root_escaping_path_stays_unresolved(repository: Repository, music: Path) -> None:
     """A mapping that would leave the root leaves the track unresolved."""
     library_path = write_library(music)
     service = make_service(
@@ -253,9 +247,7 @@ def test_import_leaves_a_path_that_escapes_the_root_unresolved(
     assert result.plan.assets == []
 
 
-def test_import_finds_a_track_that_moved(
-    repository: Repository, music: Path, tmp_path: Path
-) -> None:
+def test_import_finds_moved_track(repository: Repository, music: Path, tmp_path: Path) -> None:
     """A track whose file moved is found by the search and imported at the new path."""
     track_path = music / "track.wav"
     create_wav_fixture(track_path, duration_sec=SHORT_DURATION_SEC)
@@ -290,7 +282,7 @@ def test_import_finds_a_track_that_moved(
     assert second.relocations[0].confirmed is True
 
 
-def test_import_leaves_a_track_outside_the_root_unresolved(
+def test_track_outside_root_stays_unresolved(
     repository: Repository, music: Path, tmp_path: Path
 ) -> None:
     """A source library cannot make the import read a file outside the root."""
@@ -315,7 +307,7 @@ def test_import_leaves_a_track_outside_the_root_unresolved(
     assert result.plan.assets == []
 
 
-def test_import_leaves_a_track_that_leaves_the_root_through_a_link_unresolved(
+def test_track_linked_outside_root_unresolved(
     repository: Repository, music: Path, tmp_path: Path
 ) -> None:
     """A track that reaches a file through a link out of the root stays unresolved."""
@@ -346,9 +338,7 @@ def test_import_leaves_a_track_that_leaves_the_root_through_a_link_unresolved(
     assert result.unresolved_paths == [str(link / "secret.wav")]
 
 
-def test_the_library_record_and_the_assets_share_one_identifier(
-    repository: Repository, music: Path
-) -> None:
+def test_library_record_assets_share_identifier(repository: Repository, music: Path) -> None:
     """The stored library names the same import as the assets it holds."""
     track_path = music / "track.wav"
     create_wav_fixture(track_path, duration_sec=SHORT_DURATION_SEC)
@@ -368,7 +358,7 @@ def test_the_library_record_and_the_assets_share_one_identifier(
     assert repository.get_imported_library(result.library.id) is not None
 
 
-def test_the_import_saves_the_path_mappings(repository: Repository, music: Path) -> None:
+def test_import_saves_path_mappings(repository: Repository, music: Path) -> None:
     """A commit saves the prefix mappings of the import."""
     track_path = music / "track.wav"
     create_wav_fixture(track_path, duration_sec=SHORT_DURATION_SEC)
@@ -393,7 +383,7 @@ def test_the_import_saves_the_path_mappings(repository: Repository, music: Path)
     assert stored[0].root_path == str(music)
 
 
-def test_a_failed_library_write_rolls_the_whole_import_back(
+def test_failed_library_write_rolls_back(
     repository: Repository, music: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The library record and the assets share one transaction.
@@ -427,7 +417,7 @@ def test_a_failed_library_write_rolls_the_whole_import_back(
     assert repository.approved_fields_by_file() == {}
 
 
-def test_the_repository_writes_join_the_open_batch(repository: Repository) -> None:
+def test_repository_writes_join_open_batch(repository: Repository) -> None:
     """A write inside a batch is not visible to another connection until the batch ends.
 
     The batch owns the transaction. A repository method inside it does not
@@ -454,9 +444,7 @@ def test_the_repository_writes_join_the_open_batch(repository: Repository) -> No
     assert repository.get_imported_library("library-in-batch") is not None
 
 
-def test_a_manual_request_reads_through_the_reader_of_its_format(
-    repository: Repository, music: Path
-) -> None:
+def test_manual_request_uses_format_reader(repository: Repository, music: Path) -> None:
     """A request that names the manual format gets the reader of the file."""
     track_path = music / "track.wav"
     create_wav_fixture(track_path, duration_sec=SHORT_DURATION_SEC)
@@ -477,9 +465,7 @@ def test_a_manual_request_reads_through_the_reader_of_its_format(
     assert len(result.plan.assets) == 1
 
 
-def test_the_imported_assets_name_the_source_group_of_the_import(
-    repository: Repository, music: Path
-) -> None:
+def test_imported_assets_name_source_group(repository: Repository, music: Path) -> None:
     """Every imported asset stays with the group that holds the imported library."""
     track_path = music / "track.wav"
     create_wav_fixture(track_path, duration_sec=SHORT_DURATION_SEC)
@@ -500,7 +486,7 @@ def test_the_imported_assets_name_the_source_group_of_the_import(
     assert [asset.id for asset in assets] == [result.plan.assets[0].id]
 
 
-def test_a_file_that_is_replaced_while_it_opens_stays_unresolved(
+def test_file_replaced_during_open_unresolved(
     repository: Repository, music: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A file that changes between the check and the read never reaches the app."""
@@ -533,9 +519,7 @@ def test_a_file_that_is_replaced_while_it_opens_stays_unresolved(
     assert result.plan.assets == []
 
 
-def test_a_parser_that_fails_leaves_the_track_unresolved(
-    repository: Repository, music: Path
-) -> None:
+def test_failing_parser_leaves_track_unresolved(repository: Repository, music: Path) -> None:
     """A file whose parser raises leaves the track unresolved."""
     broken = music / "broken.wav"
     broken.write_bytes(b"not a wav file at all")
@@ -558,7 +542,7 @@ def test_a_parser_that_fails_leaves_the_track_unresolved(
     assert result.plan.assets == []
 
 
-def test_a_damaged_file_still_imports_with_its_warning(repository: Repository, music: Path) -> None:
+def test_damaged_file_imports_with_warning(repository: Repository, music: Path) -> None:
     """A file the parser reads with a warning imports and keeps the warning."""
     damaged = music / "damaged.wav"
     damaged.write_bytes(b"not a wav file at all")

@@ -37,30 +37,30 @@ class BranchBoundaryTest(unittest.TestCase):
             timeout=TIMEOUT_SECONDS, check=False,
         )
 
-    def test_file_tool_protects_actual_worktree_head(self):
+    def test_file_tool_worktree_head(self):
         result = self.run_payload("Write", {
             "file_path": str(self.admin / "HEAD"),
             "content": "ref: refs/heads/claude/x\n",
         })
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
 
-    def test_shell_write_protects_actual_worktree_head(self):
+    def test_shell_write_worktree_head(self):
         result = self.run_payload("Bash", {
             "command": "printf 'ref: refs/heads/claude/x' > administration/HEAD",
         })
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
 
-    def test_file_tool_rejects_unresolved_metadata_content(self):
+    def test_file_tool_unresolved_metadata(self):
         result = self.run_payload("Write", {
             "file_path": ".git", "content": "gitdir: unknown-location\n",
         })
         self.assertEqual(result.returncode, BLOCKING_EXIT_CODE, result.stderr)
 
-    def test_branch_stdin_is_not_a_literal_target(self):
+    def test_branch_stdin_not_target(self):
         context = {"subcommand": "update-ref", "arguments": ["--stdin"]}
         self.assertTrue(hook._git_context_reason(context, str(self.root)))
 
-    def test_branch_bootstrap_is_available_during_recovery(self):
+    def test_bootstrap_during_recovery(self):
         with tempfile.TemporaryDirectory() as directory:
             policy = Path(directory).resolve()
             (policy / ".git").mkdir()
@@ -81,7 +81,7 @@ class BranchBoundaryTest(unittest.TestCase):
                 result = self.run_payload("Bash", {"command": 'printf "' + "x" * size})
                 self.assertEqual(result.returncode, BLOCKING_EXIT_CODE)
 
-    def test_checker_treats_option_like_branch_as_data(self):
+    def test_option_like_branch_data(self):
         self.assertTrue(hook.check_branch("--help", project_dir=str(REPO_ROOT)))
 
 

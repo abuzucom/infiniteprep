@@ -169,7 +169,7 @@ class GateAdoptionHookTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "")
 
-    def test_process_denies_antigravity_write_outside_staging(self) -> None:
+    def test_process_unstaged_write_denied(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             checker = root / "scripts" / "check_gate_adoption.py"
@@ -188,7 +188,7 @@ class GateAdoptionHookTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('"decision": "deny"', result.stdout)
 
-    def test_process_denies_antigravity_write_without_target(self) -> None:
+    def test_process_targetless_write_denied(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             checker = root / "scripts" / "check_gate_adoption.py"
@@ -202,7 +202,7 @@ class GateAdoptionHookTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('"decision": "deny"', result.stdout)
 
-    def test_process_denies_antigravity_write_outside_repository(self) -> None:
+    def test_process_external_write_denied(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             checker = root / "scripts" / "check_gate_adoption.py"
@@ -268,14 +268,14 @@ class GateAdoptionHookTest(unittest.TestCase):
         )
         self.assertEqual(result, 0, output)
 
-    def test_incomplete_set_allows_read_only_discovery(self) -> None:
+    def test_incomplete_allows_discovery(self) -> None:
         result, output = self.run_hook(
             {"tool_name": "Read", "tool_input": {"file_path": "hooks/example.py"}},
             "codex registration is absent",
         )
         self.assertEqual(result, 0, output)
 
-    def test_incomplete_set_allows_only_staging_writes(self) -> None:
+    def test_incomplete_allows_staging_writes(self) -> None:
         allowed, output = self.run_hook(
             {
                 "tool_name": "Write",
@@ -297,7 +297,7 @@ class GateAdoptionHookTest(unittest.TestCase):
         self.assertEqual(blocked, BLOCKING_EXIT_CODE)
         self.assertIn("codex registration is absent", blocked_output)
 
-    def test_incomplete_set_rejects_staging_path_escape(self) -> None:
+    def test_incomplete_rejects_staging_escape(self) -> None:
         result, output = self.run_hook(
             {
                 "tool_name": "Write",
@@ -328,7 +328,7 @@ class GateAdoptionHookTest(unittest.TestCase):
                     patch.object(self.hook, "_check_complete_set", return_value="gate is absent"):
                 self.assertEqual(self.hook.main(), 0)
 
-    def test_antigravity_rejects_native_write_outside_staging(self) -> None:
+    def test_native_unstaged_write_rejected(self) -> None:
         payload = {
             "toolCall": {
                 "name": "replace_file_content",

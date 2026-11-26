@@ -55,7 +55,7 @@ class SyncCheckEventPathTest(unittest.TestCase):
             *find_suite_steps(load_workflow(OS_TESTS_WORKFLOW)),
         ]
 
-    def test_each_suite_command_runs_in_a_step(self) -> None:
+    def test_suite_commands_run_in_steps(self) -> None:
         commands = [str(step["run"]).strip() for _, step in self.suite_steps]
         self.assertEqual(commands.count(SUITE_COMMANDS[0]), 2)
         self.assertEqual(commands.count(SUITE_COMMANDS[1]), 1)
@@ -69,7 +69,7 @@ class SyncCheckEventPathTest(unittest.TestCase):
         self.assertIn(". '{0}'", shell)
         self.assertIn("exit $LASTEXITCODE", shell)
 
-    def test_posix_suite_steps_unset_the_event_path(self) -> None:
+    def test_posix_steps_unset_event_path(self) -> None:
         posix_steps = [step for job, step in self.suite_steps if job != "tests-windows"]
         self.assertEqual(len(posix_steps), 2)
         for step in posix_steps:
@@ -79,26 +79,26 @@ class SyncCheckEventPathTest(unittest.TestCase):
 class SecurityReviewPushGuardTest(unittest.TestCase):
     """The security review resolves a pull request only for pull request runs."""
 
-    def test_workflow_run_trigger_ignores_main_branch(self) -> None:
+    def test_workflow_run_ignores_main_branch(self) -> None:
         workflow = load_workflow(SECURITY_CALLER)
         on_trigger = workflow.get("on") or workflow.get(True) or {}
         trigger = on_trigger.get("workflow_run", {})
         self.assertEqual(trigger.get("branches-ignore"), ["main"])
 
-    def test_resolve_job_skips_push_triggered_ci_runs(self) -> None:
+    def test_resolve_job_skips_push_runs(self) -> None:
         workflow = load_workflow(SECURITY_CALLER)
         self.assertEqual(workflow["jobs"]["resolve-pr"].get("if"), PULL_REQUEST_GUARD)
 
     def test_review_jobs_need_resolved_pr(self) -> None:
         jobs = load_workflow(SECURITY_CALLER)["jobs"]
-        for job_name in ("review", "fork-review", "fork-review-skipped"):
+        for job_name in ("review",):
             self.assertIn("needs.resolve-pr.result == 'success'", jobs[job_name]["if"])
 
 
 class QualityReviewPushGuardTest(unittest.TestCase):
     """The quality review ignores main branch pushes on workflow_run."""
 
-    def test_workflow_run_trigger_ignores_main_branch(self) -> None:
+    def test_workflow_run_ignores_main_branch(self) -> None:
         workflow = load_workflow(QUALITY_CALLER)
         on_trigger = workflow.get("on") or workflow.get(True) or {}
         trigger = on_trigger.get("workflow_run", {})

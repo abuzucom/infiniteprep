@@ -102,13 +102,13 @@ ipython_config.py
 
 # uv
 #   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   This is especially recommended for binary packages to keep builds reproducible, and is more
 #   commonly ignored for libraries.
 # uv.lock
 
 # poetry
 #   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   This is especially recommended for binary packages to keep builds reproducible, and is more
 #   commonly ignored for libraries.
 #   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
 # poetry.lock
@@ -271,3 +271,11 @@ $RECYCLE.BIN/
 .idea/
 *.swp
 *~
+
+# Comment drafts for scripts/trusted_gh.py comment. Drafts never belong in commits.
+.comment-drafts/
+
+# Per-session scratch and worktree folders, handoffs included.
+# scripts/check_forbidden_paths.py blocks any commit that stages a path below them.
+.scratch/
+.worktrees/

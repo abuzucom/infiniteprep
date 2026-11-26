@@ -78,9 +78,7 @@ def test_crash_leaves_one_interrupted_record(library: Any, monkeypatch: pytest.M
     assert sorted(p.name for p in source.parent.iterdir()) == ["track_0.wav", "track_1.wav"]
 
 
-def test_restore_reverts_and_marks_rolled_back(
-    library: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_restore_reverts_marks_rolled_back(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """Restore puts back the verified backup and clears the interrupted list."""
     repo, write_svc, file_ids, source, original_hash = library
     operation_id = crash_mid_write(write_svc, file_ids[0], source, monkeypatch)
@@ -112,7 +110,7 @@ def test_tampered_backup_keeps_record_pending(
     assert [r.operation_id for r in write_svc.list_interrupted_operations()] == [operation_id]
 
 
-def test_mark_finished_keeps_file_and_hash(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mark_finished_keeps_file_hash(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """Mark as finished stores COMPLETED and the hash of the file as it is now."""
     repo, write_svc, file_ids, source, _ = library
     operation_id = crash_mid_write(write_svc, file_ids[0], source, monkeypatch)
@@ -126,9 +124,7 @@ def test_mark_finished_keeps_file_and_hash(library: Any, monkeypatch: pytest.Mon
     assert compute_sha256(source) == CORRUPT_HASH
 
 
-def test_writes_are_blocked_while_a_record_is_pending(
-    library: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_pending_record_blocks_writes(library: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """A pending record stops apply_batch before it touches any other file."""
     _, write_svc, file_ids, source, _ = library
     crash_mid_write(write_svc, file_ids[0], source, monkeypatch)

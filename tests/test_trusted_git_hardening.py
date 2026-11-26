@@ -123,7 +123,7 @@ class GitContextTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertFalse(name in environment)
 
-    def test_malformed_pairs_and_nul_values_are_dropped(self):
+    def test_malformed_pairs_dropped(self):
         environment = self.run_with_context({
             "GIT_CONFIG_COUNT": "x", "GIT_CONFIG_KEY_0": "user.email",
             "GIT_CONFIG_VALUE_0": "a@b", "GIT_DIR": "bad\0dir",
@@ -149,7 +149,7 @@ class GitContextTest(unittest.TestCase):
 class CheckerContextTest(unittest.TestCase):
     """The policy-root checker sees an inline identity through trusted Git."""
 
-    def test_inline_user_email_reaches_the_checker(self):
+    def test_inline_email_reaches_checker(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         root = Path(directory.name)

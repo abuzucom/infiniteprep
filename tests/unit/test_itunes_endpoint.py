@@ -74,7 +74,7 @@ def test_endpoint_is_published_search_url() -> None:
     assert parsed.path == "/search"
 
 
-def test_the_request_path_refuses_a_redirect() -> None:
+def test_request_path_refuses_redirect() -> None:
     """The opener follows no redirect, so a lookup never leaves the endpoint."""
     opener = build_search_opener()
 
@@ -131,7 +131,7 @@ def test_request_refuses_off_endpoint_url() -> None:
         adapter._default_http_get_json("https://127.0.0.1/search", {})
 
 
-def test_every_adapter_shares_the_provider_limiter() -> None:
+def test_adapters_share_provider_limiter() -> None:
     """Two adapters in the process wait for the same interval."""
     first = ItunesSearchAdapter(repository=build_memory_repository())
     second = ItunesSearchAdapter(repository=build_memory_repository())

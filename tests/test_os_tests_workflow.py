@@ -68,13 +68,13 @@ class OsTestsTriggerTest(unittest.TestCase):
         """A merged change already passed its cross-platform run on the pull request."""
         self.assertNotIn("push", self.triggers)
 
-    def test_pull_request_edits_start_no_run(self) -> None:
+    def test_pr_edits_start_no_run(self) -> None:
         """The pull request trigger lists the code events and omits edited."""
         pull_request = self.triggers["pull_request"]
         self.assertEqual(pull_request["branches"], [PRIMARY_BRANCH])
         self.assertEqual(pull_request["types"], CODE_EVENT_TYPES)
 
-    def test_newer_run_replaces_the_older_run(self) -> None:
+    def test_newer_run_replaces_older_run(self) -> None:
         """A newer pull request commit replaces the older run of the same pull request."""
         concurrency = self.workflow["concurrency"]
         self.assertIs(concurrency["cancel-in-progress"], True)
@@ -105,13 +105,13 @@ class OsTestsJobTest(unittest.TestCase):
         self.assertEqual(classify["run"], CLASSIFY_COMMAND)
         self.assertEqual(classify["env"], OS_TESTS_REVISION_SOURCES)
 
-    def test_each_platform_job_runs_on_its_platform(self) -> None:
+    def test_platform_jobs_keep_runner_images(self) -> None:
         """The Windows and macOS jobs keep their runner images."""
         for job_name, runner in OS_TEST_JOBS.items():
             with self.subTest(job=job_name):
                 self.assertEqual(self.jobs[job_name]["runs-on"], runner)
 
-    def test_platform_jobs_run_unless_the_class_is_light(self) -> None:
+    def test_platform_jobs_run_unless_light(self) -> None:
         """A failed changes job yields no flag, and the platform jobs run."""
         for job_name in OS_TEST_JOBS:
             with self.subTest(job=job_name):
@@ -147,12 +147,12 @@ class SyncCheckSplitTest(unittest.TestCase):
             with self.subTest(job=job_name):
                 self.assertNotIn(job_name, self.jobs)
 
-    def test_sync_check_still_runs_on_edits(self) -> None:
+    def test_sync_check_runs_on_edits(self) -> None:
         """The pull request title and description checks rerun after an edit."""
         types = self.workflow[SYNC_TRIGGER_KEY]["pull_request"]["types"]
         self.assertIn(EDITED_EVENT_TYPE, types)
 
-    def test_agent_lint_skips_on_a_light_change(self) -> None:
+    def test_agent_lint_skips_light_change(self) -> None:
         """The advisory lint reads the light flag of the classify step in its own job."""
         steps = self.jobs["check-sync"]["steps"]
         classify = find_classify_step(steps)
@@ -165,7 +165,7 @@ class SyncCheckSplitTest(unittest.TestCase):
         self.assertEqual(agent_lint["if"], STEP_NOT_LIGHT)
         self.assertLess(steps.index(classify), steps.index(agent_lint))
 
-    def test_no_other_sync_check_step_reads_the_light_flag(self) -> None:
+    def test_only_agentlint_reads_light_flag(self) -> None:
         """Every blocking check in check-sync runs on a light change."""
         steps = self.jobs["check-sync"]["steps"]
         gated = [step["name"] for step in steps if STEP_NOT_LIGHT in str(step.get("if", ""))]

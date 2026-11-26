@@ -44,7 +44,7 @@ class FakeImporter:
         )
 
 
-def test_registry_holds_the_importer_of_each_format() -> None:
+def test_registry_holds_importer_per_format() -> None:
     """Registering two formats keeps both, and the identifiers come back in name order."""
     registry = ImporterRegistry()
     registry.register(FakeImporter("traktor"))
@@ -55,7 +55,7 @@ def test_registry_holds_the_importer_of_each_format() -> None:
     assert registry.get("mixxx") is None
 
 
-def test_registry_replaces_the_importer_of_a_format() -> None:
+def test_registry_replaces_format_importer() -> None:
     """Registering a format again replaces the earlier importer of that format."""
     registry = ImporterRegistry()
     first = FakeImporter("traktor")
@@ -67,7 +67,7 @@ def test_registry_replaces_the_importer_of_a_format() -> None:
     assert registry.format_ids() == ("traktor",)
 
 
-def test_import_library_reads_through_the_registered_importer(tmp_path: Path) -> None:
+def test_import_library_uses_registered_importer(tmp_path: Path) -> None:
     """The registry hands the library to the importer of the named format."""
     importer = FakeImporter("traktor")
     registry = ImporterRegistry()
@@ -82,7 +82,7 @@ def test_import_library_reads_through_the_registered_importer(tmp_path: Path) ->
     assert library.tracks[0].values[0].value == "Song"
 
 
-def test_import_library_raises_for_an_unregistered_format(tmp_path: Path) -> None:
+def test_import_library_rejects_unregistered_format(tmp_path: Path) -> None:
     """A format with no importer raises rather than reading the file."""
     registry = ImporterRegistry()
     source = tmp_path / "collection.nml"
@@ -91,7 +91,7 @@ def test_import_library_raises_for_an_unregistered_format(tmp_path: Path) -> Non
         import_library(source, registry, "mixxx")
 
 
-def test_the_missing_importer_error_names_the_registered_formats(tmp_path: Path) -> None:
+def test_missing_importer_error_names_formats(tmp_path: Path) -> None:
     """The error names the formats the registry can read."""
     registry = ImporterRegistry()
     registry.register(FakeImporter("traktor"))
@@ -101,7 +101,7 @@ def test_the_missing_importer_error_names_the_registered_formats(tmp_path: Path)
         import_library(source, registry, "mixxx")
 
 
-def test_the_production_registry_holds_the_built_in_importers() -> None:
+def test_production_registry_has_default_importers() -> None:
     """The registry the app reads libraries through holds the built-in importers."""
     registry = production_registry()
 
@@ -110,14 +110,14 @@ def test_the_production_registry_holds_the_built_in_importers() -> None:
     )
 
 
-def test_the_production_registry_takes_the_importers_it_is_given() -> None:
+def test_production_registry_takes_given_importers() -> None:
     """A caller can build a registry that holds a chosen set of importers."""
     registry = production_registry([FakeImporter("traktor"), FakeImporter("serato")])
 
     assert registry.format_ids() == ("serato", "traktor")
 
 
-def test_a_built_in_importer_reads_through_the_production_registry(tmp_path: Path) -> None:
+def test_production_registry_runs_default_importer(tmp_path: Path) -> None:
     """Every built-in importer satisfies the interface the framework calls."""
     registry = production_registry()
 
@@ -127,6 +127,6 @@ def test_a_built_in_importer_reads_through_the_production_registry(tmp_path: Pat
         assert isinstance(importer, LibraryImporter)
 
 
-def test_a_fake_importer_satisfies_the_importer_protocol() -> None:
+def test_fake_importer_satisfies_protocol() -> None:
     """Any reader with the format identifier and the read method serves as an importer."""
     assert isinstance(FakeImporter(), LibraryImporter)

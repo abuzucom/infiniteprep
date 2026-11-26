@@ -39,12 +39,12 @@ class LauncherNameTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertTrue(CHECKER.is_denied(name))
 
-    def test_files_inside_a_tool_folder_are_denied(self) -> None:
+    def test_tool_folder_files_are_denied(self) -> None:
         """A file below a folder named after a tool fails, whatever its own name."""
         self.assertTrue(CHECKER.is_denied("_internal/Designer/readme.txt"))
         self.assertTrue(CHECKER.is_denied("_internal/qmlls/data/index.json"))
 
-    def test_data_files_and_near_names_stay_allowed(self) -> None:
+    def test_data_files_near_names_allowed(self) -> None:
         """Data suffixes and longer names are not tool names."""
         for name in (
             "_internal/rcc.dat",

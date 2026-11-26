@@ -99,7 +99,7 @@ class StatementBoundaryTest(unittest.TestCase):
         ("Remove-Item -Recurse C:\\work\\build > log.txt", "ask"),
     )
 
-    def test_statements_after_a_separator_are_classified(self):
+    def test_post_separator_statements_classified(self):
         for command, expected in self.CASES:
             with self.subTest(command=command):
                 _, decision = run_hook(command)
@@ -135,7 +135,7 @@ class EncodedCommandTest(unittest.TestCase):
         "-encodedcommand",
     )
 
-    def test_every_supported_spelling_classifies_destructive_payloads(self):
+    def test_supported_spellings_classify_payloads(self):
         payload = encoded("Remove-Item -Recurse C:\\work\\build")
         for program in ("powershell", "powershell.exe", "pwsh", "pwsh.exe"):
             for flag in self.FLAGS:
@@ -171,11 +171,11 @@ class EncodedCommandTest(unittest.TestCase):
         self.assertEqual(code, BLOCKING_EXIT_CODE)
         self.assertEqual(decision, "deny")
 
-    def test_e_is_not_encoded_command_for_an_unrelated_interpreter(self):
+    def test_e_flag_other_interpreter(self):
         _, decision = run_hook("python -e not-base64")
         self.assertEqual(decision, "")
 
-    def test_command_flag_without_payload_still_denies(self):
+    def test_command_flag_without_payload(self):
         _, decision = run_hook("pwsh -Command")
         self.assertEqual(decision, "deny")
 
@@ -428,12 +428,12 @@ class PowerShellPolicyTest(unittest.TestCase):
                 with self.subTest(program=program, operands=operands):
                     self.assertEqual(run_hook(command)[1], "deny")
 
-    def test_remote_command_paths_ignore_fixture_names(self):
+    def test_remote_paths_ignore_fixtures(self):
         for command in self.REMOTE_COMMAND_PATHS:
             with self.subTest(command=command):
                 self.assertEqual(run_hook(command)[1], "deny")
 
-    def test_transfer_rules_ignore_sources_and_endpoints(self):
+    def test_transfer_rules_ignore_endpoints(self):
         for command in self.TRANSFER_CASES:
             with self.subTest(command=command):
                 self.assertEqual(run_hook(command)[1], "deny")
@@ -443,7 +443,7 @@ class PowerShellPolicyTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(run_hook(command)[1], "deny")
 
-    def test_web_transfer_rules_ignore_fixture_endpoints(self):
+    def test_web_transfer_ignores_endpoints(self):
         for command in self.WEB_TRANSFER_CASES:
             with self.subTest(command=command):
                 self.assertEqual(run_hook(command)[1], "deny")
@@ -453,12 +453,12 @@ class PowerShellPolicyTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(run_hook(command)[1], "ask")
 
-    def test_archive_policy_does_not_depend_on_example_filenames(self):
+    def test_archive_policy_ignores_filenames(self):
         for command in self.ARCHIVE_CASES:
             with self.subTest(command=command):
                 self.assertEqual(run_hook(command)[1], "ask")
 
-    def test_file_policy_uses_operation_and_path_properties(self):
+    def test_file_policy_properties(self):
         for command, expected in self.FILE_NAME_CASES:
             with self.subTest(command=command):
                 self.assertEqual(run_hook(command)[1], expected)
@@ -482,7 +482,7 @@ class GitDelegationTest(unittest.TestCase):
         ("git push origin feat/x", ""),
     )
 
-    def test_git_commands_match_the_bash_gate(self):
+    def test_git_matches_bash_gate(self):
         for command, expected in self.CASES:
             with self.subTest(command=command):
                 _, decision = run_hook(command)
@@ -492,11 +492,11 @@ class GitDelegationTest(unittest.TestCase):
 class TestWriteTest(unittest.TestCase):
     """A redirect into a test file is an edit no Edit matcher sees."""
 
-    def test_redirect_into_a_test_file_gates(self):
+    def test_test_file_redirect_gates(self):
         _, decision = run_hook("Write-Output x > tests/test_auth.py")
         self.assertEqual(decision, "ask")
 
-    def test_redirect_into_a_source_file_passes(self):
+    def test_source_file_redirect_passes(self):
         _, decision = run_hook("Write-Output x > src/app.js")
         self.assertEqual(decision, "")
 
@@ -516,7 +516,7 @@ class TestWriteTest(unittest.TestCase):
                 _, decision = run_hook(command)
                 self.assertEqual(decision, "ask")
 
-    def test_named_write_paths_gate_regardless_of_parameter_order(self):
+    def test_named_write_paths_gate(self):
         commands = (
             "Set-Content -Value x -Path hooks/new.py",
             "Add-Content -Value x -LiteralPath .claude/settings.json",
@@ -530,7 +530,7 @@ class TestWriteTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(run_hook(command)[1], "ask")
 
-    def test_abbreviated_write_parameters_gate_regardless_of_order(self):
+    def test_abbreviated_write_parameters_gate(self):
         commands = (
             "Set-Content -Va x -Pat hooks/new.py",
             "Add-Content -Va x -L .claude/settings.json",
@@ -544,7 +544,7 @@ class TestWriteTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(run_hook(command)[1], "ask")
 
-    def test_linked_directory_into_hooks_is_gated(self):
+    def test_hooks_directory_link_gated(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             hooks = root / "hooks"
@@ -575,7 +575,7 @@ class GitEnvironmentTest(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(run_hook(command)[1], "ask")
 
-    def test_provider_and_braced_environment_assignments_are_gated(self):
+    def test_provider_braced_env_gated(self):
         commands = (
             "${env:GIT_PAGER}='/tmp/evil'; git status",
             "Set-Item Env:GIT_EXTERNAL_DIFF /tmp/evil; git diff",
@@ -633,7 +633,7 @@ if __name__ == "__main__":
 class CorpusTest(unittest.TestCase):
     """Every known PowerShell bypass reaches the verdict the corpus records."""
 
-    def test_every_corpus_row_reaches_its_verdict(self):
+    def test_corpus_verdicts(self):
         for command, expected, why in gate_corpus.POWERSHELL_CASES:
             with self.subTest(command=command, why=why):
                 _, decision = run_hook(command)

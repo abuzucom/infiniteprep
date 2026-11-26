@@ -47,7 +47,7 @@ def _run_check_assets(arguments: list[str]) -> tuple[int, str]:
 class ExplicitBundleRequirementTest(unittest.TestCase):
     """Only --require-bundles makes check-assets expect Sigstore bundles."""
 
-    def test_stray_bundle_is_an_extra_without_the_flag(self) -> None:
+    def test_stray_bundle_extra_without_flag(self) -> None:
         """One bundle beside the six packages yields one extra-file problem."""
         with tempfile.TemporaryDirectory() as folder:
             _write_files(Path(folder), (*PACKAGES, BUNDLES[0]))
@@ -56,7 +56,7 @@ class ExplicitBundleRequirementTest(unittest.TestCase):
         self.assertIn(BUNDLES[0], problems[0])
         self.assertIn(NOT_AN_ASSET, problems[0])
 
-    def test_complete_bundle_set_fails_without_the_flag(self) -> None:
+    def test_complete_bundles_fail_without_flag(self) -> None:
         """Every bundle counts as an extra file when the flag is absent."""
         with tempfile.TemporaryDirectory() as folder:
             _write_files(Path(folder), (*PACKAGES, *BUNDLES))
@@ -66,7 +66,7 @@ class ExplicitBundleRequirementTest(unittest.TestCase):
         self.assertTrue(all(NOT_AN_ASSET in problem for problem in problems), problems)
         self.assertEqual(exit_code, RELEASE.CHECK_FAILED)
 
-    def test_complete_bundle_set_passes_with_the_flag(self) -> None:
+    def test_complete_bundles_pass_with_flag(self) -> None:
         """The six packages and six bundles pass under --require-bundles."""
         with tempfile.TemporaryDirectory() as folder:
             _write_files(Path(folder), (*PACKAGES, *BUNDLES))
@@ -79,7 +79,7 @@ class ExplicitBundleRequirementTest(unittest.TestCase):
 class SuccessMessageCountTest(unittest.TestCase):
     """The success line states the number of expected assets."""
 
-    def test_message_counts_packages_without_the_flag(self) -> None:
+    def test_message_counts_packages_without_flag(self) -> None:
         """Six packages give a count of six."""
         with tempfile.TemporaryDirectory() as folder:
             _write_files(Path(folder), PACKAGES)

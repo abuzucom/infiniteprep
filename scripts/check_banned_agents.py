@@ -19,6 +19,11 @@ import subprocess
 import sys
 
 try:
+    from scripts._commit_trailers import parse_coauthor, terminal_trailers
+except ModuleNotFoundError:
+    from _commit_trailers import parse_coauthor, terminal_trailers
+
+try:
     from scripts.trusted_git import run_git
 except ModuleNotFoundError:
     try:
@@ -32,12 +37,6 @@ DENYLIST_NAMES = ("grok", "xai")
 DENYLIST_EMAIL_DOMAINS = ("x.ai",)
 DENYLIST_MODELS = ("deepseekv4flash",)
 
-TRAILER_LINE = re.compile(
-    r"^(?P<key>[A-Za-z0-9]+(?:[- ][A-Za-z0-9]+)*):[ \t]*(?P<value>.*)$"
-)
-CO_AUTHOR = re.compile(
-    r"^(?P<name>[^<>]+?)[ \t]*(?:<(?P<email>[^<>]+)>[ \t]*)?$"
-)
 OBJECT_ID = re.compile(r"^[0-9a-fA-F]{40,64}$")
 MAX_COMMITS = 200
 MAX_COMMIT_BYTES = 256 * 1024
@@ -162,30 +161,9 @@ def _extract_pr_disclosures(body: str) -> list[str]:
     return disclosures
 
 
-def _terminal_trailers(body: str) -> list[tuple[str, str]]:
-    """Return key/value pairs from a structured terminal trailer paragraph."""
-    lines = body.splitlines()
-    while lines and not lines[-1].strip():
-        lines.pop()
-    if not lines:
-        return []
-    trailer_lines = []
-    for line in reversed(lines):
-        if not line.strip():
-            break
-        trailer_lines.append(line)
-    trailer_lines.reverse()
-    trailers = []
-    for line in trailer_lines:
-        if line.startswith((" ", "\t")):
-            if trailers:
-                key, value = trailers[-1]
-                trailers[-1] = (key, f"{value}\n{line.lstrip()}")
-            continue
-        match = TRAILER_LINE.fullmatch(line)
-        if match:
-            trailers.append((match.group("key"), match.group("value")))
-    return trailers
+# The attribution checker reads the same trailer paragraph through
+# scripts/_commit_trailers.py.
+_terminal_trailers = terminal_trailers
 
 
 def find_violations(
@@ -214,7 +192,7 @@ def find_violations(
             norm_key = key.lower().replace(" ", "-")
             if norm_key not in ("co-authored-by", "assisted-by"):
                 continue
-            match = CO_AUTHOR.fullmatch(value)
+            match = parse_coauthor(value)
             if not match:
                 continue
             name = match.group("name").strip()
@@ -232,7 +210,7 @@ def find_violations(
         violations.append(f"PR author: banned-agent login '{pr_author}'")
     if pr_body:
         for disclosure in _extract_pr_disclosures(pr_body):
-            match = CO_AUTHOR.fullmatch(disclosure)
+            match = parse_coauthor(disclosure)
             name = match.group("name").strip() if match else disclosure.strip()
             email = match.group("email") or "" if match else ""
             if _matches_denylist(

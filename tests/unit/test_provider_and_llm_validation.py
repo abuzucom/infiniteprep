@@ -66,7 +66,7 @@ def test_validator_rejects_mismatched_pair() -> None:
     assert "does not belong" in error
 
 
-def test_rejects_value_when_none_have_values() -> None:
+def test_rejects_value_without_candidate_values() -> None:
     """A proposed value with no candidate value to match counts as invented."""
     allowed = [{"id": "cand-1"}, {"id": "cand-2"}]
 
@@ -104,7 +104,7 @@ def test_validator_rejects_bad_types_sizes(output: dict[str, Any]) -> None:
     assert is_valid is False
 
 
-def test_validator_accepts_pair_id_or_value() -> None:
+def test_validator_accepts_id_or_value() -> None:
     """A matching pair, a lone known ID, and a lone known value each pass."""
     validator = ClosedWorldValidator()
 
@@ -149,7 +149,7 @@ def test_adapter_failure_names_only_class() -> None:
     assert body_text not in result["rationale"]
 
 
-def test_provider_text_accepts_text_and_integers_only() -> None:
+def test_provider_text_accepts_text_integers() -> None:
     """Text and integers pass. Booleans, floats, and containers read as absent."""
     assert provider_text("  Deep Dish  ") == "Deep Dish"
     assert provider_text(1994) == "1994"
@@ -159,7 +159,7 @@ def test_provider_text_accepts_text_and_integers_only() -> None:
     assert provider_text("   ") is None
 
 
-def test_provider_text_drops_controls_and_caps() -> None:
+def test_provider_text_drops_controls_caps() -> None:
     """Line breaks and tabs drop out, and long text stops at the cap."""
     assert provider_text("Deep\nDish\t") == "DeepDish"
     capped = provider_text(LONG_TEXT)
@@ -167,7 +167,7 @@ def test_provider_text_drops_controls_and_caps() -> None:
     assert len(capped) == MAX_PROVIDER_TEXT_CHARS
 
 
-def test_provider_number_and_dicts_reject_bad_shapes() -> None:
+def test_number_dicts_reject_bad_shapes() -> None:
     """Numbers must be finite and non-negative. Lists keep dict items up to the cap."""
     assert provider_number(480) == SAMPLE_DURATION_SEC
     assert provider_number("480") is None
@@ -237,7 +237,7 @@ def test_discogs_never_caches_non_object() -> None:
     assert len(requested) == 2
 
 
-def test_musicbrainz_caps_text_skips_text_length() -> None:
+def test_musicbrainz_caps_text_skips_length() -> None:
     """A long title stops at the cap, and a length given as text reads as no duration."""
     payload = {"recordings": [{"id": "rec-1", "title": LONG_TEXT, "length": "480000"}]}
     adapter = MusicBrainzAdapter(
@@ -251,7 +251,7 @@ def test_musicbrainz_caps_text_skips_text_length() -> None:
     assert candidates[0].duration is None
 
 
-def test_acoustid_rejects_bad_score_and_items(tmp_path: Path) -> None:
+def test_acoustid_rejects_bad_score_items(tmp_path: Path) -> None:
     """A score above 1 reads as no confidence, and non-dict list items drop out."""
     payload = {
         "results": [
@@ -288,7 +288,7 @@ def test_acoustid_rejects_bad_score_and_items(tmp_path: Path) -> None:
         (b"not json", []),
     ],
 )
-def test_ollama_model_list_reads_only_valid_names(
+def test_ollama_list_reads_valid_names(
     monkeypatch: pytest.MonkeyPatch, body: bytes, expected: list[str]
 ) -> None:
     """The tag probe keeps valid names and returns nothing for a malformed body."""
@@ -299,7 +299,7 @@ def test_ollama_model_list_reads_only_valid_names(
     assert OllamaBootstrapService().list_installed_models() == expected
 
 
-def test_ollama_model_list_refuses_big_body(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ollama_list_refuses_big_body(monkeypatch: pytest.MonkeyPatch) -> None:
     """A tag response larger than the cap returns no models."""
     monkeypatch.setattr(ollama_bootstrap, "MAX_TAGS_RESPONSE_BYTES", len(TAGS_TOO_LARGE) - 1)
     monkeypatch.setattr(

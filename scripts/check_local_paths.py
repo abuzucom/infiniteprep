@@ -4,13 +4,13 @@
 Two checks share one pass per line:
 
 - Check 2 flags user-profile paths (`C:\\Users\\<name>`, `/Users/<name>`,
-  `/home/<name>`, and the same paths inside `file:` URIs) whose user segment
-  is not a placeholder and is not an approved `.local-path-allowlist` pair.
+  `/home/<name>`, and the same paths inside `file:` URIs) with a user segment
+  that is not a placeholder and is not an approved `.local-path-allowlist` pair.
 - Check 1 runs only on a developer machine. It flags the local account name,
   home directory, and computer name, read from OS APIs at run time.
 
 The checker never stores, logs, or echoes a runtime identity value. Only
-`--report`, which refuses to run in CI, prints committed user-segment names
+`--report` refuses to run in CI. Locally it prints committed user-segment names
 so that a human can approve allowlist entries one by one.
 
 Exit codes: 0 clean, 1 findings or a fail-closed error, 2 usage error.
@@ -203,12 +203,12 @@ def _decode_as(content: bytes, encoding: str) -> str | None:
         return content.decode(encoding)
     except UnicodeDecodeError:
         # A misfit is an expected result: the caller tries the next
-        # candidate and ends at Latin-1, which accepts every byte.
+        # candidate and ends at Latin-1. Latin-1 accepts every byte.
         return None
 
 
 def _bomless_wide_encodings(content: bytes) -> list:
-    """Return UTF-16 candidates whose NUL byte pattern identifies them."""
+    """Return UTF-16 candidates identified by a NUL byte pattern."""
     if len(content) < UTF16_UNIT_BYTES or len(content) % UTF16_UNIT_BYTES:
         return []
     even = content[0::UTF16_UNIT_BYTES].count(0) / (len(content) // UTF16_UNIT_BYTES)
