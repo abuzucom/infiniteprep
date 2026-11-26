@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.90.2] (2026-11-26)
+## [0.90.3] (2026-11-26)
 
 ### Added
 
@@ -17,6 +17,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- The test suite now covers the desktop entrypoint, USB manifest confinement, library import boundaries, adapter fallbacks, credential storage, settings validation, and waveform worker outcomes.
 - Every taken hook, checker, test, client setting, and policy document matches the template revision. The policy copies come from `scripts/sync.py`.
 - The `pr-checks` job of `agents-compliance.yml` runs on draft pull requests. `agents-md-compliance.yml` has no branch filter and also runs on the `edited` event.
 - `sync-check.yml` runs on pull requests only and adds the delegated recovery command check.
@@ -33,7 +34,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tests/test_review_wiring.py` covers the wrapper pins, the permissions, the secret mapping, and the check names.
 - `ci/README.md` kept the `ci` path that the CodeQL configuration declared. The default setup reads that configuration from `main`.
 - The CodeQL configuration drops the `ci` path.
-- The version advances from 0.88.0 to 0.90.2 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.88.0 to 0.90.3 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 
