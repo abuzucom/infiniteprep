@@ -48,12 +48,23 @@ WORKER_CRASH_MESSAGE: Final[str] = (
 )
 # The message a file gets when the batch was cancelled before its analysis ran.
 CANCELLED_MESSAGE: Final[str] = "The analysis was cancelled before this file ran."
+# The message a file gets when its analysis took longer than the time limit.
+ANALYSIS_TIMEOUT_MESSAGE: Final[str] = (
+    "The analysis of this file took longer than the time limit. Check the file."
+)
+# Seconds one file may take in a worker. The analyzer reads at most 30 minutes of audio,
+# so a healthy file ends in seconds. The limit ends a file whose decoder hangs.
+ANALYSIS_TIMEOUT_SECONDS: Final[float] = 3600.0
 # A file runs at most twice. The second run is the retry after a worker died.
 MAX_TASK_ATTEMPTS: Final[int] = 2
 
 
 class PoolCancelled(Exception):
     """Raised inside the pool when a cancel request stops the workers."""
+
+
+class AnalysisTimedOut(Exception):
+    """Raised inside the pool when one file takes longer than the time limit."""
 
 
 @dataclass(frozen=True)
@@ -140,29 +151,63 @@ class AnalysisPool:
             return self._ready.popleft()
         if not self._tasks:
             raise RuntimeError("No analysis task was submitted to the pool.")
-        task = self._tasks[0]
+        return self._head_outcome(self._tasks[0], should_cancel)
+
+    def _head_outcome(
+        self, task: _Task, should_cancel: Callable[[], bool] | None
+    ) -> AnalysisOutcome:
+        """Wait for the outcome of the task at the head of the queue."""
         if task.error is not None:
-            self._tasks.popleft()
-            return AnalysisOutcome(file_id=task.file_id, path=task.path, error=task.error)
+            return self._failed_outcome(task, task.error)
         try:
             result = self._await_result(task, should_cancel)
         except PoolCancelled:
-            self._tasks.clear()
-            return AnalysisOutcome(
-                file_id=task.file_id, path=task.path, error=CANCELLED_MESSAGE, cancelled=True
-            )
+            return self._cancelled_outcome(task)
         except BrokenExecutor as error:
-            self._recover_from_crash()
-            if not self._ready:
-                raise RuntimeError("The analysis pool lost the outcome of a task.") from error
-            return self._ready.popleft()
+            return self._recover_outcome(task, should_cancel, error)
+        except AnalysisTimedOut:
+            return self._timed_out_outcome(task)
         except Exception as error:
             logger.exception("The analysis of %s failed in the worker.", task.path)
-            self._tasks.popleft()
-            message = f"{type(error).__name__}: {error}"
-            return AnalysisOutcome(file_id=task.file_id, path=task.path, error=message)
+            return self._failed_outcome(task, f"{type(error).__name__}: {error}")
         self._tasks.popleft()
         return AnalysisOutcome(file_id=task.file_id, path=task.path, result=result)
+
+    def _failed_outcome(self, task: _Task, message: str) -> AnalysisOutcome:
+        """Return the outcome of a task that ended with an error."""
+        self._tasks.popleft()
+        return AnalysisOutcome(file_id=task.file_id, path=task.path, error=message)
+
+    def _cancelled_outcome(self, task: _Task) -> AnalysisOutcome:
+        """Return the outcome of a task that a cancel request stopped."""
+        self._tasks.clear()
+        return AnalysisOutcome(
+            file_id=task.file_id, path=task.path, error=CANCELLED_MESSAGE, cancelled=True
+        )
+
+    def _timed_out_outcome(self, task: _Task) -> AnalysisOutcome:
+        """Return the outcome of a file that took longer than the time limit.
+
+        The worker that hung ends now. The pool rebuilds for the files after it.
+        """
+        self._shutdown_executor()
+        self._tasks.popleft()
+        return AnalysisOutcome(file_id=task.file_id, path=task.path, error=ANALYSIS_TIMEOUT_MESSAGE)
+
+    def _recover_outcome(
+        self,
+        task: _Task,
+        should_cancel: Callable[[], bool] | None,
+        error: BrokenExecutor,
+    ) -> AnalysisOutcome:
+        """Rebuild the pool after a crash and return the outcome of the next file."""
+        try:
+            self._recover_from_crash(should_cancel)
+        except PoolCancelled:
+            return self._cancelled_outcome(task)
+        if not self._ready:
+            raise RuntimeError("The analysis pool lost the outcome of a task.") from error
+        return self._ready.popleft()
 
     def cancel(self) -> None:
         """Stop the worker processes at once and drop the queued files."""
@@ -207,6 +252,16 @@ class AnalysisPool:
         future = task.future
         if future is None:
             raise RuntimeError("The analysis task never started.")
+        return self._wait_for(future, task, should_cancel)
+
+    def _wait_for(
+        self,
+        future: Future,
+        task: _Task,
+        should_cancel: Callable[[], bool] | None,
+    ) -> AnalysisResult:
+        """Wait for one worker result. The wait observes a cancel request and a deadline."""
+        deadline = time.monotonic() + ANALYSIS_TIMEOUT_SECONDS
         while True:
             # The wait reports whether the task ended. Reading the result of a task that
             # ended keeps a worker error apart from the wait.
@@ -216,8 +271,11 @@ class AnalysisPool:
             if should_cancel is not None and should_cancel():
                 self.cancel()
                 raise PoolCancelled from None
+            if time.monotonic() >= deadline:
+                self._stop_workers()
+                raise AnalysisTimedOut from None
 
-    def _recover_from_crash(self) -> None:
+    def _recover_from_crash(self, should_cancel: Callable[[], bool] | None = None) -> None:
         """Rebuild the pool after a worker died and finish the unfinished files.
 
         A worker that dies takes every task in flight with it. Each unfinished file then
@@ -230,7 +288,9 @@ class AnalysisPool:
         self._shutdown_executor()
         for task in pending:
             outcome = self._finished_outcome(task)
-            self._ready.append(outcome if outcome is not None else self._run_alone(task))
+            if outcome is None:
+                outcome = self._run_alone(task, should_cancel)
+            self._ready.append(outcome)
 
     @staticmethod
     def _finished_outcome(task: _Task) -> AnalysisOutcome | None:
@@ -247,16 +307,20 @@ class AnalysisPool:
             return AnalysisOutcome(file_id=task.file_id, path=task.path, error=message)
         return AnalysisOutcome(file_id=task.file_id, path=task.path, result=result)
 
-    def _run_alone(self, task: _Task) -> AnalysisOutcome:
+    def _run_alone(
+        self, task: _Task, should_cancel: Callable[[], bool] | None = None
+    ) -> AnalysisOutcome:
         """Run one file on a single worker, then retry it once when the worker dies."""
-        outcome, crashed = self._run_task(task)
+        outcome, crashed = self._run_task(task, should_cancel)
         if not crashed or task.attempts >= MAX_TASK_ATTEMPTS:
             return outcome
         logger.warning("The analysis worker died on %s. The file runs again.", task.path)
-        outcome, _crashed = self._run_task(task)
+        outcome, _crashed = self._run_task(task, should_cancel)
         return outcome
 
-    def _run_task(self, task: _Task) -> tuple[AnalysisOutcome, bool]:
+    def _run_task(
+        self, task: _Task, should_cancel: Callable[[], bool] | None = None
+    ) -> tuple[AnalysisOutcome, bool]:
         """Run one task on a fresh pool. Return the outcome and whether the worker died."""
         executor = self._new_executor(1)
         task.attempts += 1
@@ -264,11 +328,20 @@ class AnalysisPool:
             future = executor.submit(
                 analyze_track, str(task.path), task.file_id, self._analyzer_factory
             )
-            result = future.result()
+            result = self._wait_for(future, task, should_cancel)
         except BrokenExecutor:
             return AnalysisOutcome(
                 file_id=task.file_id, path=task.path, error=WORKER_CRASH_MESSAGE
             ), True
+        except PoolCancelled:
+            # A cancel request ends the pool. It is not a failure of one file.
+            raise
+        except AnalysisTimedOut:
+            # The worker hung. The pool rebuilds and the file ends as failed.
+            self._shutdown_executor()
+            return AnalysisOutcome(
+                file_id=task.file_id, path=task.path, error=ANALYSIS_TIMEOUT_MESSAGE
+            ), False
         except Exception as error:
             logger.exception("The analysis of %s failed in the worker.", task.path)
             message = f"{type(error).__name__}: {error}"

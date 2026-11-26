@@ -13,17 +13,19 @@ import pytest
 from infiniteprep.config.settings import SettingsManager
 from infiniteprep.db.connection import DatabaseManager
 from infiniteprep.db.repositories import Repository
+from infiniteprep.services import analysis_pool
 from infiniteprep.services.analysis_pool import (
     WORKER_CRASH_MESSAGE,
     AnalysisPool,
     resolve_worker_count,
 )
 from infiniteprep.services.import_service import ImportService
-from infiniteprep.services.job_orchestrator import JobOrchestrator
+from infiniteprep.services.job_orchestrator import MISSING_FILE_MESSAGE, JobOrchestrator
 from tests.fixtures.audio_factory import create_wav_fixture
 from tests.fixtures.worker_analyzers import (
     COUNTER_ENVIRONMENT_VARIABLE,
     CRASHING_FILE_NAME,
+    CrashAndSlowAnalyzer,
     CrashingAnalyzer,
     FailingSlowAnalyzer,
     SlowAnalyzer,
@@ -108,6 +110,38 @@ def test_pool_retries_crashed_file(crate: Path, tmp_path: Path, monkeypatch: Any
     assert calls.count(TRACK_NAMES[2]) == 1
 
 
+def test_cancel_reaches_the_crash_recovery(crate: Path, tmp_path: Path, monkeypatch: Any) -> None:
+    """A cancel request reaches the recovery path that runs after a worker died."""
+    counter = tmp_path / "calls.txt"
+    monkeypatch.setenv(COUNTER_ENVIRONMENT_VARIABLE, str(counter))
+
+    def should_cancel() -> bool:
+        """Report the cancel once the slow file runs in the recovery."""
+        if not counter.exists():
+            return False
+        return TRACK_NAMES[2] in counter.read_text(encoding="utf-8")
+
+    with AnalysisPool(analyzer_factory=CrashAndSlowAnalyzer, worker_count=1) as pool:
+        pool.submit(crate / CRASHING_FILE_NAME, "file-0")
+        pool.submit(crate / TRACK_NAMES[2], "file-1")
+        outcome = pool.next_outcome(should_cancel)
+
+    assert outcome.cancelled is True
+    assert outcome.result is None
+
+
+def test_timed_out_file_fails(crate: Path, monkeypatch: Any) -> None:
+    """A file that takes longer than the time limit ends as one failed file."""
+    monkeypatch.setattr(analysis_pool, "ANALYSIS_TIMEOUT_SECONDS", 1.0)
+
+    with AnalysisPool(analyzer_factory=SlowAnalyzer, worker_count=1) as pool:
+        pool.submit(crate / TRACK_NAMES[0], "file-0")
+        outcome = pool.next_outcome()
+
+    assert outcome.failed is True
+    assert outcome.error == analysis_pool.ANALYSIS_TIMEOUT_MESSAGE
+
+
 def test_worker_count_follows_cpu_limit() -> None:
     """The worker count never passes the processor count or the settings cap."""
     cpu_count = os.cpu_count() or 1
@@ -133,6 +167,21 @@ def test_settings_refuse_bad_worker_count(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         manager.update(analysis_workers=9)
+
+
+def test_missing_file_counts_as_failed(imported_ids: Any) -> None:
+    """A requested file that no longer exists counts as one failed file."""
+    repo, file_ids = imported_ids
+    orchestrator = JobOrchestrator(repository=repo)
+
+    with AnalysisPool(worker_count=1) as pool:
+        summary = orchestrator.process_files_continuing(
+            [*file_ids, "missing-file-id"], analysis_pool=pool
+        )
+
+    assert summary.completed_files == len(file_ids)
+    assert summary.failed_files == 1
+    assert summary.errors["missing-file-id"] == MISSING_FILE_MESSAGE
 
 
 def test_batch_reports_progress_per_file(imported_ids: Any) -> None:

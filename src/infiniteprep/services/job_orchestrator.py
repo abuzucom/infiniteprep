@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from typing import Final
 
 from infiniteprep.adapters.analyzers.mock_analyzer import MockAudioAnalyzerAdapter
 from infiniteprep.adapters.catalog.mock_catalog import MockCatalogProviderAdapter
@@ -44,6 +45,8 @@ JOB_STATE_FAILED = "failed"
 
 CancelCheck = Callable[[], bool]
 ProgressCallback = Callable[[int, int, str], None]
+# The message a requested file gets when the library holds no record of it.
+MISSING_FILE_MESSAGE: Final[str] = "The file is no longer in the library."
 
 
 @dataclass
@@ -305,6 +308,10 @@ class JobOrchestrator:
                 return summary
             asset = self.repo.get_file_by_id(file_id)
             if asset is None:
+                self._record_missing_file(file_id, summary)
+                if stop_on_failure:
+                    summary.stopped_early = True
+                    return summary
                 continue
             if progress is not None:
                 progress(index + 1, total, asset.current_path)
@@ -326,15 +333,24 @@ class JobOrchestrator:
     ) -> BatchJobSummary:
         """Process each file, running the audio analysis in the worker pool."""
         summary = BatchJobSummary()
-        assets = self._assets_in_order(file_ids)
+        entries = self._entries_in_order(file_ids)
+        runnable = [entry for entry in entries if entry[2] is not None]
         total = len(file_ids)
         submitted = 0
-        for position, (number, asset) in enumerate(assets):
+        position = 0
+        for number, file_id, asset in entries:
             if should_cancel is not None and should_cancel():
                 pool.cancel()
                 summary.stopped_early = True
                 return summary
-            submitted = self._submit_ahead(pool, assets, submitted, position)
+            if asset is None:
+                self._record_missing_file(file_id, summary)
+                if stop_on_failure:
+                    summary.stopped_early = True
+                    return summary
+                continue
+            submitted = self._submit_ahead(pool, runnable, submitted, position)
+            position += 1
             if progress is not None:
                 progress(number + 1, total, asset.current_path)
             error = self._identify_asset(asset)
@@ -356,27 +372,26 @@ class JobOrchestrator:
                 return summary
         return summary
 
-    def _assets_in_order(self, file_ids: list[str]) -> list[tuple[int, FileAsset]]:
-        """Return the stored assets of file_ids with their number in the batch."""
-        assets: list[tuple[int, FileAsset]] = []
+    def _entries_in_order(self, file_ids: list[str]) -> list[tuple[int, str, FileAsset | None]]:
+        """Return the number, the ID, and the stored asset of every requested file."""
+        entries: list[tuple[int, str, FileAsset | None]] = []
         for number, file_id in enumerate(file_ids):
-            asset = self.repo.get_file_by_id(file_id)
-            if asset is not None:
-                assets.append((number, asset))
-        return assets
+            entries.append((number, file_id, self.repo.get_file_by_id(file_id)))
+        return entries
 
     def _submit_ahead(
         self,
         pool: AnalysisPool,
-        assets: list[tuple[int, FileAsset]],
+        runnable: list[tuple[int, str, FileAsset | None]],
         submitted: int,
         position: int,
     ) -> int:
         """Submit the analysis of the files ahead of the current one."""
-        limit = min(len(assets), position + pool.max_workers)
+        limit = min(len(runnable), position + pool.max_workers)
         while submitted < limit:
-            _number, asset = assets[submitted]
-            pool.submit(Path(asset.current_path), asset.id)
+            _number, _file_id, asset = runnable[submitted]
+            if asset is not None:
+                pool.submit(Path(asset.current_path), asset.id)
             submitted += 1
         return submitted
 
@@ -448,6 +463,12 @@ class JobOrchestrator:
         )
         summary.failed_files += 1
         summary.errors[asset.id] = message
+
+    @staticmethod
+    def _record_missing_file(file_id: str, summary: BatchJobSummary) -> None:
+        """Count a requested file that no longer exists as one failed file."""
+        summary.failed_files += 1
+        summary.errors[file_id] = MISSING_FILE_MESSAGE
 
     def _process_asset_recording_failure(
         self,

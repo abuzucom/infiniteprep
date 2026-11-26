@@ -77,7 +77,8 @@ class SlowAnalyzer:
         return True, None
 
     def analyze(self, audio_reference: Path, file_id: str = "") -> AnalysisResult:
-        """Sleep before the result, so the worker runs when the cancel arrives."""
+        """Record the call, then sleep, so the worker runs when the cancel arrives."""
+        record_call(audio_reference)
         time.sleep(SLOW_SLEEP_SECONDS)
         return _result(file_id, self.analyzer_name)
 
@@ -97,5 +98,24 @@ class FailingSlowAnalyzer:
         path = Path(audio_reference)
         if not path.exists():
             raise FileNotFoundError(f"No such file: {path}")
+        time.sleep(SLOW_SLEEP_SECONDS)
+        return _result(file_id, self.analyzer_name)
+
+
+class CrashAndSlowAnalyzer:
+    """Analyzer that stops the worker on the named file and keeps the worker busy otherwise."""
+
+    analyzer_name = "crash_and_slow"
+    analyzer_version = "1.0.0"
+
+    def is_available(self) -> tuple[bool, str | None]:
+        """Return the availability of the analyzer."""
+        return True, None
+
+    def analyze(self, audio_reference: Path, file_id: str = "") -> AnalysisResult:
+        """Stop the worker process on the named file. Sleep on every other file."""
+        record_call(audio_reference)
+        if Path(audio_reference).name == CRASHING_FILE_NAME:
+            os._exit(CRASH_EXIT_CODE)
         time.sleep(SLOW_SLEEP_SECONDS)
         return _result(file_id, self.analyzer_name)
