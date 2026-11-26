@@ -17,6 +17,9 @@ paths:
   # so that a new source directory cannot enter or leave the analysis without
   # a matching change to this file.
   - .github
+  # ci holds no code. The path stays until main drops it, since the default
+  # setup reads this file from main and a declared path must exist.
+  - ci
   - hooks
   - packaging
   - scripts
