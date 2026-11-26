@@ -108,7 +108,7 @@ def make_metadata() -> TechnicalAndTagMetadata:
     )
 
 
-def test_track_file_facts_return_the_real_size_hash_and_metadata(tmp_path: Path) -> None:
+def test_track_file_facts_return_the(tmp_path: Path) -> None:
     """A readable file produces complete facts from the real path."""
     track = tmp_path / "track.wav"
     track.write_bytes(b"audio bytes")
@@ -125,12 +125,12 @@ def test_track_file_facts_return_the_real_size_hash_and_metadata(tmp_path: Path)
     assert facts.original_tags["technical"]["xdj_rx3_warnings"] == ["XDJ-RX3 Warning 1"]
 
 
-def test_track_file_facts_reject_a_missing_file(tmp_path: Path) -> None:
+def test_track_file_facts_case_4(tmp_path: Path) -> None:
     """A file that cannot be stat produces no facts."""
     assert read_track_file_facts(tmp_path / "missing.wav", StubAdapter()) is None
 
 
-def test_track_file_facts_reject_an_unsupported_format(tmp_path: Path) -> None:
+def test_track_file_facts_reject_an(tmp_path: Path) -> None:
     """A file with an unsupported extension produces no facts."""
     track = tmp_path / "track.txt"
     track.write_bytes(b"audio bytes")
@@ -138,9 +138,7 @@ def test_track_file_facts_reject_an_unsupported_format(tmp_path: Path) -> None:
     assert read_track_file_facts(track) is None
 
 
-def test_track_file_facts_reject_a_file_over_the_size_limit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_track_file_facts_case_3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A file over the read limit is rejected before any content read."""
     track = tmp_path / "track.wav"
     track.write_bytes(b"audio bytes")
@@ -153,9 +151,7 @@ def test_track_file_facts_reject_a_file_over_the_size_limit(
     assert read_track_file_facts(track, StubAdapter()) is None
 
 
-def test_track_file_facts_reject_a_failed_hash_read(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_track_file_facts_reject_a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A hash read failure produces no facts."""
     track = tmp_path / "track.wav"
     track.write_bytes(b"audio bytes")
@@ -169,7 +165,7 @@ def test_track_file_facts_reject_a_failed_hash_read(
     assert read_track_file_facts(track, StubAdapter()) is None
 
 
-def test_track_file_facts_reject_a_failed_header_read(tmp_path: Path) -> None:
+def test_track_file_facts_case_2(tmp_path: Path) -> None:
     """A documented header read failure produces no facts."""
     track = tmp_path / "track.wav"
     track.write_bytes(b"audio bytes")
@@ -178,7 +174,7 @@ def test_track_file_facts_reject_a_failed_header_read(tmp_path: Path) -> None:
     assert read_track_file_facts(track, adapter) is None
 
 
-def test_opened_file_facts_use_the_open_handle(tmp_path: Path) -> None:
+def test_opened_file_facts_use_the(tmp_path: Path) -> None:
     """An open file produces facts from its handle and its recorded identity."""
     root = tmp_path / "root"
     root.mkdir()
@@ -196,7 +192,7 @@ def test_opened_file_facts_use_the_open_handle(tmp_path: Path) -> None:
     assert facts.duration == 12.5
 
 
-def test_opened_file_facts_reject_an_unreadable_stat() -> None:
+def test_opened_file_facts_reject_an() -> None:
     """An open handle with an invalid descriptor produces no facts."""
     handle = cast(IO[bytes], InvalidDescriptorHandle())
     opened = OpenedFile(
@@ -208,7 +204,7 @@ def test_opened_file_facts_reject_an_unreadable_stat() -> None:
     assert read_opened_file_facts(opened, StubAdapter()) is None
 
 
-def test_opened_file_facts_reject_a_failed_hash_read(tmp_path: Path) -> None:
+def test_opened_file_facts_case_2(tmp_path: Path) -> None:
     """A handle read failure produces no facts."""
     root = tmp_path / "root"
     root.mkdir()
@@ -227,7 +223,7 @@ def test_opened_file_facts_reject_a_failed_hash_read(tmp_path: Path) -> None:
         assert read_opened_file_facts(failing, StubAdapter()) is None
 
 
-def test_opened_file_facts_reject_a_failed_header_read(tmp_path: Path) -> None:
+def test_opened_file_facts_case_3(tmp_path: Path) -> None:
     """A documented handle header failure produces no facts."""
     root = tmp_path / "root"
     root.mkdir()
@@ -241,9 +237,7 @@ def test_opened_file_facts_reject_a_failed_header_read(tmp_path: Path) -> None:
         assert read_opened_file_facts(opened, adapter) is None
 
 
-def test_opened_file_facts_reject_a_changed_identity(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_opened_file_facts_reject_a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A file that changed during the read produces no facts."""
     root = tmp_path / "root"
     root.mkdir()

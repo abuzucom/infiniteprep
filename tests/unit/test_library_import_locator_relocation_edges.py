@@ -33,7 +33,7 @@ def make_location(
     )
 
 
-def test_known_folder_confinement_refuses_a_junction(
+def test_known_folder_confinement_refuses_a(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A known profile folder that is a junction holds no candidate."""
@@ -53,7 +53,7 @@ def test_known_folder_confinement_refuses_a_junction(
     assert found == []
 
 
-def test_known_folder_confinement_refuses_an_outside_resolution(
+def test_known_folder_confinement_refuses_an(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A known profile folder that resolves outside the profile holds no candidate."""
@@ -94,7 +94,7 @@ def test_candidate_confinement_refuses_a_junction(
     assert locator._candidate_inside_profile(folder, candidate, profile) is False
 
 
-def test_candidate_confinement_survives_a_resolution_failure(
+def test_candidate_confinement_survives_a_resolution(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A candidate that cannot resolve stays outside the profile."""
@@ -113,7 +113,7 @@ def test_candidate_confinement_survives_a_resolution_failure(
     assert locator._candidate_inside_profile(folder, candidate, profile) is False
 
 
-def test_candidate_confinement_refuses_an_outside_resolution(
+def test_candidate_confinement_refuses_an_outside(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A candidate that resolves outside the profile stays outside the profile."""
@@ -137,9 +137,7 @@ def test_candidate_confinement_refuses_an_outside_resolution(
     assert locator._candidate_inside_profile(folder, candidate, profile) is False
 
 
-def test_library_in_folder_refuses_a_candidate_outside_the_profile(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_library_in_folder_refuses_a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A candidate resolved outside the profile never reaches the result."""
     profile = tmp_path / "profile"
     folder = profile / "Music"
@@ -161,9 +159,7 @@ def test_library_in_folder_refuses_a_candidate_outside_the_profile(
     assert locator._library_in_folder(make_location(), folder, profile) == []
 
 
-def test_scan_root_confinement_refuses_a_junction(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_scan_root_confinement_refuses_a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A scan root that is a junction contributes no candidate."""
     profile = tmp_path / "profile"
     root = profile / "Music"
@@ -178,9 +174,7 @@ def test_scan_root_confinement_refuses_a_junction(
     assert locator._scan_root_inside_profile(profile, "Music") is None
 
 
-def test_scan_root_confinement_survives_a_resolution_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_scan_root_confinement_survives_a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A scan root that cannot resolve contributes no candidate."""
     profile = tmp_path / "profile"
     profile.mkdir()
@@ -194,9 +188,7 @@ def test_scan_root_confinement_survives_a_resolution_failure(
     assert locator._scan_root_inside_profile(profile, "Music") is None
 
 
-def test_scan_root_confinement_refuses_an_outside_resolution(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_scan_root_confinement_refuses_an(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A scan root that resolves outside the profile contributes no candidate."""
     profile = tmp_path / "profile"
     root = profile / "Music"
@@ -216,9 +208,7 @@ def test_scan_root_confinement_refuses_an_outside_resolution(
     assert locator._scan_root_inside_profile(profile, "Music") is None
 
 
-def test_bounded_walk_refuses_a_junction_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_bounded_walk_refuses_a_junction(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A junction root never enters the bounded locator walk."""
     root = tmp_path / "root"
     root.mkdir()
@@ -232,9 +222,7 @@ def test_bounded_walk_refuses_a_junction_root(
     assert locator._walk_bounded(root) == []
 
 
-def test_scanned_matches_skip_a_linked_scan_root(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_scanned_matches_skip_a_linked(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A linked scan root contributes no scanned library."""
     profile = tmp_path / "profile"
     documents = profile / "Documents"
@@ -249,9 +237,7 @@ def test_scanned_matches_skip_a_linked_scan_root(
     assert locator._scanned_matches(profile, ()) == []
 
 
-def test_scanned_matches_skip_a_repeated_folder(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_scanned_matches_skip_a_repeated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A folder found through two scan roots contributes one result."""
     profile = tmp_path / "profile"
     child = profile / "Music" / "child"
@@ -261,14 +247,14 @@ def test_scanned_matches_skip_a_repeated_folder(
     assert locator._scanned_matches(profile, ()) == []
 
 
-def test_scanned_matches_require_a_profile_directory(tmp_path: Path) -> None:
+def test_scanned_matches_require_a_profile(tmp_path: Path) -> None:
     """A missing profile folder contributes no scanned library."""
     profile = tmp_path / "missing"
 
     assert locator._scanned_matches(profile, ()) == []
 
 
-def test_drive_matches_require_a_device_location() -> None:
+def test_drive_matches_require_a_device() -> None:
     """A drive cannot match a location that does not belong to a device."""
     fixed = tuple(
         location for location in locations_for(Platform.WINDOWS) if not location.on_device
@@ -278,7 +264,7 @@ def test_drive_matches_require_a_device_location() -> None:
     assert locator._drive_matches((candidate,), fixed) == []
 
 
-def test_drive_failure_contributes_no_mount_match() -> None:
+def test_drive_failure_contributes_no_mount() -> None:
     """A drive with no inspection contributes no mount match."""
     location = make_location(
         folders=((Platform.ANY, ("Music",)),),
@@ -289,12 +275,12 @@ def test_drive_failure_contributes_no_mount_match() -> None:
     assert locator._drive_candidate_matches((location,), candidate) == []
 
 
-def test_library_version_header_reports_a_read_failure(tmp_path: Path) -> None:
+def test_library_version_header_reports_a(tmp_path: Path) -> None:
     """A library file that cannot be opened produces no version."""
     assert read_library_version(tmp_path / "missing.nml") is None
 
 
-def test_library_version_header_accepts_the_maximum_length(tmp_path: Path) -> None:
+def test_library_version_header_accepts_the(tmp_path: Path) -> None:
     """A version header accepts the longest supported version value."""
     library = tmp_path / "collection.nml"
     version = "x" * 32

@@ -30,9 +30,7 @@ class NoneFormatAdapter(MetadataTagAdapter):
         return None
 
 
-def test_is_link_or_junction_detects_a_junction(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_is_link_or_junction_detects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A path reported as a junction is refused as a link."""
     junction = tmp_path / "junction"
     junction.mkdir()
@@ -46,9 +44,7 @@ def test_is_link_or_junction_detects_a_junction(
     assert filesystem.is_link_or_junction(junction) is True
 
 
-def test_is_link_or_junction_detects_a_reparse_tag(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_is_link_or_case_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A directory entry with a reparse tag is refused as a link."""
     path = tmp_path / "reparse"
     path.mkdir()
@@ -63,9 +59,7 @@ def test_is_link_or_junction_detects_a_reparse_tag(
     assert filesystem.is_link_or_junction(path) is True
 
 
-def test_is_link_or_junction_survives_a_failed_lstat(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_is_link_or_junction_survives(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A failed directory entry stat does not report a link."""
     path = tmp_path / "missing"
     monkeypatch.setattr(Path, "is_symlink", lambda path: False)
@@ -80,9 +74,7 @@ def test_is_link_or_junction_survives_a_failed_lstat(
     assert filesystem.is_link_or_junction(path) is False
 
 
-def test_resolve_inside_root_survives_a_resolution_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_inside_root_survives_a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A path that cannot resolve does not pass the root check."""
     root = tmp_path / "root"
     root.mkdir()
@@ -96,9 +88,7 @@ def test_resolve_inside_root_survives_a_resolution_failure(
     assert resolve_inside_root(candidate, root) is None
 
 
-def test_open_inside_root_survives_a_resolution_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_open_inside_root_survives_a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A candidate that cannot resolve never reaches the safe open."""
     root = tmp_path / "root"
     root.mkdir()
@@ -112,9 +102,7 @@ def test_open_inside_root_survives_a_resolution_failure(
     assert open_inside_root(candidate, root) is None
 
 
-def test_resolve_inside_root_refuses_a_crossing_link(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_resolve_inside_root_refuses_a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A link below the root cannot carry a candidate out of the root."""
     root = tmp_path / "root"
     child = root / "linked"
@@ -129,7 +117,7 @@ def test_resolve_inside_root_refuses_a_crossing_link(
     assert resolve_inside_root(candidate, root) is None
 
 
-def test_crosses_link_ignores_a_candidate_outside_the_textual_root(tmp_path: Path) -> None:
+def test_crosses_link_ignores_a_candidate(tmp_path: Path) -> None:
     """A candidate outside the textual root has no crossed link component."""
     root = tmp_path / "root"
     outside = tmp_path / "outside"
@@ -139,7 +127,7 @@ def test_crosses_link_ignores_a_candidate_outside_the_textual_root(tmp_path: Pat
     assert filesystem._crosses_link(outside, root) is False
 
 
-def test_open_inside_root_refuses_a_missing_identity(tmp_path: Path) -> None:
+def test_open_inside_root_refuses_a(tmp_path: Path) -> None:
     """A missing file cannot supply the identity needed for a safe open."""
     root = tmp_path / "root"
     root.mkdir()
@@ -147,9 +135,7 @@ def test_open_inside_root_refuses_a_missing_identity(tmp_path: Path) -> None:
     assert open_inside_root(root / "missing.wav", root) is None
 
 
-def test_open_inside_root_refuses_a_replaced_identity(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_open_inside_root_case_3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A file whose open identity differs from its entry is refused."""
     root = tmp_path / "root"
     root.mkdir()
@@ -171,9 +157,7 @@ def test_open_inside_root_refuses_a_replaced_identity(
     assert open_inside_root(track, root) is None
 
 
-def test_open_inside_root_refuses_a_path_that_leaves_after_the_open(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_open_inside_root_case_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A candidate that changes during the open never reaches the caller."""
     root = tmp_path / "root"
     root.mkdir()
@@ -196,7 +180,7 @@ def test_open_inside_root_refuses_a_path_that_leaves_after_the_open(
     assert open_inside_root(track, root) is None
 
 
-def test_real_children_survives_an_unreadable_folder(
+def test_real_children_survives_an_unreadable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A folder that cannot be listed contributes no real children."""
@@ -212,7 +196,7 @@ def test_real_children_survives_an_unreadable_folder(
     assert filesystem.real_children(root) == []
 
 
-def test_opened_track_facts_reject_an_unknown_format(tmp_path: Path) -> None:
+def test_opened_track_facts_reject_an(tmp_path: Path) -> None:
     """An open file with no detected format produces no facts."""
     root = tmp_path / "root"
     root.mkdir()
@@ -230,9 +214,7 @@ def test_relocation_accepts_no_references(tmp_path: Path) -> None:
     assert find_relocated_files([], tmp_path) == []
 
 
-def test_safe_root_survives_a_resolution_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_safe_root_survives_a_resolution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A root that cannot resolve cannot bound a relocation search."""
     root = tmp_path / "root"
     root.mkdir()
@@ -245,7 +227,7 @@ def test_safe_root_survives_a_resolution_failure(
     assert relocation._safe_root(root) is None
 
 
-def test_empty_content_hash_never_confirms_a_candidate(tmp_path: Path) -> None:
+def test_empty_content_hash_never_confirms(tmp_path: Path) -> None:
     """A candidate with the right size stays unresolved when its hash is empty."""
     root = tmp_path / "root"
     root.mkdir()
@@ -259,7 +241,7 @@ def test_empty_content_hash_never_confirms_a_candidate(tmp_path: Path) -> None:
     assert results[0].found_path is None
 
 
-def test_hash_cache_reports_a_failed_open(tmp_path: Path) -> None:
+def test_hash_cache_reports_a_failed(tmp_path: Path) -> None:
     """A candidate that cannot open has no cached digest."""
     root = tmp_path / "root"
     root.mkdir()
@@ -268,9 +250,7 @@ def test_hash_cache_reports_a_failed_open(tmp_path: Path) -> None:
     assert hashes.digest_of(root / "missing.wav") is None
 
 
-def test_hash_cache_reports_a_failed_size_read(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_hash_cache_reports_case_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A candidate whose size cannot be read has no cached digest."""
     root = tmp_path / "root"
     root.mkdir()
@@ -293,9 +273,7 @@ def test_hash_cache_reports_a_failed_size_read(
     assert hashes.digest_of(candidate) is None
 
 
-def test_hash_cache_rejects_an_identity_changed_during_the_read(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_hash_cache_rejects_an_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A candidate replaced during the hash read has no cached digest."""
     root = tmp_path / "root"
     root.mkdir()
@@ -315,9 +293,7 @@ def test_hash_cache_rejects_an_identity_changed_during_the_read(
     assert hashes.digest_of(candidate) is None
 
 
-def test_relocation_file_size_reports_a_failed_stat(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_relocation_file_size_reports_a(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A candidate whose entry stat fails has no file size."""
     candidate = tmp_path / "track.wav"
 
@@ -330,7 +306,7 @@ def test_relocation_file_size_reports_a_failed_stat(
     assert relocation._file_size(candidate) is None
 
 
-def test_relocation_digest_reports_a_failed_content_read() -> None:
+def test_relocation_digest_reports_a_failed() -> None:
     """A handle content read failure produces an empty digest."""
 
     class ReadFailure:
