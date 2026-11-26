@@ -184,6 +184,36 @@ def test_missing_file_counts_as_failed(imported_ids: Any) -> None:
     assert summary.errors["missing-file-id"] == MISSING_FILE_MESSAGE
 
 
+class RecordingPool(AnalysisPool):
+    """Pool that records every submitted file."""
+
+    def __init__(self, worker_count: int | None = None) -> None:
+        """Start the pool without a worker process."""
+        super().__init__(worker_count=worker_count)
+        self.submitted: list[str] = []
+
+    def submit(self, path: Path, file_id: str) -> None:
+        """Record the file and send it to the pool."""
+        self.submitted.append(file_id)
+        super().submit(path, file_id)
+
+
+def test_batch_fills_the_worker_window(imported_ids: Any) -> None:
+    """The batch keeps the worker window full. Every worker starts at once."""
+    repo, file_ids = imported_ids
+    orchestrator = JobOrchestrator(repository=repo)
+    pool = RecordingPool(worker_count=2)
+    window_sizes: list[int] = []
+
+    orchestrator.process_files_continuing(
+        file_ids,
+        progress=lambda done, total, path: window_sizes.append(len(pool.submitted)),
+        analysis_pool=pool,
+    )
+
+    assert window_sizes == [2, 3, 3]
+
+
 def test_batch_reports_progress_per_file(imported_ids: Any) -> None:
     """The queued batch reports the progress of every file it analyzes."""
     repo, file_ids = imported_ids

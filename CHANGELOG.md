@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.93.5] (2026-11-26)
+## [0.93.6] (2026-11-26)
 
 ### Added
 
@@ -50,6 +50,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The crash recovery of the analysis pool observes a cancel request. A cancel ends the pool at once, also after a worker died.
 - A file that takes longer than the time limit of the analysis pool ends as one failed file. The pool rebuilds for the files after it.
 - A requested file that no longer exists in the library counts as one failed file. The batch reports it in the summary.
+- A cancel stops the worker processes of the analysis pool only. A child process of another component stays untouched.
 - The analysis pool logs an unexpected worker error with the file path and the traceback.
 
 ### Changed
@@ -77,7 +78,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The mount point itself may remain an OS-managed mount link.
 - Relocation hash caching in `relocation.py` keys cached digests by device, inode, size, and modification timestamp, and rechecks file metadata after reading (IMPORT-1, #143).
 - File URL normalization and remainder extraction in `path_mapping.py` collapse slashes, normalize Windows drive letters, and split canonical segments (IMPORT-1, #143).
-- The version advances from 0.88.0 to 0.93.5 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
+- The version advances from 0.88.0 to 0.93.6 in `pyproject.toml`, `src/infiniteprep/__init__.py`, and `requirements-lock.txt`.
 
 ### Removed
 

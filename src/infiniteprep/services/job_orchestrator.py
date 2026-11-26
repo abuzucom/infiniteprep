@@ -386,8 +386,14 @@ class JobOrchestrator:
         submitted: int,
         position: int,
     ) -> int:
-        """Submit the analysis of the files ahead of the current one."""
-        limit = min(len(runnable), position + pool.max_workers)
+        """Submit the analysis of the files ahead of the current one.
+
+        The window covers the current file and the files ahead of it. Its size never
+        passes the worker count of the pool. Every worker starts at once, and the window
+        stays full as the results arrive.
+        """
+        window_end = position + pool.max_workers
+        limit = min(len(runnable), window_end)
         while submitted < limit:
             _number, _file_id, asset = runnable[submitted]
             if asset is not None:

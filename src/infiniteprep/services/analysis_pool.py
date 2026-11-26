@@ -124,8 +124,6 @@ class AnalysisPool:
         self._executor: ProcessPoolExecutor | None = None
         self._tasks: deque[_Task] = deque()
         self._ready: deque[AnalysisOutcome] = deque()
-        # The children that existed before this pool started are not its workers.
-        self._other_pids = {process.pid for process in multiprocessing.active_children()}
         self._cancelled = False
 
     @property
@@ -272,7 +270,8 @@ class AnalysisPool:
                 self.cancel()
                 raise PoolCancelled from None
             if time.monotonic() >= deadline:
-                self._stop_workers()
+                if self._executor is not None:
+                    self._stop_workers(self._executor)
                 raise AnalysisTimedOut from None
 
     def _recover_from_crash(self, should_cancel: Callable[[], bool] | None = None) -> None:
@@ -366,30 +365,30 @@ class AnalysisPool:
         if executor is None:
             return
         if terminate:
-            self._stop_workers()
+            self._stop_workers(executor)
         executor.shutdown(wait=not terminate, cancel_futures=True)
 
-    def _stop_workers(self) -> None:
+    def _stop_workers(self, executor: ProcessPoolExecutor) -> None:
         """Stop the worker processes at once so a cancel ends the analysis now."""
-        processes = self._worker_processes()
+        processes = self._worker_processes(executor)
         deadline = time.monotonic() + WORKER_STOP_WAIT_SECONDS
         while not processes and time.monotonic() < deadline:
             time.sleep(WORKER_POLL_SECONDS)
-            processes = self._worker_processes()
+            processes = self._worker_processes(executor)
         for process in processes:
             if process.is_alive():
                 process.terminate()
         for process in processes:
             process.join(timeout=WORKER_JOIN_SECONDS)
 
-    def _worker_processes(self) -> list[multiprocessing.Process]:
-        """Return the worker processes that belong to this pool.
+    @staticmethod
+    def _worker_processes(executor: ProcessPoolExecutor) -> list[multiprocessing.Process]:
+        """Return the worker processes that the executor owns.
 
-        The application starts no other child process, so every child that started after
-        this pool belongs to it.
+        The executor keeps the processes that it started. That map names the workers of
+        this pool exactly, so a child process of another component stays untouched.
         """
-        return [
-            process
-            for process in multiprocessing.active_children()
-            if process.pid not in self._other_pids
-        ]
+        processes = getattr(executor, "_processes", None)
+        if not isinstance(processes, dict):
+            return []
+        return [process for process in processes.values() if process.is_alive()]
