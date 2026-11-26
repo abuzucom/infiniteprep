@@ -21,7 +21,11 @@ from infiniteprep.services.analysis_pool import (
 from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.job_orchestrator import JobOrchestrator
 from tests.fixtures.audio_factory import create_wav_fixture
-from tests.fixtures.crashing_analyzer import CRASHING_FILE_NAME, CrashingAnalyzer
+from tests.fixtures.worker_analyzers import (
+    CRASHING_FILE_NAME,
+    CrashingAnalyzer,
+    SlowAnalyzer,
+)
 
 TRACK_NAMES = ("a_first.wav", CRASHING_FILE_NAME, "c_last.wav")
 
@@ -64,7 +68,7 @@ def test_pool_cancel_stops_worker_processes(crate: Path) -> None:
     """A cancel stops the worker processes at once and returns no result."""
     children_before = len(multiprocessing.active_children())
 
-    with AnalysisPool(worker_count=1) as pool:
+    with AnalysisPool(analyzer_factory=SlowAnalyzer, worker_count=1) as pool:
         pool.submit(crate / TRACK_NAMES[0], "file-0")
         outcome = pool.next_outcome(lambda: True)
         deadline = time.monotonic() + 5.0
