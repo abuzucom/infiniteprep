@@ -30,7 +30,6 @@ from infiniteprep.ui.library_import_dialog import LibraryImportDialog
 from infiniteprep.ui.main_window import MainWindow
 from infiniteprep.ui.workflow_bar import WorkflowBar
 from tests.fixtures.audio_factory import create_wav_fixture
-from tests.fixtures.call_recorder import CallRecorder
 from tests.fixtures.memory_settings import MemorySettingsManager
 
 
@@ -45,8 +44,8 @@ class _FakeImporter:
     def read_library(self, source_path: Path) -> SourceLibrary:
         """Return a SourceLibrary containing the configured tracks."""
         return SourceLibrary(
-            format_id=self.format_id,
-            source_path=source_path,
+            source_format=self.format_id,
+            source_path=str(source_path),
             version="3.11.0",
             tracks=self._tracks,
         )
@@ -78,8 +77,12 @@ def test_workflow_bar_has_library_button(qtbot: Any) -> None:
     """WorkflowBar exposes an Import DJ library tool button that emits its signal."""
     bar = WorkflowBar()
     qtbot.addWidget(bar)
-    emitted = CallRecorder(0)
-    bar.import_library_requested.connect(emitted)
+    emitted: list[bool] = []
+
+    def record_signal() -> None:
+        emitted.append(True)
+
+    bar.import_library_requested.connect(record_signal)
 
     bar.import_library_btn.click()
 
@@ -129,12 +132,10 @@ def test_dialog_builds_plan_before_review(qtbot: Any, tmp_path: Path) -> None:
         _FakeImporter(
             tracks=(
                 ImportedTrack(
-                    source_id="t1",
                     source_path=str(track_path),
                     values=(ImportedValue("title", "Sunset"),),
                 ),
                 ImportedTrack(
-                    source_id="t2",
                     source_path=str(root / "missing.wav"),
                     values=(),
                 ),
@@ -219,7 +220,6 @@ def test_main_window_commits_library_import(
         _FakeImporter(
             tracks=(
                 ImportedTrack(
-                    source_id="t1",
                     source_path=str(track_path),
                     values=(ImportedValue("title", "Horizon"),),
                 ),

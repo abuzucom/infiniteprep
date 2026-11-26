@@ -196,7 +196,7 @@ def _candidate_inside_profile(folder: Path, file_path: Path, profile_folder: Pat
     containment root itself may be an OS-managed mount link.
     """
     if profile_folder is None:
-        return False
+        return not is_link_or_junction(folder) and not is_link_or_junction(file_path)
     return (
         resolve_inside_root(folder, profile_folder) is not None
         and resolve_inside_root(file_path, profile_folder) is not None

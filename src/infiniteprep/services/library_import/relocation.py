@@ -196,6 +196,12 @@ def _opened_stat(opened: OpenedFile) -> os.stat_result | None:
         return None
 
 
+def _opened_size(opened: OpenedFile) -> int | None:
+    """Return the size of an open file, or None when it cannot be read."""
+    stat_info = _opened_stat(opened)
+    return None if stat_info is None else stat_info.st_size
+
+
 def _handle_unchanged(opened: OpenedFile, before: os.stat_result) -> bool:
     """Return True when path identity, size, and mtime still match after reading."""
     if not identity_still_matches(opened):
