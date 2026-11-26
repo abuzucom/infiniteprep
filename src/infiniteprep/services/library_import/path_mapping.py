@@ -119,11 +119,11 @@ def _file_url_body(path_text: str) -> str:
 
 
 def _normalize_file_url(path_text: str) -> str:
-    """Return the file URL with its separators and drive letter in a fixed form."""
+    """Return the file URL with decoded text, collapsed slashes, and fixed drive case."""
     decoded = _file_url_body(path_text)
     if _has_windows_drive(decoded.lstrip("/")):
-        decoded = "/" + decoded.lstrip("/")
-    return FILE_URL_SCHEME + decoded.replace("\\", "/")
+        return FILE_URL_SCHEME + "/" + _normalize_windows(decoded.lstrip("/"))
+    return FILE_URL_SCHEME + _normalize_posix(decoded)
 
 
 def _normalize_traktor_volume(path_text: str) -> str:
@@ -132,7 +132,7 @@ def _normalize_traktor_volume(path_text: str) -> str:
     volume, separator, rest = body.partition("/")
     if not separator:
         return TRAKTOR_VOLUME_PREFIX + volume.upper()
-    return TRAKTOR_VOLUME_PREFIX + volume.upper() + "/" + rest.replace("\\", "/")
+    return TRAKTOR_VOLUME_PREFIX + volume.upper() + "/" + _collapse_slashes(rest.replace("\\", "/"))
 
 
 def _normalize_windows(path_text: str) -> str:
@@ -232,11 +232,14 @@ def reverse_mapping(path_text: str, mapping: PathMapping) -> str:
 
 
 def _mapping_remainder(path_text: str, prefix_text: str) -> str:
-    """Return the part of the path below the prefix."""
+    """Return the part of the path below the prefix using canonical path segments."""
     normalized = normalize_path(path_text)
     prefix = normalize_path(prefix_text)
-    remainder = normalized[len(prefix) :]
-    return remainder.lstrip("/")
+    if prefix == "/":
+        return normalized.lstrip("/")
+    path_parts = normalized.split("/")
+    prefix_parts = prefix.rstrip("/").split("/")
+    return "/".join(path_parts[len(prefix_parts) :])
 
 
 def _has_parent_segment(remainder: str) -> bool:

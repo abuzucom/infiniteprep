@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import sys
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -25,6 +26,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -63,6 +65,15 @@ from infiniteprep.domain.metadata_values import resolve_effective_value, top_pro
 from infiniteprep.domain.models import ApprovedField, FileAsset
 from infiniteprep.services.import_service import ImportBatchReport, ImportService
 from infiniteprep.services.job_orchestrator import BatchKind, BatchState, QueuedBatch
+from infiniteprep.services.library_import import (
+    LibraryImportRequest,
+    LibraryImportResult,
+    LibraryImportService,
+    LocatedLibrary,
+    PathMapping,
+    Platform,
+    find_installed_libraries,
+)
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.ui.accessible_names import announce, name_combo_box
 from infiniteprep.ui.action_handlers import show_plain_message
@@ -92,6 +103,7 @@ from infiniteprep.ui.library_columns import (
     parse_column_choices,
     status_icon,
 )
+from infiniteprep.ui.library_import_dialog import LibraryImportDialog
 from infiniteprep.ui.library_sidebar import LibrarySidebar
 from infiniteprep.ui.stylesheet import BUTTON_VARIANT_PROPERTY, ICON_BUTTON_VARIANT
 from infiniteprep.ui.table_sort import (
@@ -327,6 +339,15 @@ def load_library_snapshot(repo: Repository) -> LibrarySnapshot:
     )
 
 
+def _current_import_platform() -> Platform:
+    """Return the library locator Platform matching the host operating system."""
+    if sys.platform.startswith("win"):
+        return Platform.WINDOWS
+    if sys.platform == "darwin":
+        return Platform.MACOS
+    return Platform.LINUX
+
+
 def format_duration(seconds: float) -> str:
     """Format a track duration as M:SS or H:MM:SS, truncating fractions."""
     whole_seconds = int(max(0.0, float(seconds)))
@@ -354,6 +375,7 @@ class MainWindow(QMainWindow):
         on_export_playlist: Callable[[list[str], Path], object] | None = None,
         enable_audio_backend: bool = False,
         analyze_runner: AnalyzeRunner | None = None,
+        library_import_service: LibraryImportService | None = None,
     ) -> None:
         """Initialize MainWindow with core services and callbacks.
 
@@ -365,6 +387,7 @@ class MainWindow(QMainWindow):
         self.repo = repository
         self.import_service = import_service
         self.review_service = review_service
+        self.library_import_service = library_import_service
         self.on_analyze_batch = on_analyze_batch
         self.analyze_runner = analyze_runner
         self.on_open_write_dialog = on_open_write_dialog
@@ -447,6 +470,7 @@ class MainWindow(QMainWindow):
         }
         bar = self.workflow_bar
         bar.stage_triggered.connect(self._on_stage_triggered)
+        bar.import_library_requested.connect(self._trigger_import_library)
         bar.transcode_requested.connect(self._trigger_transcode_batch)
         bar.history_requested.connect(self._trigger_open_journal)
         bar.settings_requested.connect(self._trigger_open_settings)
@@ -454,6 +478,7 @@ class MainWindow(QMainWindow):
         self.sidebar.filter_changed.connect(self._on_library_filter_changed)
         self.bulk_btn = bar.stage_buttons[WorkflowStage.REVIEW]
         self.export_playlist_btn = bar.stage_buttons[WorkflowStage.EXPORT]
+        self.import_library_btn = bar.import_library_btn
         self.transcode_btn = bar.transcode_btn
         self.journal_btn = bar.history_btn
         for notation in KeyDisplayNotation:
@@ -1185,6 +1210,35 @@ class MainWindow(QMainWindow):
         if chosen:
             self.start_folder_import(Path(chosen))
 
+    def _trigger_import_library(self) -> None:
+        """Open the three-step DJ library import dialog and commit accepted changes."""
+        service = self.library_import_service or LibraryImportService(self.repo)
+        libraries = find_installed_libraries(Path.home(), _current_import_platform())
+
+        def build_plan(
+            library: LocatedLibrary, mappings: list[PathMapping], root_text: str
+        ) -> LibraryImportResult:
+            request = LibraryImportRequest(
+                source_path=library.file_path,
+                format_id=library.format_id,
+                root=Path(root_text),
+                mappings=tuple(mappings),
+            )
+            return service.build_plan(request)
+
+        dialog = LibraryImportDialog(
+            libraries,
+            self,
+            readable_formats=service.registry.format_ids(),
+            plan_builder=build_plan,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        result = dialog.pending_result()
+        if result is not None:
+            service.commit(result)
+            self.refresh_file_table()
+
     def start_folder_import(self, folder: Path) -> bool:
         """Add a folder import to the batch queue. It runs on a worker thread. Return True."""
         self.batch_queue.enqueue_import([folder])
@@ -1217,6 +1271,7 @@ class MainWindow(QMainWindow):
         self.workflow_bar.set_stages_locked(set() if idle else {WorkflowStage.REVIEW})
         for widget in (
             self.sidebar.stage_buttons[WorkflowStage.REVIEW],
+            self.import_library_btn,
             self.transcode_btn,
             self.journal_btn,
             self.detail_panel.fields_table,

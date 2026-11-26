@@ -42,9 +42,11 @@ STAGE_ACTION_LABELS: Final[dict[WorkflowStage, str]] = {
     WorkflowStage.APPLY: "Review changes",
     WorkflowStage.EXPORT: "Export playlist",
 }
+IMPORT_LIBRARY_TOOL_LABEL: Final[str] = "Import DJ library"
 TRANSCODE_TOOL_LABEL: Final[str] = "Transcode"
 HISTORY_TOOL_LABEL: Final[str] = "History"
 SETTINGS_TOOL_LABEL: Final[str] = "Settings"
+IMPORT_LIBRARY_ICON: Final[str] = "database"
 TRANSCODE_ICON: Final[str] = "replace"
 HISTORY_ICON: Final[str] = "history"
 SETTINGS_ICON: Final[str] = "settings"
@@ -88,6 +90,7 @@ class WorkflowBar(QWidget):
     """
 
     stage_triggered = Signal(str)
+    import_library_requested = Signal()
     transcode_requested = Signal()
     history_requested = Signal()
     settings_requested = Signal()
@@ -112,13 +115,20 @@ class WorkflowBar(QWidget):
         self.primary_button.clicked.connect(self._on_primary_clicked)
         layout.addWidget(self.primary_button)
         layout.addStretch()
+        self.import_library_btn = self._build_tool_button(IMPORT_LIBRARY_TOOL_LABEL)
         self.transcode_btn = self._build_tool_button(TRANSCODE_TOOL_LABEL)
         self.history_btn = self._build_tool_button(HISTORY_TOOL_LABEL)
         self.settings_btn = self._build_tool_button(SETTINGS_TOOL_LABEL)
+        self.import_library_btn.clicked.connect(self.import_library_requested)
         self.transcode_btn.clicked.connect(self.transcode_requested)
         self.history_btn.clicked.connect(self.history_requested)
         self.settings_btn.clicked.connect(self.settings_requested)
-        for button in (self.transcode_btn, self.history_btn, self.settings_btn):
+        for button in (
+            self.import_library_btn,
+            self.transcode_btn,
+            self.history_btn,
+            self.settings_btn,
+        ):
             layout.addWidget(button)
         self._render()
 
@@ -196,6 +206,7 @@ class WorkflowBar(QWidget):
         self.primary_button.setText(STAGE_ACTION_LABELS[self._current])
         self.primary_button.setEnabled(self._current not in self._locked)
         tool_icons = (
+            (self.import_library_btn, IMPORT_LIBRARY_ICON),
             (self.transcode_btn, TRANSCODE_ICON),
             (self.history_btn, HISTORY_ICON),
             (self.settings_btn, SETTINGS_ICON),
