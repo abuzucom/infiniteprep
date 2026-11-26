@@ -55,11 +55,13 @@ def test_https_dns_rejects_mixed_public_and_private_answers(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """One private DNS answer rejects an otherwise public hostname."""
+
     def records() -> list[tuple[Any, ...]]:
         return [
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.8", 443)),
         ]
+
     monkeypatch.setattr(
         settings_module.socket,
         "getaddrinfo",
@@ -101,6 +103,7 @@ def test_https_dns_rejects_empty_and_failed_answers(
 
     def fail_dns(*_args: Any, **_kwargs: Any) -> Any:
         raise OSError("resolver unavailable")
+
     monkeypatch.setattr(settings_module.socket, "getaddrinfo", fail_dns)
     valid, reason = validate_endpoint_url("https://example.test/v1", resolve_dns=True)
     assert valid is False
@@ -128,8 +131,10 @@ def test_localhost_dns_rejects_a_non_loopback_answer(
 
 def test_loopback_literals_skip_dns_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
     """Numeric loopback hosts pass without a DNS lookup."""
+
     def refuse_dns(*_args: Any, **_kwargs: Any) -> Any:
         pytest.fail("Loopback literals must not resolve through DNS.")
+
     monkeypatch.setattr(settings_module.socket, "getaddrinfo", refuse_dns)
 
     assert validate_endpoint_url("http://127.0.0.1:11434/v1", resolve_dns=True) == (
@@ -177,6 +182,7 @@ def test_sync_directory_handles_an_open_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A POSIX directory that cannot open leaves the written settings in place."""
+
     def fail_open(*_args: Any) -> Any:
         raise OSError("open failed")
 
@@ -238,6 +244,7 @@ def test_atomic_settings_write_keeps_the_old_file_after_fsync_failure(
 
     def fail_fsync(_descriptor: int) -> None:
         raise OSError("flush failed")
+
     monkeypatch.setattr(settings_module.os, "fsync", fail_fsync)
 
     with pytest.raises(OSError, match="flush failed"):
@@ -257,6 +264,7 @@ def test_atomic_settings_write_cleans_up_after_replace_failure(
 
     def fail_replace(_source: Path, _destination: Path) -> None:
         raise OSError("replace failed")
+
     monkeypatch.setattr(settings_module.os, "replace", fail_replace)
 
     with pytest.raises(OSError, match="replace failed"):
@@ -276,6 +284,7 @@ def test_atomic_settings_write_cleans_up_after_an_interrupt(
 
     def interrupt_replace(_source: Path, _destination: Path) -> None:
         raise KeyboardInterrupt
+
     monkeypatch.setattr(settings_module.os, "replace", interrupt_replace)
 
     with pytest.raises(KeyboardInterrupt):

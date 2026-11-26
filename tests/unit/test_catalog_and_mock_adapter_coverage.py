@@ -135,9 +135,7 @@ def test_mock_reasoning_adapter_selects_the_first_allowed_candidate() -> None:
     """The mock selects the first dictionary candidate and preserves its fields."""
     adapter = MockReasoningAdapter()
 
-    result = adapter.arbitrate(
-        {"allowed_candidates": [{"id": "candidate-1", "value": "First"}]}
-    )
+    result = adapter.arbitrate({"allowed_candidates": [{"id": "candidate-1", "value": "First"}]})
 
     assert adapter.is_available() == (True, None)
     assert result["selected_candidate_id"] == "candidate-1"

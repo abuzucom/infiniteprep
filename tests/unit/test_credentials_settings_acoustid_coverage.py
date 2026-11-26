@@ -148,6 +148,7 @@ def test_acoustid_identify_returns_empty_result_when_unavailable(tmp_path: Path)
 )
 def test_acoustid_reports_fpcalc_errors(error: Exception) -> None:
     """Every supported fpcalc failure produces a warning without matches."""
+
     def failing_runner(_path: Path) -> tuple[float, str]:
         raise error
 
@@ -166,6 +167,7 @@ def test_acoustid_reports_fpcalc_errors(error: Exception) -> None:
 
 def test_acoustid_lookup_failure_keeps_fingerprint(tmp_path: Path) -> None:
     """A lookup failure keeps the computed fingerprint and reports no API key."""
+
     def failing_http(_url: str, _params: dict[str, str]) -> dict[str, Any]:
         raise OSError("offline")
 

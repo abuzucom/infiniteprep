@@ -144,9 +144,7 @@ def test_omission_validation_rejects_invalid_entries(raw: object) -> None:
         ("my_tags_sha256", "", "cannot be empty"),
     ],
 )
-def test_manifest_parsing_rejects_invalid_fields(
-    field: str, value: object, message: str
-) -> None:
+def test_manifest_parsing_rejects_invalid_fields(field: str, value: object, message: str) -> None:
     """Manifest parsing rejects invalid states, timestamps, collections, and counts."""
     raw = json.loads(json.dumps(manifest._manifest_to_dict(build_manifest())))
     raw[field] = value

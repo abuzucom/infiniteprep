@@ -217,6 +217,7 @@ def test_qt_material_package_directory_handles_lookup_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A failed package lookup leaves the theme package unavailable."""
+
     def fail_lookup(_name: str) -> None:
         raise ImportError("package lookup failed")
 
@@ -260,6 +261,7 @@ def test_load_qt_material_handles_import_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A missing optional theme package leaves no engine loaded."""
+
     def fail_import(_name: str) -> None:
         raise ImportError("qt-material is missing")
 

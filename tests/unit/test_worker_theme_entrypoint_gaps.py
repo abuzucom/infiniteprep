@@ -194,9 +194,7 @@ def test_system_theme_uses_the_host_color_scheme(
     expected: str,
 ) -> None:
     """The system choice follows the host color scheme without an internal stub."""
-    app = SimpleNamespace(
-        styleHints=lambda: SimpleNamespace(colorScheme=lambda: scheme)
-    )
+    app = SimpleNamespace(styleHints=lambda: SimpleNamespace(colorScheme=lambda: scheme))
     monkeypatch.setattr(
         theme_module,
         "QGuiApplication",

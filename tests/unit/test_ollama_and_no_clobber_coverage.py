@@ -205,7 +205,7 @@ def test_ollama_exec_array_uses_shell_false(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr(ollama_bootstrap.subprocess, "run", run)
     service = OllamaBootstrapService()
 
-    assert service._exec_array(["ollama", "pull", "qwen2.5:3b"]) .stdout == "done"
+    assert service._exec_array(["ollama", "pull", "qwen2.5:3b"]).stdout == "done"
     assert calls[0][0] == ["ollama", "pull", "qwen2.5:3b"]
     assert calls[0][1]["shell"] is False
 
@@ -273,6 +273,7 @@ def test_rename_error_paths_report_existing_and_unsupported_destinations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Native errors distinguish an existing destination from an unsupported operation."""
+
     def existing(_source: bytes, _destination: bytes) -> int:
         ctypes.set_errno(errno.EEXIST)
         return -1

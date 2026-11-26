@@ -131,9 +131,7 @@ def test_write_json_atomic_creates_parent_and_replaces_target(tmp_path: Path) ->
     result = shared.write_json_atomic(parent, "data.json", {"name": "cafe"})
 
     assert result == target
-    assert target.read_text(encoding="utf-8") == (
-        '{\n  "name": "cafe"\n}\n'
-    )
+    assert target.read_text(encoding="utf-8") == ('{\n  "name": "cafe"\n}\n')
     assert list(parent.glob(".data.json.*.tmp")) == []
 
 

@@ -158,9 +158,7 @@ def test_analyze_runner_body_passes_reconciliation_and_stop_policy(
 
     orchestrator = SimpleNamespace(process_files_continuing=process_files)
     reconciler = SimpleNamespace(reconcile_file=reconcile_file)
-    settings_manager = SimpleNamespace(
-        load=lambda: AppSettings(stop_batch_on_first_failure=True)
-    )
+    settings_manager = SimpleNamespace(load=lambda: AppSettings(stop_batch_on_first_failure=True))
     monkeypatch.setattr(main_module, "SettingsManager", lambda: settings_manager)
     runner = main_module.build_analyze_runner(orchestrator, reconciler)
     cancel = MagicMock(return_value=False)
@@ -193,9 +191,7 @@ def test_write_runner_body_passes_plans_and_stop_policy(
 
     write_service = SimpleNamespace(apply_batch_continuing=apply_batch)
     window = SimpleNamespace(queue_batch=queue_batch)
-    settings_manager = SimpleNamespace(
-        load=lambda: AppSettings(stop_batch_on_first_failure=False)
-    )
+    settings_manager = SimpleNamespace(load=lambda: AppSettings(stop_batch_on_first_failure=False))
     monkeypatch.setattr(main_module, "SettingsManager", lambda: settings_manager)
     plans: list[FileWritePlan] = []
 
