@@ -9,9 +9,7 @@ import pytest
 import infiniteprep.services.usb._shared as shared
 
 
-def test_temp_path_writer_cleans_up_after_a_flush_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_temp_path_writer_cleans_up(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The path writer removes its temporary file after a flush failure."""
     monkeypatch.setattr(
         shared.os,
@@ -25,7 +23,7 @@ def test_temp_path_writer_cleans_up_after_a_flush_failure(
     assert list(tmp_path.glob(".data.json.*.tmp")) == []
 
 
-def test_atomic_dir_fd_writer_cleans_up_after_replace_failure(
+def test_atomic_dir_fd_writer_cleans(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The descriptor writer removes its temporary file after a replace failure."""
@@ -44,7 +42,7 @@ def test_atomic_dir_fd_writer_cleans_up_after_replace_failure(
     assert removed == ["temporary"]
 
 
-def test_atomic_dir_fd_writer_checks_the_target_twice(
+def test_atomic_dir_fd_writer_checks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The descriptor writer checks the target before and after its temporary write."""
@@ -66,7 +64,7 @@ def test_atomic_dir_fd_writer_checks_the_target_twice(
     assert checks == 2
 
 
-def test_atomic_writer_routes_a_descriptor_to_the_dir_fd_writer(
+def test_atomic_writer_routes_a_descriptor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The atomic writer routes a descriptor to its confined writer."""
