@@ -5,13 +5,14 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.93.8] (2026-11-27)
+## [0.93.9] (2026-11-27)
 
 ### Changed
 
 - The main window opens at a share of the available screen and restores saved geometry when available.
 - A large-window layout gives the sidebar and track details more room from 1680 logical pixels.
 - The waveform and playback controls stay visible above the library. The queue and workflow controls leave the remaining height to the library (UI-7, #362).
+- Compact player spacing keeps the cue buttons visible at the minimum window size (UI-7, #362).
 
 ## [0.93.7] (2026-11-26)
 

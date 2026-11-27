@@ -95,8 +95,9 @@ ZOOM_SECONDS: Final[tuple[int, ...]] = SUPPORTED_WAVEFORM_ZOOM_SECONDS
 OVERVIEW_MODE: Final[str] = "Overview"
 ZOOM_MODE: Final[str] = "Zoom"
 LAYOUT_MARGIN_PX: Final[int] = 4
-DECK_ROW_SPACING: Final[int] = 2
+DECK_SPACING: Final[int] = 2
 DECK_WAVEFORM_MIN_HEIGHT: Final[int] = 16
+COMPACT_DECK_WAVEFORM_MIN_HEIGHT: Final[int] = 8
 DECK_EMPTY_TEXT: Final[str] = "Pick a track and press Play, or drag a track here."
 MS_PER_SECOND: Final[float] = 1000.0
 SECONDS_PER_MINUTE: Final[float] = 60.0
@@ -747,8 +748,8 @@ class AudioPreviewWidget(QWidget):
     def _build_deck_layout(self, root: QVBoxLayout) -> None:
         """Lay out the same transport and waveform widgets in the main window deck."""
         root.setContentsMargins(LAYOUT_MARGIN_PX, 0, LAYOUT_MARGIN_PX, 0)
-        root.setSpacing(DECK_ROW_SPACING)
         self.deck_heading = QHBoxLayout()
+        self.deck_heading.setSpacing(DECK_SPACING)
         self.deck_heading.addWidget(self.loaded_track_label, 3)
         self.deck_hint = DeckTextLabel(DECK_EMPTY_TEXT, self)
         self.deck_hint.use_deck_width()
@@ -760,17 +761,17 @@ class AudioPreviewWidget(QWidget):
         self.status_label.setVisible(bool(self.status_label.text()))
         self.analysis_status_label.setVisible(bool(self.analysis_status_label.text()))
         root.addLayout(self.deck_heading)
-        self.waveform_bar.setMinimumHeight(DECK_WAVEFORM_MIN_HEIGHT)
         root.addWidget(self.waveform_bar, 1)
         root.addWidget(self.position_slider)
 
         self.deck_controls = QBoxLayout(QBoxLayout.Direction.LeftToRight)
-        self.deck_controls.setSpacing(DECK_ROW_SPACING)
         self.deck_transport = QHBoxLayout()
+        self.deck_transport.setSpacing(DECK_SPACING)
         self.deck_transport.addWidget(self.play_btn)
         self.deck_transport.addWidget(self.stop_btn)
         self.deck_transport.addStretch()
         cues = QHBoxLayout()
+        cues.setSpacing(DECK_SPACING)
         for cue_button in self.cue_buttons.values():
             cues.addWidget(cue_button)
         self.deck_controls.addLayout(self.deck_transport, 1)
@@ -780,6 +781,12 @@ class AudioPreviewWidget(QWidget):
 
     def set_deck_compact(self, compact: bool) -> None:
         """Move waveform settings beside transport when cues need their own row."""
+        # Keep room for theme-dependent control heights when the cues use a separate row.
+        spacing = 0 if compact else DECK_SPACING
+        self.layout().setSpacing(spacing)
+        self.deck_controls.setSpacing(spacing)
+        waveform_minimum = COMPACT_DECK_WAVEFORM_MIN_HEIGHT if compact else DECK_WAVEFORM_MIN_HEIGHT
+        self.waveform_bar.setMinimumHeight(waveform_minimum)
         self.deck_heading.removeWidget(self.deck_views)
         self.deck_transport.removeWidget(self.deck_views)
         if compact:
