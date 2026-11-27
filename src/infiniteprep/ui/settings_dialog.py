@@ -143,6 +143,7 @@ class SettingsDialog(QDialog):
         self.theme_combo = self.general_tab.theme_combo
         self.unsorted_rows_placement_combo = self.general_tab.unsorted_rows_placement_combo
         self.stop_on_failure_checkbox = self.analysis_tab.stop_on_failure_checkbox
+        self.analysis_worker_count_spin = self.analysis_tab.worker_count_spin
         self.fake_lossless_method_combo = self.analysis_tab.fake_lossless_method_combo
         self.transcode_mode_combo = self.transcode_tab.transcode_mode_combo
         self.transcode_preset_combo = self.transcode_tab.transcode_preset_combo

@@ -96,6 +96,8 @@ CANDIDATES_LIST_NAME: Final[str] = "Possible matches"
 NO_SAVE_SUFFIX: Final[str] = " (can't save tags to this file)"
 ORIGINAL_MIX_TEXT: Final[str] = "Original"
 NOTHING_DETECTED_TEXT: Final[str] = "Nothing detected"
+# The row of a result that an older analyzer version wrote.
+STALE_ANALYSIS_TEXT: Final[str] = "Detected: outdated analysis. Analyze the track again."
 PERCENT_SCALE: Final[int] = 100
 
 
@@ -137,8 +139,14 @@ def format_candidate_row(
     return f"{track}. From {provider}, {format_match_percent(match_score)}"
 
 
-def format_analysis_row(bpm: str | None, key_text: str | None) -> str:
-    """Return one analysis row, such as "Detected: 128 BPM, key 8A"."""
+def format_analysis_row(bpm: str | None, key_text: str | None, stale: bool = False) -> str:
+    """Return one analysis row, such as "Detected: 128 BPM, key 8A".
+
+    A result that an older analyzer version wrote states no BPM and no key. The row then
+    names the outdated analysis instead of the values.
+    """
+    if stale:
+        return STALE_ANALYSIS_TEXT
     parts = []
     if bpm:
         parts.append(f"{bpm} BPM")
@@ -1079,7 +1087,9 @@ class DetailPanel(QWidget):
                     analysis.key_tonic, analysis.key_mode, self.key_notation
                 )
             bpm_text = str(analysis.bpm) if analysis.bpm else None
-            self.candidates_list.addItem(format_analysis_row(bpm_text, key_text))
+            self.candidates_list.addItem(
+                format_analysis_row(bpm_text, key_text, stale=analysis.stale)
+            )
 
     def accept_first_proposal_for_field(self, field_name: str) -> bool:
         """Programmatically accept the top proposal for field_name on the current file."""

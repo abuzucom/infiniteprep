@@ -15,7 +15,7 @@ from infiniteprep.domain.enums import (
 )
 from infiniteprep.domain.library_query import LibraryQuery, canonical_key
 from infiniteprep.domain.metadata_values import resolve_effective_value, top_proposal_values
-from infiniteprep.domain.models import ApprovedField, FileAsset
+from infiniteprep.domain.models import AnalysisResult, ApprovedField, FileAsset
 from infiniteprep.ui.table_sort import LibraryRow, parse_bpm_value
 from infiniteprep.ui.time_format import split_time_seconds
 from infiniteprep.ui.write_preview_model import format_count
@@ -62,6 +62,10 @@ def format_status_cell(value: str) -> str:
 
 
 WARNING_LINE_SEPARATOR: Final[str] = "\n"
+# The warning that marks a file whose analysis no longer states the current values.
+STALE_ANALYSIS_WARNING: Final[str] = (
+    "The analysis of this track is out of date. Analyze the track again."
+)
 
 
 def format_warning_summary(warnings: list[str]) -> str:
@@ -95,10 +99,21 @@ def load_library_snapshot(repo: Repository) -> LibrarySnapshot:
             for file_id, file_proposals in proposals.items()
         },
         analysis_warnings={
-            file_id: [warning for result in results for warning in result.warnings]
-            for file_id, results in analyses.items()
+            file_id: analysis_warning_lines(results) for file_id, results in analyses.items()
         },
     )
+
+
+def analysis_warning_lines(results: list[AnalysisResult]) -> list[str]:
+    """Return the warning lines of the stored analysis results of one file.
+
+    A result that an older analyzer version wrote no longer states the current values.
+    The file reads as needing a new analysis only while no current result exists.
+    """
+    lines = [warning for result in results if not result.stale for warning in result.warnings]
+    if results and all(result.stale for result in results):
+        lines.append(STALE_ANALYSIS_WARNING)
+    return lines
 
 
 def format_duration(seconds: float) -> str:

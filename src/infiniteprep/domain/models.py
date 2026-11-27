@@ -198,6 +198,10 @@ class AnalysisResult:
     beat_positions_optional: list[float] | None = None
     warnings: list[str] = field(default_factory=list)
     analyzed_at: str = ""
+    # True when the analyzer version that wrote this result is no longer the one the app
+    # runs. A stale result stays in the table for reference, and the app does not use it
+    # as the current BPM or key.
+    stale: bool = False
 
 
 @dataclass
