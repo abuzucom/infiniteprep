@@ -354,6 +354,7 @@ class DetailPanel(QWidget):
         *,
         enable_audio_backend: bool = False,
         settings_manager: SettingsManager | None = None,
+        player_in_deck: bool = False,
     ) -> None:
         """Initialize DetailPanel with Repository, ReviewService, and AudioPreviewWidget.
 
@@ -401,7 +402,7 @@ class DetailPanel(QWidget):
         self.other_tags_table = QTableWidget(0, OTHER_TAGS_COLUMN_COUNT, self)
         self.candidates_list = QListWidget(self)
 
-        self._build_layout()
+        self._build_layout(player_in_deck)
 
     def _build_waveform_pool(self) -> None:
         """Create the waveform analysis pool and connect its results."""
@@ -415,7 +416,7 @@ class DetailPanel(QWidget):
         if application is not None:
             application.aboutToQuit.connect(self.waveform_pool.shutdown)
 
-    def _build_layout(self) -> None:
+    def _build_layout(self, player_in_deck: bool) -> None:
         """Stack the track header and the sections, each with its collapse arrow.
 
         Every section opens by default. Technical details starts closed, so tag frame
@@ -424,7 +425,10 @@ class DetailPanel(QWidget):
         root = QVBoxLayout(self)
         header_row = QHBoxLayout()
         header_row.addWidget(self.header_label, stretch=1)
-        header_row.addWidget(self.play_selected_btn)
+        if player_in_deck:
+            self.play_selected_btn.hide()
+        else:
+            header_row.addWidget(self.play_selected_btn)
         root.addLayout(header_row)
         self.badges_row = TrackBadgesRow(self)
         root.addWidget(self.badges_row)
@@ -437,13 +441,14 @@ class DetailPanel(QWidget):
         self.technical_label.setWordWrap(True)
         self.technical_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         sections = (
-            (PLAYER_SECTION_TITLE, self.audio_player, True),
             (CHANGES_SECTION_TITLE, self.fields_table, True),
             (WARNINGS_SECTION_TITLE, self.warnings_label, True),
             (OTHER_TAGS_SECTION_TITLE, self.other_tags_table, True),
             (CANDIDATES_SECTION_TITLE, self.candidates_list, True),
             (TECHNICAL_SECTION_TITLE, self.technical_label, False),
         )
+        if not player_in_deck:
+            sections = ((PLAYER_SECTION_TITLE, self.audio_player, True), *sections)
         self.sections: dict[str, CollapsibleSection] = {}
         for title, content, expanded in sections:
             section = CollapsibleSection(title, content, self, expanded=expanded)

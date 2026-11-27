@@ -56,11 +56,13 @@ class BatchQueueStrip(QWidget):
         parent: QWidget | None = None,
         *,
         clock: Callable[[], float] = time.monotonic,
+        collapse_when_open: bool = False,
     ) -> None:
         """Build the strip and follow the controller's state and progress."""
         super().__init__(parent)
         self.controller = controller
         self._clock = clock
+        self._collapse_when_open = collapse_when_open
         self._started_at: dict[str, float] = {}
         # (files done, time of the report that raised it) per batch. The pace counts
         # finished files only, so time on the file in progress leaves it unchanged.
@@ -95,7 +97,8 @@ class BatchQueueStrip(QWidget):
     def refresh(self) -> None:
         """Show the running batch, or hide the strip while nothing runs or waits."""
         running = self.controller.queue.running
-        self.setVisible(self.controller.is_busy())
+        open_queue = self._collapse_when_open and self.queue_button.isChecked()
+        self.setVisible(self.controller.is_busy() and not open_queue)
         self._forget_other_batches(running)
         if running is None:
             self.batch_label.setText("")
@@ -112,6 +115,8 @@ class BatchQueueStrip(QWidget):
         self.queue_button.setChecked(shown)
         self.queue_button.blockSignals(False)
         self._label_queue_button(shown)
+        if self._collapse_when_open:
+            self.refresh()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Toggle the full queue on a left click anywhere on the strip."""
