@@ -59,6 +59,14 @@ MP4_LARGE_ATOM_HEADER_SIZE: Final[int] = 16
 # A size field of 1 means a 64-bit size follows the type.
 MP4_LARGE_SIZE_MARKER: Final[int] = 1
 MP4_MEDIA_TYPE: Final[bytes] = b"mdat"
+MP4_MOVIE_TYPE: Final[bytes] = b"moov"
+MP4_STEM_TYPE: Final[bytes] = b"stem"
+# The atoms whose children the movie walk descends into.
+MP4_CONTAINER_TYPES: Final[frozenset[bytes]] = frozenset(
+    {b"moov", b"trak", b"mdia", b"minf", b"stbl", b"edts", b"dinf", b"udta"}
+)
+# The movie walk reads at most this many atoms.
+MAX_MP4_ATOMS: Final[int] = 4096
 # MPEG audio frame header fields.
 MPEG_HEADER_SIZE: Final[int] = 4
 MPEG_SYNC_BYTE: Final[int] = 0xFF
@@ -138,6 +146,29 @@ class _ChunkSpan:
     chunk_id: bytes
     start: int
     size: int
+
+
+@dataclass(frozen=True)
+class _Mp4Atom:
+    """One MP4 atom: its four-character type and the byte range of its body."""
+
+    atom_type: bytes
+    body_start: int
+    body_end: int
+
+
+class _AtomBudget:
+    """A counter that bounds how many atoms one walk may read."""
+
+    def __init__(self, message: str, limit: int = MAX_MP4_ATOMS) -> None:
+        self.remaining = limit
+        self.message = message
+
+    def spend(self) -> None:
+        """Count one atom and refuse a file that holds too many of them."""
+        self.remaining -= 1
+        if self.remaining < 0:
+            raise AudioPropertiesError(self.message)
 
 
 @dataclass(frozen=True)
@@ -245,36 +276,79 @@ def find_aiff_payload(data: bytes) -> tuple[tuple[int, int], ...]:
 
 
 def find_m4a_payload(data: bytes) -> tuple[tuple[int, int], ...]:
-    """Return the byte range of every mdat payload, in file order.
+    """Return the byte range of every mdat payload, then every stem box.
 
     Every atom size is checked against the end of the file, so a damaged size cannot name a
-    range that reaches past the file.
+    range that reaches past the file. A stem file keeps its stem metadata in a stem atom
+    inside the movie. The tag writer copies that atom byte for byte, so the atom joins the
+    ranges that the audio digest covers. A change to the stem metadata then fails the
+    comparison between the digest before and after a write.
     """
     ranges: list[tuple[int, int]] = []
+    movie: _Mp4Atom | None = None
     offset = 0
     end = len(data)
+    budget = _AtomBudget("The M4A file holds too many atoms to read.")
     while offset < end:
-        if offset + MP4_ATOM_HEADER_SIZE > end:
-            raise AudioPropertiesError("The M4A file ends inside an atom header.")
-        size = struct.unpack(">I", data[offset : offset + UINT32_SIZE])[0]
-        atom_type = data[offset + UINT32_SIZE : offset + MP4_ATOM_HEADER_SIZE]
-        header = MP4_ATOM_HEADER_SIZE
-        if size == MP4_LARGE_SIZE_MARKER:
-            if offset + MP4_LARGE_ATOM_HEADER_SIZE > end:
-                raise AudioPropertiesError("The M4A atom header is truncated.")
-            field = data[offset + MP4_ATOM_HEADER_SIZE : offset + MP4_LARGE_ATOM_HEADER_SIZE]
-            size = struct.unpack(">Q", field)[0]
-            header = MP4_LARGE_ATOM_HEADER_SIZE
-        elif size == 0:
-            size = end - offset
-        if size < header or offset + size > end:
-            raise AudioPropertiesError("An M4A atom size is invalid; the file is damaged.")
-        if atom_type == MP4_MEDIA_TYPE:
-            ranges.append((offset + header, offset + size))
-        offset += size
+        atom = _read_mp4_atom(data, offset, end)
+        budget.spend()
+        if atom.atom_type == MP4_MEDIA_TYPE:
+            ranges.append((atom.body_start, atom.body_end))
+        elif atom.atom_type == MP4_MOVIE_TYPE:
+            movie = atom
+        offset = atom.body_end
     if not ranges:
         raise AudioPropertiesError("The M4A file has no media data.")
+    if movie is not None:
+        ranges.extend(_find_stem_ranges(data, movie))
     return tuple(ranges)
+
+
+def _find_stem_ranges(data: bytes, movie: _Mp4Atom) -> list[tuple[int, int]]:
+    """Return the body range of every stem atom in the movie."""
+    found: list[tuple[int, int]] = []
+    pending = [(movie.body_start, movie.body_end)]
+    budget = _AtomBudget("The M4A movie holds too many atoms to read.")
+    while pending:
+        start, end = pending.pop()
+        for child in _mp4_children(data, start, end, budget):
+            if child.atom_type == MP4_STEM_TYPE:
+                found.append((child.body_start, child.body_end))
+            if child.atom_type in MP4_CONTAINER_TYPES:
+                pending.append((child.body_start, child.body_end))
+    return found
+
+
+def _mp4_children(data: bytes, start: int, end: int, budget: _AtomBudget) -> list[_Mp4Atom]:
+    """Return the atoms laid out between start and end."""
+    atoms: list[_Mp4Atom] = []
+    offset = start
+    while offset < end:
+        atom = _read_mp4_atom(data, offset, end)
+        budget.spend()
+        atoms.append(atom)
+        offset = atom.body_end
+    return atoms
+
+
+def _read_mp4_atom(data: bytes, offset: int, end: int) -> _Mp4Atom:
+    """Return the atom at offset, checking its size against the end of the file."""
+    if offset + MP4_ATOM_HEADER_SIZE > end:
+        raise AudioPropertiesError("The M4A file ends inside an atom header.")
+    size = struct.unpack(">I", data[offset : offset + UINT32_SIZE])[0]
+    atom_type = data[offset + UINT32_SIZE : offset + MP4_ATOM_HEADER_SIZE]
+    header = MP4_ATOM_HEADER_SIZE
+    if size == MP4_LARGE_SIZE_MARKER:
+        if offset + MP4_LARGE_ATOM_HEADER_SIZE > end:
+            raise AudioPropertiesError("The M4A atom header is truncated.")
+        field = data[offset + MP4_ATOM_HEADER_SIZE : offset + MP4_LARGE_ATOM_HEADER_SIZE]
+        size = struct.unpack(">Q", field)[0]
+        header = MP4_LARGE_ATOM_HEADER_SIZE
+    elif size == 0:
+        size = end - offset
+    if size < header or offset + size > end:
+        raise AudioPropertiesError("An M4A atom size is invalid; the file is damaged.")
+    return _Mp4Atom(atom_type, offset + header, offset + size)
 
 
 def _aiff_sound_range(data: bytes, chunk: _ChunkSpan) -> tuple[int, int]:
