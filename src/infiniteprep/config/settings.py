@@ -208,6 +208,10 @@ class AppSettings:
     analysis_workers: int = DEFAULT_ANALYSIS_WORKERS
     # Places the rows without a value for the sorted column first or last.
     unsorted_rows_placement: str = UNSORTED_PLACEMENT_FIRST
+    # The library table sort column index and direction from the last session. The
+    # window checks the column against its own column count on load.
+    library_sort_column: int = 0
+    library_sort_descending: bool = False
     theme: str = DARK_THEME_ID
     text_size: str = TEXT_SIZE_STANDARD
     file_table_layout: str = ""  # Base64-encoded QHeaderView state.

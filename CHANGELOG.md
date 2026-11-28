@@ -5,10 +5,23 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.94.4] (2026-11-28)
+## [0.95.0] (2026-11-28)
 
 ### Added
 
+- The library search runs after a 250 ms typing pause. Text set by the app, such as a saved search, still runs at once.
+- The search field gains a clear button. Ctrl+F selects the search text. Escape empties the field.
+- The line above the table shows the result count, such as "Showing 12 of 340 tracks".
+- A removable chip names each active sidebar filter and folder. **Clear all** empties the search and removes every filter.
+- An empty table names its cause. An empty library offers **Add folder**. A search without matches offers **Clear search and filters**.
+- A plain search shows matching cells in bold. A search on genre or year names the matched value in the filename tooltip.
+- Each sidebar filter shows its track count beside its name.
+- A click on a sidebar folder narrows the table to that folder. A second click shows every folder again.
+- The **Saved searches** menu gains **Rename** and **Delete** submenus. A delete asks first and keeps every track.
+  - `CollectionRepository` adds `saved_search_entries`, `rename_saved_search`, and `delete_saved_search`.
+  - The new `SavedSearch` value holds the ID, the name, and the query of one saved search.
+- `library_query` adds `plain_search_term` and `query_fields` for the search hints.
+- `AppSettings` adds `library_sort_column` and `library_sort_descending`. The sort column and direction return at the next launch.
 - M4A files accept tag writes (FMT-3, #104).
   - The new `adapters/metadata_io/mp4_writer.py` rebuilds the movie atom, keeps every item it does not write, and moves the chunk offsets of every track when the movie changes size. The media data keeps its bytes.
   - A free atom takes the size change where the file holds one. The media data then stays where it is.
@@ -33,6 +46,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- A half-typed query shows its error after the typing pause. The table keeps the last valid results. The summary marks those results as old.
+- A saved search resets the sidebar filters. The table then matches its smart playlist.
 - The main window opens at a share of the available screen and restores saved geometry when available.
 - A large-window layout gives the sidebar and track details more room from 1680 logical pixels.
 - The waveform and playback controls stay visible above the library. The queue and workflow controls leave the remaining height to the library (UI-7, #362).

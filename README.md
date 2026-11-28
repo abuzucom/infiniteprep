@@ -275,8 +275,26 @@ Use `format is FLAC` for an exact match. Numeric fields accept comparisons such 
 Use parentheses to group alternatives. For example, enter `(genre:house OR genre:disco) AND NOT bpm:120-128`.
 Double quotes keep a phrase together. The sidebar filter also applies to the results.
 
+The search runs 250 ms after the last typed key. Ctrl+F (Cmd+F on macOS) selects the
+search text. Escape or the clear button in the field empties it. A plain search shows
+matching cells in bold. A search on genre or year names the matched value in the
+filename tooltip. An unfinished query keeps the last results on screen. The line above
+the table marks those results as old.
+
+The line above the table shows the result count, such as `Showing 12 of 340 tracks`. A chip
+names each active sidebar filter and folder. A click on a chip removes that filter.
+**Clear all** empties the search and removes every filter. An empty table names its
+cause and offers **Add folder** or **Clear search and filters**.
+
+Each sidebar filter shows its track count. A click on a sidebar folder shows only the
+tracks of that folder. A second click shows every folder again. The sort column and
+direction return at the next launch.
+
 Open **Saved searches** and select **Save current search**. Enter a smart playlist name.
-Select that name from the same menu to run the query against the current library.
+Select that name from the same menu to run the query against the whole library. The
+selection resets the sidebar filters. The table then matches the smart playlist. The
+**Rename** and **Delete** submenus edit or remove a saved search. A delete asks first
+and keeps every track in the library.
 
 ## Usage Walkthrough
 

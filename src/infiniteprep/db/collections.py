@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections import Counter
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 from uuid import uuid4
 
@@ -20,6 +21,16 @@ if TYPE_CHECKING:
     from infiniteprep.db.repositories import Repository
 
 MAX_FOLDER_DEPTH: Final[int] = 8
+MISSING_SAVED_SEARCH_TEXT: Final[str] = "That saved search no longer exists. Choose another one."
+
+
+@dataclass(frozen=True)
+class SavedSearch:
+    """Hold the collection ID, the name, and the original query of one saved search."""
+
+    id: str
+    name: str
+    query: str
 
 
 def validate_import_folder_paths(paths: Iterable[Sequence[str]]) -> None:
@@ -191,6 +202,47 @@ class CollectionRepository:
             "WHERE search_query IS NOT NULL ORDER BY name_key"
         )
         return [(row["name"], row["search_query"]) for row in rows]
+
+    def saved_search_entries(self) -> list[SavedSearch]:
+        """List each saved search with its ID in library order."""
+        rows = self._repository.db.connect().execute(
+            "SELECT id, name, search_query FROM collections "
+            "WHERE search_query IS NOT NULL ORDER BY name_key"
+        )
+        return [SavedSearch(row["id"], row["name"], row["search_query"]) for row in rows]
+
+    def rename_saved_search(self, search_id: str, name: str) -> None:
+        """Rename a saved search and keep its query."""
+        name = _normalize_name(name)
+        conn = self._repository.db.connect()
+        with self._repository.batch(immediate=True):
+            self._require_saved_search(search_id)
+            _write_named_record(
+                conn,
+                "UPDATE collections SET name = ?, name_key = ? WHERE id = ?",
+                (name, name.casefold(), search_id),
+            )
+
+    def delete_saved_search(self, search_id: str) -> None:
+        """Delete a saved search. An ordinary playlist or crate stays in place."""
+        conn = self._repository.db.connect()
+        with self._repository.batch(immediate=True):
+            self._require_saved_search(search_id)
+            conn.execute(
+                "DELETE FROM collections WHERE id = ? AND search_query IS NOT NULL", (search_id,)
+            )
+
+    def _require_saved_search(self, search_id: str) -> None:
+        row = (
+            self._repository.db.connect()
+            .execute(
+                "SELECT 1 FROM collections WHERE id = ? AND search_query IS NOT NULL",
+                (search_id,),
+            )
+            .fetchone()
+        )
+        if row is None:
+            raise ValueError(MISSING_SAVED_SEARCH_TEXT)
 
     def create_crate(self, name: str, folder_id: str | None = None) -> TrackCollection:
         """Create an empty unordered crate."""

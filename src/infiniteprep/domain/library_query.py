@@ -212,8 +212,8 @@ class QueryParser:
         return term.predicate
 
 
-def parse_library_query(source: str) -> LibraryQuery:
-    """Preserve ordinary substring searches and compile structured expressions."""
+def _normalize_source(source: str) -> tuple[str, str]:
+    """Return the folded search text and its expanded form, or raise ValueError."""
     if len(source) > MAX_LENGTH:
         raise ValueError(f"Limit the search to {MAX_LENGTH} characters.")
     text = source.strip().casefold()
@@ -234,11 +234,53 @@ def parse_library_query(source: str) -> LibraryQuery:
                 + genre[3]
             ]
     normalized = "".join(part if part.startswith('"') else expand_phrase(part) for part in parts)
-    if (
-        not any(FIELD_START.search(part) for part in QUOTE.split(normalized)[::2])
-        and normalized == text
-    ):
-        return make_term("text", ":", text.removeprefix('"').removesuffix('"'))
+    return text, normalized
+
+
+def _simple_term(text: str, normalized: str) -> str | None:
+    """Return the substring term of a search without fields or phrases, or None."""
+    if normalized != text:
+        return None
+    if any(FIELD_START.search(part) for part in QUOTE.split(normalized)[::2]):
+        return None
+    return text.removeprefix('"').removesuffix('"')
+
+
+def plain_search_term(source: str) -> str | None:
+    """Return the folded term of a plain substring search.
+
+    A search with fields, phrases, or an error returns None. Such a search has no
+    single term to mark in the table.
+    """
+    try:
+        text, normalized = _normalize_source(source)
+    except ValueError:
+        return None
+    return _simple_term(text, normalized)
+
+
+def query_fields(source: str) -> frozenset[str]:
+    """Return the canonical names of the fields a search names.
+
+    The names come from the expanded search. A spoken phrase names the fields of
+    its compiled form. A search with an error names no fields.
+    """
+    try:
+        _text, normalized = _normalize_source(source)
+    except ValueError:
+        return frozenset()
+    names: set[str] = set()
+    for part in QUOTE.split(normalized)[::2]:
+        names.update(ALIASES.get(match[1], match[1]) for match in FIELD_START.finditer(part))
+    return frozenset(names)
+
+
+def parse_library_query(source: str) -> LibraryQuery:
+    """Preserve ordinary substring searches and compile structured expressions."""
+    text, normalized = _normalize_source(source)
+    term = _simple_term(text, normalized)
+    if term is not None:
+        return make_term("text", ":", term)
     parser = QueryParser(TOKEN.findall(normalized))
     predicate = parser.expression()
     if parser.peek():
