@@ -372,8 +372,7 @@ def _rebuild_moov(
             group = _rebuild_udta(file, child, written, dropped, layout, depth=1, target=target)
             if not has_udta:
                 has_udta = True
-                if target is None:
-                    group.append(_render_meta(written, dropped))
+                group = _with_new_meta(group, target, written, dropped)
             parts.append(_render_atom(UDTA, b"".join(group)))
         elif child.atom_type == META:
             parts.append(
@@ -389,6 +388,18 @@ def _rebuild_moov(
     return _render_atom(MOOV, body)
 
 
+def _with_new_meta(
+    group: list[bytes],
+    target: int | None,
+    written: Sequence[tuple[str, bytes]],
+    dropped: set[str],
+) -> list[bytes]:
+    """Return the children of a user data atom with a new meta atom when the movie has none."""
+    if target is not None:
+        return group
+    return [*group, _render_meta(written, dropped)]
+
+
 def _find_target_meta(file: _File, children: list[_Atom]) -> int | None:
     """Return the start offset of the first meta atom in the movie, or None.
 
@@ -399,9 +410,17 @@ def _find_target_meta(file: _File, children: list[_Atom]) -> int | None:
         if child.atom_type == META:
             return child.start
         if child.atom_type == UDTA:
-            for grand in _children(file.data, child.body_start, child.end, _Budget()):
-                if grand.atom_type == META:
-                    return grand.start
+            found = _first_meta_start(file, child)
+            if found is not None:
+                return found
+    return None
+
+
+def _first_meta_start(file: _File, udta: _Atom) -> int | None:
+    """Return the start offset of the first meta atom inside a user data atom, or None."""
+    for child in _children(file.data, udta.body_start, udta.end, _Budget()):
+        if child.atom_type == META:
+            return child.start
     return None
 
 

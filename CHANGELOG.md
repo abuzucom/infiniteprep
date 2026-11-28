@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.94.3] (2026-11-28)
+## [0.94.4] (2026-11-28)
 
 ### Added
 
@@ -28,6 +28,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The M4A writer refuses a track or disc number that names no total, such as `3/`.
 - The M4A writer keeps every user data atom in the movie. A movie with two user data atoms lost the first one before this change.
 - The M4A writer replaces a native item that differs only in case. The file no longer holds two items for one field.
+- The M4A movie rebuild now passes the code quality invariants for nesting depth.
 - The M4A writer docstring names the hdlr child that tells the two meta layouts apart.
 
 ### Changed
