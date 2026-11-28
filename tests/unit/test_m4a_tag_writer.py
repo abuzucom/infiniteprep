@@ -13,15 +13,25 @@ from infiniteprep.adapters.metadata_io.mp4_writer import Mp4WriteError, write_m4
 from tests.fixtures import synthetic_audio as sa
 from tests.fixtures.mp4_bytes import (
     atom,
+    audio_entry,
     data_atom,
+    esds,
+    ftyp,
     item,
     m4a_with_sound_track,
+    mvhd,
+    trak,
     udta,
 )
 
 RATE = 44_100
 CHUNK_COUNT = 8
 CHUNK_SIZE = 512
+BITRATE = 256_000
+MEDIA_BYTES = bytes(range(256)) * 64
+# The writer refuses a value above this size and a file that nests its atoms too deeply.
+MAX_TAG_VALUE_BYTES = 64 * 1024
+MAX_ATOM_DEPTH = 32
 # The item key that holds each stored field, in the lower case the reader uses.
 FIELD_KEYS: dict[str, str] = {
     "artist": "\xa9art",
@@ -107,6 +117,25 @@ def _item_list_bytes(data: bytes) -> bytes:
     return data[position - 4 : position - 4 + size]
 
 
+def build_nested_m4a(depth: int) -> bytes:
+    """Return an M4A file whose movie nests user data atoms deeply."""
+    nested = b""
+    for _ in range(depth):
+        nested = atom(b"udta", nested)
+    entry = audio_entry(b"mp4a", 2, RATE, esds(BITRATE))
+    sizes = [CHUNK_SIZE] * CHUNK_COUNT
+    movie = mvhd(RATE, RATE * 2)
+    placeholder = trak(b"soun", entry, sizes, [0] * CHUNK_COUNT)
+    start = len(ftyp()) + len(atom(b"moov", movie + placeholder + nested)) + 8
+    offsets: list[int] = []
+    cursor = start
+    for size in sizes:
+        offsets.append(cursor)
+        cursor += size
+    track = trak(b"soun", entry, sizes, offsets)
+    return ftyp() + atom(b"moov", movie + track + nested) + atom(b"mdat", MEDIA_BYTES)
+
+
 @pytest.mark.parametrize(
     ("name", "builder"),
     [("aac", sa.build_m4a_aac_bytes), ("alac", sa.build_m4a_alac_bytes)],
@@ -144,6 +173,43 @@ def test_free_atom_absorbs_size_change() -> None:
     assert find_m4a_payload(written) == find_m4a_payload(data)
     assert len(written) == len(data)
     assert _chunk_offsets(written) == _chunk_offsets(data)
+
+
+def test_small_free_atom_moves_media() -> None:
+    """A free atom with too little room absorbs part of the change, and the media moves."""
+    data = build_m4a(free_bytes=8)
+    written = write_m4a_tags(data, {"artist": "Artist", "title": "Title"})
+    shift = len(written) - len(data)
+    assert shift > 0
+    assert _chunk_offsets(written) == [offset + shift for offset in _chunk_offsets(data)]
+    start, end = find_m4a_payload(data)[0]
+    new_start, new_end = find_m4a_payload(written)[0]
+    assert new_start == start + shift
+    assert written[new_start:new_end] == data[start:end]
+
+
+def test_quicktime_meta_round_trips() -> None:
+    """A QuickTime meta atom keeps its layout and its handler through a write."""
+    quicktime = udta(item(b"\xa9nam", data_atom(1, b"QuickTime")), full_meta=False)
+    data = build_m4a(tags=quicktime)
+    written = write_m4a_tags(data, {"artist": "Artist"})
+    tags = _tags_of(written)
+    assert tags["\xa9nam"] == ("QuickTime",)
+    assert tags["\xa9art"] == ("Artist",)
+    assert written.count(b"mdir") == data.count(b"mdir")
+
+
+def test_deep_nesting_is_refused() -> None:
+    """A file that nests its atoms too deeply is refused instead of raising a recursion error."""
+    with pytest.raises(Mp4WriteError, match="deeply"):
+        write_m4a_tags(build_nested_m4a(MAX_ATOM_DEPTH + 8), {"artist": "Artist"})
+
+
+def test_oversized_value_is_refused() -> None:
+    """A value above the size limit is refused instead of reaching the atom construction."""
+    oversized = "A" * (MAX_TAG_VALUE_BYTES + 1)
+    with pytest.raises(Mp4WriteError, match="byte limit"):
+        write_m4a_tags(build_m4a(), {"artist": oversized})
 
 
 def test_unwritten_items_survive_the_write() -> None:
@@ -213,6 +279,12 @@ def test_text_track_number_is_refused() -> None:
     """A track number that is not a number is refused."""
     with pytest.raises(Mp4WriteError, match="not a number"):
         write_m4a_tags(build_m4a(), {"track_number": "A1"})
+
+
+def test_empty_total_is_refused() -> None:
+    """A track number that names no total is refused instead of losing the total."""
+    with pytest.raises(Mp4WriteError, match="not a number"):
+        write_m4a_tags(build_m4a(), {"track_number": "3/"})
 
 
 def test_raised_digit_number_is_refused() -> None:

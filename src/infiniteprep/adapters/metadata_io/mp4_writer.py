@@ -28,10 +28,18 @@ UINT16_SIZE: Final[int] = 2
 UINT32_SIZE: Final[int] = 4
 UINT64_SIZE: Final[int] = 8
 UINT32_MAX: Final[int] = 0xFFFFFFFF
+UINT64_MAX: Final[int] = 0xFFFFFFFFFFFFFFFF
 # A walk reads at most this many atoms, so a damaged file cannot exhaust memory.
 MAX_ATOMS: Final[int] = 100_000
+# A container tree deeper than this is refused. The limit keeps a crafted file from
+# exhausting the interpreter stack during a rebuild.
+MAX_ATOM_DEPTH: Final[int] = 32
 # The rebuilt movie atom stays under this size.
 MAX_MOVIE_BYTES: Final[int] = 64 * 1024 * 1024
+# One tag value holds at most this many bytes, and the whole item list holds at most
+# MAX_ITEM_LIST_BYTES. The limits keep a large value from reaching the atom construction.
+MAX_TAG_VALUE_BYTES: Final[int] = 64 * 1024
+MAX_ITEM_LIST_BYTES: Final[int] = 1024 * 1024
 # The chunk offsets settle after a few passes, because a wider offset table changes the movie.
 MAX_REBUILD_PASSES: Final[int] = 16
 MAX_CHUNK_OFFSETS: Final[int] = 5_000_000
@@ -242,7 +250,12 @@ def _parse_file(data: bytes) -> _File:
 
 
 def _pick_free(atoms: tuple[_Atom, ...], moov: _Atom, media: tuple[_Atom, ...]) -> int | None:
-    """Return the index of the free atom that can absorb a size change, or None."""
+    """Return the index of the free atom that can absorb a size change, or None.
+
+    A free atom between the movie and the media data keeps the media data where it is. A
+    free atom anywhere else still absorbs the change in the file size. A free atom with less
+    room than the change absorbs only part of it, and the rest moves the media data.
+    """
     free_indexes = [index for index, atom in enumerate(atoms) if atom.atom_type == FREE]
     if not free_indexes:
         return None
@@ -355,20 +368,23 @@ def _rebuild_moov(
     meta_found = False
     for child in _children(file.data, file.moov.body_start, file.moov.end, _Budget()):
         if child.atom_type == UDTA:
-            udta_parts, child_meta = _rebuild_udta(file, child, written, dropped, layout)
+            udta_parts, child_meta = _rebuild_udta(file, child, written, dropped, layout, depth=1)
             meta_found = meta_found or child_meta
         elif child.atom_type == META:
             meta_found = True
-            parts.append(_rebuild_meta(file, child, written, dropped, layout))
+            parts.append(_rebuild_meta(file, child, written, dropped, layout, depth=1))
         else:
-            parts.append(_rebuild_atom(file, child, layout))
+            parts.append(_rebuild_atom(file, child, layout, depth=1))
     if udta_parts is None:
         parts.append(_render_atom(UDTA, _render_meta(written, dropped)))
     else:
         if not meta_found:
             udta_parts.append(_render_meta(written, dropped))
         parts.append(_render_atom(UDTA, b"".join(udta_parts)))
-    return _render_atom(MOOV, b"".join(parts))
+    body = b"".join(parts)
+    if len(body) > MAX_MOVIE_BYTES:
+        raise Mp4WriteError(f"the movie atom is larger than the {MAX_MOVIE_BYTES} byte limit")
+    return _render_atom(MOOV, body)
 
 
 def _rebuild_udta(
@@ -377,6 +393,8 @@ def _rebuild_udta(
     written: Sequence[tuple[str, bytes]],
     dropped: set[str],
     layout: _Layout,
+    *,
+    depth: int,
 ) -> tuple[list[bytes], bool]:
     """Return the rebuilt children of a user data atom and whether it holds a meta atom."""
     parts: list[bytes] = []
@@ -384,9 +402,9 @@ def _rebuild_udta(
     for child in _children(file.data, udta.body_start, udta.end, _Budget()):
         if child.atom_type == META:
             meta_found = True
-            parts.append(_rebuild_meta(file, child, written, dropped, layout))
+            parts.append(_rebuild_meta(file, child, written, dropped, layout, depth=depth + 1))
         else:
-            parts.append(_rebuild_atom(file, child, layout))
+            parts.append(_rebuild_atom(file, child, layout, depth=depth + 1))
     return parts, meta_found
 
 
@@ -396,6 +414,8 @@ def _rebuild_meta(
     written: Sequence[tuple[str, bytes]],
     dropped: set[str],
     layout: _Layout,
+    *,
+    depth: int,
 ) -> bytes:
     """Return the rebuilt meta atom with the written items in its item list."""
     start = _meta_children_start(file, meta)
@@ -407,7 +427,7 @@ def _rebuild_meta(
             item_list = file.data[child.body_start : child.end]
             parts.append(_render_atom(ILST, _render_items(item_list, written, dropped)))
         else:
-            parts.append(_rebuild_atom(file, child, layout))
+            parts.append(_rebuild_atom(file, child, layout, depth=depth + 1))
     if not ilst_found:
         parts.append(_render_atom(ILST, _render_items(b"", written, dropped)))
     body = b"".join(parts)
@@ -420,7 +440,10 @@ def _meta_children_start(file: _File, meta: _Atom) -> int:
     """Return where the children of a meta atom start.
 
     An iTunes meta atom holds a version and flags before its children. A QuickTime meta atom
-    starts its children at once.
+    starts its children at once. The hdlr child tells the two layouts apart. A QuickTime
+    layout holds the hdlr type in the four bytes after the body starts. An iTunes layout
+    holds the version and flags in those bytes instead, so the hdlr type lands one atom
+    later.
     """
     marker = file.data[meta.body_start + UINT32_SIZE : meta.body_start + ATOM_HEADER_SIZE]
     if marker == HANDLER.encode("latin-1"):
@@ -439,11 +462,13 @@ def _render_meta(written: Sequence[tuple[str, bytes]], dropped: set[str]) -> byt
     return _render_atom(META, body)
 
 
-def _rebuild_atom(file: _File, atom: _Atom, layout: _Layout) -> bytes:
+def _rebuild_atom(file: _File, atom: _Atom, layout: _Layout, *, depth: int) -> bytes:
     """Return one atom rebuilt, relocated, or copied as it was."""
+    if depth > MAX_ATOM_DEPTH:
+        raise Mp4WriteError("the file nests its atoms too deeply to rewrite safely")
     if atom.atom_type in CONTAINER_TYPES:
         children = _children(file.data, atom.body_start, atom.end, _Budget())
-        parts = [_rebuild_atom(file, child, layout) for child in children]
+        parts = [_rebuild_atom(file, child, layout, depth=depth + 1) for child in children]
         return _render_atom(atom.atom_type, b"".join(parts))
     if atom.atom_type in (STCO, CO64):
         return _rebuild_offset_table(file, atom, layout)
@@ -534,7 +559,9 @@ def _free_change(file: _File, delta: int) -> int:
     """Return the size change of the free atom that absorbs the movie size change.
 
     A free atom that shrinks by the amount the movie grew keeps the media data where it is. A
-    free atom that grows by the amount the movie shrank does the same.
+    free atom that grows by the amount the movie shrank does the same. A free atom with less
+    room than the change absorbs only part of it. The rest of the change moves the media data,
+    and the chunk offset relocation follows the media data.
     """
     if file.free_index is None:
         return 0
@@ -578,6 +605,10 @@ def _written_items(tags_to_write: Mapping[str, str]) -> tuple[list[tuple[str, by
         value = str(tags_to_write.get(field, "")).strip()
         if not value:
             continue
+        if len(value.encode("utf-8")) > MAX_TAG_VALUE_BYTES:
+            raise Mp4WriteError(
+                f"the {field} value is larger than the {MAX_TAG_VALUE_BYTES} byte limit"
+            )
         item = _render_field(field, value)
         if item is None:
             continue
@@ -645,7 +676,11 @@ def _render_pair_item(key: str, value: str) -> bytes:
 
 
 def _parse_number_pair(value: str) -> tuple[int, int]:
-    """Return the number and the total held in a value such as 3 or 3/12."""
+    """Return the number and the total held in a value such as 3 or 3/12.
+
+    A value with a slash needs a number on both sides. A value with no slash holds a number
+    and no total.
+    """
     number_text, separator, total_text = value.strip().partition("/")
     number = _parse_pair_number(number_text)
     if number is None:
@@ -654,10 +689,13 @@ def _parse_number_pair(value: str) -> tuple[int, int]:
             "number and a total separated by a slash"
         )
     total = 0
-    if separator and total_text.strip():
+    if separator:
         parsed_total = _parse_pair_number(total_text.strip())
         if parsed_total is None:
-            raise Mp4WriteError(f"the total in the track or disc number {value!r} is not a number")
+            raise Mp4WriteError(
+                f"the total in the track or disc number {value!r} is not a number, so write a "
+                "number and a total separated by a slash"
+            )
         total = parsed_total
     return number, total
 
@@ -694,7 +732,10 @@ def _render_items(
     for key, body in written:
         if key not in placed:
             parts.append(body)
-    return b"".join(parts)
+    rendered = b"".join(parts)
+    if len(rendered) > MAX_ITEM_LIST_BYTES:
+        raise Mp4WriteError(f"the item list is larger than the {MAX_ITEM_LIST_BYTES} byte limit")
+    return rendered
 
 
 def _item_key(data: bytes, item: _Atom) -> str:
@@ -733,8 +774,13 @@ def _render_atom(atom_type: str, *parts: bytes, header_size: int = ATOM_HEADER_S
     name = atom_type.encode("latin-1")
     if header_size == LARGE_ATOM_HEADER_SIZE:
         size = LARGE_ATOM_HEADER_SIZE + len(body)
+        if size > UINT64_MAX:
+            raise Mp4WriteError(f"the {atom_type!r} atom is too large to render")
         return struct.pack(">I", LARGE_SIZE_MARKER) + name + struct.pack(">Q", size) + body
-    return struct.pack(">I", ATOM_HEADER_SIZE + len(body)) + name + body
+    size = ATOM_HEADER_SIZE + len(body)
+    if size > UINT32_MAX:
+        raise Mp4WriteError(f"the {atom_type!r} atom is too large to render")
+    return struct.pack(">I", size) + name + body
 
 
 def _read_atom(data: bytes, offset: int, end: int) -> _Atom:
