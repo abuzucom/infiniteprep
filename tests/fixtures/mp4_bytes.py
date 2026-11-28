@@ -134,6 +134,7 @@ def m4a_with_sound_track(
     free_bytes: int = 0,
     leading_atoms: bytes = b"",
     tags: bytes = b"",
+    more_tags: bytes = b"",
     with_offsets: bool = True,
     rate: int = 44_100,
     bitrate: int = 256_000,
@@ -141,7 +142,8 @@ def m4a_with_sound_track(
     """Return an M4A file with one sound track, its media data, and a chunk offset table.
 
     The chunk offsets point at the media data, so a writer has offsets to move. A file built
-    without offsets holds no media offsets at all.
+    without offsets holds no media offsets at all. The more_tags bytes join the movie as a
+    second user data atom.
     """
     sizes = chunk_sizes if chunk_sizes is not None else [512] * 8
     entry = audio_entry(entry_type, 2, rate, esds(bitrate))
@@ -151,7 +153,7 @@ def m4a_with_sound_track(
     start = (
         len(ftyp())
         + len(leading_atoms)
-        + len(atom(b"moov", movie + tags + placeholder))
+        + len(atom(b"moov", movie + tags + placeholder + more_tags))
         + len(free)
         + 8
     )
@@ -163,5 +165,9 @@ def m4a_with_sound_track(
     track = trak(b"soun", entry, sizes, offsets if with_offsets else None)
     payload = bytes(range(256)) * (sum(sizes) // 256 + 1)
     return (
-        ftyp() + leading_atoms + atom(b"moov", movie + tags + track) + free + atom(b"mdat", payload)
+        ftyp()
+        + leading_atoms
+        + atom(b"moov", movie + tags + track + more_tags)
+        + free
+        + atom(b"mdat", payload)
     )

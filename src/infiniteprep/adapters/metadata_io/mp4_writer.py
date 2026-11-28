@@ -363,28 +363,46 @@ def _rebuild_moov(
     file: _File, written: Sequence[tuple[str, bytes]], dropped: set[str], layout: _Layout
 ) -> bytes:
     """Return the rebuilt movie atom with the written items in place."""
+    children = _children(file.data, file.moov.body_start, file.moov.end, _Budget())
+    target = _find_target_meta(file, children)
     parts: list[bytes] = []
-    udta_parts: list[bytes] | None = None
-    meta_found = False
-    for child in _children(file.data, file.moov.body_start, file.moov.end, _Budget()):
+    has_udta = False
+    for child in children:
         if child.atom_type == UDTA:
-            udta_parts, child_meta = _rebuild_udta(file, child, written, dropped, layout, depth=1)
-            meta_found = meta_found or child_meta
+            group = _rebuild_udta(file, child, written, dropped, layout, depth=1, target=target)
+            if not has_udta:
+                has_udta = True
+                if target is None:
+                    group.append(_render_meta(written, dropped))
+            parts.append(_render_atom(UDTA, b"".join(group)))
         elif child.atom_type == META:
-            meta_found = True
-            parts.append(_rebuild_meta(file, child, written, dropped, layout, depth=1))
+            parts.append(
+                _rebuild_meta(file, child, written, dropped, layout, depth=1, target=target)
+            )
         else:
             parts.append(_rebuild_atom(file, child, layout, depth=1))
-    if udta_parts is None:
+    if not has_udta and target is None:
         parts.append(_render_atom(UDTA, _render_meta(written, dropped)))
-    else:
-        if not meta_found:
-            udta_parts.append(_render_meta(written, dropped))
-        parts.append(_render_atom(UDTA, b"".join(udta_parts)))
     body = b"".join(parts)
     if len(body) > MAX_MOVIE_BYTES:
         raise Mp4WriteError(f"the movie atom is larger than the {MAX_MOVIE_BYTES} byte limit")
     return _render_atom(MOOV, body)
+
+
+def _find_target_meta(file: _File, children: list[_Atom]) -> int | None:
+    """Return the start offset of the first meta atom in the movie, or None.
+
+    The writer stores the written items in that one meta atom. Every other meta atom keeps
+    the items it already holds.
+    """
+    for child in children:
+        if child.atom_type == META:
+            return child.start
+        if child.atom_type == UDTA:
+            for grand in _children(file.data, child.body_start, child.end, _Budget()):
+                if grand.atom_type == META:
+                    return grand.start
+    return None
 
 
 def _rebuild_udta(
@@ -395,17 +413,18 @@ def _rebuild_udta(
     layout: _Layout,
     *,
     depth: int,
-) -> tuple[list[bytes], bool]:
-    """Return the rebuilt children of a user data atom and whether it holds a meta atom."""
+    target: int | None,
+) -> list[bytes]:
+    """Return the rebuilt children of a user data atom."""
     parts: list[bytes] = []
-    meta_found = False
     for child in _children(file.data, udta.body_start, udta.end, _Budget()):
         if child.atom_type == META:
-            meta_found = True
-            parts.append(_rebuild_meta(file, child, written, dropped, layout, depth=depth + 1))
+            parts.append(
+                _rebuild_meta(file, child, written, dropped, layout, depth=depth + 1, target=target)
+            )
         else:
             parts.append(_rebuild_atom(file, child, layout, depth=depth + 1))
-    return parts, meta_found
+    return parts
 
 
 def _rebuild_meta(
@@ -416,8 +435,15 @@ def _rebuild_meta(
     layout: _Layout,
     *,
     depth: int,
+    target: int | None,
 ) -> bytes:
-    """Return the rebuilt meta atom with the written items in its item list."""
+    """Return the rebuilt meta atom with the written items in its item list.
+
+    A meta atom other than the target one keeps its bytes, so a movie with more than one
+    meta atom holds the written items once.
+    """
+    if target is not None and meta.start != target:
+        return file.data[meta.start : meta.end]
     start = _meta_children_start(file, meta)
     parts: list[bytes] = []
     ilst_found = False
@@ -724,10 +750,12 @@ def _render_items(
             offset = item.end
             continue
         if key in replacements:
-            parts.append(replacements[key])
-            placed.add(key)
-        else:
-            parts.append(existing[item.start : item.end])
+            if key not in placed:
+                parts.append(replacements[key])
+                placed.add(key)
+            offset = item.end
+            continue
+        parts.append(existing[item.start : item.end])
         offset = item.end
     for key, body in written:
         if key not in placed:
@@ -757,10 +785,12 @@ def _freeform_text(data: bytes, item: _Atom, atom_type: str) -> str:
 
 
 def _canonical_key(key: str) -> str:
-    """Return the key used to match an existing item against a written field."""
-    if key.startswith(f"{FREEFORM_KEY}:"):
-        return key.lower()
-    return key
+    """Return the key used to match an existing item against a written field.
+
+    The reader lowercases every key, so an item that differs only in case names the same
+    field. The writer replaces that item instead of adding a second one for the field.
+    """
+    return key.lower()
 
 
 def _render_data(type_code: int, payload: bytes) -> bytes:

@@ -83,6 +83,7 @@ def build_m4a(
     free_bytes: int = 0,
     leading_atoms: bytes = b"",
     tags: bytes = b"",
+    more_tags: bytes = b"",
     with_offsets: bool = True,
 ) -> bytes:
     """Return an M4A file with the given atoms, a sound track, and a media atom."""
@@ -92,6 +93,7 @@ def build_m4a(
         free_bytes=free_bytes,
         leading_atoms=leading_atoms,
         tags=tags,
+        more_tags=more_tags,
         with_offsets=with_offsets,
         rate=RATE,
     )
@@ -226,6 +228,29 @@ def test_second_write_replaces_the_value() -> None:
     first = write_m4a_tags(data, {"artist": "First"})
     second = write_m4a_tags(first, {"artist": "Second"})
     assert _tags_of(second)["\xa9art"] == ("Second",)
+
+
+def test_case_variant_item_is_replaced() -> None:
+    """An item that differs only in case names the same field, so the writer replaces it."""
+    lower = udta(item(b"\xa9art", data_atom(1, b"Lower")))
+    written = write_m4a_tags(build_m4a(tags=lower), {"artist": "New"})
+    artists = [tag for tag in read_mp4(written).tags if tag.key.lower() == "\xa9art"]
+    assert [(tag.key, tag.values) for tag in artists] == [("\xa9ART", ("New",))]
+
+
+def test_second_udta_survives_the_write() -> None:
+    """A movie with two user data atoms keeps both of them and the written items."""
+    first_udta = udta(item(b"\xa9cmt", data_atom(1, b"Note")))
+    second_udta = udta(item(b"\xa9too", data_atom(1, b"Tool")))
+    written = write_m4a_tags(
+        build_m4a(tags=first_udta, more_tags=second_udta), {"artist": "Artist"}
+    )
+    tags = _tags_of(written)
+    assert written.count(b"udta") == 2
+    assert b"\xa9too" in written
+    assert b"Tool" in written
+    assert tags["\xa9cmt"] == ("Note",)
+    assert tags["\xa9art"] == ("Artist",)
 
 
 def test_legacy_genre_item_is_removed() -> None:
