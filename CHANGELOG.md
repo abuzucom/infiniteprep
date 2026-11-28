@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.96.0] (2026-11-28)
+## [0.96.1] (2026-11-28)
 
 ### Added
 
@@ -38,6 +38,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- The version advances from 0.96.0 to 0.96.1 after the branch merges `main`. The lock file header names the current version again.
+- The `requirements-lock.txt` header names the current project version. The pins and hashes stay unchanged.
 - The track and disc number parser accepts ASCII digits only. The writer refuses a value with a digit outside ASCII with the same message as any other text value.
 - The M4A writer refuses a file that nests its atoms more than 32 levels deep. A crafted file no longer raises a recursion error.
 - The M4A writer refuses a tag value above 64 KiB and an item list above one MiB. The movie atom stays under 64 MiB.
