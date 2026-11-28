@@ -66,12 +66,29 @@ def stsz(sample_sizes: list[int]) -> bytes:
     return full_atom(b"stsz", struct.pack(">II", 0, len(sample_sizes)) + table)
 
 
-def trak(handler: bytes, entry: bytes = b"", sizes: list[int] | None = None) -> bytes:
-    """Build a trak holding an hdlr and, for a sample entry, an stbl with stsd and stsz."""
+def stco(offsets: list[int]) -> bytes:
+    """Build an stco atom with a table of chunk offsets."""
+    table = b"".join(struct.pack(">I", offset) for offset in offsets)
+    return full_atom(b"stco", struct.pack(">I", len(offsets)) + table)
+
+
+def trak(
+    handler: bytes,
+    entry: bytes = b"",
+    sizes: list[int] | None = None,
+    offsets: list[int] | None = None,
+) -> bytes:
+    """Build a trak holding an hdlr and, for a sample entry, an stbl with stsd and stsz.
+
+    The offsets add a chunk offset table to the sample table. A file without that table has
+    no media offsets for a writer to move.
+    """
     stbl_children = b""
     if entry:
         stbl_children = full_atom(b"stsd", struct.pack(">I", 1) + entry)
         stbl_children += stsz(sizes or [])
+        if offsets is not None:
+            stbl_children += stco(offsets)
     minf = atom(b"minf", atom(b"stbl", stbl_children))
     return atom(b"trak", atom(b"mdia", hdlr(handler) + minf))
 
@@ -100,7 +117,57 @@ def udta(*items: bytes, full_meta: bool = True) -> bytes:
     return atom(b"udta", meta)
 
 
+def ftyp() -> bytes:
+    """Build the ftyp atom that marks an M4A file."""
+    return atom(b"ftyp", b"M4A " + struct.pack(">I", 0) + b"M4A isom")
+
+
 def m4a_file(*moov_children: bytes, mdat: bytes = b"\x00" * 64) -> bytes:
     """Join ftyp, a moov holding moov_children, and an mdat."""
-    ftyp = atom(b"ftyp", b"M4A " + struct.pack(">I", 0) + b"M4A isom")
-    return ftyp + atom(b"moov", b"".join(moov_children)) + atom(b"mdat", mdat)
+    return ftyp() + atom(b"moov", b"".join(moov_children)) + atom(b"mdat", mdat)
+
+
+def m4a_with_sound_track(
+    *,
+    entry_type: bytes = b"mp4a",
+    chunk_sizes: list[int] | None = None,
+    free_bytes: int = 0,
+    leading_atoms: bytes = b"",
+    tags: bytes = b"",
+    more_tags: bytes = b"",
+    with_offsets: bool = True,
+    rate: int = 44_100,
+    bitrate: int = 256_000,
+) -> bytes:
+    """Return an M4A file with one sound track, its media data, and a chunk offset table.
+
+    The chunk offsets point at the media data, so a writer has offsets to move. A file built
+    without offsets holds no media offsets at all. The more_tags bytes join the movie as a
+    second user data atom.
+    """
+    sizes = chunk_sizes if chunk_sizes is not None else [512] * 8
+    entry = audio_entry(entry_type, 2, rate, esds(bitrate))
+    movie = mvhd(rate, rate * 2)
+    free = atom(b"free", bytes(free_bytes)) if free_bytes else b""
+    placeholder = trak(b"soun", entry, sizes, [0] * len(sizes) if with_offsets else None)
+    start = (
+        len(ftyp())
+        + len(leading_atoms)
+        + len(atom(b"moov", movie + tags + placeholder + more_tags))
+        + len(free)
+        + 8
+    )
+    offsets: list[int] = []
+    cursor = start
+    for size in sizes:
+        offsets.append(cursor)
+        cursor += size
+    track = trak(b"soun", entry, sizes, offsets if with_offsets else None)
+    payload = bytes(range(256)) * (sum(sizes) // 256 + 1)
+    return (
+        ftyp()
+        + leading_atoms
+        + atom(b"moov", movie + tags + track + more_tags)
+        + free
+        + atom(b"mdat", payload)
+    )

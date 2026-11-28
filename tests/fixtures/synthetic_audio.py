@@ -17,7 +17,16 @@ from typing import Final
 import numpy as np
 import soundfile as sf
 
-from tests.fixtures.mp4_bytes import alac_config, atom, audio_entry, esds, m4a_file, mvhd, trak
+from tests.fixtures.mp4_bytes import (
+    alac_config,
+    atom,
+    audio_entry,
+    esds,
+    ftyp,
+    m4a_file,
+    mvhd,
+    trak,
+)
 from tests.fixtures.ogg_bytes import (
     make_ogg_page,
     make_opus_head_header,
@@ -72,6 +81,8 @@ DEFAULT_ADTS_PAYLOAD_SIZE: Final[int] = 256
 AAC_FRAME_SAMPLES: Final[int] = 1024
 ALAC_FRAME_SAMPLES: Final[int] = 4096
 BITS_PER_BYTE: Final[int] = 8
+# An mdat atom opens with a 4-byte size and a four-character type.
+MDAT_HEADER_SIZE: Final[int] = 8
 DEFAULT_AAC_BITRATE: Final[int] = 256000
 # Lossless audio typically compresses to about 60 percent of the PCM rate.
 ALAC_COMPRESSION_RATIO: Final[float] = 0.6
@@ -322,11 +333,45 @@ def _frame_sizes(
 
 
 def _single_track_m4a(
-    entry: bytes, total: int, sample_rate: int, sizes: list[int], seed: int
+    entry: bytes,
+    total: int,
+    sample_rate: int,
+    sizes: list[int],
+    seed: int,
+    *,
+    chunk_offsets: bool = False,
 ) -> bytes:
     """Return an M4A holding one sound track for entry and a seeded filler mdat."""
-    track = trak(b"soun", entry, sizes)
-    return m4a_file(mvhd(sample_rate, total), track, mdat=_rng(seed).bytes(sum(sizes)))
+    payload = _rng(seed).bytes(sum(sizes))
+    if not chunk_offsets:
+        track = trak(b"soun", entry, sizes)
+        return m4a_file(mvhd(sample_rate, total), track, mdat=payload)
+    return _m4a_with_chunk_offsets(entry, total, sample_rate, sizes, payload)
+
+
+def _m4a_with_chunk_offsets(
+    entry: bytes, total: int, sample_rate: int, sizes: list[int], payload: bytes
+) -> bytes:
+    """Return an M4A whose chunk offset table points at the media data.
+
+    The offset table takes the same number of bytes whatever its values hold, so one pass
+    settles the offsets.
+    """
+    movie = mvhd(sample_rate, total)
+    placeholder = trak(b"soun", entry, sizes, [0] * len(sizes))
+    start = len(ftyp()) + len(atom(b"moov", movie + placeholder)) + MDAT_HEADER_SIZE
+    track = trak(b"soun", entry, sizes, _chunk_offsets(sizes, start))
+    return m4a_file(movie, track, mdat=payload)
+
+
+def _chunk_offsets(sizes: list[int], start: int) -> list[int]:
+    """Return the file offset of every chunk in the media data."""
+    offsets: list[int] = []
+    cursor = start
+    for size in sizes:
+        offsets.append(cursor)
+        cursor += size
+    return offsets
 
 
 def build_m4a_aac_bytes(
@@ -337,12 +382,17 @@ def build_m4a_aac_bytes(
     bit_depth: int = 16,
     bitrate: int = DEFAULT_AAC_BITRATE,
     seed: int = DEFAULT_SEED,
+    chunk_offsets: bool = False,
 ) -> bytes:
-    """Return an M4A with one AAC sound track and a seeded filler mdat."""
+    """Return an M4A with one AAC sound track and a seeded filler mdat.
+
+    The chunk offsets add the offset table that locates the media data in the file. A file
+    without that table has no offsets for a writer to move.
+    """
     total = _sample_count(duration_sec, sample_rate)
     sizes = _frame_sizes(total, AAC_FRAME_SAMPLES, bitrate, sample_rate)
     entry = audio_entry(b"mp4a", channels, sample_rate, esds(bitrate), sample_size=bit_depth)
-    return _single_track_m4a(entry, total, sample_rate, sizes, seed)
+    return _single_track_m4a(entry, total, sample_rate, sizes, seed, chunk_offsets=chunk_offsets)
 
 
 def build_m4a_alac_bytes(
@@ -352,14 +402,19 @@ def build_m4a_alac_bytes(
     channels: int = STEREO_CHANNELS,
     bit_depth: int = 16,
     seed: int = DEFAULT_SEED,
+    chunk_offsets: bool = False,
 ) -> bytes:
-    """Return an M4A with one ALAC sound track and a seeded filler mdat."""
+    """Return an M4A with one ALAC sound track and a seeded filler mdat.
+
+    The chunk offsets add the offset table that locates the media data in the file. A file
+    without that table has no offsets for a writer to move.
+    """
     total = _sample_count(duration_sec, sample_rate)
     bitrate = int(sample_rate * channels * bit_depth * ALAC_COMPRESSION_RATIO)
     sizes = _frame_sizes(total, ALAC_FRAME_SAMPLES, bitrate, sample_rate)
     config = alac_config(sample_rate, channels, bit_depth, bitrate)
     entry = audio_entry(b"alac", channels, sample_rate, config, sample_size=bit_depth)
-    return _single_track_m4a(entry, total, sample_rate, sizes, seed)
+    return _single_track_m4a(entry, total, sample_rate, sizes, seed, chunk_offsets=chunk_offsets)
 
 
 def build_stem_mp4_bytes(
