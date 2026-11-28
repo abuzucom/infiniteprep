@@ -11,6 +11,7 @@ from typing import Final
 from infiniteprep.adapters.metadata_io.audio_properties import (
     find_aiff_payload,
     find_flac_payload,
+    find_m4a_payload,
     find_mp3_payload,
     find_wav_payload,
 )
@@ -22,6 +23,7 @@ PAYLOAD_LOCATORS: Final[dict[AudioFormat, Callable[[bytes], tuple[tuple[int, int
     AudioFormat.FLAC: find_flac_payload,
     AudioFormat.WAV: find_wav_payload,
     AudioFormat.AIFF: find_aiff_payload,
+    AudioFormat.M4A: find_m4a_payload,
 }
 
 

@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.94.0] (2026-11-28)
+## [0.95.0] (2026-11-28)
 
 ### Added
 
@@ -22,16 +22,32 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The new `SavedSearch` value holds the ID, the name, and the query of one saved search.
 - `library_query` adds `plain_search_term` and `query_fields` for the search hints.
 - `AppSettings` adds `library_sort_column` and `library_sort_descending`. The sort column and direction return at the next launch.
+- M4A files accept tag writes (FMT-3, #104).
+  - The new `adapters/metadata_io/mp4_writer.py` rebuilds the movie atom, keeps every item it does not write, and moves the chunk offsets of every track when the movie changes size. The media data keeps its bytes.
+  - A free atom takes the size change where the file holds one. The media data then stays where it is.
+  - The writer stores the artist, the title, the mix name, the remixer, the release title, the label, the catalog number, the track and disc numbers, the vinyl position, the genre, the style, the tempo, the key, the year, the Acoustid id, the MusicBrainz recording and release ids, and the Discogs release id. A field with no native atom becomes a freeform item in the iTunes namespace.
+  - The writer rounds the tempo half up to the integer the format holds. The track and disc numbers use the native number pair atoms.
+  - The writer refuses a DRM protected file, a fragmented file, a file with a top-level metadata atom, and a file with no chunk offset table. The refusal reaches the preview before any file changes.
+  - The M4A locator joins the audio payload check. Every M4A tag write then compares the media digest before and after the write.
+  - M4A joins the write-enabled formats. The reader maps every stored item back to its field.
+- Regression tests cover the writer on AAC and ALAC fixtures, the payload digest, and every refusal.
+
+### Fixed
+
+- The track and disc number parser accepts ASCII digits only. The writer refuses a value with a digit outside ASCII with the same message as any other text value.
+- The M4A writer refuses a file that nests its atoms more than 32 levels deep. A crafted file no longer raises a recursion error.
+- The M4A writer refuses a tag value above 64 KiB and an item list above one MiB. The movie atom stays under 64 MiB.
+- The M4A writer refuses an atom that no longer fits its size field. A packing error no longer reaches the caller.
+- The M4A writer refuses a track or disc number that names no total, such as `3/`.
+- The M4A writer keeps every user data atom in the movie. A movie with two user data atoms lost the first one before this change.
+- The M4A writer replaces a native item that differs only in case. The file no longer holds two items for one field.
+- The M4A movie rebuild now passes the code quality invariants for nesting depth.
+- The M4A writer docstring names the hdlr child that tells the two meta layouts apart.
 
 ### Changed
 
 - A half-typed query shows its error after the typing pause. The table keeps the last valid results. The summary marks them as old.
 - A saved search resets the sidebar filters, so the table matches its smart playlist.
-
-## [0.93.9] (2026-11-27)
-
-### Changed
-
 - The main window opens at a share of the available screen and restores saved geometry when available.
 - A large-window layout gives the sidebar and track details more room from 1680 logical pixels.
 - The waveform and playback controls stay visible above the library. The queue and workflow controls leave the remaining height to the library (UI-7, #362).

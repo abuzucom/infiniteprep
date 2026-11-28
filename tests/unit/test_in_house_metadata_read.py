@@ -26,7 +26,17 @@ from tests.fixtures.audio_factory import (
     create_wav_fixture,
 )
 from tests.fixtures.id3v2_bytes import tag_bytes, utf16, v23_frame
-from tests.fixtures.mp4_bytes import audio_entry, data_atom, esds, item, m4a_file, mvhd, trak, udta
+from tests.fixtures.mp4_bytes import (
+    audio_entry,
+    data_atom,
+    esds,
+    freeform,
+    item,
+    m4a_file,
+    mvhd,
+    trak,
+    udta,
+)
 
 TAGS = {"artist": "Kerri Chandler", "title": "Rain", "bpm": "124", "key": "8A", "label": "Madhouse"}
 # Every written standard field reads back unchanged.
@@ -118,16 +128,22 @@ def test_flac_reads_streaminfo_vorbis_comment(adapter: MetadataTagAdapter, tmp_p
 
 
 def test_m4a_reads_properties_raw_items(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
-    """M4A stays read-only: properties come from moov and every ilst item stays raw."""
+    """M4A reads its properties from moov and maps every stored item to its field."""
     track = trak(b"soun", audio_entry(b"mp4a", 2, RATE_44K, esds(256_000)))
-    tags = udta(item(b"\xa9nam", data_atom(1, b"Rain")))
+    tags = udta(
+        item(b"\xa9nam", data_atom(1, b"Rain")),
+        item(b"tmpo", data_atom(21, struct.pack(">H", 124))),
+        freeform("com.apple.iTunes", "initialkey", "8A"),
+    )
     path = tmp_path / "track.m4a"
     path.write_bytes(m4a_file(mvhd(RATE_44K, RATE_44K * 3), track, tags))
     meta = adapter.read_metadata(path)
     assert meta.duration == pytest.approx(3.0)
     assert (meta.sample_rate, meta.channels, meta.bitrate) == (RATE_44K, 2, 256_000)
+    assert meta.standard_tags == {"title": "Rain", "bpm": "124", "key": "8A"}
     assert meta.raw_custom_tags["\xa9nam"] == "['Rain']"
-    assert meta.standard_tags == {}
+    assert meta.raw_custom_tags["tmpo"] == "['124']"
+    assert meta.raw_custom_tags["----:com.apple.iTunes:initialkey"] == "['8A']"
 
 
 def test_ogg_reads_properties_xdj_warning(adapter: MetadataTagAdapter, tmp_path: Path) -> None:
