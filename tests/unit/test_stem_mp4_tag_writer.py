@@ -12,7 +12,11 @@ from pathlib import Path
 import pytest
 
 from infiniteprep.adapters.metadata_io.audio_payload import compute_audio_payload_digest
-from infiniteprep.adapters.metadata_io.audio_properties import find_m4a_payload
+from infiniteprep.adapters.metadata_io.audio_properties import (
+    MAX_MP4_ATOMS,
+    AudioPropertiesError,
+    find_m4a_payload,
+)
 from infiniteprep.adapters.metadata_io.metadata_tag_adapter import MetadataTagAdapter
 from infiniteprep.adapters.metadata_io.mp4_writer import write_m4a_tags
 from infiniteprep.db.connection import DatabaseManager
@@ -23,6 +27,7 @@ from infiniteprep.services.import_service import ImportService
 from infiniteprep.services.review_service import ReviewService
 from infiniteprep.services.write_service import WriteService
 from tests.fixtures import synthetic_audio as sa
+from tests.fixtures.mp4_bytes import atom, audio_entry, esds, ftyp, mvhd, trak
 
 TAGS = {"artist": "Artist", "title": "Title"}
 # The fixture writes AAC frames of this size into the media data.
@@ -106,6 +111,17 @@ def test_stem_box_joins_payload_ranges() -> None:
     ranges = find_m4a_payload(data)
     assert len(ranges) == 2
     assert data[ranges[1][0] : ranges[1][1]] == _stem_box_bytes(data)[8:]
+
+
+def test_movie_atom_limit_is_enforced() -> None:
+    """A movie with more atoms than the walk allows is refused before the walk finishes."""
+    entry = audio_entry(b"mp4a", 2, 44_100, esds(256_000))
+    movie = mvhd(44_100, 44_100 * 2)
+    padding = b"".join(atom(b"free", b"") for _ in range(MAX_MP4_ATOMS + 8))
+    data = ftyp() + atom(b"moov", movie + trak(b"soun", entry) + padding) + atom(b"mdat", bytes(64))
+
+    with pytest.raises(AudioPropertiesError, match="too many atoms"):
+        find_m4a_payload(data)
 
 
 def test_changed_stem_box_fails_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

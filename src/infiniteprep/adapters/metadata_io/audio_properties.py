@@ -157,6 +157,19 @@ class _Mp4Atom:
     body_end: int
 
 
+class _AtomBudget:
+    """A counter that bounds how many atoms one walk may read."""
+
+    def __init__(self, limit: int = MAX_MP4_ATOMS) -> None:
+        self.remaining = limit
+
+    def spend(self) -> None:
+        """Count one atom and refuse a file that holds too many of them."""
+        self.remaining -= 1
+        if self.remaining < 0:
+            raise AudioPropertiesError("The M4A movie holds too many atoms to read.")
+
+
 @dataclass(frozen=True)
 class _MpegHeader:
     """The fields of one MPEG audio frame header that timing needs."""
@@ -292,13 +305,10 @@ def _find_stem_ranges(data: bytes, movie: _Mp4Atom) -> list[tuple[int, int]]:
     """Return the body range of every stem atom in the movie."""
     found: list[tuple[int, int]] = []
     pending = [(movie.body_start, movie.body_end)]
-    visited = 0
+    budget = _AtomBudget()
     while pending:
         start, end = pending.pop()
-        for child in _mp4_children(data, start, end):
-            visited += 1
-            if visited > MAX_MP4_ATOMS:
-                raise AudioPropertiesError("The M4A movie holds too many atoms to read.")
+        for child in _mp4_children(data, start, end, budget):
             if child.atom_type == MP4_STEM_TYPE:
                 found.append((child.body_start, child.body_end))
             if child.atom_type in MP4_CONTAINER_TYPES:
@@ -306,12 +316,13 @@ def _find_stem_ranges(data: bytes, movie: _Mp4Atom) -> list[tuple[int, int]]:
     return found
 
 
-def _mp4_children(data: bytes, start: int, end: int) -> list[_Mp4Atom]:
+def _mp4_children(data: bytes, start: int, end: int, budget: _AtomBudget) -> list[_Mp4Atom]:
     """Return the atoms laid out between start and end."""
     atoms: list[_Mp4Atom] = []
     offset = start
     while offset < end:
         atom = _read_mp4_atom(data, offset, end)
+        budget.spend()
         atoms.append(atom)
         offset = atom.body_end
     return atoms
