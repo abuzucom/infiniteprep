@@ -12,6 +12,14 @@ Tag mapping reference
   for ID3, initialkey and integer tmpo for MP4, INITIALKEY and BPM for Vorbis,
   and INITIALKEY and WM/BeatsPerMinute for ASF.
 
+Tag writing reference
+- The M4A tag writer follows the MIT-licensed `Borewit/music-metadata` writer.
+  Copyright (c) 2026 Borewit. The port covers the movie atom rebuild, the
+  chunk offset relocation, and the item layout.
+- The M4A padding atom follows the MIT-licensed `Zeugma440/atldotnet` writer.
+  Copyright (c) 2017 Zeugma440. The free atom that absorbs a size change comes
+  from that project.
+
 Desktop UI and playback
 - Qt 6 and PySide6 6.12.0 (QtCore, QtGui, QtWidgets, QtMultimedia):
   LGPL-3.0-only. InfinitePrep links Qt dynamically, and the packaged

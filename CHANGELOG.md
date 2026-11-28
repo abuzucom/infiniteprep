@@ -5,7 +5,19 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.93.9] (2026-11-27)
+## [0.94.0] (2026-11-27)
+
+### Added
+
+- M4A files accept tag writes (FMT-3, #104).
+  - The new `adapters/metadata_io/mp4_writer.py` rebuilds the movie atom, keeps every item it does not write, and moves the chunk offsets of every track when the movie changes size. The media data keeps its bytes.
+  - A free atom takes the size change where the file holds one. The media data then stays where it is.
+  - The writer stores the artist, the title, the mix name, the remixer, the release title, the label, the catalog number, the track and disc numbers, the vinyl position, the genre, the style, the tempo, the key, the year, the Acoustid id, the MusicBrainz recording and release ids, and the Discogs release id. A field with no native atom becomes a freeform item in the iTunes namespace.
+  - The writer rounds the tempo half up to the integer the format holds. The track and disc numbers use the native number pair atoms.
+  - The writer refuses a DRM protected file, a fragmented file, a file with a top-level metadata atom, and a file with no chunk offset table. The refusal reaches the preview before any file changes.
+  - The M4A locator joins the audio payload check. Every M4A tag write then compares the media digest before and after the write.
+  - M4A joins the write-enabled formats. The reader maps every stored item back to its field.
+- Regression tests cover the writer on AAC and ALAC fixtures, the payload digest, and every refusal.
 
 ### Changed
 

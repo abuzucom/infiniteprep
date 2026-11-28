@@ -50,3 +50,19 @@ class TagOutputFormat:
         except InvalidOperation as exc:
             raise ValueError("BPM is outside the supported range. Enter a shorter value.") from exc
         return format(result, "f")
+
+
+def round_bpm_to_integer(raw_bpm: str) -> int:
+    """Return raw_bpm rounded half up to the nearest integer.
+
+    A format that stores the tempo as an integer needs one rounding rule. The rule matches the
+    one the tag output format uses, so a rounded tempo matches the text the app shows.
+    """
+    cleaned = raw_bpm.strip()
+    if not BPM_TEXT.fullmatch(cleaned):
+        raise ValueError("Enter a nonnegative BPM with a period as the decimal separator.")
+    try:
+        result = Decimal(cleaned).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+    except InvalidOperation as exc:
+        raise ValueError("BPM is outside the supported range. Enter a shorter value.") from exc
+    return int(result)

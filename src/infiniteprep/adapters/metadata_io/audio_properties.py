@@ -53,6 +53,12 @@ STREAMINFO_CHANNELS_SHIFT, STREAMINFO_CHANNELS_MASK = 41, 0x7
 STREAMINFO_BITS_SHIFT, STREAMINFO_BITS_MASK = 36, 0x1F
 STREAMINFO_TOTAL_MASK: Final[int] = (1 << 36) - 1
 MAX_FLAC_BLOCKS: Final[int] = 4096
+# An MP4 atom opens with a 4-byte size and a four-character type.
+MP4_ATOM_HEADER_SIZE: Final[int] = 8
+MP4_LARGE_ATOM_HEADER_SIZE: Final[int] = 16
+# A size field of 1 means a 64-bit size follows the type.
+MP4_LARGE_SIZE_MARKER: Final[int] = 1
+MP4_MEDIA_TYPE: Final[bytes] = b"mdat"
 # MPEG audio frame header fields.
 MPEG_HEADER_SIZE: Final[int] = 4
 MPEG_SYNC_BYTE: Final[int] = 0xFF
@@ -236,6 +242,39 @@ def find_aiff_payload(data: bytes) -> tuple[tuple[int, int], ...]:
     if not spans:
         raise AudioPropertiesError("The AIFF file has no sound data chunk.")
     return spans
+
+
+def find_m4a_payload(data: bytes) -> tuple[tuple[int, int], ...]:
+    """Return the byte range of every mdat payload, in file order.
+
+    Every atom size is checked against the end of the file, so a damaged size cannot name a
+    range that reaches past the file.
+    """
+    ranges: list[tuple[int, int]] = []
+    offset = 0
+    end = len(data)
+    while offset < end:
+        if offset + MP4_ATOM_HEADER_SIZE > end:
+            raise AudioPropertiesError("The M4A file ends inside an atom header.")
+        size = struct.unpack(">I", data[offset : offset + UINT32_SIZE])[0]
+        atom_type = data[offset + UINT32_SIZE : offset + MP4_ATOM_HEADER_SIZE]
+        header = MP4_ATOM_HEADER_SIZE
+        if size == MP4_LARGE_SIZE_MARKER:
+            if offset + MP4_LARGE_ATOM_HEADER_SIZE > end:
+                raise AudioPropertiesError("The M4A atom header is truncated.")
+            field = data[offset + MP4_ATOM_HEADER_SIZE : offset + MP4_LARGE_ATOM_HEADER_SIZE]
+            size = struct.unpack(">Q", field)[0]
+            header = MP4_LARGE_ATOM_HEADER_SIZE
+        elif size == 0:
+            size = end - offset
+        if size < header or offset + size > end:
+            raise AudioPropertiesError("An M4A atom size is invalid; the file is damaged.")
+        if atom_type == MP4_MEDIA_TYPE:
+            ranges.append((offset + header, offset + size))
+        offset += size
+    if not ranges:
+        raise AudioPropertiesError("The M4A file has no media data.")
+    return tuple(ranges)
 
 
 def _aiff_sound_range(data: bytes, chunk: _ChunkSpan) -> tuple[int, int]:

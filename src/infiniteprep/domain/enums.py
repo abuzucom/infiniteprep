@@ -21,6 +21,7 @@ WRITE_SUPPORTED_FORMATS: frozenset[AudioFormat] = frozenset(
         AudioFormat.FLAC,
         AudioFormat.WAV,
         AudioFormat.AIFF,
+        AudioFormat.M4A,
     }
 )
 

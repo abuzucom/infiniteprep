@@ -1,4 +1,4 @@
-"""Metadata reader and writer for MP3, FLAC, WAV, and AIFF, plus read-only M4A and OGG.
+"""Metadata reader and writer for MP3, FLAC, WAV, AIFF, and M4A, plus read-only OGG.
 
 Reads and writes use the in-house codecs in this package.
 """
@@ -62,6 +62,11 @@ from infiniteprep.adapters.metadata_io.id3v2 import (
     v23_date_text,
 )
 from infiniteprep.adapters.metadata_io.mp4_reader import read_mp4
+from infiniteprep.adapters.metadata_io.mp4_writer import (
+    Mp4WriteError,
+    check_m4a_writable,
+    write_m4a_tags,
+)
 from infiniteprep.adapters.metadata_io.no_clobber_move import move_to_new_path
 from infiniteprep.adapters.metadata_io.ogg_reader import OggMetadata, read_ogg, read_ogg_from_handle
 from infiniteprep.domain.enums import (
@@ -73,7 +78,7 @@ from infiniteprep.domain.enums import (
 )
 from infiniteprep.domain.models import ApprovedField, ChangeRecord, FileAsset, utc_now_iso
 from infiniteprep.domain.ports import FileWritePlan, TechnicalAndTagMetadata
-from infiniteprep.domain.tag_output import TagOutputFormat
+from infiniteprep.domain.tag_output import TagOutputFormat, round_bpm_to_integer
 from infiniteprep.hashing import compute_sha256
 
 XDJ_RX3_MAX_SAMPLE_RATE_HZ: Final[int] = 48000
@@ -529,17 +534,38 @@ def _parse_flac(data: bytes) -> _ParsedAudio:
     return _ParsedAudio(stream.properties, standard, raw)
 
 
-MP4_KEY_TEMPO_FIELDS: Final[dict[str, FieldName]] = {
-    "----:com.apple.itunes:initialkey": FieldName.KEY,
-    "tmpo": FieldName.BPM,
+# The M4A item keys the writer stores, mapped to the app field each one carries. The reader
+# lowercases every key, so the freeform names are written in lowercase here.
+MP4_TAG_FIELDS: Final[dict[str, str]] = {
+    "\xa9art": FieldName.ARTIST.value,
+    "\xa9nam": FieldName.TITLE.value,
+    "\xa9alb": FieldName.RELEASE_TITLE.value,
+    "\xa9gen": FieldName.GENRE.value,
+    "\xa9day": FieldName.YEAR.value,
+    "trkn": FieldName.TRACK_NUMBER.value,
+    "disk": FieldName.DISC_NUMBER.value,
+    "tmpo": FieldName.BPM.value,
+    "----:com.apple.itunes:initialkey": FieldName.KEY.value,
+    "----:com.apple.itunes:subtitle": FieldName.MIX_NAME.value,
+    "----:com.apple.itunes:remixer": FieldName.REMIXER.value,
+    "----:com.apple.itunes:label": FieldName.LABEL.value,
+    "----:com.apple.itunes:catalognumber": FieldName.CATALOG_NUMBER.value,
+    "----:com.apple.itunes:vinyltrack": FieldName.VINYL_POSITION.value,
+    "----:com.apple.itunes:style": FieldName.STYLE.value,
+    "----:com.apple.itunes:discogs_release_id": FieldName.DISCOGS_RELEASE_ID.value,
+    "----:com.apple.itunes:acoustid id": FieldName.ACOUSTID_ID.value,
+    "----:com.apple.itunes:musicbrainz release track id": FieldName.MB_RECORDING_ID.value,
+    "----:com.apple.itunes:musicbrainz album id": FieldName.MB_RELEASE_ID.value,
 }
-VORBIS_KEY_TEMPO_FIELDS: Final[dict[str, FieldName]] = {
-    VORBIS_FIELD_MAP[field].lower(): field for field in (FieldName.KEY, FieldName.BPM)
+# The fields the M4A writer stores and the reader maps back.
+MP4_STORED_FIELDS: Final[frozenset[str]] = frozenset(MP4_TAG_FIELDS.values())
+VORBIS_KEY_TEMPO_FIELDS: Final[dict[str, str]] = {
+    VORBIS_FIELD_MAP[field].lower(): field.value for field in (FieldName.KEY, FieldName.BPM)
 }
 
 
-def _read_key_and_tempo(
-    values: Mapping[str, Sequence[str]], fields: Mapping[str, FieldName]
+def _read_stored_fields(
+    values: Mapping[str, Sequence[str]], fields: Mapping[str, str]
 ) -> dict[str, str]:
     """Expose the first nonempty value of each supported tag in the review fields."""
     standard: dict[str, str] = {}
@@ -551,14 +577,14 @@ def _read_key_and_tempo(
 
 
 def _parse_m4a(data: bytes) -> _ParsedAudio:
-    """Read M4A key and tempo while preserving the original atom names."""
+    """Read M4A properties and map every stored item back to its app field."""
     info = read_mp4(data)
     properties = AudioProperties(
         info.duration, info.sample_rate, info.channels, info.bitrate, info.bit_depth
     )
     raw: dict[str, Any] = {tag.key: str(list(tag.values)) for tag in info.tags}
     values = {tag.key.lower(): tag.values for tag in info.tags}
-    return _ParsedAudio(properties, _read_key_and_tempo(values, MP4_KEY_TEMPO_FIELDS), raw)
+    return _ParsedAudio(properties, _read_stored_fields(values, MP4_TAG_FIELDS), raw)
 
 
 def _parse_ogg(file_path: Path) -> _ParsedAudio:
@@ -585,7 +611,7 @@ def _ogg_metadata(info: OggMetadata) -> _ParsedAudio:
         info.duration, info.sample_rate, info.channels, info.bitrate or None, None
     )
     grouped = _group_vorbis_fields(info.comment)
-    standard = _read_key_and_tempo(grouped, VORBIS_KEY_TEMPO_FIELDS)
+    standard = _read_stored_fields(grouped, VORBIS_KEY_TEMPO_FIELDS)
     return _ParsedAudio(properties, standard, {key: str(values) for key, values in grouped.items()})
 
 
@@ -665,15 +691,39 @@ def _apply_id3_fields(tag: Id3Tag | None, tags_to_write: dict[str, str]) -> Id3T
     return updated
 
 
-def _expected_read_back(field_name: str, value: str, is_flac: bool) -> str:
+def _expected_read_back(field_name: str, value: str, audio_format: AudioFormat) -> str:
     """Return the value a written field reads back as.
 
-    The ID3v2.3 date frames hold a year, a calendar date, and a time of day. A YEAR
-    such as 2020-05 then reads back as 2020. FLAC stores the text as written.
+    The ID3v2.3 date frames hold a year, a calendar date, and a time of day. A YEAR such as
+    2020-05 then reads back as 2020. FLAC stores the text as written. An M4A tempo atom holds
+    an integer, so a decimal tempo reads back as the rounded number.
     """
-    if is_flac or field_name != FieldName.YEAR:
+    if audio_format == AudioFormat.FLAC:
+        return value
+    if audio_format == AudioFormat.M4A:
+        return _expected_m4a_read_back(field_name, value)
+    if field_name != FieldName.YEAR:
         return value
     return v23_date_text(value)
+
+
+def _expected_m4a_read_back(field_name: str, value: str) -> str:
+    """Return the value an M4A field reads back as."""
+    if field_name != FieldName.BPM:
+        return value
+    try:
+        return str(round_bpm_to_integer(value))
+    except ValueError:
+        return value
+
+
+def _stored_fields(audio_format: AudioFormat) -> frozenset[str]:
+    """Return the fields each format stores and reads back."""
+    if audio_format == AudioFormat.FLAC:
+        return VORBIS_STORED_FIELDS
+    if audio_format == AudioFormat.M4A:
+        return MP4_STORED_FIELDS
+    return ID3_STORED_FIELDS
 
 
 def _classify_id3_tag(tag: Id3Tag | None) -> tuple[dict[str, str], dict[str, Any]]:
@@ -1041,6 +1091,7 @@ class MetadataTagAdapter:
         except ValueError as exc:
             validation_errors.append(str(exc))
         tag_data_warnings = self._check_dropped_tag_data(source_path, validation_errors)
+        self._check_m4a_write_support(source_path, validation_errors)
 
         return FileWritePlan(
             file_id=file_asset.id,
@@ -1081,13 +1132,31 @@ class MetadataTagAdapter:
             return []
         return [DROPPED_TAG_DATA_WARNING.format(names=", ".join(dropped))]
 
+    def _check_m4a_write_support(self, source_path: Path, validation_errors: list[str]) -> None:
+        """Block an M4A file that the writer cannot rewrite safely.
+
+        A fragmented file, a protected file, and a file with no chunk offset table carry media
+        the writer cannot move. The check runs before the plan is approved, so no file is
+        touched.
+        """
+        if self.detect_format(source_path) != AudioFormat.M4A:
+            return
+        if not source_path.is_file():
+            return
+        try:
+            check_m4a_writable(source_path.read_bytes())
+        except (Mp4WriteError, OSError) as exc:
+            validation_errors.append(
+                f"The M4A file cannot carry a tag write ({exc}). The file stays unchanged."
+            )
+
     def _validate_source_for_write(self, file_asset: FileAsset, source_path: Path) -> list[str]:
         """Validate write format support, file existence, and content hash match."""
         errors: list[str] = []
         if not file_asset.is_write_supported:
             errors.append(
                 f"Format '{file_asset.format}' is not enabled for tag writing; "
-                "use MP3, FLAC, WAV, or AIFF."
+                "use MP3, FLAC, WAV, AIFF, or M4A."
             )
         if not source_path.exists():
             errors.append(f"Source file missing at {source_path}; re-import or locate file.")
@@ -1265,14 +1334,13 @@ class MetadataTagAdapter:
             problems.append("the audio no longer parses")
         if (after.sample_rate, after.channels) != (baseline.sample_rate, baseline.channels):
             problems.append("the sample rate or channel count changed")
-        is_flac = after.format == AudioFormat.FLAC
-        stored = VORBIS_STORED_FIELDS if is_flac else ID3_STORED_FIELDS
+        stored = _stored_fields(after.format)
         problems.extend(
             f"{field_name} reads back as {after.standard_tags.get(field_name)!r}"
             for field_name, value in tags_to_write.items()
             if field_name in stored
             and after.standard_tags.get(field_name)
-            != _expected_read_back(field_name, value, is_flac)
+            != _expected_read_back(field_name, value, after.format)
         )
         if problems:
             raise OSError(
@@ -1317,10 +1385,11 @@ class MetadataTagAdapter:
             AudioFormat.WAV: self._write_wav_tags,
             AudioFormat.AIFF: self._write_aiff_tags,
             AudioFormat.FLAC: self._write_flac_tags,
+            AudioFormat.M4A: self._write_m4a_tags,
         }.get(audio_format)
         if writer is None:
             raise ValueError(
-                f"Unsupported write format {audio_format}; use MP3, FLAC, WAV, or AIFF."
+                f"Unsupported write format {audio_format}; use MP3, FLAC, WAV, AIFF, or M4A."
             )
         before = compute_audio_payload_digest(file_path, audio_format)
         writer(file_path, tags_to_write)
@@ -1361,3 +1430,15 @@ class MetadataTagAdapter:
             if field_key == FieldName.LABEL:
                 comment = replace_field(comment, FLAC_ORGANIZATION_FIELD, [value])
         file_path.write_bytes(write_flac_comment(data, comment))
+
+    def _write_m4a_tags(self, file_path: Path, tags_to_write: dict[str, str]) -> None:
+        """Write iTunes-style tags to an M4A file, keeping the media data byte for byte."""
+        data = file_path.read_bytes()
+        try:
+            written = write_m4a_tags(data, tags_to_write)
+        except Mp4WriteError as exc:
+            raise Mp4WriteError(
+                f"The M4A file cannot carry a tag write ({exc}). No tags were written and the "
+                "file is unchanged."
+            ) from exc
+        file_path.write_bytes(written)
