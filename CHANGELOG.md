@@ -46,8 +46,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- A half-typed query shows its error after the typing pause. The table keeps the last valid results. The summary marks them as old.
-- A saved search resets the sidebar filters, so the table matches its smart playlist.
+- A half-typed query shows its error after the typing pause. The table keeps the last valid results. The summary marks those results as old.
+- A saved search resets the sidebar filters. The table then matches its smart playlist.
 - The main window opens at a share of the available screen and restores saved geometry when available.
 - A large-window layout gives the sidebar and track details more room from 1680 logical pixels.
 - The waveform and playback controls stay visible above the library. The queue and workflow controls leave the remaining height to the library (UI-7, #362).
