@@ -665,7 +665,7 @@ def _parse_number_pair(value: str) -> tuple[int, int]:
 def _parse_pair_number(text: str) -> int | None:
     """Return the number in text, or None when it is not a number the atom can hold."""
     cleaned = text.strip()
-    if not cleaned.isdigit():
+    if not cleaned.isascii() or not cleaned.isdigit():
         return None
     number = int(cleaned)
     return number if number <= MAX_PAIR_VALUE else None

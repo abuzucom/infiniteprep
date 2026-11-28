@@ -215,6 +215,12 @@ def test_text_track_number_is_refused() -> None:
         write_m4a_tags(build_m4a(), {"track_number": "A1"})
 
 
+def test_raised_digit_number_is_refused() -> None:
+    """A track number that holds a raised digit is refused instead of raising."""
+    with pytest.raises(Mp4WriteError, match="not a number"):
+        write_m4a_tags(build_m4a(), {"track_number": "\u00b2"})
+
+
 def test_tempo_above_atom_limit_refused() -> None:
     """A tempo above the limit of the tempo atom is refused."""
     with pytest.raises(Mp4WriteError, match="limit"):

@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.94.0] (2026-11-27)
+## [0.94.1] (2026-11-27)
 
 ### Added
 
@@ -18,6 +18,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The M4A locator joins the audio payload check. Every M4A tag write then compares the media digest before and after the write.
   - M4A joins the write-enabled formats. The reader maps every stored item back to its field.
 - Regression tests cover the writer on AAC and ALAC fixtures, the payload digest, and every refusal.
+
+### Fixed
+
+- The track and disc number parser accepts ASCII digits only. The writer refuses a value with a digit outside ASCII with the same message as any other text value.
 
 ### Changed
 
