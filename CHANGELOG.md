@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.96.3] (2026-11-28)
+## [0.96.4] (2026-11-28)
 
 ### Added
 
@@ -38,6 +38,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Waveform seeks during playback fade through silence. Zoom scrubbing combines rapid updates and lands at the release position (#246).
 - The branch merges `main` and advances the version to 0.96.3. The lock file header names the current version.
 - The M4A stem walk counts every atom as it reads it. A movie with more atoms than the walk allows now fails at once.
 - The M4A file walk counts every top-level atom as it reads it. A file with more atoms than the walk allows now fails at once.

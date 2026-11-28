@@ -5,12 +5,13 @@ from __future__ import annotations
 import logging
 import threading
 from collections.abc import Callable
+from enum import Enum, auto
 from pathlib import Path
 from typing import Final
 
 import numpy as np
 import soundfile as sf
-from PySide6.QtCore import QSignalBlocker, Qt, QUrl, Signal
+from PySide6.QtCore import QElapsedTimer, QObject, QSignalBlocker, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
     QColor,
     QDragEnterEvent,
@@ -103,6 +104,9 @@ MS_PER_SECOND: Final[float] = 1000.0
 SECONDS_PER_MINUTE: Final[float] = 60.0
 SLIDER_SINGLE_STEP_MS: Final[int] = 1000
 SLIDER_PAGE_STEP_MS: Final[int] = 10_000
+SEEK_GAIN_INTERVAL_MS: Final[int] = 4
+SEEK_FADE_MS: Final[int] = 24
+SEEK_SILENCE_MS: Final[int] = 32
 POSITION_SLIDER_NAME: Final[str] = "Playback position"
 # The drag payload carries the file ID of a library row. A path would break when
 # the file moves, and the ID is what the player and the panel both address.
@@ -263,6 +267,7 @@ class WaveformOverviewBar(QWidget):
         self.spectrum: object | None = None
         self._dragging = False
         self._drag_window = (0.0, 0.0)
+        self._last_seek_x = 0.0
         self._drop_highlight = False
         self.on_seek_ratio = None
         self.setMouseTracking(True)
@@ -333,6 +338,7 @@ class WaveformOverviewBar(QWidget):
 
     def _seek_from_x(self, x: float) -> None:
         """Map a canvas coordinate to the overview or zoom time interval."""
+        self._last_seek_x = x
         ratio = max(0.0, min(1.0, x / float(max(1, self.width()))))
         if self.view_mode == ZOOM_MODE:
             start, end = self._drag_window if self._dragging else self.zoom_window()
@@ -357,8 +363,16 @@ class WaveformOverviewBar(QWidget):
         if self.view_mode == ZOOM_MODE and self._dragging and self.duration_sec > 0:
             self._seek_from_x(event.position().x())
 
-    def mouseReleaseEvent(self, _event: QMouseEvent) -> None:
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Finish a zoom scrub gesture."""
+        x = event.position().x()
+        if (
+            self._dragging
+            and self.view_mode == ZOOM_MODE
+            and self.duration_sec > 0
+            and x != self._last_seek_x
+        ):
+            self._seek_from_x(x)
         self._dragging = False
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
@@ -611,6 +625,96 @@ class DeckTextLabel(QLabel):
         )
 
 
+class _SeekPhase(Enum):
+    FADE_OUT = auto()
+    HOLD = auto()
+    FADE_IN = auto()
+
+
+class _WaveformSeek(QObject):
+    """Queue the latest waveform request and seek between two output gain ramps."""
+
+    def __init__(self, player: QMediaPlayer, output: QAudioOutput) -> None:
+        super().__init__(player)
+        self._player = player
+        self._output = output
+        self._pending_ms: int | None = None
+        self._original_volume: float | None = None
+        self._phase = _SeekPhase.FADE_OUT
+        self._clock = QElapsedTimer()
+        self._timer = QTimer(self)
+        self._timer.setTimerType(Qt.TimerType.PreciseTimer)
+        self._timer.setInterval(SEEK_GAIN_INTERVAL_MS)
+        self._timer.timeout.connect(self._advance_fade)
+        player.playbackStateChanged.connect(self._update_playback_state)
+
+    @property
+    def has_pending_position(self) -> bool:
+        return self._pending_ms is not None
+
+    def seek(self, position_ms: int, *, fade: bool) -> None:
+        playing = self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState
+        if not fade or not playing or not self._player.isSeekable():
+            self.cancel()
+            self._player.setPosition(position_ms)
+            return
+
+        self._pending_ms = position_ms
+        if self._original_volume is None:
+            self._original_volume = self._output.volume()
+            self._phase = _SeekPhase.FADE_OUT
+            self._clock.start()
+            self._timer.start()
+
+    def cancel(self) -> None:
+        volume = self._original_volume
+        self._original_volume = None
+        self._pending_ms = None
+        self._timer.stop()
+        if volume is not None:
+            self._output.setVolume(volume)
+
+    def _update_playback_state(self, state: QMediaPlayer.PlaybackState) -> None:
+        if state == QMediaPlayer.PlaybackState.PlayingState:
+            return
+        target = self._pending_ms
+        self.cancel()
+        if state == QMediaPlayer.PlaybackState.PausedState and target is not None:
+            self._player.setPosition(target)
+
+    def _advance_fade(self) -> None:
+        volume = self._original_volume
+        if volume is None:
+            return
+        elapsed = self._clock.elapsed()
+        if self._phase == _SeekPhase.FADE_OUT:
+            self._output.setVolume(volume * max(0.0, 1.0 - elapsed / SEEK_FADE_MS))
+            if elapsed >= SEEK_FADE_MS:
+                self._commit_quiet_seek()
+            return
+        if self._phase == _SeekPhase.HOLD:
+            if elapsed >= SEEK_SILENCE_MS:
+                self._phase = _SeekPhase.FADE_IN
+                self._clock.start()
+            return
+        self._output.setVolume(volume * min(1.0, elapsed / SEEK_FADE_MS))
+        if elapsed >= SEEK_FADE_MS:
+            if self._pending_ms is None:
+                self.cancel()
+            else:
+                self._phase = _SeekPhase.FADE_OUT
+                self._clock.start()
+
+    def _commit_quiet_seek(self) -> None:
+        target = self._pending_ms
+        self._pending_ms = None
+        self._phase = _SeekPhase.HOLD
+        if target is not None:
+            self._player.setPosition(target)
+        # Keep output at zero while the backend replaces the old audio buffer.
+        self._clock.start()
+
+
 class AudioPreviewWidget(QWidget):
     """Audio preview transport with waveform overview and needle-drop cue buttons."""
 
@@ -643,10 +747,12 @@ class AudioPreviewWidget(QWidget):
 
         self.player: QMediaPlayer | None = None
         self.audio_output: QAudioOutput | None = None
+        self._waveform_seek: _WaveformSeek | None = None
         if self.enable_multimedia_backend:
             self.player = QMediaPlayer(self)
             self.audio_output = QAudioOutput(self)
             self.player.setAudioOutput(self.audio_output)
+            self._waveform_seek = _WaveformSeek(self.player, self.audio_output)
 
         self._in_deck = False
         self._build_controls()
@@ -839,6 +945,8 @@ class AudioPreviewWidget(QWidget):
 
     def _on_player_error(self, _error: QMediaPlayer.Error, error_string: str) -> None:
         """Report a playback failure and return the transport to its stopped state."""
+        if self._waveform_seek is not None:
+            self._waveform_seek.cancel()
         self.show_status(format_playback_failure(error_string or UNKNOWN_PLAYBACK_ERROR))
         self.play_btn.setText("Play")
 
@@ -861,6 +969,8 @@ class AudioPreviewWidget(QWidget):
 
     def load_file(self, file_path: Path, fallback_duration_sec: float | None = None) -> None:
         """Load a track without decoding its overview on the UI thread."""
+        if self._waveform_seek is not None:
+            self._waveform_seek.cancel()
         self.current_file_path = file_path
         self.current_position_sec = 0.0
         self.loaded_track_label.setText(f"{LOADED_TRACK_LABEL_PREFIX}{file_path.name}")
@@ -983,19 +1093,27 @@ class AudioPreviewWidget(QWidget):
 
     def seek_to_seconds(self, position_sec: float) -> None:
         """Seek playback position to position_sec and update waveform playhead."""
+        self._seek_position(position_sec, fade=False)
+
+    def _seek_by_ratio(self, ratio: float) -> None:
+        """Seek from the waveform and fade the output if playback is active."""
+        self._seek_position(ratio * self.duration_sec, fade=True)
+
+    def _seek_position(self, position_sec: float, *, fade: bool) -> None:
         clamped = max(0.0, min(self.duration_sec, float(position_sec)))
         self.current_position_sec = clamped
-        if self.player is not None:
-            self.player.setPosition(int(clamped * MS_PER_SECOND))
+        position_ms = int(clamped * MS_PER_SECOND)
+        if self._waveform_seek is not None:
+            self._waveform_seek.seek(position_ms, fade=fade)
+        elif self.player is not None:
+            self.player.setPosition(position_ms)
         self.waveform_bar.set_playback(clamped, self.duration_sec)
         self._update_time_label()
 
-    def _seek_by_ratio(self, ratio: float) -> None:
-        """Seek to a normalized ratio in [0.0, 1.0] of total duration."""
-        self.seek_to_seconds(ratio * self.duration_sec)
-
     def _on_media_position_changed(self, position_ms: int) -> None:
         """Handle positionChanged signal from QMediaPlayer."""
+        if self._waveform_seek is not None and self._waveform_seek.has_pending_position:
+            return
         if position_ms > 0:
             self.current_position_sec = position_ms / MS_PER_SECOND
             self.waveform_bar.set_playback(self.current_position_sec, self.duration_sec)
