@@ -54,12 +54,13 @@ from infiniteprep.config.settings import (
     AppSettings,
     SettingsManager,
 )
+from infiniteprep.db.collections import SavedSearch
 from infiniteprep.db.repositories import Repository
 from infiniteprep.domain.enums import (
     KeyDisplayNotation,
     ReviewStatus,
 )
-from infiniteprep.domain.library_query import parse_library_query
+from infiniteprep.domain.library_query import LibraryQuery, parse_library_query
 from infiniteprep.domain.models import FileAsset
 from infiniteprep.services.import_service import ImportBatchReport, ImportService
 from infiniteprep.services.job_orchestrator import BatchKind, BatchState, QueuedBatch
@@ -107,7 +108,24 @@ from infiniteprep.ui.library_rows import (
     LibrarySnapshot,
     load_library_snapshot,
 )
-from infiniteprep.ui.library_sidebar import LibrarySidebar
+from infiniteprep.ui.library_search import (
+    DELETE_SEARCH_MENU_TEXT,
+    DELETE_SEARCH_TEMPLATE,
+    DELETE_SEARCH_TITLE,
+    RENAME_SEARCH_LABEL,
+    RENAME_SEARCH_MENU_TEXT,
+    RENAME_SEARCH_TITLE,
+    SEARCH_DEBOUNCE_MS,
+    ActiveFilterBar,
+    EmptyStateBanner,
+    MatchHints,
+    SearchFieldKeys,
+    build_match_hints,
+    count_library_filters,
+    escape_mnemonic,
+    format_result_summary,
+)
+from infiniteprep.ui.library_sidebar import FILTER_LABELS, LibrarySidebar
 from infiniteprep.ui.stylesheet import BUTTON_VARIANT_PROPERTY, ICON_BUTTON_VARIANT
 from infiniteprep.ui.table_sort import (
     FILENAME_COLUMN,
@@ -373,6 +391,8 @@ class MainWindow(QMainWindow, LibraryRows):
         self._setup_central_widget()
         self._setup_batch_queue()
         self._restore_table_layouts()
+        # A restored header state carries the sort arrow of its save time. The stored sort wins.
+        self.file_table.horizontalHeader().setSortIndicator(self._sort_column, self._sort_order())
         self._apply_theme_palette()
         self.refresh_file_table()
         self._restore_window_geometry()
@@ -381,6 +401,14 @@ class MainWindow(QMainWindow, LibraryRows):
     def _create_widgets(self, enable_audio_backend: bool) -> None:
         """Create the search field, pickers, bar, sidebar, table, and detail panel."""
         self.search_input = QLineEdit(self)
+        # Typed text waits for a pause. The window then reloads a large library once, not per key.
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(SEARCH_DEBOUNCE_MS)
+        self._search_timer.timeout.connect(self.refresh_file_table)
+        self._search_keys = SearchFieldKeys(self)
+        self.active_filter_bar = ActiveFilterBar(self)
+        self.empty_state = EmptyStateBanner(self)
         self.key_notation_combo = QComboBox(self)
         self.workflow_bar = WorkflowBar(self)
         self.sidebar = LibrarySidebar(self)
@@ -453,6 +481,14 @@ class MainWindow(QMainWindow, LibraryRows):
         bar.settings_requested.connect(self._trigger_open_settings)
         self.sidebar.stage_triggered.connect(self._on_stage_triggered)
         self.sidebar.filter_changed.connect(self._on_library_filter_changed)
+        self.sidebar.folder_changed.connect(self._on_library_filter_changed)
+        self.active_filter_bar.status_removed.connect(
+            lambda: self.sidebar.select_filter(LibraryFilter.ALL)
+        )
+        self.active_filter_bar.folder_removed.connect(lambda: self.sidebar.select_folder(""))
+        self.active_filter_bar.clear_all_requested.connect(self.clear_search_and_filters)
+        self.empty_state.clear_requested.connect(self.clear_search_and_filters)
+        self.empty_state.add_folder_requested.connect(self._prompt_import_folder)
         self.bulk_btn = bar.stage_buttons[WorkflowStage.REVIEW]
         self.export_playlist_btn = bar.stage_buttons[WorkflowStage.EXPORT]
         self.import_library_btn = bar.import_library_btn
@@ -479,13 +515,41 @@ class MainWindow(QMainWindow, LibraryRows):
         self._stage_actions[stage]()
 
     def _on_library_filter_changed(self, _filter_value: str) -> None:
-        """Show the tracks of the new filter and close the sidebar drawer."""
+        """Show the tracks of the new filter and close the sidebar drawer.
+
+        The chips above the table keep the active filters in view after the drawer closes.
+        """
         if self.layout_mode is not LayoutMode.WIDE:
             self.sidebar.hide()
         self.refresh_file_table()
 
+    def clear_search_and_filters(self) -> None:
+        """Empty the search and show every track of every folder."""
+        self._search_timer.stop()
+        self.search_input.blockSignals(True)
+        self.search_input.setText("")
+        self.search_input.blockSignals(False)
+        self.sidebar.blockSignals(True)
+        self.sidebar.select_filter(LibraryFilter.ALL)
+        self.sidebar.select_folder("")
+        self.sidebar.blockSignals(False)
+        self.refresh_file_table()
+
+    def _on_search_text_changed(self, _text: str) -> None:
+        """Search after a typing pause, or at once for text set by the app."""
+        if self.search_input.isModified():
+            self._search_timer.start()
+            return
+        self._search_timer.stop()
+        self.refresh_file_table()
+
+    def _focus_search(self) -> None:
+        """Move the focus to the search field and select its text."""
+        self.search_input.setFocus(Qt.FocusReason.ShortcutFocusReason)
+        self.search_input.selectAll()
+
     def _setup_shortcuts(self) -> None:
-        """Bind window-wide keys for Import, Settings, and preview Play/Pause."""
+        """Bind window-wide keys for Import, Settings, Find, stages, and preview Play/Pause."""
         context = Qt.ShortcutContext.WindowShortcut
         self.import_shortcut = QShortcut(QKeySequence(QKeySequence.StandardKey.Open), self)
         self.import_shortcut.setContext(context)
@@ -493,6 +557,9 @@ class MainWindow(QMainWindow, LibraryRows):
         self.settings_shortcut = QShortcut(QKeySequence(SETTINGS_SHORTCUT), self)
         self.settings_shortcut.setContext(context)
         self.settings_shortcut.activated.connect(self._trigger_open_settings)
+        self.find_shortcut = QShortcut(QKeySequence(QKeySequence.StandardKey.Find), self)
+        self.find_shortcut.setContext(context)
+        self.find_shortcut.activated.connect(self._focus_search)
         # Alt and the stage number run that stage, as the number on the bar shows.
         self.stage_shortcuts: dict[WorkflowStage, QShortcut] = {}
         for stage in WorkflowStage:
@@ -525,6 +592,8 @@ class MainWindow(QMainWindow, LibraryRows):
         self.search_error = QLabel(self)
         self.search_error.setAccessibleName("Search feedback")
         content_layout.addWidget(self.search_error)
+        content_layout.addWidget(self.active_filter_bar)
+        content_layout.addWidget(self.empty_state)
         self._setup_file_table()
         self.detail_splitter = QSplitter(Qt.Orientation.Horizontal, content)
         self.detail_splitter.addWidget(self.file_table)
@@ -560,7 +629,9 @@ class MainWindow(QMainWindow, LibraryRows):
         self.search_input.setPlaceholderText(
             "Search tracks, e.g. Daft Punk tracks between 120 and 128 BPM"
         )
-        self.search_input.textChanged.connect(self.refresh_file_table)
+        self.search_input.textChanged.connect(self._on_search_text_changed)
+        self.search_input.setClearButtonEnabled(True)
+        self.search_input.installEventFilter(self._search_keys)
         self.search_input.setAccessibleName(SEARCH_INPUT_NAME)
         filter_bar.addWidget(self.search_input, stretch=1)
         self.search_menu = QMenu(self)
@@ -578,15 +649,71 @@ class MainWindow(QMainWindow, LibraryRows):
         return filter_bar
 
     def _refresh_search_menu(self) -> None:
+        """List the saved searches, with Rename and Delete submenus when any exist."""
         self.search_menu.clear()
         save = self.search_menu.addAction("Save current search...")
         save.setEnabled(bool(self.search_input.text().strip()))
         save.triggered.connect(self._save_search)
-        for name, query in self.repo.collections.saved_searches():
-            action = self.search_menu.addAction(name.replace("&", "&&"))
+        entries = self.repo.collections.saved_search_entries()
+        for entry in entries:
+            action = self.search_menu.addAction(escape_mnemonic(entry.name))
             action.triggered.connect(
-                lambda checked=False, text=query: self.search_input.setText(text)
+                lambda _checked=False, text=entry.query: self._apply_saved_search(text)
             )
+        if not entries:
+            return
+        self.search_menu.addSeparator()
+        rename_menu = self.search_menu.addMenu(RENAME_SEARCH_MENU_TEXT)
+        delete_menu = self.search_menu.addMenu(DELETE_SEARCH_MENU_TEXT)
+        for entry in entries:
+            rename = rename_menu.addAction(escape_mnemonic(entry.name))
+            rename.triggered.connect(
+                lambda _checked=False, chosen=entry: self._rename_saved_search(chosen)
+            )
+            delete = delete_menu.addAction(escape_mnemonic(entry.name))
+            delete.triggered.connect(
+                lambda _checked=False, chosen=entry: self._delete_saved_search(chosen)
+            )
+
+    def _apply_saved_search(self, query: str) -> None:
+        """Show a saved search over the whole library, as its smart playlist holds it."""
+        self.sidebar.blockSignals(True)
+        self.sidebar.select_filter(LibraryFilter.ALL)
+        self.sidebar.select_folder("")
+        self.sidebar.blockSignals(False)
+        if self.search_input.text() == query:
+            self.refresh_file_table()
+            return
+        self.search_input.setText(query)
+
+    def _rename_saved_search(self, entry: SavedSearch) -> None:
+        """Ask for a new name and rename the saved search."""
+        name, accepted = QInputDialog.getText(
+            self, RENAME_SEARCH_TITLE, RENAME_SEARCH_LABEL, text=entry.name
+        )
+        if not accepted:
+            return
+        try:
+            self.repo.collections.rename_saved_search(entry.id, name)
+        except ValueError as error:
+            self._show_search_message(str(error))
+
+    def _delete_saved_search(self, entry: SavedSearch) -> None:
+        """Delete a saved search after a confirmation. The tracks stay in the library."""
+        answer = QMessageBox.question(
+            self, DELETE_SEARCH_TITLE, DELETE_SEARCH_TEMPLATE.format(name=entry.name)
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.repo.collections.delete_saved_search(entry.id)
+        except ValueError as error:
+            self._show_search_message(str(error))
+
+    def _show_search_message(self, text: str) -> None:
+        """Show a saved search problem below the search field."""
+        self.search_error.setText(text)
+        self.search_error.show()
 
     def _save_search(self) -> None:
         name, accepted = QInputDialog.getText(self, "Save search", "Smart playlist name")
@@ -596,8 +723,7 @@ class MainWindow(QMainWindow, LibraryRows):
                     name, self.search_input.text(), self.current_key_notation
                 )
             except ValueError as error:
-                self.search_error.setText(str(error))
-                self.search_error.show()
+                self._show_search_message(str(error))
 
     def _setup_file_table(self) -> None:
         """Set the headers, sizing, sorting, selection, and actions of the library table."""
@@ -615,7 +741,7 @@ class MainWindow(QMainWindow, LibraryRows):
         file_header.setSectionsClickable(True)
         self.file_table.setSortingEnabled(False)
         file_header.setSortIndicatorShown(True)
-        file_header.setSortIndicator(self._sort_column, Qt.SortOrder.AscendingOrder)
+        file_header.setSortIndicator(self._sort_column, self._sort_order())
         file_header.sectionClicked.connect(self._on_table_header_clicked)
         self.file_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         # Tab leaves the table in one press. The arrow keys move between cells.
@@ -832,31 +958,22 @@ class MainWindow(QMainWindow, LibraryRows):
 
     def refresh_file_table(self) -> None:
         """Reload all FileAssets from Repository and populate the filtered table."""
+        self._search_timer.stop()
         search_text = self.search_input.text()
         try:
             query = parse_library_query(search_text)
         except ValueError as error:
-            self.search_error.setText(str(error))
-            self.search_error.show()
+            # The table keeps the last valid results. The summary marks them as old.
+            self._show_search_message(str(error))
+            self.active_filter_bar.show_stale()
             return
         self.search_error.clear()
         self.search_error.hide()
         all_files = self.repo.list_files()
         snapshot = load_library_snapshot(self.repo)
         self._show_library_counts(all_files)
-        filtered = [
-            file_asset
-            for file_asset in all_files
-            if self._matches_status_filter(file_asset, snapshot)
-        ]
-        rows = [self._build_library_row(asset, snapshot) for asset in filtered]
-        if search_text.strip():
-            records = [
-                self.search_record(asset, row, snapshot)
-                for asset, row in zip(filtered, rows, strict=True)
-            ]
-            matches = set(query.select_ids(self.repo.db.connect(), records))
-            rows = [row for row in rows if row.file_id in matches]
+        self._show_filter_counts(all_files, snapshot)
+        rows, records = self._collect_visible_rows(all_files, snapshot, search_text, query)
         ordered = sort_rows(
             rows,
             column=self._sort_column,
@@ -865,7 +982,36 @@ class MainWindow(QMainWindow, LibraryRows):
             notation=self.current_key_notation,
         )
         self.visible_file_ids = [row.file_id for row in ordered]
+        self._fill_file_table(ordered, build_match_hints(search_text, records))
+        self._show_search_state(len(ordered), len(all_files))
+        self._sync_detail_panel_with_selection()
 
+    def _collect_visible_rows(
+        self,
+        all_files: list[FileAsset],
+        snapshot: LibrarySnapshot,
+        search_text: str,
+        query: LibraryQuery,
+    ) -> tuple[list[LibraryRow], list[dict]]:
+        """Return the rows that pass the filters and the search, and the search records."""
+        filtered = [
+            file_asset
+            for file_asset in all_files
+            if self._matches_status_filter(file_asset, snapshot)
+            and self._matches_folder_filter(file_asset)
+        ]
+        rows = [self._build_library_row(asset, snapshot) for asset in filtered]
+        if not search_text.strip():
+            return rows, []
+        records = [
+            self.search_record(asset, row, snapshot)
+            for asset, row in zip(filtered, rows, strict=True)
+        ]
+        matches = set(query.select_ids(self.repo.db.connect(), records))
+        return [row for row in rows if row.file_id in matches], records
+
+    def _fill_file_table(self, ordered: list[LibraryRow], hints: MatchHints) -> None:
+        """Write the rows into the table and keep the selected file selected."""
         # The repopulation empties the table selection for a moment. The panel
         # keeps the file while the refresh runs, and the selection is restored
         # before the refresh ends.
@@ -874,13 +1020,41 @@ class MainWindow(QMainWindow, LibraryRows):
             self.file_table.blockSignals(True)
             self.file_table.setRowCount(len(ordered))
             for row_index, row in enumerate(ordered):
-                self._populate_table_row(row_index, row)
+                self._populate_table_row(row_index, row, hints)
             self.file_table.blockSignals(False)
             self.file_sizer.refit()
             self._restore_selected_file()
         finally:
             self._refreshing_table = False
-        self._sync_detail_panel_with_selection()
+
+    def _show_search_state(self, shown: int, total: int) -> None:
+        """Show the result count, the active filter chips, and the empty state."""
+        chosen = self.sidebar.current_filter()
+        status_label = "" if chosen is LibraryFilter.ALL else FILTER_LABELS[chosen]
+        folder = self.sidebar.current_folder()
+        folder_name = (Path(folder).name or folder) if folder else ""
+        self.active_filter_bar.show_state(
+            format_result_summary(shown, total), status_label, folder_name
+        )
+        narrowed = bool(status_label or folder or self.search_input.text().strip())
+        self.active_filter_bar.show_clear_all(narrowed)
+        if shown:
+            self.empty_state.hide()
+            return
+        self.empty_state.show_state(library_empty=total == 0)
+
+    def _show_filter_counts(self, all_files: list[FileAsset], snapshot: LibrarySnapshot) -> None:
+        """Show the track count of each library filter over the whole library."""
+        tracks = (
+            (str(asset.review_status), bool(self._asset_warnings(asset, snapshot)))
+            for asset in all_files
+        )
+        self.sidebar.set_filter_counts(count_library_filters(tracks))
+
+    def _matches_folder_filter(self, asset: FileAsset) -> bool:
+        """Return True when no folder is chosen or the asset sits in the chosen folder."""
+        folder = self.sidebar.current_folder()
+        return not folder or str(Path(asset.current_path).parent) == folder
 
     def _show_library_counts(self, all_files: list[FileAsset]) -> None:
         """Show the stage counts, the current stage, and the source folders.
@@ -912,6 +1086,7 @@ class MainWindow(QMainWindow, LibraryRows):
         rows.setDefaultSectionSize(row_height)
         self.workflow_bar.set_palette(palette)
         self.sidebar.set_palette(palette)
+        self.active_filter_bar.set_palette(palette)
         self.detail_panel.set_palette(palette)
         self.sidebar_toggle_btn.setIcon(themed_icon(SIDEBAR_TOGGLE_ICON, palette.text))
 
@@ -942,9 +1117,18 @@ class MainWindow(QMainWindow, LibraryRows):
         self.setGeometry(fit_window_on_screens(self.geometry(), screens))
 
     def _init_sort_state(self) -> None:
-        """Set the starting sort column, direction, selection, and placement."""
-        self._sort_column: int = FILENAME_COLUMN
-        self._sort_descending: bool = False
+        """Set the starting sort column, direction, selection, and placement.
+
+        The sort of the last session returns. A stored column outside the table
+        falls back to the file name.
+        """
+        stored = SettingsManager().load()
+        column = getattr(stored, "library_sort_column", FILENAME_COLUMN)
+        valid_column = isinstance(column, int) and 0 <= column < SORT_COLUMN_COUNT
+        self._sort_column: int = column if valid_column else FILENAME_COLUMN
+        self._sort_descending: bool = valid_column and bool(
+            getattr(stored, "library_sort_descending", False)
+        )
         self._selected_file_id: str | None = None
         self._refreshing_table = False
         self._unsorted_placement: str = self._read_unsorted_placement()
@@ -978,7 +1162,7 @@ class MainWindow(QMainWindow, LibraryRows):
         self.sort_column_combo.setCurrentIndex(self._sort_column)
         name_combo_box(self.sort_column_combo, SORT_COLUMN_NAME)
         sort_label.setBuddy(self.sort_column_combo)
-        self.sort_direction_btn = QPushButton(SORT_ASCENDING_TEXT, self)
+        self.sort_direction_btn = QPushButton(self._sort_direction_text(), self)
         self.sort_direction_btn.setAccessibleName(SORT_DIRECTION_NAME)
         self.sort_column_combo.currentIndexChanged.connect(self._on_sort_column_chosen)
         self.sort_direction_btn.clicked.connect(self._on_sort_direction_toggled)
@@ -1010,17 +1194,31 @@ class MainWindow(QMainWindow, LibraryRows):
 
     def _apply_sort(self) -> None:
         """Show the sort state on the header and the sort controls, then repaint."""
-        order = (
-            Qt.SortOrder.DescendingOrder if self._sort_descending else Qt.SortOrder.AscendingOrder
-        )
-        self.file_table.horizontalHeader().setSortIndicator(self._sort_column, order)
+        self.file_table.horizontalHeader().setSortIndicator(self._sort_column, self._sort_order())
         self.sort_column_combo.blockSignals(True)
         self.sort_column_combo.setCurrentIndex(self._sort_column)
         self.sort_column_combo.blockSignals(False)
-        self.sort_direction_btn.setText(
-            SORT_DESCENDING_TEXT if self._sort_descending else SORT_ASCENDING_TEXT
-        )
+        self.sort_direction_btn.setText(self._sort_direction_text())
+        self._save_sort_choice()
         self.refresh_file_table()
+
+    def _sort_order(self) -> Qt.SortOrder:
+        """Return the header sort order of the current direction."""
+        if self._sort_descending:
+            return Qt.SortOrder.DescendingOrder
+        return Qt.SortOrder.AscendingOrder
+
+    def _sort_direction_text(self) -> str:
+        """Return the direction button text of the current direction."""
+        return SORT_DESCENDING_TEXT if self._sort_descending else SORT_ASCENDING_TEXT
+
+    def _save_sort_choice(self) -> None:
+        """Store the sort column and direction for the next session."""
+        settings_manager = SettingsManager()
+        settings = settings_manager.load()
+        settings.library_sort_column = self._sort_column
+        settings.library_sort_descending = self._sort_descending
+        settings_manager.save(settings)
 
     def _restore_selected_file(self) -> None:
         """Keep the selected file selected after the table repaints."""
@@ -1040,12 +1238,26 @@ class MainWindow(QMainWindow, LibraryRows):
         )
         return matches_library_filter(chosen, str(asset.review_status), has_warnings)
 
-    def _populate_table_row(self, row_index: int, row: LibraryRow) -> None:
-        """Render one library row and store its file ID on the first cell."""
+    def _populate_table_row(
+        self, row_index: int, row: LibraryRow, hints: MatchHints | None = None
+    ) -> None:
+        """Render one library row and store its file ID on the first cell.
+
+        A plain search marks each cell that holds the term in bold. A search on a
+        field without a column names the field and its value on the first cell.
+        """
+        hints = hints or MatchHints()
         for column_index, text in enumerate(row.cells):
             item = QTableWidgetItem(text)
+            if hints.term and hints.term in text.casefold():
+                font = item.font()
+                font.setBold(True)
+                item.setFont(font)
             if column_index == 0:
                 item.setData(Qt.ItemDataRole.UserRole, row.file_id)
+                tooltip = hints.tooltips.get(row.file_id)
+                if tooltip:
+                    item.setToolTip(tooltip)
             if column_index == WARNINGS_COLUMN and row.warning_details:
                 item.setToolTip(row.warning_details)
                 warning_color = self._palette.status[StatusRole.WARNING]

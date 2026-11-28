@@ -5,6 +5,29 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.94.0] (2026-11-28)
+
+### Added
+
+- The library search runs after a 250 ms typing pause. Text set by the app, such as a saved search, still runs at once.
+- The search field gains a clear button. Ctrl+F selects the search text. Escape empties the field.
+- The line above the table shows the result count, such as "Showing 12 of 340 tracks".
+- A removable chip names each active sidebar filter and folder. **Clear all** empties the search and removes every filter.
+- An empty table names its cause. An empty library offers **Add folder**. A search without matches offers **Clear search and filters**.
+- A plain search shows matching cells in bold. A search on genre or year names the matched value in the filename tooltip.
+- Each sidebar filter shows its track count beside its name.
+- A click on a sidebar folder narrows the table to that folder. A second click shows every folder again.
+- The **Saved searches** menu gains **Rename** and **Delete** submenus. A delete asks first and keeps every track.
+  - `CollectionRepository` adds `saved_search_entries`, `rename_saved_search`, and `delete_saved_search`.
+  - The new `SavedSearch` value holds the ID, the name, and the query of one saved search.
+- `library_query` adds `plain_search_term` and `query_fields` for the search hints.
+- `AppSettings` adds `library_sort_column` and `library_sort_descending`. The sort column and direction return at the next launch.
+
+### Changed
+
+- A half-typed query shows its error after the typing pause. The table keeps the last valid results. The summary marks them as old.
+- A saved search resets the sidebar filters, so the table matches its smart playlist.
+
 ## [0.93.9] (2026-11-27)
 
 ### Changed
