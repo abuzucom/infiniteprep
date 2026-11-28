@@ -124,6 +124,15 @@ def test_movie_atom_limit_is_enforced() -> None:
         find_m4a_payload(data)
 
 
+def test_file_atom_limit_is_enforced() -> None:
+    """A file with more top-level atoms than the walk allows is refused."""
+    padding = b"".join(atom(b"free", b"") for _ in range(MAX_MP4_ATOMS + 8))
+    data = ftyp() + padding + atom(b"mdat", bytes(64))
+
+    with pytest.raises(AudioPropertiesError, match="too many atoms"):
+        find_m4a_payload(data)
+
+
 def test_changed_stem_box_fails_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A stem atom that changes during a write fails the write and keeps the file."""
     adapter = MetadataTagAdapter()
