@@ -5,7 +5,7 @@ This file documents every notable project change.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.95.0] (2026-11-28)
+## [0.96.0] (2026-11-28)
 
 ### Added
 
@@ -31,6 +31,10 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - The M4A locator joins the audio payload check. Every M4A tag write then compares the media digest before and after the write.
   - M4A joins the write-enabled formats. The reader maps every stored item back to its field.
 - Regression tests cover the writer on AAC and ALAC fixtures, the payload digest, and every refusal.
+- STEM.MP4 files accept tag writes (FMT-4, #105).
+  - The writer keeps the NI `stem` atom byte for byte and moves the chunk offsets of every track.
+  - The M4A locator covers the stem atom after the media range. A change to the stem metadata then fails the audio digest comparison.
+  - The shared stem fixture carries the offset tables that locate the samples of every track.
 
 ### Fixed
 

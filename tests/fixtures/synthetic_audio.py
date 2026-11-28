@@ -423,15 +423,54 @@ def build_stem_mp4_bytes(
     sample_rate: int = DEFAULT_SAMPLE_RATE,
     stem_names: tuple[str, ...] = DEFAULT_STEM_NAMES,
     seed: int = DEFAULT_SEED,
+    chunk_offsets: bool = False,
 ) -> bytes:
-    """Return a STEM.MP4: a mixdown track, one AAC track per stem, and a udta stem manifest."""
+    """Return a STEM.MP4: a mixdown track, one AAC track per stem, and a udta stem manifest.
+
+    The chunk offsets add the offset tables that locate every track's samples in the media
+    data. A file without those tables holds no media offsets for a writer to move.
+    """
     total = _sample_count(duration_sec, sample_rate)
     sizes = _frame_sizes(total, AAC_FRAME_SAMPLES, DEFAULT_AAC_BITRATE, sample_rate)
     entry = audio_entry(b"mp4a", STEREO_CHANNELS, sample_rate, esds(DEFAULT_AAC_BITRATE))
-    tracks = [trak(b"soun", entry, sizes) for _ in range(len(stem_names) + 1)]
-    payload = _rng(seed).bytes(sum(sizes) * len(tracks))
     manifest = _stem_manifest_udta(stem_names)
-    return m4a_file(mvhd(sample_rate, total), *tracks, manifest, mdat=payload)
+    track_count = len(stem_names) + 1
+    payload = _rng(seed).bytes(sum(sizes) * track_count)
+    movie = mvhd(sample_rate, total)
+    if not chunk_offsets:
+        tracks = [trak(b"soun", entry, sizes) for _ in range(track_count)]
+        return m4a_file(movie, *tracks, manifest, mdat=payload)
+    return _stem_mp4_with_offsets(
+        movie, entry, sizes, manifest=manifest, payload=payload, track_count=track_count
+    )
+
+
+def _stem_mp4_with_offsets(
+    movie: bytes,
+    entry: bytes,
+    sizes: list[int],
+    *,
+    manifest: bytes,
+    payload: bytes,
+    track_count: int,
+) -> bytes:
+    """Return a STEM.MP4 whose chunk offset tables point at every track's samples.
+
+    The offset tables take the same number of bytes whatever their values hold, so one pass
+    settles the offsets.
+    """
+    placeholders = [trak(b"soun", entry, sizes, [0] * len(sizes)) for _ in range(track_count)]
+    start = len(ftyp()) + len(atom(b"moov", movie + b"".join(placeholders) + manifest)) + 8
+    per_track = sum(sizes)
+    tracks = []
+    for index in range(track_count):
+        offsets = []
+        cursor = start + index * per_track
+        for size in sizes:
+            offsets.append(cursor)
+            cursor += size
+        tracks.append(trak(b"soun", entry, sizes, offsets))
+    return m4a_file(movie, *tracks, manifest, mdat=payload)
 
 
 def _stem_manifest_udta(stem_names: tuple[str, ...]) -> bytes:
